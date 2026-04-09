@@ -4,15 +4,327 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  DIRECTOR
+  ASSISTANT_MANAGER
+  ADMINISTRATOR
+  OPERATIONS_SUPERVISOR
+  FIELD_SUPERVISOR
+  TRAINER
+  ACCOUNTS_OFFICER
+  MARKETING
+  GUARD
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+enum DocumentType {
+  NIN
+  LC1_LETTER
+  CONTRACT
+  PSO_CERTIFICATE
+  NSSF
+  WARNING_LETTER
+  OTHER
+}
+
+enum ShiftType {
+  DAY
+  NIGHT
+  FULL_24
+}
+
+enum DisciplinaryType {
+  VERBAL_WARNING
+  WRITTEN_WARNING
+  SUSPENSION
+  TERMINATION
+}
+
+enum ClientContractStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum ComplaintCategory {
+  GUARD_CONDUCT
+  LATE_DEPLOYMENT
+  BILLING_DISPUTE
+  EQUIPMENT
+  OTHER
+}
+
+enum ComplaintSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  AWOL
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
 model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Back-relations
+  guard               Guard?               @relation("GuardUser")
+  uploadedDocuments   GuardDocument[]      @relation("DocumentUploader")
+  supervisedHistory   DeploymentHistory[]  @relation("DeploymentSupervisor")
+  disciplinaryActions DisciplinaryRecord[] @relation("DisciplinaryOfficer")
+  deployments         Deployment[]         @relation("DeploymentSupervisor")
+  checkins            SupervisorCheckin[]  @relation("CheckinSupervisor")
+  assignedComplaints  ClientComplaint[]    @relation("ComplaintAssignee")
+  auditLogs           AuditLog[]
+}
+
+model Guard {
+  id               String           @id @default(cuid())
+  firstName        String
+  lastName         String
+  otherNames       String?
+  nationalId       String           @unique
+  phone            String
+  photoUrl         String?
+  dateOfBirth      DateTime
+  nextOfKinName    String
+  nextOfKinPhone   String
+  bankName         String?
+  accountNumber    String?
+  salaryRate       Int
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  contractStart    DateTime
+  contractEnd      DateTime?
+  psoCertNumber    String?
+  userId           String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user              User?                @relation("GuardUser", fields: [userId], references: [id], onDelete: SetNull)
+  documents         GuardDocument[]
+  deploymentHistory DeploymentHistory[]
+  disciplinary      DisciplinaryRecord[]
+  deployments       Deployment[]
+  attendance        AttendanceRecord[]
+}
+
+model GuardDocument {
+  id           String       @id @default(cuid())
+  guardId      String
+  documentType DocumentType
+  filePath     String
+  version      Int          @default(1)
+  uploadedBy   String
+  uploadedAt   DateTime     @default(now())
+
+  guard    Guard @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  uploader User  @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
+}
+
+model DeploymentHistory {
+  id           String    @id @default(cuid())
+  guardId      String
+  siteId       String
+  startDate    DateTime
+  endDate      DateTime?
+  shiftType    ShiftType
+  supervisorId String
+  createdAt    DateTime  @default(now())
+
+  guard      Guard @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  site       Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  supervisor User  @relation("DeploymentSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+}
+
+model DisciplinaryRecord {
+  id           String           @id @default(cuid())
+  guardId      String
+  incidentDate DateTime
+  type         DisciplinaryType
+  officerId    String
+  reason       String
+  outcome      String
+  letterPath   String?
+  createdAt    DateTime         @default(now())
+
+  guard   Guard @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  officer User  @relation("DisciplinaryOfficer", fields: [officerId], references: [id], onDelete: Restrict)
+}
+
+model Client {
+  id              String               @id @default(cuid())
+  clientName      String
+  contactPerson   String
+  contactPhone    String
+  email           String?
+  physicalAddress String
+  billingAddress  String?
+  billingTerms    Int
+  contractStatus  ClientContractStatus @default(ACTIVE)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  sites      Site[]
+  contracts  Contract[]
+  complaints ClientComplaint[]
+}
+
+model Site {
+  id                  String   @id @default(cuid())
+  clientId            String
+  siteName            String
+  location            String
+  gpsLat              Float?
+  gpsLon              Float?
+  siteManagerName     String?
+  siteManagerContact  String?
+  specialInstructions String?
+  guardsRequired      Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  deploymentHistory DeploymentHistory[]
+  deployments       Deployment[]
+  attendance        AttendanceRecord[]
+  checkins          SupervisorCheckin[]
+  complaints        ClientComplaint[]
+}
+
+model Contract {
+  id              String         @id @default(cuid())
+  clientId        String
+  contractStart   DateTime
+  contractEnd     DateTime
+  guardsRequired  Int
+  billingPerGuard Int
+  contractFile    String?
+  status          ContractStatus @default(DRAFT)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+}
+
+model ClientComplaint {
+  id          String            @id @default(cuid())
+  clientId    String
+  siteId      String?
+  category    ComplaintCategory
+  description String
+  severity    ComplaintSeverity
+  assignedTo  String?
+  status      ComplaintStatus   @default(OPEN)
+  resolvedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site     Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  assignee User?  @relation("ComplaintAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+}
+
+model Deployment {
+  id           String    @id @default(cuid())
+  guardId      String
+  siteId       String
+  shiftType    ShiftType
+  date         DateTime
+  supervisorId String
+  createdAt    DateTime  @default(now())
+
+  guard      Guard @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  site       Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  supervisor User  @relation("DeploymentSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+}
+
+model AttendanceRecord {
+  id                  String           @id @default(cuid())
+  guardId             String
+  siteId              String
+  date                DateTime
+  status              AttendanceStatus
+  timeIn              DateTime?
+  timeOut             DateTime?
+  supervisorCheckinId String?
+  notes               String?
+  createdAt           DateTime         @default(now())
+
+  guard             Guard              @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  site              Site               @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  supervisorCheckin SupervisorCheckin? @relation(fields: [supervisorCheckinId], references: [id], onDelete: SetNull)
+}
+
+model SupervisorCheckin {
+  id           String   @id @default(cuid())
+  supervisorId String
+  siteId       String
+  dateTime     DateTime
+  photoUrl     String?
+  gpsLat       Float?
+  gpsLon       Float?
+  notes        String?
+  incidentFlag Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  supervisor User               @relation("CheckinSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+  site       Site               @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  attendance AttendanceRecord[]
+}
+
+model AuditLog {
   id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      String
-  status    String   @default("active")
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
