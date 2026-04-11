@@ -1,28 +1,76 @@
 import axios from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 
+// ── In-memory token store (never localStorage — XSS protection) ───────────────
+let _accessToken: string | null = null;
+let _isRefreshing = false;
+
+export function setAccessToken(token: string | null): void {
+  _accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+// ── Axios instance ─────────────────────────────────────────────────────────────
 const api = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true,
+  withCredentials: true, // needed to send the httpOnly refresh cookie
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach JWT from localStorage to every request
+// ── Request interceptor — attach Bearer token ─────────────────────────────────
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (_accessToken) {
+    config.headers.Authorization = `Bearer ${_accessToken}`;
+  }
   return config;
 });
 
-// Handle 401 — redirect to login
+// ── Response interceptor — silent refresh on 401 ─────────────────────────────
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retried?: boolean };
+    const url = originalRequest?.url ?? '';
+
+    // Skip refresh loop for auth endpoints themselves
+    const isAuthEndpoint = url.includes('/auth/refresh') || url.includes('/auth/login');
+
+    if (error.response?.status === 401 && !originalRequest._retried && !isAuthEndpoint) {
+      if (_isRefreshing) {
+        return Promise.reject(error);
+      }
+
+      _isRefreshing = true;
+      originalRequest._retried = true;
+
+      try {
+        // Call refresh directly (withCredentials sends the httpOnly cookie)
+        const { data } = await axios.post(
+          '/api/v1/auth/refresh',
+          {},
+          { withCredentials: true },
+        );
+        const newToken: string = data.data.accessToken;
+        setAccessToken(newToken);
+
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        }
+        return api(originalRequest);
+      } catch {
+        setAccessToken(null);
+        window.location.href = '/login';
+        return Promise.reject(error);
+      } finally {
+        _isRefreshing = false;
+      }
     }
+
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
