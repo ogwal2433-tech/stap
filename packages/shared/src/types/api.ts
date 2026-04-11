@@ -5,14 +5,15 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+// Matches the Prisma Role enum (uppercase)
 export type UserRole =
-  | 'director'
-  | 'assistant_manager'
-  | 'administrator'
-  | 'operations_supervisor'
-  | 'field_supervisor'
-  | 'trainer'
-  | 'accounts_officer'
-  | 'marketing'
-  | 'guard'
-  | 'client';
+  | 'DIRECTOR'
+  | 'ASSISTANT_MANAGER'
+  | 'ADMINISTRATOR'
+  | 'OPERATIONS_SUPERVISOR'
+  | 'FIELD_SUPERVISOR'
+  | 'TRAINER'
+  | 'ACCOUNTS_OFFICER'
+  | 'MARKETING'
+  | 'GUARD'
+  | 'CLIENT';

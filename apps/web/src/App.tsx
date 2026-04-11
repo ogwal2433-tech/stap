@@ -1,28 +1,44 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Container, Button } from 'react-bootstrap';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import LoginPage from '@/pages/LoginPage';
 
-// Pages (create these as you go)
-// import LoginPage from '@/pages/LoginPage';
-// import DashboardPage from '@/pages/DashboardPage';
+function Dashboard() {
+  const { user, logout } = useAuth();
+  return (
+    <Container className="py-5">
+      <h2 style={{ color: '#1B3A6B' }}>Welcome, {user?.name}</h2>
+      <p className="text-muted mb-4">
+        Role: <span className="badge bg-secondary">{user?.role}</span>
+      </p>
+      <Button
+        variant="outline-secondary"
+        onClick={logout}
+      >
+        Sign out
+      </Button>
+    </Container>
+  );
+}
 
 function App() {
   return (
-    <div className="min-vh-100 bg-light">
+    <AuthProvider>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        {/* <Route path="/login" element={<LoginPage />} /> */}
-        {/* <Route path="/dashboard" element={<DashboardPage />} /> */}
-        <Route
-          path="*"
-          element={
-            <div className="container py-5 text-center">
-              <h1 className="display-4 text-primary">STAP Security</h1>
-              <p className="lead text-muted">Web Management Platform</p>
-              <span className="badge bg-success fs-6">Setup Complete ✓</span>
-            </div>
-          }
-        />
+        {/* Public */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Protected */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </div>
+    </AuthProvider>
   );
 }
 
