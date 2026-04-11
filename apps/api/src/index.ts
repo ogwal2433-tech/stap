@@ -17,7 +17,7 @@ import { disburseWorker } from './jobs/workers/disburseWorker';
 import { queues } from './jobs/queues';
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
-import authRouter from './routes/auth';
+import apiRouter from './routes/index';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -43,7 +43,7 @@ app.get('/api/v1/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use('/api/v1/auth', authRouter);
+app.use('/api/v1', apiRouter);
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);

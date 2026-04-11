@@ -1,0 +1,98 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # ── Enforce PR title convention ───────────────────────────────────────────────
+  pr-title-check:
+    name: PR Title Convention
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          PATTERN='^(feat|fix|chore|docs|refactor|test|style|ci|db)\(.+\):.+'
+          if ! echo "$PR_TITLE" | grep -qE "$PATTERN"; then
+            echo "❌ PR title does not follow the required convention."
+            echo ""
+            echo "Required format: <type>(<scope>): <description>"
+            echo "Allowed types: feat, fix, chore, docs, refactor, test, style, ci, db"
+            echo ""
+            echo "Examples:"
+            echo "  feat(auth): add TOTP two-factor authentication"
+            echo "  fix(api): resolve refresh token rotation race condition"
+            echo "  db(schema): add 2FA fields to users table"
+            echo ""
+            echo "Your title: $PR_TITLE"
+            exit 1
+          fi
+          echo "✅ PR title is valid: $PR_TITLE"
+
+  # ── Report which apps changed ─────────────────────────────────────────────────
+  changed-files:
+    name: Changed Files Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed files
+        id: changes
+        uses: tj-actions/changed-files@v44
+        with:
+          files_yaml: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+            shared:
+              - 'packages/shared/**'
+
+      - name: Post changed apps summary
+        run: |
+          API="${{ steps.changes.outputs.api_any_changed == 'true' && 'yes ✅' || 'no' }}"
+          WEB="${{ steps.changes.outputs.web_any_changed == 'true' && 'yes ✅' || 'no' }}"
+          SHARED="${{ steps.changes.outputs.shared_any_changed == 'true' && 'yes ✅' || 'no' }}"
+
+          echo "### 📁 Changed Packages" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Changed |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| API     | $API    |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web     | $WEB    |" >> $GITHUB_STEP_SUMMARY
+          echo "| Shared  | $SHARED |" >> $GITHUB_STEP_SUMMARY
+
+  # ── Security audit ────────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run security audit
+        id: audit
+        run: pnpm audit --audit-level=high || echo "AUDIT_FAILED=true" >> $GITHUB_ENV
+        continue-on-error: true
+
+      - name: Post audit warning
+        if: env.AUDIT_FAILED == 'true'
+        run: |
+          echo "### ⚠️ Security Audit Warning" >> $GITHUB_STEP_SUMMARY
+          echo "High or critical severity vulnerabilities were detected." >> $GITHUB_STEP_SUMMARY
+          echo "Run \`pnpm audit\` locally for details. This does not block the build." >> $GITHUB_STEP_SUMMARY

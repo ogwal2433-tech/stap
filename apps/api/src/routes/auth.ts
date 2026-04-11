@@ -1,9 +1,10 @@
 import { Router, type IRouter } from 'express';
 import rateLimit from 'express-rate-limit';
-import { LoginSchema } from '@stap/shared';
+import { LoginSchema, ROLES } from '@stap/shared';
 import { authService } from '../services/authService';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/authenticate';
+import { requireRole, requireMinimumRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';
 import prisma from '../db/prisma';
 import { UnauthorisedError } from '../errors/AppError';
@@ -117,6 +118,26 @@ router.get(
     }
 
     res.status(200).json({ success: true, data: user });
+  }),
+);
+
+// TODO: remove before production — RBAC smoke-test endpoint (Director only)
+router.get(
+  '/rbac-test/:role',
+  authenticate,
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    res.status(200).json({ success: true, data: req.user });
+  }),
+);
+
+// TODO: remove before production — minimum-role smoke-test endpoint (≥ ACCOUNTS_OFFICER)
+router.get(
+  '/minimum-role-test',
+  authenticate,
+  requireMinimumRole(ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (req, res) => {
+    res.status(200).json({ success: true, data: req.user });
   }),
 );
 

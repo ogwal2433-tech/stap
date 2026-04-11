@@ -109,6 +109,11 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  // ── 2FA fields (setup UI in Sprint 3 / TST-003) ──────────────────────────────
+  twoFactorEnabled     Boolean  @default(false)
+  twoFactorSecret      String?  // Encrypted TOTP secret — null until user sets up 2FA
+  twoFactorBackupCodes String[] // Array of hashed one-time backup codes
+
   // Back-relations
   guard               Guard?               @relation("GuardUser")
   uploadedDocuments   GuardDocument[]      @relation("DocumentUploader")

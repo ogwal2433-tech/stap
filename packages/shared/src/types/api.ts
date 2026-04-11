@@ -5,15 +5,5 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-// Matches the Prisma Role enum (uppercase)
-export type UserRole =
-  | 'DIRECTOR'
-  | 'ASSISTANT_MANAGER'
-  | 'ADMINISTRATOR'
-  | 'OPERATIONS_SUPERVISOR'
-  | 'FIELD_SUPERVISOR'
-  | 'TRAINER'
-  | 'ACCOUNTS_OFFICER'
-  | 'MARKETING'
-  | 'GUARD'
-  | 'CLIENT';
+// UserRole is now the canonical export from ./types/roles
+// Re-exported via packages/shared/src/index.ts → types/roles

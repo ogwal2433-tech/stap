@@ -1,9 +1,15 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
+import { type UserRole } from '@stap/shared';
 
-export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+interface ProtectedRouteProps {
+  /** When provided, only users with one of these roles can access the route. */
+  allowedRoles?: UserRole[];
+}
+
+export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,6 +23,10 @@ export default function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && user && !allowedRoles.includes(user.role as UserRole)) {
+    return <Navigate to="/unauthorised" replace />;
   }
 
   return <Outlet />;

@@ -1,26 +1,15 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Container, Button } from 'react-bootstrap';
-import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import LoginPage from '@/pages/LoginPage';
+import DashboardPage from '@/pages/DashboardPage';
+import UnauthorisedPage from '@/pages/UnauthorisedPage';
 
-function Dashboard() {
-  const { user, logout } = useAuth();
-  return (
-    <Container className="py-5">
-      <h2 style={{ color: '#1B3A6B' }}>Welcome, {user?.name}</h2>
-      <p className="text-muted mb-4">
-        Role: <span className="badge bg-secondary">{user?.role}</span>
-      </p>
-      <Button
-        variant="outline-secondary"
-        onClick={logout}
-      >
-        Sign out
-      </Button>
-    </Container>
-  );
-}
+// Example of role-gated routes (uncomment in Sprint 2 as modules ship):
+// import { ROLES } from '@stap/shared';
+// <Route element={<ProtectedRoute allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} />}>
+//   <Route path="/payroll" element={<PayrollPage />} />
+// </Route>
 
 function App() {
   return (
@@ -28,10 +17,11 @@ function App() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/unauthorised" element={<UnauthorisedPage />} />
 
-        {/* Protected */}
+        {/* Protected (all authenticated users) */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
 
