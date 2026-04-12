@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(pm2 restart:*)"
+      "Bash(pm2 restart:*)",
+      "Bash(pnpm --filter web exec tsc --noEmit)",
+      "Bash(pnpm --filter api test --reporter=verbose)"
     ]
   }
 }

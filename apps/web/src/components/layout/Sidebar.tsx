@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Nav, Offcanvas } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../RoleGuard';
@@ -47,8 +47,12 @@ interface NavContentProps {
   onNavigate?: () => void;
 }
 
+// Active nav items (all others are "coming soon")
+const ACTIVE_PATHS = new Set(['/dashboard', '/guards', '/clients']);
+
 function NavContent({ onNavigate }: NavContentProps) {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
 
   return (
     <div className="d-flex flex-column h-100">
@@ -65,23 +69,35 @@ function NavContent({ onNavigate }: NavContentProps) {
         {NAV_ITEMS.map((item) => (
           <RoleGuard key={item.to} allowedRoles={item.roles as UserRole[]}>
             <Nav.Item>
-              <NavLink
-                to={item.to}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  `nav-link d-flex align-items-center gap-2 px-3 py-2 rounded mx-2 mb-1 ${
-                    isActive ? 'bg-white bg-opacity-10 text-white fw-medium' : ''
-                  }`
-                }
-                style={({ isActive }) => ({
-                  color: isActive ? '#fff' : 'rgba(255,255,255,0.7)',
-                  textDecoration: 'none',
-                  transition: 'color 0.15s',
-                })}
-              >
-                <i className={`bi ${item.icon}`} style={{ fontSize: '1rem', width: 18, textAlign: 'center' }} />
-                <span className="small">{item.label}</span>
-              </NavLink>
+              {ACTIVE_PATHS.has(item.to) ? (
+                <NavLink
+                  to={item.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `nav-link d-flex align-items-center gap-2 px-3 py-2 rounded mx-2 mb-1 ${
+                      isActive || pathname.startsWith(item.to + '/') ? 'bg-white bg-opacity-10 text-white fw-medium' : ''
+                    }`
+                  }
+                  style={({ isActive }) => ({
+                    color: isActive || pathname.startsWith(item.to + '/') ? '#fff' : 'rgba(255,255,255,0.7)',
+                    textDecoration: 'none',
+                    transition: 'color 0.15s',
+                  })}
+                >
+                  <i className={`bi ${item.icon}`} style={{ fontSize: '1rem', width: 18, textAlign: 'center' }} />
+                  <span className="small">{item.label}</span>
+                </NavLink>
+              ) : (
+                <div
+                  className="nav-link d-flex align-items-center gap-2 px-3 py-2 rounded mx-2 mb-1"
+                  style={{ color: 'rgba(255,255,255,0.35)', cursor: 'not-allowed' }}
+                  title="Coming soon"
+                >
+                  <i className={`bi ${item.icon}`} style={{ fontSize: '1rem', width: 18, textAlign: 'center' }} />
+                  <span className="small">{item.label}</span>
+                  <span className="ms-auto badge" style={{ fontSize: '0.6rem', background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' }}>Soon</span>
+                </div>
+              )}
             </Nav.Item>
           </RoleGuard>
         ))}

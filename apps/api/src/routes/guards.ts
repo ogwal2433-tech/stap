@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import fs from 'fs';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
+import { letterService } from '../services/letterService';
 import { uploadService } from '../services/uploadService';
 import { guardDocumentUpload } from '../config/multer';
 import { authenticate } from '../middleware/authenticate';
@@ -13,11 +14,14 @@ import { QueueService } from '../jobs/QueueService';
 import {
   ROLES,
   INTERNAL_ROLES,
+  HR_ROLES,
   GUARD_WRITE_ROLES,
   CreateGuardSchema,
   UpdateGuardSchema,
   GuardStatusSchema,
   GuardListQuerySchema,
+  CreateDisciplinarySchema,
+  LetterGenerationSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -202,6 +206,138 @@ router.delete(
     });
 
     res.status(200).json({ success: true, message: 'Document removed' });
+  }),
+);
+
+// ── POST /:id/disciplinary — create disciplinary record ────────────────────────
+router.post(
+  '/:id/disciplinary',
+  requireRole(...GUARD_WRITE_ROLES),
+  validate(CreateDisciplinarySchema),
+  asyncHandler(async (req, res) => {
+    const guard = await prisma.guard.findUnique({ where: { id: req.params.id } });
+    if (!guard) throw new AppError('Guard not found', 404);
+
+    const record = await prisma.disciplinaryRecord.create({
+      data: {
+        guardId: req.params.id,
+        incidentDate: new Date(req.body.incidentDate),
+        type: req.body.type,
+        officerId: req.user!.userId,
+        reason: req.body.reason,
+        outcome: req.body.outcome,
+      },
+      include: {
+        guard: { select: { id: true, firstName: true, lastName: true, otherNames: true, nationalId: true } },
+        officer: { select: { id: true, name: true } },
+      },
+    });
+
+    await QueueService.logAudit({
+      userId: req.user!.userId,
+      action: 'DISCIPLINARY_RECORD_CREATED',
+      entity: 'disciplinaryRecord',
+      entityId: record.id,
+      newValue: { guardId: req.params.id, type: record.type },
+    });
+
+    const fullName = [record.guard.firstName, record.guard.otherNames, record.guard.lastName]
+      .filter(Boolean)
+      .join(' ');
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: record.id,
+        guard: { id: record.guard.id, fullName, nationalId: record.guard.nationalId },
+        incidentDate: record.incidentDate.toISOString(),
+        type: record.type,
+        officer: { id: record.officer.id, name: record.officer.name },
+        reason: record.reason,
+        outcome: record.outcome,
+        letterPath: record.letterPath,
+        createdAt: record.createdAt.toISOString(),
+      },
+    });
+  }),
+);
+
+// ── GET /:id/disciplinary — list disciplinary records for a guard ──────────────
+router.get(
+  '/:id/disciplinary',
+  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  asyncHandler(async (req, res) => {
+    const records = await prisma.disciplinaryRecord.findMany({
+      where: { guardId: req.params.id },
+      orderBy: { incidentDate: 'desc' },
+      include: {
+        guard: { select: { id: true, firstName: true, lastName: true, otherNames: true, nationalId: true } },
+        officer: { select: { id: true, name: true } },
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: records.map((r) => ({
+        id: r.id,
+        guard: {
+          id: r.guard.id,
+          fullName: [r.guard.firstName, r.guard.otherNames, r.guard.lastName].filter(Boolean).join(' '),
+          nationalId: r.guard.nationalId,
+        },
+        incidentDate: r.incidentDate.toISOString(),
+        type: r.type,
+        officer: { id: r.officer.id, name: r.officer.name },
+        reason: r.reason,
+        outcome: r.outcome,
+        letterPath: r.letterPath,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  }),
+);
+
+// ── POST /:id/letters — generate a letter for a guard ─────────────────────────
+router.post(
+  '/:id/letters',
+  requireRole(...GUARD_WRITE_ROLES),
+  validate(LetterGenerationSchema),
+  asyncHandler(async (req, res) => {
+    const result = await letterService.generateLetter(
+      { ...req.body, guardId: req.params.id },
+      req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: result });
+  }),
+);
+
+// ── GET /:id/letters — list generated letters for a guard ─────────────────────
+router.get(
+  '/:id/letters',
+  requireRole(...HR_ROLES),
+  asyncHandler(async (req, res) => {
+    const docs = await prisma.guardDocument.findMany({
+      where: {
+        guardId: req.params.id,
+        documentType: { in: ['WARNING_LETTER', 'CONTRACT', 'OTHER'] },
+        deletedAt: null,
+      },
+      orderBy: { uploadedAt: 'desc' },
+      include: { uploader: { select: { name: true } } },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: docs.map((d) => ({
+        id: d.id,
+        documentType: d.documentType,
+        filePath: d.filePath,
+        version: d.version,
+        uploadedAt: d.uploadedAt.toISOString(),
+        uploadedBy: { name: d.uploader.name },
+        deletedAt: d.deletedAt ? d.deletedAt.toISOString() : null,
+      })),
+    });
   }),
 );
 

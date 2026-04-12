@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -123,6 +123,7 @@ model User {
   checkins            SupervisorCheckin[]  @relation("CheckinSupervisor")
   assignedComplaints  ClientComplaint[]    @relation("ComplaintAssignee")
   auditLogs           AuditLog[]
+  reportedIncidents   Incident[]           @relation("IncidentReporter")
 }
 
 model Guard {
@@ -153,6 +154,7 @@ model Guard {
   disciplinary      DisciplinaryRecord[]
   deployments       Deployment[]
   attendance        AttendanceRecord[]
+  incidentGuards    IncidentGuard[]
 }
 
 model GuardDocument {
@@ -238,6 +240,7 @@ model Site {
   attendance        AttendanceRecord[]
   checkins          SupervisorCheckin[]
   complaints        ClientComplaint[]
+  incidents         Incident[]
 }
 
 model Contract {
@@ -319,6 +322,31 @@ model SupervisorCheckin {
   supervisor User               @relation("CheckinSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
   site       Site               @relation(fields: [siteId], references: [id], onDelete: Restrict)
   attendance AttendanceRecord[]
+  incidents  Incident[]
+}
+
+model Incident {
+  id                  String    @id @default(cuid())
+  siteId              String
+  site                Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  incidentType        String
+  description         String
+  severity            String
+  occurredAt          DateTime
+  reportedById        String
+  reportedBy          User      @relation("IncidentReporter", fields: [reportedById], references: [id])
+  supervisorCheckinId String?
+  supervisorCheckin   SupervisorCheckin? @relation(fields: [supervisorCheckinId], references: [id])
+  incidentGuards      IncidentGuard[]
+  createdAt           DateTime  @default(now())
+}
+
+model IncidentGuard {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  guardId    String
+  guard      Guard    @relation(fields: [guardId], references: [id], onDelete: Restrict)
 }
 
 model AuditLog {

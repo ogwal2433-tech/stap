@@ -5,14 +5,17 @@ import {
   Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory } from '../../hooks/useGuards';
+import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { guardsApi } from '../../lib/guards.api';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
+import DisciplinaryRecordModal from '../../components/guards/DisciplinaryRecordModal';
+import LetterGenerationModal from '../../components/guards/LetterGenerationModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -46,6 +49,11 @@ export default function GuardDetailPage() {
     id ?? '',
     deployPage,
   );
+  const { data: disciplinaryRecords = [], refetch: refetchDisciplinary } = useDisciplinaryRecords(id ?? '');
+  const { data: guardLetters = [], refetch: refetchLetters } = useGuardLetters(id ?? '');
+
+  const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
+  const [showLetterModal, setShowLetterModal] = useState(false);
 
   if (isLoading) {
     return (
@@ -331,7 +339,29 @@ export default function GuardDetailPage() {
 
         {/* ── Tab 4: Disciplinary Records ───────────────────────────────────── */}
         <Tab eventKey="disciplinary" title="Disciplinary Records">
-          {(guard as { disciplinary?: { id: string; incidentDate: string; type: string; outcome: string; reason: string; officer: { name: string } }[] }).disciplinary?.length === 0 ? (
+          {/* Action bar */}
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="text-muted small">{disciplinaryRecords.length} record(s)</span>
+            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+              <ButtonGroup size="sm">
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setShowDisciplinaryModal(true)}
+                >
+                  <i className="bi bi-plus-lg me-1" />Add Record
+                </Button>
+                <Button
+                  style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
+                  onClick={() => setShowLetterModal(true)}
+                >
+                  <i className="bi bi-file-earmark-pdf me-1" />Generate Letter
+                </Button>
+              </ButtonGroup>
+            </RoleGuard>
+          </div>
+
+          {/* Disciplinary records table */}
+          {disciplinaryRecords.length === 0 ? (
             <Alert variant="light">No disciplinary records.</Alert>
           ) : (
             <Table size="sm" hover responsive className="align-middle small">
@@ -342,10 +372,11 @@ export default function GuardDetailPage() {
                   <th>Officer</th>
                   <th>Reason</th>
                   <th>Outcome</th>
+                  <th>Letter</th>
                 </tr>
               </thead>
               <tbody>
-                {(guard as { disciplinary?: { id: string; incidentDate: string; type: string; outcome: string; reason: string; officer: { name: string } }[] }).disciplinary?.map((d) => {
+                {disciplinaryRecords.map((d) => {
                   const badgeInfo = DISCIPLINARY_BADGE[d.type] ?? { bg: 'secondary' };
                   return (
                     <tr key={d.id}>
@@ -356,17 +387,78 @@ export default function GuardDetailPage() {
                         </Badge>
                       </td>
                       <td>{d.officer?.name}</td>
-                      <td>{d.reason}</td>
-                      <td>{d.outcome}</td>
+                      <td title={d.reason}>
+                        {d.reason.length > 60 ? d.reason.substring(0, 60) + '…' : d.reason}
+                      </td>
+                      <td title={d.outcome}>
+                        {d.outcome.length > 60 ? d.outcome.substring(0, 60) + '…' : d.outcome}
+                      </td>
+                      <td>
+                        {d.letterPath ? (
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            href={d.letterPath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            as="a"
+                          >
+                            <i className="bi bi-download" />
+                          </Button>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </Table>
           )}
-          <p className="text-muted small mt-2">
-            Note: Adding disciplinary records directly is available in GRD-004.
-          </p>
+
+          {/* Generated Letters section */}
+          <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+            <div className="mt-4">
+              <h6 className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.75rem', letterSpacing: '0.06em' }}>
+                Generated Letters
+              </h6>
+              {guardLetters.length === 0 ? (
+                <Alert variant="light" className="small py-2">No letters generated yet.</Alert>
+              ) : (
+                <Table size="sm" hover responsive className="align-middle small">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Letter Type</th>
+                      <th>Date Generated</th>
+                      <th>Version</th>
+                      <th>Download</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guardLetters.map((l) => (
+                      <tr key={l.id}>
+                        <td><Badge bg="secondary">{l.documentType.replace(/_/g, ' ')}</Badge></td>
+                        <td>{new Date(l.uploadedAt).toLocaleDateString()}</td>
+                        <td>v{l.version}</td>
+                        <td>
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            href={l.filePath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            as="a"
+                          >
+                            <i className="bi bi-download" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </div>
+          </RoleGuard>
         </Tab>
       </Tabs>
 
@@ -386,6 +478,24 @@ export default function GuardDetailPage() {
           guardId={id!}
           onClose={() => setShowDocUpload(false)}
           onSuccess={() => refetch()}
+        />
+      )}
+      {showDisciplinaryModal && (
+        <DisciplinaryRecordModal
+          guardId={id!}
+          guardName={guard.fullName}
+          existingRecords={disciplinaryRecords}
+          onClose={() => setShowDisciplinaryModal(false)}
+          onSuccess={() => refetchDisciplinary()}
+        />
+      )}
+      {showLetterModal && (
+        <LetterGenerationModal
+          guardId={id!}
+          guardName={guard.fullName}
+          disciplinaryRecords={disciplinaryRecords}
+          onClose={() => setShowLetterModal(false)}
+          onSuccess={() => refetchLetters()}
         />
       )}
     </div>

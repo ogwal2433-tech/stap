@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import authRouter from './auth';
 import { guardsRouter } from './guards';
+import { clientsRouter } from './clients';
 
 const router: IRouter = Router();
 
@@ -8,11 +9,10 @@ const router: IRouter = Router();
 
 router.use('/auth', authRouter);
 router.use('/guards', guardsRouter);
+router.use('/clients', clientsRouter);
 
 // Sprint 2 routes (uncomment as modules are built):
 // router.use('/attendance', attendanceRouter)  // Sprint 2
-// router.use('/clients', clientsRouter)        // Sprint 2
-// router.use('/sites', sitesRouter)            // Sprint 2
 // router.use('/deployments', deploymentsRouter) // Sprint 2
 
 // Sprint 3 routes:

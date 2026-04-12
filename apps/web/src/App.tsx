@@ -15,8 +15,12 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const GuardsListPage = lazy(() => import('@/pages/guards/GuardsListPage'));
 const GuardFormPage = lazy(() => import('@/pages/guards/GuardFormPage'));
 const GuardDetailPage = lazy(() => import('@/pages/guards/GuardDetailPage'));
+const ClientsListPage = lazy(() => import('@/pages/clients/ClientsListPage'));
+const ClientFormPage = lazy(() => import('@/pages/clients/ClientFormPage'));
+const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'));
 
 const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 
 // Example of role-gated routes (uncomment in Sprint 2 as modules ship):
 // <Route element={<ProtectedRoute allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} />}>
@@ -77,6 +81,44 @@ function App() {
                   <Suspense fallback={<PageSpinner />}>
                     <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
                       <GuardFormPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+
+              {/* Clients */}
+              <Route
+                path="/clients"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <ClientsListPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/clients/new"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}>
+                      <ClientFormPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/clients/:id"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <ClientDetailPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/clients/:id/edit"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}>
+                      <ClientFormPage />
                     </RoleGuard>
                   </Suspense>
                 }
