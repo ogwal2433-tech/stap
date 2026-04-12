@@ -1,0 +1,235 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  # ── Job 1: Run tests before deploying ──────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stap_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-jwt-secret-for-ci-only
+      JWT_REFRESH_SECRET: test-refresh-secret-for-ci-only
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter api db:generate
+
+      - name: Run database migrations (test DB)
+        run: cd apps/api && pnpm exec prisma migrate deploy
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run type-check
+        run: pnpm type-check
+
+      - name: Run tests
+        run: pnpm --filter api test
+
+  # ── Job 2: Build ────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter api db:generate
+
+      - name: Build API
+        run: pnpm --filter api build
+
+      - name: Build frontend
+        run: pnpm --filter web build
+
+      - name: Upload API build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          path: apps/api/dist
+          retention-days: 1
+
+      - name: Upload web build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 1
+
+  # ── Job 3: Deploy ────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST << 'ENDSSH'
+            set -e  # Exit immediately if any command fails
+
+            echo "🚀 Starting deployment..."
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # 1. Pull the latest code from develop
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout develop
+            git pull origin develop
+
+            # 2. Install dependencies (production only for API,
+            #    all for shared and web build tools)
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            # 3. Generate Prisma client
+            echo "🗄️  Generating Prisma client..."
+            pnpm --filter api db:generate
+
+            # 4. Run any pending database migrations
+            echo "🗄️  Running database migrations..."
+            cd apps/api && pnpm exec prisma migrate deploy
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # 5. Build API
+            echo "🔨 Building API..."
+            pnpm --filter api build
+
+            # 6. Build frontend
+            echo "🔨 Building frontend..."
+            pnpm --filter web build
+
+            # 7. Reload PM2 (zero-downtime reload)
+            echo "♻️  Reloading application..."
+            pm2 reload ecosystem.config.js --env production
+
+            # 8. Verify processes are running
+            echo "✅ Verifying deployment..."
+            pm2 status
+
+            # 9. Quick health check
+            sleep 3
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:3001/api/v1/health)
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Health check passed (HTTP $HTTP_STATUS)"
+            else
+              echo "❌ Health check failed (HTTP $HTTP_STATUS)"
+              echo "Rolling back..."
+              pm2 reload ecosystem.config.js --env production
+              exit 1
+            fi
+
+            echo "🎉 Deployment complete!"
+          ENDSSH
+
+      - name: Post deployment summary
+        if: success()
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Server | ${{ secrets.DEPLOY_HOST }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | develop |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Post failure summary
+        if: failure()
+        run: |
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
