@@ -1,4 +1,5 @@
 import { Badge, Button, Card, Col, Container, Navbar, Row } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import RoleGuard from '../components/RoleGuard';
 import {
@@ -53,6 +54,7 @@ function QuickLinkCard({ emoji, title, description }: QuickLinkCardProps) {
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   if (!user) return null;
 
@@ -106,11 +108,13 @@ export default function DashboardPage() {
           <Row xs={1} sm={2} lg={4} className="g-3">
             <RoleGuard allowedRoles={[...HR_ROLES, ...DEPLOYMENT_ROLES]}>
               <Col>
-                <QuickLinkCard
-                  emoji="👮"
-                  title="Guards"
-                  description="Manage guard profiles, deployments and records."
-                />
+                <div onClick={() => navigate('/guards')} style={{ cursor: 'pointer' }}>
+                  <QuickLinkCard
+                    emoji="👮"
+                    title="Guards"
+                    description="Manage guard profiles, deployments and records."
+                  />
+                </div>
               </Col>
             </RoleGuard>
 

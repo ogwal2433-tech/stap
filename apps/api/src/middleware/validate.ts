@@ -16,3 +16,21 @@ export function validate(schema: ZodSchema): RequestHandler {
     next();
   };
 }
+
+/** Like `validate`, but parses `req.query` instead of `req.body`. */
+export function validateQuery(schema: ZodSchema): RequestHandler {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid query parameters',
+        details: (result.error as ZodError).flatten(),
+      });
+      return;
+    }
+    // Assign parsed (and coerced) values back to req.query
+    req.query = result.data as typeof req.query;
+    next();
+  };
+}

@@ -1,0 +1,334 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Alert, Badge, Button, ButtonGroup, Col, Dropdown, Form,
+  Pagination, Row, Spinner, Table,
+} from 'react-bootstrap';
+import { useGuardList, useUpdateGuardStatus } from '../../hooks/useGuards';
+import RoleGuard from '../../components/RoleGuard';
+import InitialsAvatar from '../../components/ui/InitialsAvatar';
+import StatusChangeModal from '../../components/guards/StatusChangeModal';
+import { useToast } from '../../context/ToastContext';
+import {
+  ROLES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
+} from '@stap/shared';
+import type { GuardResponse } from '@stap/shared';
+
+const STATUS_BADGE: Record<string, string> = {
+  ACTIVE: 'success',
+  SUSPENDED: 'warning',
+  TERMINATED: 'danger',
+};
+
+function contractExpiringSoon(contractEnd: string | null): boolean {
+  if (!contractEnd) return false;
+  const days = (new Date(contractEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  return days >= 0 && days <= 30;
+}
+
+interface StatusModal {
+  guard: GuardResponse;
+  targetStatus: 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
+}
+
+export default function GuardsListPage() {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading, isError, error, refetch } = useGuardList({
+    page,
+    limit,
+    search: debouncedSearch || undefined,
+    status: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
+    sortBy,
+    sortOrder: 'desc',
+  });
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    setPage(1);
+  }, []);
+
+  const guards = data?.data ?? [];
+  const pagination = data?.pagination;
+  const totalPages = pagination?.totalPages ?? 1;
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    const pages: number[] = [];
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, start + 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+
+    return (
+      <Pagination size="sm" className="mb-0 mt-3 justify-content-center">
+        <Pagination.First onClick={() => setPage(1)} disabled={page === 1} />
+        <Pagination.Prev onClick={() => setPage((p) => p - 1)} disabled={page === 1} />
+        {pages.map((p) => (
+          <Pagination.Item key={p} active={p === page} onClick={() => setPage(p)}>
+            {p}
+          </Pagination.Item>
+        ))}
+        <Pagination.Next onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} />
+        <Pagination.Last onClick={() => setPage(totalPages)} disabled={page === totalPages} />
+      </Pagination>
+    );
+  };
+
+  return (
+    <div>
+      {/* Header row */}
+      <div className="d-flex align-items-center justify-content-between mb-4">
+        <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Guards</h4>
+        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+          <Button
+            variant="primary"
+            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+            onClick={() => navigate('/guards/new')}
+          >
+            + Add Guard
+          </Button>
+        </RoleGuard>
+      </div>
+
+      {/* Filter bar */}
+      <Row className="g-2 mb-3">
+        <Col md={4}>
+          <Form.Control
+            placeholder="Search by name, NIN or phone…"
+            value={search}
+            onChange={handleSearchChange}
+          />
+        </Col>
+        <Col md={2}>
+          <Form.Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+            <option value="">All Statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="SUSPENDED">Suspended</option>
+            <option value="TERMINATED">Terminated</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+            <option value="createdAt">Date Added</option>
+            <option value="firstName">First Name</option>
+            <option value="lastName">Last Name</option>
+            <option value="salaryRate">Salary</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}>
+            <option value={10}>10 per page</option>
+            <option value={20}>20 per page</option>
+            <option value={50}>50 per page</option>
+          </Form.Select>
+        </Col>
+      </Row>
+
+      {/* Results summary */}
+      {pagination && (
+        <p className="text-muted small mb-2">
+          Showing{' '}
+          {pagination.total === 0
+            ? 0
+            : (page - 1) * limit + 1}
+          –{Math.min(page * limit, pagination.total)} of {pagination.total} guards
+        </p>
+      )}
+
+      {/* Error state */}
+      {isError && (
+        <Alert variant="danger">
+          Failed to load guards. {(error as Error)?.message}
+          <Button size="sm" variant="outline-danger" className="ms-3" onClick={() => refetch()}>
+            Retry
+          </Button>
+        </Alert>
+      )}
+
+      {/* Loading skeleton */}
+      {isLoading && (
+        <Table striped hover responsive className="align-middle">
+          <tbody>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <tr key={i}>
+                {Array.from({ length: 7 }).map((__, j) => (
+                  <td key={j}>
+                    <p className="placeholder-glow mb-0">
+                      <span className="placeholder col-10 rounded" />
+                    </p>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+
+      {/* Table */}
+      {!isLoading && !isError && (
+        <>
+          {guards.length === 0 ? (
+            <Alert variant="info">
+              {debouncedSearch || status
+                ? 'No guards match your search. Try different filters.'
+                : "No guards have been added yet. Click 'Add Guard' to get started."}
+            </Alert>
+          ) : (
+            <Table striped hover responsive className="align-middle small">
+              <thead className="table-dark">
+                <tr>
+                  <th>Photo</th>
+                  <th>Name / NIN</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Contract</th>
+                  <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
+                    <th>Salary</th>
+                  </RoleGuard>
+                  <th>Docs</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {guards.map((g) => (
+                  <tr key={g.id}>
+                    <td>
+                      {g.photoUrl ? (
+                        <img
+                          src={g.photoUrl}
+                          alt={g.fullName}
+                          width={40}
+                          height={40}
+                          className="rounded-circle object-fit-cover"
+                        />
+                      ) : (
+                        <InitialsAvatar name={g.fullName} size={40} />
+                      )}
+                    </td>
+                    <td>
+                      <div className="fw-semibold">{g.fullName}</div>
+                      <div className="text-muted">{g.nationalId}</div>
+                    </td>
+                    <td>{g.phone}</td>
+                    <td>
+                      <Badge
+                        bg={STATUS_BADGE[g.employmentStatus]}
+                        text={g.employmentStatus === 'SUSPENDED' ? 'dark' : undefined}
+                      >
+                        {g.employmentStatus}
+                      </Badge>
+                    </td>
+                    <td>
+                      <div>{new Date(g.contractStart).toLocaleDateString()}</div>
+                      {g.contractEnd && (
+                        <div
+                          className={`small ${
+                            contractExpiringSoon(g.contractEnd) ? 'text-danger fw-semibold' : 'text-muted'
+                          }`}
+                        >
+                          Expires: {new Date(g.contractEnd).toLocaleDateString()}
+                        </div>
+                      )}
+                    </td>
+                    <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
+                      <td>UGX {g.salaryRate.toLocaleString()}</td>
+                    </RoleGuard>
+                    <td>
+                      <Badge bg="secondary">{g._count?.documents ?? 0} docs</Badge>
+                    </td>
+                    <td>
+                      <ButtonGroup size="sm">
+                        <Button variant="outline-primary" onClick={() => navigate(`/guards/${g.id}`)}>
+                          View
+                        </Button>
+                        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                          <Button
+                            variant="outline-secondary"
+                            onClick={() => navigate(`/guards/${g.id}/edit`)}
+                          >
+                            Edit
+                          </Button>
+                        </RoleGuard>
+                        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+                          <Dropdown as={ButtonGroup}>
+                            <Dropdown.Toggle
+                              split
+                              variant="outline-secondary"
+                              id={`status-${g.id}`}
+                            />
+                            <Dropdown.Menu>
+                              {g.employmentStatus !== 'ACTIVE' && (
+                                <Dropdown.Item
+                                  onClick={() =>
+                                    setStatusModal({ guard: g, targetStatus: 'ACTIVE' })
+                                  }
+                                >
+                                  ✅ Activate
+                                </Dropdown.Item>
+                              )}
+                              {g.employmentStatus !== 'SUSPENDED' && (
+                                <Dropdown.Item
+                                  onClick={() =>
+                                    setStatusModal({ guard: g, targetStatus: 'SUSPENDED' })
+                                  }
+                                >
+                                  ⚠️ Suspend
+                                </Dropdown.Item>
+                              )}
+                              {g.employmentStatus !== 'TERMINATED' && (
+                                <Dropdown.Item
+                                  className="text-danger"
+                                  onClick={() =>
+                                    setStatusModal({ guard: g, targetStatus: 'TERMINATED' })
+                                  }
+                                >
+                                  ❌ Terminate
+                                </Dropdown.Item>
+                              )}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                        </RoleGuard>
+                      </ButtonGroup>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+
+          {renderPagination()}
+        </>
+      )}
+
+      {/* Status change modal */}
+      {statusModal && (
+        <StatusChangeModal
+          guardId={statusModal.guard.id}
+          guardName={statusModal.guard.fullName}
+          currentStatus={statusModal.guard.employmentStatus}
+          targetStatus={statusModal.targetStatus}
+          onClose={() => setStatusModal(null)}
+          onSuccess={() => {
+            showToast('Guard status updated', 'success');
+            refetch();
+          }}
+        />
+      )}
+    </div>
+  );
+}

@@ -4,8 +4,14 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
 dotenv.config();
+
+// ── Ensure upload directories exist ───────────────────────────────────────────
+fs.mkdirSync('./public/uploads/temp', { recursive: true });
+fs.mkdirSync('./public/uploads/guards', { recursive: true });
 
 // ── Queue workers (initialise on startup) ──────────────────────────────────────
 import { auditWorker } from './jobs/workers/auditWorker';
@@ -37,6 +43,9 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// ── Static files — serve uploaded files ───────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 app.get('/api/v1/health', (_req, res) => {

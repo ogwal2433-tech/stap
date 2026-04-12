@@ -1,14 +1,15 @@
 import { Router, type IRouter } from 'express';
 import authRouter from './auth';
+import { guardsRouter } from './guards';
 
 const router: IRouter = Router();
 
 // ── Mounted route modules ──────────────────────────────────────────────────────
 
 router.use('/auth', authRouter);
+router.use('/guards', guardsRouter);
 
 // Sprint 2 routes (uncomment as modules are built):
-// router.use('/guards', guardsRouter)          // Sprint 2
 // router.use('/attendance', attendanceRouter)  // Sprint 2
 // router.use('/clients', clientsRouter)        // Sprint 2
 // router.use('/sites', sitesRouter)            // Sprint 2

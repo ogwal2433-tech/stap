@@ -3,7 +3,11 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-const PASSWORD = 'StapAdmin2026!';
+const PASSWORD = process.env.SEED_PASSWORD as string;
+if (!PASSWORD) {
+  console.error('❌ SEED_PASSWORD env var is required. Set it in .env before running the seed.');
+  process.exit(1);
+}
 const SALT_ROUNDS = 12;
 
 async function main() {

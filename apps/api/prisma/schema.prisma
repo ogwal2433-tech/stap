@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // url      = env("DATABASE_URL")
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -163,6 +163,8 @@ model GuardDocument {
   version      Int          @default(1)
   uploadedBy   String
   uploadedAt   DateTime     @default(now())
+  // Soft delete only — documents are legal records and must not be permanently destroyed
+  deletedAt    DateTime?
 
   guard    Guard @relation(fields: [guardId], references: [id], onDelete: Cascade)
   uploader User  @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
