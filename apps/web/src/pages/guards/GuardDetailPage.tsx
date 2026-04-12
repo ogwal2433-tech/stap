@@ -112,7 +112,7 @@ export default function GuardDetailPage() {
                     className="text-danger"
                     onClick={() => setStatusModal({ targetStatus: 'TERMINATED' })}
                   >
-                    ❌ Terminate
+                    <i className="bi bi-x-circle-fill me-1" />Terminate
                   </Dropdown.Item>
                 )}
               </Dropdown.Menu>

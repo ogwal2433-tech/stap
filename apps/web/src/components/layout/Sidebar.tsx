@@ -17,17 +17,17 @@ const ADMIN_ONLY = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 
 const NAV_ITEMS = [
-  { icon: '🏠', label: 'Dashboard', to: '/dashboard', roles: INTERNAL_ROLES },
-  { icon: '👮', label: 'Guards', to: '/guards', roles: INTERNAL_ROLES },
-  { icon: '📅', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_ROLES },
-  { icon: '🏢', label: 'Clients', to: '/clients', roles: NON_GUARD_INTERNAL },
-  { icon: '💰', label: 'Finance', to: '/finance', roles: FINANCE_ROLES },
-  { icon: '📦', label: 'Inventory', to: '/inventory', roles: ADMIN_ONLY },
-  { icon: '📋', label: 'Requisitions', to: '/requisitions', roles: NON_GUARD_INTERNAL },
-  { icon: '👥', label: 'HR', to: '/hr', roles: HR_ROLES },
-  { icon: '📊', label: 'Reports', to: '/reports', roles: REPORT_ROLES },
-  { icon: '🔔', label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
-  { icon: '⚙️', label: 'Settings', to: '/settings', roles: [ROLES.DIRECTOR] },
+  { icon: 'bi-house-fill',          label: 'Dashboard',     to: '/dashboard',     roles: INTERNAL_ROLES },
+  { icon: 'bi-shield-fill',         label: 'Guards',        to: '/guards',        roles: INTERNAL_ROLES },
+  { icon: 'bi-calendar-check-fill', label: 'Attendance',    to: '/attendance',    roles: DEPLOYMENT_ROLES },
+  { icon: 'bi-building-fill',       label: 'Clients',       to: '/clients',       roles: NON_GUARD_INTERNAL },
+  { icon: 'bi-cash-coin',           label: 'Finance',       to: '/finance',       roles: FINANCE_ROLES },
+  { icon: 'bi-box-seam-fill',       label: 'Inventory',     to: '/inventory',     roles: ADMIN_ONLY },
+  { icon: 'bi-clipboard2-fill',     label: 'Requisitions',  to: '/requisitions',  roles: NON_GUARD_INTERNAL },
+  { icon: 'bi-people-fill',         label: 'HR',            to: '/hr',            roles: HR_ROLES },
+  { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
+  { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
+  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
@@ -79,7 +79,7 @@ function NavContent({ onNavigate }: NavContentProps) {
                   transition: 'color 0.15s',
                 })}
               >
-                <span>{item.icon}</span>
+                <i className={`bi ${item.icon}`} style={{ fontSize: '1rem', width: 18, textAlign: 'center' }} />
                 <span className="small">{item.label}</span>
               </NavLink>
             </Nav.Item>

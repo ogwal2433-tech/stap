@@ -51,7 +51,7 @@ export default function StatusChangeModal({
         )}
         {targetStatus === 'TERMINATED' && (
           <Alert variant="danger">
-            ⚠️ This action will terminate the guard&apos;s contract. This cannot be easily
+            <i className="bi bi-exclamation-triangle-fill me-1" />This action will terminate the guard&apos;s contract. This cannot be easily
             reversed.
           </Alert>
         )}

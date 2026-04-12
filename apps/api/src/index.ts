@@ -1,13 +1,11 @@
+import './bootstrap';
 import express, { type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-
-dotenv.config();
 
 // ── Ensure upload directories exist ───────────────────────────────────────────
 fs.mkdirSync('./public/uploads/temp', { recursive: true });

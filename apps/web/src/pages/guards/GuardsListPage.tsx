@@ -297,7 +297,7 @@ export default function GuardsListPage() {
                                     setStatusModal({ guard: g, targetStatus: 'TERMINATED' })
                                   }
                                 >
-                                  ❌ Terminate
+                                  <i className="bi bi-x-circle-fill me-1" />Terminate
                                 </Dropdown.Item>
                               )}
                             </Dropdown.Menu>

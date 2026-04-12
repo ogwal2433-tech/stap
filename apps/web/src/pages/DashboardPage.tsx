@@ -32,16 +32,16 @@ function greeting(name: string): string {
 }
 
 interface QuickLinkCardProps {
-  emoji: string;
+  icon: string;
   title: string;
   description: string;
 }
 
-function QuickLinkCard({ emoji, title, description }: QuickLinkCardProps) {
+function QuickLinkCard({ icon, title, description }: QuickLinkCardProps) {
   return (
     <Card className="h-100 border-0 shadow-sm">
       <Card.Body className="d-flex flex-column align-items-start gap-2 p-4">
-        <span style={{ fontSize: '2rem' }}>{emoji}</span>
+        <i className={`bi ${icon}`} style={{ fontSize: '2rem', color: '#1B3A6B' }} />
         <Card.Title className="mb-0 fs-6 fw-semibold">{title}</Card.Title>
         <Card.Text className="text-muted small mb-0">{description}</Card.Text>
         <Badge bg="secondary" className="mt-auto">
@@ -95,7 +95,7 @@ export default function DashboardPage() {
           <Card className="border-0 shadow-sm mb-4" style={{ borderLeft: '4px solid #1B3A6B' }}>
             <Card.Body className="py-3">
               <p className="mb-0 small text-muted">
-                🚧&nbsp; System is being set up. Modules will appear here as they are completed.
+                <i className="bi bi-cone-striped me-1" /> System is being set up. Modules will appear here as they are completed.
               </p>
             </Card.Body>
           </Card>
@@ -110,7 +110,7 @@ export default function DashboardPage() {
               <Col>
                 <div onClick={() => navigate('/guards')} style={{ cursor: 'pointer' }}>
                   <QuickLinkCard
-                    emoji="👮"
+                    icon="bi-shield-fill"
                     title="Guards"
                     description="Manage guard profiles, deployments and records."
                   />
@@ -121,7 +121,7 @@ export default function DashboardPage() {
             <RoleGuard allowedRoles={FINANCE_ROLES}>
               <Col>
                 <QuickLinkCard
-                  emoji="💰"
+                  icon="bi-cash-coin"
                   title="Finance"
                   description="Invoices, payments, cashbook and payroll."
                 />
@@ -131,7 +131,7 @@ export default function DashboardPage() {
             <RoleGuard allowedRoles={REPORT_ROLES}>
               <Col>
                 <QuickLinkCard
-                  emoji="📊"
+                  icon="bi-bar-chart-fill"
                   title="Reports"
                   description="Attendance, AR aging, and operational reports."
                 />
@@ -141,7 +141,7 @@ export default function DashboardPage() {
             <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ADMINISTRATOR]}>
               <Col>
                 <QuickLinkCard
-                  emoji="📦"
+                  icon="bi-box-seam-fill"
                   title="Inventory"
                   description="Issue equipment, record returns and damage."
                 />

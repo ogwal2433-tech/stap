@@ -3,9 +3,7 @@
  * Starts all BullMQ workers without starting the Express HTTP server.
  * This process is managed separately by PM2 (see ecosystem.config.js).
  */
-import dotenv from 'dotenv';
-dotenv.config();
-
+import './bootstrap';
 import { auditWorker } from './jobs/workers/auditWorker';
 import { emailWorker } from './jobs/workers/emailWorker';
 import { smsWorker } from './jobs/workers/smsWorker';

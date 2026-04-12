@@ -29,8 +29,12 @@ export function validateQuery(schema: ZodSchema): RequestHandler {
       });
       return;
     }
-    // Assign parsed (and coerced) values back to req.query
-    req.query = result.data as typeof req.query;
+    // req.query is a read-only getter in router@2.x — use defineProperty to override it
+    Object.defineProperty(req, 'query', {
+      value: result.data as typeof req.query,
+      writable: true,
+      configurable: true,
+    });
     next();
   };
 }
