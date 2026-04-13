@@ -51,6 +51,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
+      SEED_PASSWORD: ${SEED_PASSWORD}
     volumes:
       - uploads:/app/public/uploads
     networks:
