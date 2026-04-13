@@ -4,3 +4,8 @@ dist/
 *.env.local
 .DS_Store
 apps/api/prisma/migrations/*.sql
+
+# Compiled output — built on server during deployment, never committed
+packages/shared/dist/
+apps/api/dist/
+apps/web/dist/

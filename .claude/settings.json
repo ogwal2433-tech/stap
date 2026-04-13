@@ -4,7 +4,13 @@
       "Bash(npm run:*)",
       "Bash(pm2 restart:*)",
       "Bash(pnpm --filter web exec tsc --noEmit)",
-      "Bash(pnpm --filter api test --reporter=verbose)"
+      "Bash(pnpm --filter api test --reporter=verbose)",
+      "Bash(pnpm --filter api exec tsc --noEmit)",
+      "Bash(pnpm --filter @stap/shared build)",
+      "Bash(pnpm --filter api exec tsc --version)",
+      "Bash(pnpm --filter @stap/shared add -D tsup)",
+      "Bash(pnpm --filter web build)",
+      "Bash(pnpm --filter api add -D typescript@latest)"
     ]
   }
 }

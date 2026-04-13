@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+// worker imports follow
 /**
  * Worker-only entry point.
  * Starts all BullMQ workers without starting the Express HTTP server.
