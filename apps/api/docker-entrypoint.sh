@@ -2,10 +2,14 @@
 set -e
 
 echo "🗄️  Running database migrations..."
+
+# Run migrations from the correct working directory
 cd /app/apps/api
-node_modules/.bin/prisma migrate deploy
+npx prisma migrate deploy --schema /app/apps/api/prisma/schema.prisma
 
 echo "✅ Migrations complete"
 echo "🚀 Starting API server..."
 
-exec "$@"
+# Go back to app root and run the server
+cd /app
+exec node apps/api/dist/index.js

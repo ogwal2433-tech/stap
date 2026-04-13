@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
 
   # ── PostgreSQL Database ─────────────────────────────────────────────
@@ -37,10 +35,11 @@ services:
       retries: 5
 
   # ── API (Node.js) ───────────────────────────────────────────────────
-  api:
+api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    image: stap-api:latest
     container_name: stap-api
     restart: unless-stopped
     environment:
@@ -61,18 +60,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/v1/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      start_period: 40s
-      retries: 3
 
   # ── Worker (BullMQ) ─────────────────────────────────────────────────
   worker:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    image: stap-api:latest
     container_name: stap-worker
     restart: unless-stopped
     command: ["node", "apps/api/dist/worker.js"]
