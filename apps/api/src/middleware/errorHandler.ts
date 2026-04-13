@@ -1,32 +1,42 @@
-import type { ErrorRequestHandler } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- 4-argument signature required by Express
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export function errorHandler(
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  // Always log the full error — this is what we need to see
+  console.error('❌ ERROR:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+  });
+
   if (err instanceof ZodError) {
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
       error: 'Validation failed',
       details: err.flatten(),
     });
-    return;
   }
 
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({
+    return res.status(err.statusCode).json({
       success: false,
       error: err.message,
     });
-    return;
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.error(err);
-  }
-
-  res.status(500).json({
+  // Default 500
+  return res.status(500).json({
     success: false,
-    error: 'Internal server error',
+    error: process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : err.message,
   });
-};
+}
