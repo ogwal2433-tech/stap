@@ -64,7 +64,7 @@ USER nodejs
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD wget -qO- http://localhost:3001/api/v1/health || exit 1
 COPY --chown=nodejs:nodejs apps/api/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
