@@ -7,7 +7,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copy workspace config files
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 
 # Copy package.json files for all packages
 COPY packages/shared/package.json ./packages/shared/
@@ -37,7 +37,8 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copy workspace config
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+# Copy workspace config files including lockfile
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
