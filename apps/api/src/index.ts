@@ -30,6 +30,9 @@ import apiRouter from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
 
 const app: Express = express();
+// Trust the first proxy (Nginx) — required when running behind a reverse proxy
+// This allows express-rate-limit to correctly identify client IPs
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // ── Core middleware ────────────────────────────────────────────────────────────
