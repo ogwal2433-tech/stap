@@ -15,7 +15,8 @@ module.exports = {
         JWT_SECRET: 'YOUR_JWT_SECRET_HERE',
         JWT_REFRESH_SECRET: 'YOUR_JWT_REFRESH_SECRET_HERE',
         COOKIE_SECRET: 'YOUR_COOKIE_SECRET_HERE',
-        FRONTEND_URL: 'http://173.249.13.229',
+        // FRONTEND_URL: 'http://173.249.13.229',
+        FRONTEND_URL: 'localhost:5000'
       },
       error_file: '/var/log/stap/api-error.log',
       out_file: '/var/log/stap/api-out.log',
