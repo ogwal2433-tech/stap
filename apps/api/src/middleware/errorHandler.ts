@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import e, { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 
@@ -35,8 +35,9 @@ export function errorHandler(
   // Default 500
   return res.status(500).json({
     success: false,
-    error: process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message,
+    // error: process.env.NODE_ENV === 'production'
+    //   ? 'Internal server error'
+    //   : err.message,
+    error: err.message,
   });
 }
