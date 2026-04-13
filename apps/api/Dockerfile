@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL and other required packages
+RUN apk add --no-cache openssl openssl-dev libc6-compat
+
 RUN npm install -g pnpm
 
 # Copy workspace config and lockfile
@@ -12,7 +15,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-# Install ALL dependencies including devDependencies
+# Install ALL dependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source files
@@ -22,7 +25,7 @@ COPY apps/api ./apps/api
 # Build shared package first
 RUN pnpm --filter @stap/shared build
 
-# Generate Prisma client (prisma CLI available here as devDependency)
+# Generate Prisma client for Alpine (linux-musl)
 RUN cd apps/api && pnpm exec prisma generate
 
 # Build API
@@ -33,6 +36,9 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+# Install OpenSSL — required by Prisma at runtime
+RUN apk add --no-cache openssl libc6-compat
+
 RUN npm install -g pnpm
 
 # Copy workspace config and lockfile
@@ -40,20 +46,19 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-# Install production dependencies only
+# Install production dependencies
 RUN pnpm install --prod --frozen-lockfile
 
-# Copy built API from builder
+# Copy built files from builder
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
-# Copy prisma schema (needed for migrate deploy at runtime)
-COPY apps/api/prisma ./apps/api/prisma
-
-# Copy the entire node_modules from builder
-# This includes the generated Prisma client and prisma CLI
+# Copy node_modules from builder (includes generated Prisma client)
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+
+# Copy prisma schema (needed for migrate deploy at runtime)
+COPY apps/api/prisma ./apps/api/prisma
 
 # Copy entrypoint script
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
