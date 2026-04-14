@@ -34,7 +34,7 @@ export const ClientListQuerySchema = z.object({
 // ── Site schemas ───────────────────────────────────────────────────────────────
 
 export const CreateSiteSchema = z.object({
-  clientId: z.string().cuid(),
+  clientId: z.string().min(1),
   siteName: z.string().min(1).max(200),
   location: z.string().min(1).max(500),
   gpsLat: z.number().min(-90).max(90).optional(),
@@ -53,8 +53,8 @@ export const UpdateSiteSchema = CreateSiteSchema.omit({ clientId: true }).partia
 // ── Incident schema ────────────────────────────────────────────────────────────
 
 export const CreateIncidentSchema = z.object({
-  siteId: z.string().cuid(),
-  guardIds: z.array(z.string().cuid()).optional(),
+  siteId: z.string().min(1),
+  guardIds: z.array(z.string().min(1)).optional(),
   incidentType: z.enum([
     'GUARD_MISCONDUCT',
     'SECURITY_BREACH',
@@ -69,7 +69,7 @@ export const CreateIncidentSchema = z.object({
   description: z.string().min(10).max(2000),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   occurredAt: z.string().datetime(),
-  supervisorCheckinId: z.string().cuid().optional(),
+  supervisorCheckinId: z.string().min(1).optional(),
 });
 
 // ── Inferred input types ───────────────────────────────────────────────────────

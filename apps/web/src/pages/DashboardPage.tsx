@@ -2,6 +2,10 @@ import { Badge, Button, Card, Col, Container, Navbar, Row } from 'react-bootstra
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import RoleGuard from '../components/RoleGuard';
+import { useClientSummary } from '../hooks/useClients';
+import { useGuardList } from '../hooks/useGuards';
+import { useTodaysDeployments } from '../hooks/useAttendance';
+import { useExpiringContracts } from '../hooks/useContracts';
 import {
   ROLES,
   FINANCE_ROLES,
@@ -35,18 +39,27 @@ interface QuickLinkCardProps {
   icon: string;
   title: string;
   description: string;
+  stat?: React.ReactNode;
+  onClick?: () => void;
+  comingSoon?: boolean;
 }
 
-function QuickLinkCard({ icon, title, description }: QuickLinkCardProps) {
+function QuickLinkCard({ icon, title, description, stat, onClick, comingSoon }: QuickLinkCardProps) {
   return (
-    <Card className="h-100 border-0 shadow-sm">
+    <Card
+      className="h-100 border-0 shadow-sm"
+      onClick={onClick}
+      style={{ cursor: onClick ? 'pointer' : 'default', transition: 'box-shadow 0.15s' }}
+    >
       <Card.Body className="d-flex flex-column align-items-start gap-2 p-4">
         <i className={`bi ${icon}`} style={{ fontSize: '2rem', color: '#1B3A6B' }} />
         <Card.Title className="mb-0 fs-6 fw-semibold">{title}</Card.Title>
         <Card.Text className="text-muted small mb-0">{description}</Card.Text>
-        <Badge bg="secondary" className="mt-auto">
-          Coming Soon
-        </Badge>
+        <div className="mt-auto">
+          {comingSoon
+            ? <Badge bg="secondary">Coming Soon</Badge>
+            : stat}
+        </div>
       </Card.Body>
     </Card>
   );
@@ -56,9 +69,15 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const { data: guardData } = useGuardList({ page: 1, limit: 1 });
+  const { data: clientSummary } = useClientSummary();
+  const { data: todayDeployments } = useTodaysDeployments({ page: 1, limit: 1 });
+  const { data: expiringContracts } = useExpiringContracts();
+
   if (!user) return null;
 
   const badgeStyle = ROLE_BADGE[user.role as UserRole] ?? { bg: 'secondary' };
+  const expiringCount = expiringContracts?.length ?? 0;
 
   return (
     <>
@@ -91,15 +110,6 @@ export default function DashboardPage() {
           </h3>
           <p className="text-muted mb-4">Here's your workspace overview.</p>
 
-          {/* Info banner */}
-          <Card className="border-0 shadow-sm mb-4" style={{ borderLeft: '4px solid #1B3A6B' }}>
-            <Card.Body className="py-3">
-              <p className="mb-0 small text-muted">
-                <i className="bi bi-cone-striped me-1" /> System is being set up. Modules will appear here as they are completed.
-              </p>
-            </Card.Body>
-          </Card>
-
           {/* Quick-link cards — shown per role */}
           <h6 className="text-uppercase text-muted fw-semibold mb-3" style={{ letterSpacing: '0.06em' }}>
             Quick Links
@@ -108,13 +118,56 @@ export default function DashboardPage() {
           <Row xs={1} sm={2} lg={4} className="g-3">
             <RoleGuard allowedRoles={[...HR_ROLES, ...DEPLOYMENT_ROLES]}>
               <Col>
-                <div onClick={() => navigate('/guards')} style={{ cursor: 'pointer' }}>
-                  <QuickLinkCard
-                    icon="bi-shield-fill"
-                    title="Guards"
-                    description="Manage guard profiles, deployments and records."
-                  />
-                </div>
+                <QuickLinkCard
+                  icon="bi-shield-fill"
+                  title="Guards"
+                  description="Manage guard profiles, deployments and records."
+                  stat={
+                    <Badge bg="primary" pill>
+                      {guardData?.pagination.total ?? '—'} total
+                    </Badge>
+                  }
+                  onClick={() => navigate('/guards')}
+                />
+              </Col>
+            </RoleGuard>
+
+            <RoleGuard allowedRoles={DEPLOYMENT_ROLES}>
+              <Col>
+                <QuickLinkCard
+                  icon="bi-calendar-check-fill"
+                  title="Attendance"
+                  description="Today's deployment sheet and roster management."
+                  stat={
+                    <Badge bg="success" pill>
+                      {todayDeployments?.pagination.total ?? '—'} deployed today
+                    </Badge>
+                  }
+                  onClick={() => navigate('/attendance')}
+                />
+              </Col>
+            </RoleGuard>
+
+            <RoleGuard allowedRoles={[...FINANCE_ROLES, ROLES.ASSISTANT_MANAGER]}>
+              <Col>
+                <QuickLinkCard
+                  icon="bi-building-fill"
+                  title="Clients"
+                  description="Manage client accounts and contracts."
+                  stat={
+                    <>
+                      <Badge bg="primary" pill className="me-1">
+                        {clientSummary ? clientSummary.totalActive + clientSummary.totalInactive : '—'} clients
+                      </Badge>
+                      {expiringCount > 0 && (
+                        <Badge bg="danger" pill>
+                          {expiringCount} expiring
+                        </Badge>
+                      )}
+                    </>
+                  }
+                  onClick={() => navigate('/clients')}
+                />
               </Col>
             </RoleGuard>
 
@@ -124,6 +177,7 @@ export default function DashboardPage() {
                   icon="bi-cash-coin"
                   title="Finance"
                   description="Invoices, payments, cashbook and payroll."
+                  comingSoon
                 />
               </Col>
             </RoleGuard>
@@ -134,6 +188,7 @@ export default function DashboardPage() {
                   icon="bi-bar-chart-fill"
                   title="Reports"
                   description="Attendance, AR aging, and operational reports."
+                  comingSoon
                 />
               </Col>
             </RoleGuard>
@@ -144,6 +199,7 @@ export default function DashboardPage() {
                   icon="bi-box-seam-fill"
                   title="Inventory"
                   description="Issue equipment, record returns and damage."
+                  comingSoon
                 />
               </Col>
             </RoleGuard>

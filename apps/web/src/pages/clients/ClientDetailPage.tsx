@@ -1,20 +1,29 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col, Dropdown,
+  Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col,
   Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useClient, useClientSites, useArchiveClient, useDeleteSite, useSiteIncidents } from '../../hooks/useClients';
+import { useClientContracts, useDeleteContract } from '../../hooks/useContracts';
 import RoleGuard from '../../components/RoleGuard';
 import SiteFormModal from '../../components/clients/SiteFormModal';
 import IncidentFormModal from '../../components/clients/IncidentFormModal';
+import ContractFormModal from '../../components/clients/ContractFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, type UserRole, type SiteResponse } from '@stap/shared';
+import { ROLES, type UserRole, type SiteResponse, type ContractResponse } from '@stap/shared';
 
-const CONTRACT_BADGE: Record<string, string> = {
+const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
   INACTIVE: 'secondary',
   EXPIRED: 'danger',
+};
+
+const CONTRACT_STATUS_BADGE: Record<string, { bg: string; text?: string }> = {
+  DRAFT:    { bg: 'secondary' },
+  ACTIVE:   { bg: 'success' },
+  EXPIRING: { bg: 'warning', text: 'dark' },
+  EXPIRED:  { bg: 'danger' },
 };
 
 const SEVERITY_STYLE: Record<string, { bg?: string; text?: string; style?: React.CSSProperties }> = {
@@ -27,6 +36,7 @@ const SEVERITY_STYLE: Record<string, { bg?: string; text?: string; style?: React
 const CLIENT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR];
+const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,11 +45,14 @@ export default function ClientDetailPage() {
 
   const { data: client, isLoading, isError, refetch } = useClient(id ?? '');
   const { data: sites, refetch: refetchSites } = useClientSites(id ?? '');
+  const { data: contracts, refetch: refetchContracts } = useClientContracts(id ?? '');
   const archiveClient = useArchiveClient();
   const deleteSite = useDeleteSite();
+  const deleteContract = useDeleteContract(id ?? '');
 
   const [siteModal, setSiteModal] = useState<{ site?: SiteResponse } | null>(null);
   const [incidentModal, setIncidentModal] = useState<{ siteId: string; siteName: string } | null>(null);
+  const [contractModal, setContractModal] = useState<{ contract?: ContractResponse } | null>(null);
   const [incidentPage, setIncidentPage] = useState(1);
 
   // Incidents across client's sites — aggregate via first site for now (full impl in CLT-006)
@@ -66,6 +79,18 @@ export default function ClientDetailPage() {
       refetch();
     } catch {
       showToast('Failed to archive', 'danger');
+    }
+  };
+
+  const handleDeleteContract = async (contractId: string) => {
+    if (!confirm('Delete this contract? This cannot be undone.')) return;
+    try {
+      await deleteContract.mutateAsync(contractId);
+      showToast('Contract deleted', 'success');
+      refetchContracts();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete contract';
+      showToast(msg, 'danger');
     }
   };
 
@@ -120,7 +145,7 @@ export default function ClientDetailPage() {
               {client.email && <div className="text-muted small">{client.email}</div>}
             </Col>
             <Col xs="auto" className="text-end">
-              <Badge bg={CONTRACT_BADGE[client.contractStatus]} className="fs-6 px-3 py-2 mb-2 d-block">
+              <Badge bg={CLIENT_CONTRACT_BADGE[client.contractStatus]} className="fs-6 px-3 py-2 mb-2 d-block">
                 {client.contractStatus}
               </Badge>
               <div className="text-muted small">Billing: {client.billingTerms} days</div>
@@ -217,11 +242,108 @@ export default function ClientDetailPage() {
         </Tab>
 
         {/* Tab 3 — Contracts */}
-        <Tab eventKey="contracts" title="Contracts">
-          <Alert variant="info">
-            <i className="bi bi-info-circle me-2" />
-            Contract management coming in Sprint 3 (Finance).
-          </Alert>
+        <Tab eventKey="contracts" title={`Contracts (${contracts?.length ?? 0})`}>
+          {/* Expiring warning */}
+          {contracts && contracts.filter((c) => c.daysRemaining <= 30 && c.status !== 'EXPIRED' && c.status !== 'DRAFT').length > 0 && (
+            <Alert variant="warning" className="small">
+              <i className="bi bi-exclamation-triangle me-2" />
+              {contracts.filter((c) => c.daysRemaining <= 30 && c.status !== 'EXPIRED' && c.status !== 'DRAFT').length} contract(s) expiring within 30 days. Review and renew as needed.
+            </Alert>
+          )}
+
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="text-muted small">{contracts?.length ?? 0} contract(s)</span>
+            <RoleGuard allowedRoles={CONTRACT_WRITE_ROLES}>
+              <Button
+                size="sm"
+                style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+                onClick={() => setContractModal({})}
+              >
+                <i className="bi bi-plus-lg me-1" />Add Contract
+              </Button>
+            </RoleGuard>
+          </div>
+
+          {!contracts || contracts.length === 0 ? (
+            <Alert variant="light">
+              No contracts added yet. Click 'Add Contract' to create the first contract for this client.
+            </Alert>
+          ) : (
+            <Table size="sm" hover responsive className="align-middle small">
+              <thead className="table-light">
+                <tr>
+                  <th>Period</th>
+                  <th>Guards Req.</th>
+                  <th>Rate/Guard</th>
+                  <th>Monthly Value</th>
+                  <th>Days Remaining</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contracts.map((c) => {
+                  const statusStyle = CONTRACT_STATUS_BADGE[c.status] ?? { bg: 'secondary' };
+                  const daysColor = c.daysRemaining > 30
+                    ? 'text-success'
+                    : c.daysRemaining > 0
+                    ? 'text-warning fw-semibold'
+                    : 'text-danger fw-semibold';
+
+                  return (
+                    <tr key={c.id}>
+                      <td>
+                        <div>{new Date(c.contractStart).toLocaleDateString()}</div>
+                        <div className="text-muted">to {new Date(c.contractEnd).toLocaleDateString()}</div>
+                      </td>
+                      <td>{c.guardsRequired}</td>
+                      <td>UGX {c.billingPerGuard.toLocaleString()}</td>
+                      <td className="fw-semibold">UGX {c.monthlyValue.toLocaleString()}</td>
+                      <td className={daysColor}>
+                        {c.daysRemaining > 0 ? (
+                          <>
+                            {c.daysRemaining} days
+                            {c.daysRemaining <= 30 && c.status !== 'EXPIRED' && (
+                              <span className="ms-1">⚠️ Expiring</span>
+                            )}
+                          </>
+                        ) : (
+                          <span>Expired</span>
+                        )}
+                      </td>
+                      <td>
+                        <Badge bg={statusStyle.bg} text={statusStyle.text}>
+                          {c.status}
+                        </Badge>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-1">
+                          <RoleGuard allowedRoles={CONTRACT_WRITE_ROLES}>
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              onClick={() => setContractModal({ contract: c })}
+                            >
+                              Edit
+                            </Button>
+                          </RoleGuard>
+                          <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              onClick={() => handleDeleteContract(c.id)}
+                            >
+                              Delete
+                            </Button>
+                          </RoleGuard>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
         </Tab>
 
         {/* Tab 4 — Complaints */}
@@ -286,6 +408,15 @@ export default function ClientDetailPage() {
           siteName={incidentModal.siteName}
           onClose={() => setIncidentModal(null)}
           onSuccess={() => setIncidentModal(null)}
+        />
+      )}
+
+      {contractModal !== null && (
+        <ContractFormModal
+          clientId={id!}
+          contract={contractModal.contract}
+          onClose={() => setContractModal(null)}
+          onSuccess={() => { refetchContracts(); refetch(); }}
         />
       )}
     </div>

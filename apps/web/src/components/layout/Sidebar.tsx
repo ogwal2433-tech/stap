@@ -19,7 +19,8 @@ const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 const NAV_ITEMS = [
   { icon: 'bi-house-fill',          label: 'Dashboard',     to: '/dashboard',     roles: INTERNAL_ROLES },
   { icon: 'bi-shield-fill',         label: 'Guards',        to: '/guards',        roles: INTERNAL_ROLES },
-  { icon: 'bi-calendar-check-fill', label: 'Attendance',    to: '/attendance',    roles: DEPLOYMENT_ROLES },
+  { icon: 'bi-calendar-check-fill', label: 'Attendance',    to: '/attendance',    roles: [...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER] },
+  { icon: 'bi-phone-fill',          label: 'Check-in',      to: '/checkin',       roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] },
   { icon: 'bi-building-fill',       label: 'Clients',       to: '/clients',       roles: NON_GUARD_INTERNAL },
   { icon: 'bi-cash-coin',           label: 'Finance',       to: '/finance',       roles: FINANCE_ROLES },
   { icon: 'bi-box-seam-fill',       label: 'Inventory',     to: '/inventory',     roles: ADMIN_ONLY },
@@ -48,7 +49,7 @@ interface NavContentProps {
 }
 
 // Active nav items (all others are "coming soon")
-const ACTIVE_PATHS = new Set(['/dashboard', '/guards', '/clients']);
+const ACTIVE_PATHS = new Set(['/dashboard', '/guards', '/clients', '/attendance', '/checkin']);
 
 function NavContent({ onNavigate }: NavContentProps) {
   const { user, logout } = useAuth();

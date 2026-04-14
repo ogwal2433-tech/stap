@@ -1,0 +1,248 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueueService } from '../../jobs/QueueService';
+
+// ── Mocks ──────────────────────────────────────────────────────────────────────
+
+vi.mock('../../db/prisma', () => ({
+  default: {
+    site: { findUnique: vi.fn() },
+    guard: { findMany: vi.fn() },
+    user: { findUnique: vi.fn() },
+    deployment: {
+      findMany: vi.fn(),
+      createMany: vi.fn(),
+      count: vi.fn(),
+      findUnique: vi.fn(),
+      delete: vi.fn(),
+    },
+    deploymentHistory: { createMany: vi.fn() },
+    attendanceRecord: { findFirst: vi.fn() },
+  },
+}));
+
+vi.mock('../../jobs/QueueService', () => ({
+  QueueService: { logAudit: vi.fn().mockResolvedValue(undefined) },
+}));
+
+import prisma from '../../db/prisma';
+import { deploymentService } from '../../services/deploymentService';
+import { NotFoundError, AppError } from '../../errors/AppError';
+
+const mockPrisma = prisma as unknown as {
+  site: { findUnique: ReturnType<typeof vi.fn> };
+  guard: { findMany: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn> };
+  deployment: {
+    findMany: ReturnType<typeof vi.fn>;
+    createMany: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
+  deploymentHistory: { createMany: ReturnType<typeof vi.fn> };
+  attendanceRecord: { findFirst: ReturnType<typeof vi.fn> };
+};
+
+const baseSite = { id: 's1', siteName: 'Test Site' };
+const baseGuard = { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null };
+const baseSupervisor = { id: 'u1', name: 'Supervisor One', role: 'OPERATIONS_SUPERVISOR' };
+
+const baseRosterInput = {
+  siteId: 's1',
+  guardIds: ['g1'],
+  supervisorId: 'u1',
+  shiftType: 'DAY' as const,
+  startDate: '2026-04-14T00:00:00.000Z',
+  recurring: false,
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrisma.site.findUnique.mockResolvedValue(baseSite);
+  mockPrisma.guard.findMany.mockResolvedValue([baseGuard]);
+  mockPrisma.user.findUnique.mockResolvedValue(baseSupervisor);
+  mockPrisma.deployment.findMany.mockResolvedValue([]);
+  mockPrisma.deployment.createMany.mockResolvedValue({ count: 1 });
+  mockPrisma.deploymentHistory.createMany.mockResolvedValue({ count: 1 });
+});
+
+// ── createRoster() ─────────────────────────────────────────────────────────────
+
+describe('deploymentService.createRoster()', () => {
+  it('creates deployments for each guard', async () => {
+    const result = await deploymentService.createRoster(baseRosterInput, 'user1');
+
+    expect(result.created).toBe(1);
+    expect(result.conflicts).toHaveLength(0);
+    expect(mockPrisma.deployment.createMany).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.deploymentHistory.createMany).toHaveBeenCalledTimes(1);
+    expect(QueueService.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'ROSTER_CREATED' }),
+    );
+  });
+
+  it('detects conflicts with existing deployment on same date at different site', async () => {
+    // Simulate existing deployment for guard at different site
+    mockPrisma.deployment.findMany.mockResolvedValue([
+      { guardId: 'g1', siteId: 'other-site', site: { siteName: 'Other Site' } },
+    ]);
+
+    const result = await deploymentService.createRoster(baseRosterInput, 'user1');
+
+    expect(result.created).toBe(0);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].guardName).toBe('John Doe');
+    expect(result.conflicts[0].existingSite).toBe('Other Site');
+  });
+
+  it('throws NotFoundError for invalid siteId', async () => {
+    mockPrisma.site.findUnique.mockResolvedValue(null);
+
+    await expect(
+      deploymentService.createRoster(baseRosterInput, 'user1'),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws NotFoundError if any guard not found', async () => {
+    mockPrisma.guard.findMany.mockResolvedValue([]); // no guards found
+
+    await expect(
+      deploymentService.createRoster(baseRosterInput, 'user1'),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws AppError if supervisor has wrong role', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', name: 'Trainer', role: 'TRAINER' });
+
+    await expect(
+      deploymentService.createRoster(baseRosterInput, 'user1'),
+    ).rejects.toThrow(AppError);
+  });
+
+  it('recurring roster generates correct number of dates', async () => {
+    const recurringInput = {
+      ...baseRosterInput,
+      recurring: true,
+      startDate: '2026-04-14T00:00:00.000Z', // Monday
+      endDate: '2026-04-20T23:59:59.999Z',   // Sunday
+      daysOfWeek: [1, 2, 3, 4, 5],           // Mon-Fri
+    };
+
+    const result = await deploymentService.createRoster(recurringInput, 'user1');
+
+    // Mon 14, Tue 15, Wed 16, Thu 17, Fri 18 = 5 deployments for 1 guard
+    expect(result.created).toBe(5);
+    // createMany is called once with all records batched
+    expect(mockPrisma.deployment.createMany).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.deployment.createMany.mock.calls[0][0].data).toHaveLength(5);
+  });
+
+  it('caps recurring roster at 90 days', async () => {
+    const farFutureInput = {
+      ...baseRosterInput,
+      recurring: true,
+      startDate: '2026-04-14T00:00:00.000Z',
+      endDate: '2027-04-14T23:59:59.999Z', // More than 90 days
+      daysOfWeek: [1], // Every Monday
+    };
+
+    const result = await deploymentService.createRoster(farFutureInput, 'user1');
+
+    // Should be capped at 90 days worth of Mondays (≤ 13 Mondays)
+    expect(result.created).toBeLessThanOrEqual(13);
+  });
+});
+
+// ── getTodaysDeployments() ─────────────────────────────────────────────────────
+
+describe('deploymentService.getTodaysDeployments()', () => {
+  it('returns today\'s deployments with attendance status joined', async () => {
+    const mockDeployment = {
+      id: 'd1',
+      guardId: 'g1',
+      siteId: 's1',
+      shiftType: 'DAY',
+      date: new Date(),
+      createdAt: new Date(),
+      guard: { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null, phone: '+256700000001', photoUrl: null },
+      site: {
+        id: 's1',
+        siteName: 'Test Site',
+        location: 'Kampala',
+        client: { id: 'c1', clientName: 'Test Client' },
+      },
+      supervisor: { id: 'u1', name: 'Supervisor One' },
+    };
+
+    mockPrisma.deployment.findMany.mockResolvedValue([mockDeployment]);
+    mockPrisma.deployment.count.mockResolvedValue(1);
+    mockPrisma.attendanceRecord.findFirst = vi.fn();
+
+    // Mock attendanceRecord.findMany used inside
+    const attRecord = {
+      id: 'a1',
+      guardId: 'g1',
+      siteId: 's1',
+      status: 'PRESENT',
+      timeIn: null,
+      timeOut: null,
+      notes: null,
+    };
+
+    // Patch prisma.attendanceRecord.findMany
+    (prisma as unknown as { attendanceRecord: { findMany: ReturnType<typeof vi.fn> } })
+      .attendanceRecord.findMany = vi.fn().mockResolvedValue([attRecord]);
+
+    const result = await deploymentService.getTodaysDeployments({
+      page: 1,
+      limit: 50,
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].guard.fullName).toBe('John Doe');
+    expect(result.data[0].attendance?.status).toBe('PRESENT');
+    expect(result.pagination.total).toBe(1);
+  });
+});
+
+// ── deleteDeployment() ────────────────────────────────────────────────────────
+
+describe('deploymentService.deleteDeployment()', () => {
+  it('throws 409 if attendance already marked for this deployment', async () => {
+    mockPrisma.deployment.findUnique.mockResolvedValue({
+      id: 'd1',
+      guardId: 'g1',
+      siteId: 's1',
+      date: new Date(),
+      guard: { firstName: 'John', lastName: 'Doe' },
+    });
+    mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ id: 'a1' });
+
+    await expect(
+      deploymentService.deleteDeployment('d1', 'user1'),
+    ).rejects.toThrow(AppError);
+
+    await expect(
+      deploymentService.deleteDeployment('d1', 'user1'),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('deletes deployment when no attendance marked', async () => {
+    mockPrisma.deployment.findUnique.mockResolvedValue({
+      id: 'd1',
+      guardId: 'g1',
+      siteId: 's1',
+      date: new Date(),
+      guard: { firstName: 'John', lastName: 'Doe' },
+    });
+    mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
+    mockPrisma.deployment.delete.mockResolvedValue({});
+
+    await deploymentService.deleteDeployment('d1', 'user1');
+
+    expect(mockPrisma.deployment.delete).toHaveBeenCalledWith({ where: { id: 'd1' } });
+    expect(QueueService.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DEPLOYMENT_DELETED' }),
+    );
+  });
+});

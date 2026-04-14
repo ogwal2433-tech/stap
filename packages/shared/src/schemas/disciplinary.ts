@@ -3,7 +3,7 @@ import { z } from 'zod';
 // ── Disciplinary schemas ───────────────────────────────────────────────────────
 
 export const CreateDisciplinarySchema = z.object({
-  guardId: z.string().cuid(),
+  guardId: z.string().min(1),
   incidentDate: z.string().datetime(),
   type: z.enum(['VERBAL_WARNING', 'WRITTEN_WARNING', 'SUSPENSION', 'TERMINATION']),
   reason: z.string().min(10).max(2000),
@@ -11,7 +11,7 @@ export const CreateDisciplinarySchema = z.object({
 });
 
 export const LetterGenerationSchema = z.object({
-  guardId: z.string().cuid(),
+  guardId: z.string().min(1),
   letterType: z.enum([
     'VERBAL_WARNING',
     'FIRST_WARNING',
@@ -24,7 +24,7 @@ export const LetterGenerationSchema = z.object({
   ]),
   disciplinaryRecordId: z
     .string()
-    .cuid()
+    .min(1)
     .optional()
     .describe('Link letter to a disciplinary record if applicable'),
   customFields: z

@@ -9,6 +9,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
+import cron from 'node-cron';
 
 // ── Ensure upload directories exist ───────────────────────────────────────────
 fs.mkdirSync('./public/uploads/temp', { recursive: true });
@@ -25,6 +26,9 @@ import { queues } from './jobs/queues';
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 import apiRouter from './routes/index';
+
+// ── Services ───────────────────────────────────────────────────────────────────
+import { contractService } from './services/contractService';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -65,6 +69,12 @@ app.use(errorHandler);
 const server = app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
   console.log('⚙️  Queue workers initialised');
+});
+
+// ── Scheduled jobs ─────────────────────────────────────────────────────────────
+// Refresh contract statuses daily at 06:00 EAT (Africa/Kampala)
+cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
+  timezone: 'Africa/Kampala',
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────

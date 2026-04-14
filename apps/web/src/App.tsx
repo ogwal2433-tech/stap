@@ -18,9 +18,17 @@ const GuardDetailPage = lazy(() => import('@/pages/guards/GuardDetailPage'));
 const ClientsListPage = lazy(() => import('@/pages/clients/ClientsListPage'));
 const ClientFormPage = lazy(() => import('@/pages/clients/ClientFormPage'));
 const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'));
+const AttendancePage = lazy(() => import('@/pages/attendance/AttendancePage'));
+const CheckinPage = lazy(() => import('@/pages/attendance/CheckinPage'));
 
 const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
+const DEPLOYMENT_ROLES: UserRole[] = [
+  ROLES.DIRECTOR,
+  ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.FIELD_SUPERVISOR,
+  ROLES.ADMINISTRATOR,
+];
 
 // Example of role-gated routes (uncomment in Sprint 2 as modules ship):
 // <Route element={<ProtectedRoute allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} />}>
@@ -81,6 +89,34 @@ function App() {
                   <Suspense fallback={<PageSpinner />}>
                     <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
                       <GuardFormPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+
+              {/* Attendance */}
+              <Route
+                path="/attendance"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard
+                      allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}
+                      fallback={<UnauthorisedPage />}
+                    >
+                      <AttendancePage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/checkin"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard
+                      allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]}
+                      fallback={<UnauthorisedPage />}
+                    >
+                      <CheckinPage />
                     </RoleGuard>
                   </Suspense>
                 }
