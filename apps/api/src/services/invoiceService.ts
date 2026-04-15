@@ -1,0 +1,361 @@
+import prisma from '../db/prisma';
+import { QueueService } from '../jobs/QueueService';
+import { NotFoundError, AppError } from '../errors/AppError';
+import { yoPayments } from '../lib/yoPayments';
+import type {
+  CreateInvoiceInput,
+  RecordPaymentInput,
+  InvoiceResponse,
+  PaymentResponse,
+  ARAgingReport,
+  PaginatedResponse,
+} from '@stap/shared';
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function formatInvoice(inv: any, payments: any[] = []): InvoiceResponse {
+  return {
+    id:             inv.id,
+    invoiceNumber:  inv.invoiceNumber,
+    clientId:       inv.clientId,
+    clientName:     inv.client?.clientName ?? '',
+    contractId:     inv.contractId,
+    contractRef:    inv.contract ? `${inv.contract.id}` : null,
+    periodStart:    inv.periodStart.toISOString(),
+    periodEnd:      inv.periodEnd.toISOString(),
+    guardsDeployed: inv.guardsDeployed,
+    ratePerGuard:   inv.ratePerGuard,
+    subtotal:       inv.subtotal,
+    taxAmount:      inv.taxAmount,
+    totalAmount:    inv.totalAmount,
+    status:         inv.status,
+    dueDate:        inv.dueDate.toISOString(),
+    paidAt:         inv.paidAt?.toISOString() ?? null,
+    pdfPath:        inv.pdfPath,
+    yoPaymentRef:   inv.yoPaymentRef,
+    createdAt:      inv.createdAt.toISOString(),
+    payments:       (payments ?? inv.payments ?? []).map(formatPayment),
+  };
+}
+
+function formatPayment(p: any): PaymentResponse {
+  return {
+    id:              p.id,
+    invoiceId:       p.invoiceId,
+    amountPaid:      p.amountPaid,
+    mode:            p.mode,
+    referenceNumber: p.referenceNumber,
+    yoTransactionId: p.yoTransactionId,
+    reconciled:      p.reconciled,
+    recordedBy:      p.recordedBy,
+    createdAt:       p.createdAt.toISOString(),
+  };
+}
+
+// ── InvoiceService ─────────────────────────────────────────────────────────────
+
+class InvoiceService {
+  private async generateInvoiceNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const count = await prisma.invoice.count({
+      where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+    });
+    const seq = String(count + 1).padStart(4, '0');
+    return `STAP/INV/${year}/${seq}`;
+  }
+
+  async create(data: CreateInvoiceInput, createdBy: string): Promise<InvoiceResponse> {
+    const client = await prisma.client.findUnique({ where: { id: data.clientId } });
+    if (!client) throw new NotFoundError('Client not found');
+
+    const subtotal     = data.guardsDeployed * data.ratePerGuard;
+    const totalAmount  = subtotal + (data.taxAmount ?? 0);
+    const invoiceNumber = await this.generateInvoiceNumber();
+
+    const invoice = await prisma.invoice.create({
+      data: {
+        clientId:       data.clientId,
+        contractId:     data.contractId ?? null,
+        invoiceNumber,
+        periodStart:    new Date(data.periodStart),
+        periodEnd:      new Date(data.periodEnd),
+        guardsDeployed: data.guardsDeployed,
+        ratePerGuard:   data.ratePerGuard,
+        subtotal,
+        taxAmount:      data.taxAmount ?? 0,
+        totalAmount,
+        dueDate:        new Date(data.dueDate),
+        createdBy,
+      },
+      include: { client: true, contract: true, payments: true },
+    });
+
+    await QueueService.generateInvoice({
+      clientId:   invoice.clientId,
+      contractId: invoice.contractId ?? '',
+      periodStart: invoice.periodStart.toISOString(),
+      periodEnd:   invoice.periodEnd.toISOString(),
+    });
+
+    if (client.email) {
+      await QueueService.sendEmail({
+        to:       client.email,
+        subject:  `Invoice ${invoiceNumber} from STAP Security Ltd`,
+        template: 'invoice',
+        data: {
+          invoiceNumber,
+          totalAmount,
+          dueDate:    invoice.dueDate.toISOString(),
+          clientName: client.clientName,
+        },
+      });
+    }
+
+    await QueueService.logAudit({
+      userId:   createdBy,
+      action:   'INVOICE_CREATED',
+      entity:   'invoice',
+      entityId: invoice.id,
+      newValue: { invoiceNumber, totalAmount },
+    });
+
+    return formatInvoice(invoice);
+  }
+
+  async generateAutoInvoices(): Promise<void> {
+    const today     = new Date();
+    const dayOfMonth = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const isLastDay  = dayOfMonth === daysInMonth;
+
+    const contracts = await prisma.contract.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { billingDay: dayOfMonth },
+          // Last day of month covers contracts with billingDay > days in month
+          ...(isLastDay ? [{ billingDay: { gt: daysInMonth } }] : []),
+        ],
+      },
+      include: { client: true },
+    });
+
+    const periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const periodEnd   = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+
+    let generated = 0;
+    for (const contract of contracts) {
+      // Prevent duplicates
+      const existing = await prisma.invoice.findFirst({
+        where: {
+          contractId:  contract.id,
+          periodStart: { gte: periodStart },
+          periodEnd:   { lte: periodEnd },
+        },
+      });
+      if (existing) continue;
+
+      const billingTerms = contract.client.billingTerms ?? 30;
+      const dueDate = new Date(today);
+      dueDate.setDate(dueDate.getDate() + billingTerms);
+
+      await this.create(
+        {
+          clientId:       contract.clientId,
+          contractId:     contract.id,
+          periodStart:    periodStart.toISOString(),
+          periodEnd:      periodEnd.toISOString(),
+          guardsDeployed: contract.guardsRequired,
+          ratePerGuard:   contract.billingPerGuard,
+          taxAmount:      0,
+          dueDate:        dueDate.toISOString(),
+        },
+        'system',
+      );
+      generated++;
+    }
+
+    console.log(`Auto-generated ${generated} invoices for ${today.toDateString()}`);
+  }
+
+  async list(query: {
+    clientId?: string;
+    status?: string;
+    page: number;
+    limit: number;
+    from?: string;
+    to?: string;
+  }): Promise<PaginatedResponse<InvoiceResponse>> {
+    const { page, limit, clientId, status, from, to } = query;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (clientId) where.clientId = clientId;
+    if (status)   where.status   = status;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to)   where.createdAt.lte = new Date(to);
+    }
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: { client: true, contract: true, payments: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.invoice.count({ where }),
+    ]);
+
+    // Auto-mark overdue
+    const now = new Date();
+    for (const inv of invoices) {
+      if (inv.status === 'PENDING' && inv.dueDate < now) {
+        await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'OVERDUE' } });
+        inv.status = 'OVERDUE';
+      }
+    }
+
+    const totalPages = Math.ceil(total / limit);
+    return {
+      data: invoices.map((i) => formatInvoice(i)),
+      pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+    };
+  }
+
+  async getById(id: string): Promise<InvoiceResponse> {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { client: true, contract: true, payments: true },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    return formatInvoice(invoice);
+  }
+
+  async recordManualPayment(data: RecordPaymentInput, recordedBy: string): Promise<PaymentResponse> {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: data.invoiceId },
+      include: { payments: true },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+
+    const payment = await prisma.payment.create({
+      data: {
+        invoiceId:       data.invoiceId,
+        amountPaid:      data.amountPaid,
+        mode:            data.mode,
+        referenceNumber: data.referenceNumber ?? null,
+        recordedBy,
+      },
+    });
+
+    // Check if fully paid
+    const totalPaid = invoice.payments.reduce((s, p) => s + p.amountPaid, 0) + data.amountPaid;
+    if (totalPaid >= invoice.totalAmount) {
+      await prisma.invoice.update({
+        where: { id: data.invoiceId },
+        data:  { status: 'PAID', paidAt: new Date() },
+      });
+    }
+
+    await QueueService.logAudit({
+      userId:   recordedBy,
+      action:   'PAYMENT_RECORDED',
+      entity:   'payment',
+      entityId: payment.id,
+      newValue: { invoiceId: data.invoiceId, amountPaid: data.amountPaid },
+    });
+
+    return formatPayment(payment);
+  }
+
+  async getARAgingReport(): Promise<ARAgingReport> {
+    const now = new Date();
+
+    // Auto-mark overdue
+    await prisma.invoice.updateMany({
+      where:  { status: 'PENDING', dueDate: { lt: now } },
+      data:   { status: 'OVERDUE' },
+    });
+
+    const invoices = await prisma.invoice.findMany({
+      where:   { status: { in: ['PENDING', 'OVERDUE'] } },
+      include: { client: true, contract: true, payments: true },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const buckets = { current: 0, days31_60: 0, days61_90: 0, over90: 0, total: 0 };
+
+    for (const inv of invoices) {
+      const daysOverdue = Math.floor((now.getTime() - inv.dueDate.getTime()) / 86_400_000);
+      buckets.total += inv.totalAmount;
+      if (daysOverdue <= 0)       buckets.current   += inv.totalAmount;
+      else if (daysOverdue <= 30) buckets.current   += inv.totalAmount;
+      else if (daysOverdue <= 60) buckets.days31_60 += inv.totalAmount;
+      else if (daysOverdue <= 90) buckets.days61_90 += inv.totalAmount;
+      else                         buckets.over90    += inv.totalAmount;
+    }
+
+    return { invoices: invoices.map((i) => formatInvoice(i)), buckets };
+  }
+
+  async initiateYoPayment(invoiceId: string): Promise<{ paymentRef: string; status: string }> {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { client: true },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    if (!['PENDING', 'OVERDUE'].includes(invoice.status)) {
+      throw new AppError('Invoice is not payable', 400);
+    }
+
+    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'STAP';
+    const resp = await yoPayments.requestPayment({
+      amount:            invoice.totalAmount,
+      msisdn:            invoice.client.contactPhone,
+      narrative:         `Invoice ${invoice.invoiceNumber} — STAP Security Ltd`,
+      internalReference: `${prefix}-INV-${invoice.id}`,
+    });
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data:  { yoPaymentRef: resp.transactionRef },
+    });
+
+    await QueueService.logAudit({
+      action:   'YO_PAYMENT_INITIATED',
+      entity:   'invoice',
+      entityId: invoiceId,
+      newValue: { paymentRef: resp.transactionRef },
+    });
+
+    return { paymentRef: resp.transactionRef, status: resp.status };
+  }
+
+  async handleYoWebhook(payload: any): Promise<void> {
+    // Yo! Payments webhook format varies by merchant configuration.
+    // Adjust payload parsing when merchant account is confirmed.
+    const ref = payload?.InternalReference as string | undefined;
+    if (!ref) return;
+
+    const invoiceId = ref.replace(/^[A-Z]+-INV-/, '');
+    const invoice   = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) return;
+
+    if (payload?.TransactionStatus === 'COMPLETED') {
+      await this.recordManualPayment(
+        {
+          invoiceId,
+          amountPaid:      Number(payload.Amount ?? invoice.totalAmount),
+          mode:            'MOBILE_MONEY',
+          referenceNumber: payload.TransactionReference,
+        },
+        'system',
+      );
+    }
+  }
+}
+
+export const invoiceService = new InvoiceService();

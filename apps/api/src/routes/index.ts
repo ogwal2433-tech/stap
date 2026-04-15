@@ -5,6 +5,8 @@ import { clientsRouter } from './clients';
 import { attendanceRouter } from './attendance';
 import { contractsRouter } from './contracts';
 import { usersRouter } from './users';
+import { financeRouter } from './finance';
+import { requisitionsRouter } from './requisitions';
 
 const router: IRouter = Router();
 
@@ -16,12 +18,8 @@ router.use('/clients', clientsRouter);
 router.use('/attendance', attendanceRouter);
 router.use('/contracts', contractsRouter);
 router.use('/users', usersRouter);
-
-// Sprint 3 routes:
-// router.use('/finance', financeRouter)        // Sprint 3
-// router.use('/requisitions', reqRouter)       // Sprint 3
-// router.use('/inventory', inventoryRouter)    // Sprint 3
-// router.use('/payroll', payrollRouter)        // Sprint 3
+router.use('/finance', financeRouter);
+router.use('/requisitions', requisitionsRouter);
 
 // Sprint 4 routes:
 // router.use('/reports', reportsRouter)        // Sprint 4

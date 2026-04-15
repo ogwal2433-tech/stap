@@ -21,7 +21,10 @@
       "Bash(pnpm --filter api build)",
       "Bash(pnpm --filter api add xlsx)",
       "Bash(pnpm --filter web add xlsx file-saver recharts)",
-      "Bash(pnpm --filter web add -D @types/file-saver @types/recharts)"
+      "Bash(pnpm --filter web add -D @types/file-saver @types/recharts)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm --filter @stap/api exec tsc --noEmit)",
+      "Bash(pnpm --filter @stap/web exec tsc --noEmit)"
     ]
   }
 }

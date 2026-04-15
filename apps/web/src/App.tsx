@@ -22,8 +22,16 @@ const AttendancePage = lazy(() => import('@/pages/attendance/AttendancePage'));
 const CheckinPage = lazy(() => import('@/pages/attendance/CheckinPage'));
 const BulkImportPage = lazy(() => import('@/pages/guards/BulkImportPage'));
 const GuardDashboardPage = lazy(() => import('@/pages/guards/GuardDashboardPage'));
+const FinancePage = lazy(() => import('@/pages/finance/FinancePage'));
+const RequisitionsPage = lazy(() => import('@/pages/requisitions/RequisitionsPage'));
 
 const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const REQUISITION_ROLES: UserRole[] = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
+  ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.TRAINER,
+  ROLES.ACCOUNTS_OFFICER, ROLES.MARKETING,
+];
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const DEPLOYMENT_ROLES: UserRole[] = [
   ROLES.DIRECTOR,
@@ -142,6 +150,30 @@ function App() {
                       fallback={<UnauthorisedPage />}
                     >
                       <CheckinPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+
+              {/* Finance */}
+              <Route
+                path="/finance"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}>
+                      <FinancePage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+
+              {/* Requisitions */}
+              <Route
+                path="/requisitions"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}>
+                      <RequisitionsPage />
                     </RoleGuard>
                   </Suspense>
                 }

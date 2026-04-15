@@ -7,6 +7,8 @@ import { useClientSummary } from '../hooks/useClients';
 import { useGuardDashboard } from '../hooks/useGuards';
 import { useTodaysDeployments } from '../hooks/useAttendance';
 import { useExpiringContracts } from '../hooks/useContracts';
+import { useARAgingReport } from '../hooks/useFinance';
+import { useRequisitionDashboard } from '../hooks/useRequisitions';
 import {
   ROLES,
   FINANCE_ROLES,
@@ -84,6 +86,8 @@ export default function DashboardPage() {
   const { data: clientSummary } = useClientSummary();
   const { data: todayDeployments } = useTodaysDeployments({ page: 1, limit: 1 });
   const { data: expiringContracts } = useExpiringContracts();
+  const { data: arAging } = useARAgingReport();
+  const { data: reqDashboard } = useRequisitionDashboard();
 
   if (!user) return null;
 
@@ -196,7 +200,36 @@ export default function DashboardPage() {
                   icon="bi-cash-coin"
                   title="Finance"
                   description="Invoices, payments, cashbook and payroll."
-                  comingSoon
+                  stat={
+                    <>
+                      {arAging && (
+                        <Badge bg={arAging.buckets.over90 > 0 ? 'danger' : 'success'} pill className="me-1">
+                          UGX {arAging.buckets.total.toLocaleString()} outstanding
+                        </Badge>
+                      )}
+                    </>
+                  }
+                  onClick={() => navigate('/finance')}
+                />
+              </Col>
+            </RoleGuard>
+
+            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}>
+              <Col>
+                <QuickLinkCard
+                  icon="bi-clipboard2-fill"
+                  title="Requisitions"
+                  description="Submit and manage procurement requisitions."
+                  stat={
+                    reqDashboard?.pendingApprovals ? (
+                      <Badge bg="warning" text="dark" pill>
+                        {reqDashboard.pendingApprovals} pending approvals
+                      </Badge>
+                    ) : (
+                      <Badge bg="secondary" pill>No pending</Badge>
+                    )
+                  }
+                  onClick={() => navigate('/requisitions')}
                 />
               </Col>
             </RoleGuard>

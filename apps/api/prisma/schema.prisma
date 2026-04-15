@@ -125,6 +125,7 @@ model User {
   assignedComplaints  ClientComplaint[]    @relation("ComplaintAssignee")
   auditLogs           AuditLog[]
   reportedIncidents   Incident[]           @relation("IncidentReporter")
+  raisedRequisitions  Requisition[]        @relation("RaisedRequisitions")
 }
 
 model Guard {
@@ -156,6 +157,8 @@ model Guard {
   deployments       Deployment[]
   attendance        AttendanceRecord[]
   incidentGuards    IncidentGuard[]
+  deductions        GuardDeduction[]
+  payslips          Payslip[]
 }
 
 model GuardDocument {
@@ -219,6 +222,7 @@ model Client {
   sites      Site[]
   contracts  Contract[]
   complaints ClientComplaint[]
+  invoices   Invoice[]
 }
 
 model Site {
@@ -251,12 +255,14 @@ model Contract {
   contractEnd     DateTime
   guardsRequired  Int
   billingPerGuard Int
+  billingDay      Int            @default(1) // Day of month to auto-generate invoice
   contractFile    String?
   status          ContractStatus @default(DRAFT)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  invoices Invoice[]
 }
 
 model ClientComplaint {
@@ -363,4 +369,167 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ─── Finance Models ────────────────────────────────────────────────────────────
+
+model Invoice {
+  id             String    @id @default(cuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractId     String?
+  contract       Contract? @relation(fields: [contractId], references: [id])
+  invoiceNumber  String    @unique
+  periodStart    DateTime
+  periodEnd      DateTime
+  guardsDeployed Int
+  ratePerGuard   Int
+  subtotal       Int
+  taxAmount      Int       @default(0)
+  totalAmount    Int
+  status         String    @default("PENDING")
+  pdfPath        String?
+  yoPaymentRef   String?
+  dueDate        DateTime
+  paidAt         DateTime?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  payments Payment[]
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amountPaid      Int
+  mode            String
+  referenceNumber String?
+  yoTransactionId String?
+  reconciled      Boolean  @default(false)
+  recordedBy      String
+  createdAt       DateTime @default(now())
+}
+
+model GuardDeduction {
+  id            String     @id @default(cuid())
+  guardId       String
+  guard         Guard      @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  type          String
+  amount        Int
+  description   String
+  effectiveDate DateTime
+  status        String     @default("PENDING")
+  payrollRunId  String?
+  payrollRun    PayrollRun? @relation(fields: [payrollRunId], references: [id])
+  createdBy     String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model PayrollRun {
+  id              String    @id @default(cuid())
+  month           Int
+  year            Int
+  totalGuards     Int
+  totalGross      Int
+  totalDeductions Int
+  totalNet        Int
+  status          String    @default("DRAFT")
+  approvedBy      String?
+  approvedAt      DateTime?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  payslips   Payslip[]
+  deductions GuardDeduction[]
+}
+
+model Payslip {
+  id                  String     @id @default(cuid())
+  guardId             String
+  guard               Guard      @relation(fields: [guardId], references: [id])
+  payrollRunId        String
+  payrollRun          PayrollRun @relation(fields: [payrollRunId], references: [id])
+  grossSalary         Int
+  deductionsBreakdown Json
+  totalDeductions     Int
+  netSalary           Int
+  daysWorked          Int
+  totalDays           Int
+  payslipPdfPath      String?
+  disbursementStatus  String     @default("PENDING")
+  disbursementRef     String?
+  createdAt           DateTime   @default(now())
+}
+
+model CashbookEntry {
+  id          String   @id @default(cuid())
+  date        DateTime
+  description String
+  category    String
+  amount      Int
+  type        String
+  recordedBy  String
+  createdAt   DateTime @default(now())
+}
+
+// ─── Requisition Models ────────────────────────────────────────────────────────
+
+model Requisition {
+  id                String    @id @default(cuid())
+  raisedBy          String
+  raisedByUser      User      @relation("RaisedRequisitions", fields: [raisedBy], references: [id])
+  category          String
+  description       String
+  quantity          Int       @default(1)
+  estimatedUnitCost Int
+  estimatedTotal    Int
+  urgency           String    @default("NORMAL")
+  justification     String?
+  status            String    @default("DRAFT")
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectedBy        String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  comments          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model Supplier {
+  id             String    @id @default(cuid())
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  itemCategories String[]
+  paymentTerms   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id               String       @id @default(cuid())
+  requisitionId    String
+  requisition      Requisition  @relation(fields: [requisitionId], references: [id])
+  supplierId       String?
+  supplier         Supplier?    @relation(fields: [supplierId], references: [id])
+  quantity         Int
+  unitCost         Int
+  totalCost        Int
+  expectedDelivery DateTime?
+  status           String       @default("DRAFT")
+  pdfPath          String?
+  createdBy        String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }

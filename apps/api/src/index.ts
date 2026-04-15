@@ -29,6 +29,7 @@ import apiRouter from './routes/index';
 
 // ── Services ───────────────────────────────────────────────────────────────────
 import { contractService } from './services/contractService';
+import { invoiceService } from './services/invoiceService';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -74,6 +75,11 @@ const server = app.listen(PORT, () => {
 // ── Scheduled jobs ─────────────────────────────────────────────────────────────
 // Refresh contract statuses daily at 06:00 EAT (Africa/Kampala)
 cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
+  timezone: 'Africa/Kampala',
+});
+
+// Auto-generate invoices for active contracts on their billing day
+cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
   timezone: 'Africa/Kampala',
 });
 

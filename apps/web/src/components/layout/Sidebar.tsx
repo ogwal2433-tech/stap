@@ -53,6 +53,7 @@ interface NavContentProps {
 const ACTIVE_PATHS = new Set([
   '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
   '/guards/dashboard', '/guards/import',
+  '/finance', '/requisitions',
 ]);
 
 function NavContent({ onNavigate }: NavContentProps) {

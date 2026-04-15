@@ -6,6 +6,7 @@ import {
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
+import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { guardsApi } from '../../lib/guards.api';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
@@ -13,6 +14,7 @@ import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
 import DisciplinaryRecordModal from '../../components/guards/DisciplinaryRecordModal';
 import LetterGenerationModal from '../../components/guards/LetterGenerationModal';
+import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
@@ -54,6 +56,10 @@ export default function GuardDetailPage() {
 
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
+  const [showDeductionModal, setShowDeductionModal] = useState(false);
+
+  const { data: deductions = [], refetch: refetchDeductions } = useDeductions({ guardId: id });
+  const cancelDeduction = useCancelDeduction();
 
   if (isLoading) {
     return (
@@ -460,6 +466,78 @@ export default function GuardDetailPage() {
             </div>
           </RoleGuard>
         </Tab>
+
+        {/* ── Deductions Tab ────────────────────────────────────────────────── */}
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER] as UserRole[]}>
+          <Tab eventKey="deductions" title="Deductions">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <span className="fw-semibold small">Guard Deductions</span>
+              <Button size="sm" variant="outline-danger" onClick={() => setShowDeductionModal(true)}>
+                + Add Deduction
+              </Button>
+            </div>
+
+            {deductions.length === 0 ? (
+              <Alert variant="light" className="small py-2">No deductions recorded.</Alert>
+            ) : (
+              <>
+                <Table size="sm" hover responsive className="align-middle small">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Type</th>
+                      <th className="text-end">Amount (UGX)</th>
+                      <th>Description</th>
+                      <th>Effective Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deductions.map((d) => (
+                      <tr key={d.id}>
+                        <td><Badge bg="secondary" style={{ fontSize: '0.65rem' }}>{d.type.replace(/_/g, ' ')}</Badge></td>
+                        <td className="text-end">{d.amount.toLocaleString()}</td>
+                        <td>{d.description}</td>
+                        <td>{new Date(d.effectiveDate).toLocaleDateString('en-GB')}</td>
+                        <td>
+                          <Badge
+                            bg={d.status === 'PENDING' ? 'warning' : d.status === 'APPLIED' ? 'success' : 'secondary'}
+                            text={d.status === 'PENDING' ? 'dark' : undefined}
+                          >
+                            {d.status}
+                          </Badge>
+                        </td>
+                        <td>
+                          {d.status === 'PENDING' && (
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={() =>
+                                cancelDeduction.mutateAsync(d.id)
+                                  .then(() => refetchDeductions())
+                                  .catch(() => showToast('Failed to cancel', 'danger'))
+                              }
+                            >
+                              Cancel
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+                <div className="small text-muted mt-1">
+                  Total pending: <strong>
+                    UGX {deductions.filter((d) => d.status === 'PENDING').reduce((s, d) => s + d.amount, 0).toLocaleString()}
+                  </strong>
+                </div>
+                <Alert variant="info" className="small py-2 mt-2 mb-0">
+                  Pending deductions will be automatically applied in the next payroll run.
+                </Alert>
+              </>
+            )}
+          </Tab>
+        </RoleGuard>
       </Tabs>
 
       {/* Modals */}
@@ -496,6 +574,12 @@ export default function GuardDetailPage() {
           disciplinaryRecords={disciplinaryRecords}
           onClose={() => setShowLetterModal(false)}
           onSuccess={() => refetchLetters()}
+        />
+      )}
+      {showDeductionModal && (
+        <DeductionFormModal
+          guardId={id!}
+          onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
         />
       )}
     </div>
