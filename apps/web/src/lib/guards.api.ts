@@ -6,6 +6,8 @@ import type {
   PaginatedResponse,
   CreateGuardInput,
   GuardListQuery,
+  BulkImportResult,
+  GuardDashboardStats,
 } from '@stap/shared';
 
 export const guardsApi = {
@@ -82,5 +84,40 @@ export const guardsApi = {
         { params: { page, limit: 5 } },
       )
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
+  },
+
+  downloadTemplate(): Promise<void> {
+    return api
+      .get('/guards/import/template', { responseType: 'blob' })
+      .then((r) => {
+        const url = URL.createObjectURL(new Blob([r.data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'STAP_Guard_Import_Template.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  },
+
+  bulkImport(file: File): Promise<BulkImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    return api
+      .post<{ success: boolean; data: BulkImportResult }>('/guards/import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  getDashboardStats(): Promise<GuardDashboardStats> {
+    return api
+      .get<{ success: boolean; data: GuardDashboardStats }>('/guards/dashboard')
+      .then((r) => r.data.data);
+  },
+
+  getRecentActivity(): Promise<{ id: string; fullName: string; employmentStatus: string; updatedAt: string }[]> {
+    return api
+      .get<{ success: boolean; data: { id: string; fullName: string; employmentStatus: string; updatedAt: string }[] }>('/guards/recent-activity')
+      .then((r) => r.data.data);
   },
 };

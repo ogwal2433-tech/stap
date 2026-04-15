@@ -117,3 +117,72 @@ export interface PaginatedResponse<T> {
     hasPrev: boolean;
   };
 }
+
+// ── Bulk import ────────────────────────────────────────────────────────────────
+
+export const BulkImportRowSchema = z.object({
+  firstName:      z.string().min(1).max(100),
+  lastName:       z.string().min(1).max(100),
+  otherNames:     z.string().max(100).optional(),
+  nationalId:     z.string().min(1).max(50),
+  phone:          z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
+  dateOfBirth:    z.string().describe('DD/MM/YYYY format'),
+  nextOfKinName:  z.string().min(1).max(100),
+  nextOfKinPhone: z.string().regex(/^\+?[0-9]{10,15}$/),
+  bankName:       z.string().max(100).optional(),
+  accountNumber:  z.string().max(50).optional(),
+  salaryRate:     z.coerce.number().int().positive(),
+  contractStart:  z.string().describe('DD/MM/YYYY format'),
+  contractEnd:    z.string().optional().describe('DD/MM/YYYY format'),
+  psoCertNumber:  z.string().max(50).optional(),
+});
+
+export type BulkImportRow = z.infer<typeof BulkImportRowSchema>;
+
+export interface BulkImportResultRow {
+  rowNumber:  number;
+  status:     'SUCCESS' | 'ERROR' | 'SKIPPED';
+  guardId?:   string;
+  guardName?: string;
+  errors:     string[];
+  data:       Partial<BulkImportRow>;
+}
+
+export interface BulkImportResult {
+  totalRows:    number;
+  successful:   number;
+  failed:       number;
+  skipped:      number;
+  results:      BulkImportResultRow[];
+  downloadUrl?: string;
+}
+
+// ── Guard dashboard ────────────────────────────────────────────────────────────
+
+export interface GuardDashboardStats {
+  totalActive:         number;
+  totalSuspended:      number;
+  totalTerminated:     number;
+  totalGuards:         number;
+  expiringContracts:   number;
+  pendingDisciplinary: number;
+  deployedToday:       number;
+  absentToday:         number;
+  newThisMonth:        number;
+  guardsByStatus: {
+    status: string;
+    count:  number;
+  }[];
+  attendanceTrend: {
+    date:    string;
+    present: number;
+    absent:  number;
+    late:    number;
+    awol:    number;
+  }[];
+  topSitesByDeployment: {
+    siteName:   string;
+    clientName: string;
+    count:      number;
+  }[];
+}

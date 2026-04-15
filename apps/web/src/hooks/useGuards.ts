@@ -59,3 +59,32 @@ export function useGuardDeploymentHistory(guardId: string, page: number) {
     enabled: Boolean(guardId),
   });
 }
+
+export function useGuardDashboard() {
+  return useQuery({
+    queryKey:      ['guard-dashboard'],
+    queryFn:       () => guardsApi.getDashboardStats(),
+    staleTime:     5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
+
+export function useDownloadTemplate() {
+  return useMutation({ mutationFn: () => guardsApi.downloadTemplate() });
+}
+
+export function useBulkImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => guardsApi.bulkImport(file),
+    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['guards'] }); },
+  });
+}
+
+export function useRecentGuardActivity() {
+  return useQuery({
+    queryKey:  ['guard-recent-activity'],
+    queryFn:   () => guardsApi.getRecentActivity(),
+    staleTime: 2 * 60 * 1000,
+  });
+}

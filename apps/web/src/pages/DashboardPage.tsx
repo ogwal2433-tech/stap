@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Col, Container, Navbar, Row } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import RoleGuard from '../components/RoleGuard';
 import { useClientSummary } from '../hooks/useClients';
-import { useGuardList } from '../hooks/useGuards';
+import { useGuardDashboard } from '../hooks/useGuards';
 import { useTodaysDeployments } from '../hooks/useAttendance';
 import { useExpiringContracts } from '../hooks/useContracts';
 import {
@@ -65,19 +66,31 @@ function QuickLinkCard({ icon, title, description, stat, onClick, comingSoon }: 
   );
 }
 
+function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const now = useClock();
 
-  const { data: guardData } = useGuardList({ page: 1, limit: 1 });
+  const { data: guardStats } = useGuardDashboard();
   const { data: clientSummary } = useClientSummary();
   const { data: todayDeployments } = useTodaysDeployments({ page: 1, limit: 1 });
   const { data: expiringContracts } = useExpiringContracts();
 
   if (!user) return null;
 
-  const badgeStyle = ROLE_BADGE[user.role as UserRole] ?? { bg: 'secondary' };
+  const badgeStyle    = ROLE_BADGE[user.role as UserRole] ?? { bg: 'secondary' };
   const expiringCount = expiringContracts?.length ?? 0;
+  const dateStr       = now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const timeStr       = now.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' }) + ' EAT';
 
   return (
     <>
@@ -105,10 +118,16 @@ export default function DashboardPage() {
       <main style={{ paddingTop: '4.5rem', minHeight: '100vh', background: '#F2F4F7' }}>
         <Container className="py-4">
           {/* Welcome heading */}
-          <h3 className="fw-bold mb-1" style={{ color: '#1B3A6B' }}>
-            {greeting(user.name)}
-          </h3>
-          <p className="text-muted mb-4">Here's your workspace overview.</p>
+          <div className="d-flex align-items-start justify-content-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>{greeting(user.name)}</h3>
+              <div className="text-muted small">Here's your workspace overview.</div>
+            </div>
+            <div className="text-end small text-muted">
+              <div>{dateStr}</div>
+              <div className="fw-semibold" style={{ color: '#1B3A6B' }}>{timeStr}</div>
+            </div>
+          </div>
 
           {/* Quick-link cards — shown per role */}
           <h6 className="text-uppercase text-muted fw-semibold mb-3" style={{ letterSpacing: '0.06em' }}>
@@ -124,10 +143,10 @@ export default function DashboardPage() {
                   description="Manage guard profiles, deployments and records."
                   stat={
                     <Badge bg="primary" pill>
-                      {guardData?.pagination.total ?? '—'} total
+                      {guardStats?.totalActive ?? '—'} active
                     </Badge>
                   }
-                  onClick={() => navigate('/guards')}
+                  onClick={() => navigate('/guards/dashboard')}
                 />
               </Col>
             </RoleGuard>

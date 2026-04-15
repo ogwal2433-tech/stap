@@ -1,7 +1,9 @@
 import { Router, type IRouter } from 'express';
 import fs from 'fs';
+import multer from 'multer';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
+import { bulkImportService } from '../services/bulkImportService';
 import { letterService } from '../services/letterService';
 import { uploadService } from '../services/uploadService';
 import { guardDocumentUpload } from '../config/multer';
@@ -23,6 +25,24 @@ import {
   CreateDisciplinarySchema,
   LetterGenerationSchema,
 } from '@stap/shared';
+
+// Memory-based upload for Excel imports (not saved to disk)
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (
+      file.mimetype.includes('spreadsheet') ||
+      file.mimetype.includes('excel') ||
+      file.originalname.endsWith('.xlsx') ||
+      file.originalname.endsWith('.xls')
+    ) {
+      cb(null, true);
+    } else {
+      cb(new AppError('Only Excel files (.xlsx, .xls) are allowed', 400));
+    }
+  },
+});
 
 const router: IRouter = Router();
 
@@ -49,6 +69,66 @@ router.post(
   asyncHandler(async (req, res) => {
     const guard = await guardService.create(req.body, req.user!.userId);
     res.status(201).json({ success: true, data: guard });
+  }),
+);
+
+// ── GET /dashboard — guard KPI dashboard ──────────────────────────────────────
+router.get(
+  '/dashboard',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR),
+  asyncHandler(async (_req, res) => {
+    const stats = await guardService.getDashboardStats();
+    res.status(200).json({ success: true, data: stats });
+  }),
+);
+
+// ── GET /import/template — download Excel import template ──────────────────────
+router.get(
+  '/import/template',
+  requireRole(...GUARD_WRITE_ROLES),
+  asyncHandler(async (_req, res) => {
+    const buffer = await bulkImportService.generateTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=STAP_Guard_Import_Template.xlsx');
+    res.send(buffer);
+  }),
+);
+
+// ── POST /import — upload and process Excel file ───────────────────────────────
+router.post(
+  '/import',
+  requireRole(...GUARD_WRITE_ROLES),
+  importUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const result = await bulkImportService.parseAndValidate(
+      req.file.buffer,
+      req.user!.userId,
+    );
+    res.status(200).json({ success: true, data: result });
+  }),
+);
+
+// ── GET /recent-activity — last 10 updated guards ─────────────────────────────
+router.get(
+  '/recent-activity',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR),
+  asyncHandler(async (_req, res) => {
+    const guards = await prisma.guard.findMany({
+      orderBy: { updatedAt: 'desc' },
+      take:    10,
+      select: {
+        id: true, firstName: true, lastName: true, otherNames: true,
+        employmentStatus: true, updatedAt: true,
+      },
+    });
+    const data = guards.map((g) => ({
+      id:               g.id,
+      fullName:         [g.firstName, g.otherNames, g.lastName].filter(Boolean).join(' '),
+      employmentStatus: g.employmentStatus,
+      updatedAt:        g.updatedAt.toISOString(),
+    }));
+    res.status(200).json({ success: true, data });
   }),
 );
 

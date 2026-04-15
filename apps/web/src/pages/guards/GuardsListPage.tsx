@@ -94,15 +94,25 @@ export default function GuardsListPage() {
       {/* Header row */}
       <div className="d-flex align-items-center justify-content-between mb-4">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Guards</h4>
-        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
-          <Button
-            variant="primary"
-            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-            onClick={() => navigate('/guards/new')}
-          >
-            + Add Guard
-          </Button>
-        </RoleGuard>
+        <div className="d-flex gap-2">
+          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => navigate('/guards/import')}
+            >
+              📥 Import
+            </Button>
+          </RoleGuard>
+          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <Button
+              style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              onClick={() => navigate('/guards/new')}
+            >
+              + Add Guard
+            </Button>
+          </RoleGuard>
+        </div>
       </div>
 
       {/* Filter bar */}

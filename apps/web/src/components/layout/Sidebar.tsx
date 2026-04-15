@@ -10,6 +10,7 @@ import {
   HR_ROLES,
   DEPLOYMENT_ROLES,
   REPORT_ROLES,
+  GUARD_WRITE_ROLES,
   type UserRole,
 } from '@stap/shared';
 
@@ -49,7 +50,10 @@ interface NavContentProps {
 }
 
 // Active nav items (all others are "coming soon")
-const ACTIVE_PATHS = new Set(['/dashboard', '/guards', '/clients', '/attendance', '/checkin']);
+const ACTIVE_PATHS = new Set([
+  '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
+  '/guards/dashboard', '/guards/import',
+]);
 
 function NavContent({ onNavigate }: NavContentProps) {
   const { user, logout } = useAuth();
@@ -102,6 +106,50 @@ function NavContent({ onNavigate }: NavContentProps) {
             </Nav.Item>
           </RoleGuard>
         ))}
+
+        {/* Guards sub-navigation — shown when on /guards* routes */}
+        {pathname.startsWith('/guards') && (
+          <>
+            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+              <Nav.Item>
+                <NavLink
+                  to="/guards/dashboard"
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `nav-link d-flex align-items-center gap-2 ps-5 pe-3 py-1 rounded mx-2 mb-1 ${isActive ? 'bg-white bg-opacity-10 text-white fw-medium' : ''}`
+                  }
+                  style={({ isActive }) => ({
+                    color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+                    textDecoration: 'none',
+                    fontSize: '0.8rem',
+                  })}
+                >
+                  <i className="bi bi-bar-chart-fill" style={{ fontSize: '0.8rem', width: 14 }} />
+                  <span>Overview</span>
+                </NavLink>
+              </Nav.Item>
+            </RoleGuard>
+            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+              <Nav.Item>
+                <NavLink
+                  to="/guards/import"
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `nav-link d-flex align-items-center gap-2 ps-5 pe-3 py-1 rounded mx-2 mb-1 ${isActive ? 'bg-white bg-opacity-10 text-white fw-medium' : ''}`
+                  }
+                  style={({ isActive }) => ({
+                    color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+                    textDecoration: 'none',
+                    fontSize: '0.8rem',
+                  })}
+                >
+                  <i className="bi bi-file-earmark-arrow-up" style={{ fontSize: '0.8rem', width: 14 }} />
+                  <span>Bulk Import</span>
+                </NavLink>
+              </Nav.Item>
+            </RoleGuard>
+          </>
+        )}
       </Nav>
 
       {/* User footer */}

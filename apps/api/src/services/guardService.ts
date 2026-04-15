@@ -9,6 +9,7 @@ import type {
   GuardResponse,
   PaginatedResponse,
   DeploymentHistoryEntry,
+  GuardDashboardStats,
 } from '@stap/shared';
 
 // Roles allowed to see the accountNumber field
@@ -417,6 +418,103 @@ class GuardService {
     }
 
     return response;
+  }
+
+  // ── Dashboard stats ────────────────────────────────────────────────────────
+
+  async getDashboardStats(): Promise<GuardDashboardStats> {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thirtyDaysOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      statusCounts,
+      deployedToday,
+      absentToday,
+      newThisMonth,
+      expiringContracts,
+      pendingDisciplinary,
+      attendanceTrend,
+      topSites,
+    ] = await Promise.all([
+      prisma.guard.groupBy({ by: ['employmentStatus'], _count: { id: true } }),
+      prisma.deployment.count({ where: { date: todayStart } }),
+      prisma.attendanceRecord.count({
+        where: { date: todayStart, status: { in: ['ABSENT', 'AWOL'] } },
+      }),
+      prisma.guard.count({ where: { createdAt: { gte: monthStart } } }),
+      prisma.contract.count({
+        where: {
+          status:      { in: ['ACTIVE', 'EXPIRING'] },
+          contractEnd: { gte: now, lte: thirtyDaysOut },
+        },
+      }),
+      prisma.guard.count({ where: { employmentStatus: 'SUSPENDED' } }),
+      prisma.$queryRaw<{ date: Date; present: bigint; absent: bigint; late: bigint; awol: bigint }[]>`
+        SELECT
+          DATE("date") AS date,
+          COUNT(CASE WHEN status = 'PRESENT' THEN 1 END) AS present,
+          COUNT(CASE WHEN status = 'ABSENT'  THEN 1 END) AS absent,
+          COUNT(CASE WHEN status = 'LATE'    THEN 1 END) AS late,
+          COUNT(CASE WHEN status = 'AWOL'    THEN 1 END) AS awol
+        FROM "AttendanceRecord"
+        WHERE "date" >= NOW() - INTERVAL '14 days'
+        GROUP BY DATE("date")
+        ORDER BY DATE("date") ASC
+      `,
+      prisma.deployment.groupBy({
+        by:      ['siteId'],
+        _count:  { id: true },
+        where:   { date: { gte: monthStart } },
+        orderBy: { _count: { id: 'desc' } },
+        take:    5,
+      }),
+    ]);
+
+    const siteIds = topSites.map((s) => s.siteId);
+    const sites = siteIds.length
+      ? await prisma.site.findMany({
+          where:   { id: { in: siteIds } },
+          include: { client: { select: { clientName: true } } },
+        })
+      : [];
+
+    const byStatus = statusCounts.reduce(
+      (acc, s) => { acc[s.employmentStatus] = s._count.id; return acc; },
+      {} as Record<string, number>,
+    );
+
+    return {
+      totalActive:         byStatus['ACTIVE']     ?? 0,
+      totalSuspended:      byStatus['SUSPENDED']  ?? 0,
+      totalTerminated:     byStatus['TERMINATED'] ?? 0,
+      totalGuards:         statusCounts.reduce((sum, s) => sum + s._count.id, 0),
+      expiringContracts,
+      pendingDisciplinary,
+      deployedToday,
+      absentToday,
+      newThisMonth,
+      guardsByStatus: statusCounts.map((s) => ({
+        status: s.employmentStatus,
+        count:  s._count.id,
+      })),
+      attendanceTrend: attendanceTrend.map((r) => ({
+        date:    r.date.toISOString().split('T')[0],
+        present: Number(r.present),
+        absent:  Number(r.absent),
+        late:    Number(r.late),
+        awol:    Number(r.awol),
+      })),
+      topSitesByDeployment: topSites.map((ts) => {
+        const site = sites.find((s) => s.id === ts.siteId);
+        return {
+          siteName:   site?.siteName   ?? 'Unknown',
+          clientName: site?.client.clientName ?? 'Unknown',
+          count:      ts._count.id,
+        };
+      }),
+    };
   }
 }
 

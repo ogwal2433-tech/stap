@@ -20,6 +20,8 @@ const ClientFormPage = lazy(() => import('@/pages/clients/ClientFormPage'));
 const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'));
 const AttendancePage = lazy(() => import('@/pages/attendance/AttendancePage'));
 const CheckinPage = lazy(() => import('@/pages/attendance/CheckinPage'));
+const BulkImportPage = lazy(() => import('@/pages/guards/BulkImportPage'));
+const GuardDashboardPage = lazy(() => import('@/pages/guards/GuardDashboardPage'));
 
 const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
@@ -71,6 +73,29 @@ function App() {
                   <Suspense fallback={<PageSpinner />}>
                     <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
                       <GuardFormPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/guards/dashboard"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard
+                      allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]}
+                      fallback={<UnauthorisedPage />}
+                    >
+                      <GuardDashboardPage />
+                    </RoleGuard>
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/guards/import"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
+                      <BulkImportPage />
                     </RoleGuard>
                   </Suspense>
                 }
