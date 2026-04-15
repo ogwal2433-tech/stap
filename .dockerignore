@@ -1,0 +1,26 @@
+# Dependencies — installed fresh inside Docker
+**/node_modules
+
+# Local build output — rebuilt inside Docker
+**/dist
+apps/web/dist
+
+# Git
+.git
+.gitignore
+
+# Local env files — injected via docker-compose environment block
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dev tooling
+**/.turbo
+**/.cache
+**/coverage
+**/*.log
+**/.DS_Store
+
+# Editor
+**/.vscode
+**/.idea
