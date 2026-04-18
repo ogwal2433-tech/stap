@@ -128,6 +128,9 @@ model User {
   raisedRequisitions  Requisition[]        @relation("RaisedRequisitions")
   notifications       Notification[]
   clientOf            Client?              @relation("ClientUser")
+  assignedApplicants  Applicant[]          @relation("ApplicantAssignee")
+  trainerSessions     TrainingSession[]    @relation("TrainerSessions")
+  recordedInventory   InventoryTransaction[] @relation("InventoryRecorder")
 }
 
 model Guard {
@@ -161,6 +164,10 @@ model Guard {
   incidentGuards    IncidentGuard[]
   deductions        GuardDeduction[]
   payslips          Payslip[]
+  trainingAttendees TrainingAttendee[]
+  leaveRequests     LeaveRequest[]
+  inventoryTxns     InventoryTransaction[]
+  convertedApplicant Applicant?
 }
 
 model GuardDocument {
@@ -575,4 +582,141 @@ model ScheduledReport {
   createdBy  String
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+}
+
+// ─── HR Models ─────────────────────────────────────────────────────────────────
+
+model Applicant {
+  id              String    @id @default(cuid())
+  firstName       String
+  lastName        String
+  phone           String
+  email           String?
+  nationalId      String?
+  dateOfBirth     DateTime?
+  address         String?
+  appliedPosition String    @default("Security Guard")
+  source          String?
+  stage           String    @default("APPLICATION_RECEIVED")
+  interviewDate   DateTime?
+  interviewNotes  String?
+  offerSalary     Int?
+  offerDate       DateTime?
+  rejectionReason String?
+  convertedToGuardId String? @unique
+  convertedGuard  Guard?    @relation(fields: [convertedToGuardId], references: [id])
+  assignedTo      String?
+  assignedUser    User?     @relation("ApplicantAssignee", fields: [assignedTo], references: [id])
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model TrainingSession {
+  id                  String    @id @default(cuid())
+  title               String
+  description         String?
+  trainerId           String
+  trainer             User      @relation("TrainerSessions", fields: [trainerId], references: [id])
+  location            String?
+  scheduledAt         DateTime
+  durationHours       Float     @default(1)
+  passMark            Int       @default(70)
+  status              String    @default("SCHEDULED")
+  attendanceSheetPath String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  attendees           TrainingAttendee[]
+}
+
+model TrainingAttendee {
+  id                String          @id @default(cuid())
+  trainingSessionId String
+  trainingSession   TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+  guardId           String
+  guard             Guard           @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  attended          Boolean         @default(false)
+  score             Int?
+  passed            Boolean?
+  notes             String?
+  createdAt         DateTime        @default(now())
+
+  @@unique([trainingSessionId, guardId])
+}
+
+model LeaveRequest {
+  id              String    @id @default(cuid())
+  guardId         String
+  guard           Guard     @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  type            String
+  startDate       DateTime
+  endDate         DateTime
+  daysRequested   Int
+  reason          String
+  status          String    @default("PENDING")
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedBy      String?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model LetterTemplate {
+  id         String   @id @default(cuid())
+  name       String
+  letterType String   @unique
+  content    String   @db.Text
+  version    Int      @default(1)
+  isActive   Boolean  @default(true)
+  createdBy  String
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Inventory Models ──────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id               String    @id @default(cuid())
+  itemName         String
+  itemCode         String    @unique
+  itemType         String
+  unitCost         Int
+  stockQuantity    Int       @default(0)
+  reorderThreshold Int       @default(5)
+  description      String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  transactions     InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id            String        @id @default(cuid())
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  guardId       String?
+  guard         Guard?        @relation(fields: [guardId], references: [id])
+  action        String
+  quantity      Int
+  conditionNote String?
+  chargedAmount Int?
+  reference     String?
+  recordedBy    String
+  recordedByUser User         @relation("InventoryRecorder", fields: [recordedBy], references: [id])
+  createdAt     DateTime      @default(now())
+}
+
+// ─── Settings Model ────────────────────────────────────────────────────────────
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  label     String
+  group     String
+  dataType  String   @default("string")
+  updatedBy String?
+  updatedAt DateTime @updatedAt
 }

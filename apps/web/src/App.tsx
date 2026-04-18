@@ -30,9 +30,14 @@ const ComplaintsDashboard          = lazy(() => import('@/pages/complaints/Compl
 const ReportsPage                  = lazy(() => import('@/pages/reports/ReportsPage'));
 const NotificationsPage            = lazy(() => import('@/pages/notifications/NotificationsPage'));
 const NotificationSettingsPage     = lazy(() => import('@/pages/settings/NotificationSettingsPage'));
+const HRPage                       = lazy(() => import('@/pages/hr/HRPage'));
+const InventoryPage                = lazy(() => import('@/pages/inventory/InventoryPage'));
+const SettingsPage                 = lazy(() => import('@/pages/settings/SettingsPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
 
-const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
+const INV_ROLES: UserRole[]      = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
 const REQUISITION_ROLES: UserRole[] = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
@@ -107,7 +112,14 @@ function App() {
               {/* Notifications */}
               <Route path="/notifications" element={<L><NotificationsPage /></L>} />
 
+              {/* HR */}
+              <Route path="/hr" element={<L><RoleGuard allowedRoles={HR_VIEW_ROLES} fallback={<UnauthorisedPage />}><HRPage /></RoleGuard></L>} />
+
+              {/* Inventory */}
+              <Route path="/inventory" element={<L><RoleGuard allowedRoles={INV_ROLES} fallback={<UnauthorisedPage />}><InventoryPage /></RoleGuard></L>} />
+
               {/* Settings */}
+              <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
             </Route>
           </Route>

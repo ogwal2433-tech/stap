@@ -31,6 +31,7 @@ import apiRouter from './routes/index';
 import { contractService } from './services/contractService';
 import { invoiceService } from './services/invoiceService';
 import { reportService } from './services/reportService';
+import { inventoryService } from './services/inventoryService';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -86,6 +87,11 @@ cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
 
 // Initialise any persisted scheduled reports on startup
 reportService.initScheduledReports();
+
+// Daily low stock check at 07:00 EAT
+cron.schedule('0 7 * * *', () => inventoryService.runLowStockCheck(), {
+  timezone: 'Africa/Kampala',
+});
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];

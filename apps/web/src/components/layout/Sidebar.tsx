@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { icon: 'bi-chat-left-text-fill',  label: 'Complaints',    to: '/complaints',    roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) },
   { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
   { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
-  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings/notifications', roles: [ROLES.DIRECTOR] },
+  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',               roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER] },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
@@ -51,12 +51,13 @@ interface NavContentProps {
   onNavigate?: () => void;
 }
 
-// Active nav items (all others are "coming soon")
+// Active nav items
 const ACTIVE_PATHS = new Set([
   '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
   '/guards/dashboard', '/guards/import',
   '/finance', '/requisitions',
-  '/complaints', '/reports', '/notifications', '/settings',
+  '/complaints', '/reports', '/notifications',
+  '/settings', '/hr', '/inventory',
 ]);
 
 function NavContent({ onNavigate }: NavContentProps) {

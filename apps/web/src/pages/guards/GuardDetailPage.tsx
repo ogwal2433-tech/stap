@@ -7,6 +7,7 @@ import {
 import { useGuard, useGuardDeploymentHistory } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
+import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
@@ -39,6 +40,63 @@ interface StatusModal {
 }
 
 const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+
+function IssuedItemsTab({ guardId }: { guardId: string }) {
+  const { data: items, isLoading } = useGuardInventory(guardId);
+  const ret = useReturnItem();
+  const { showToast } = useToast();
+
+  const handleReturn = (itemId: string, guardId: string) => {
+    const qty = Number(prompt('Quantity to return:') ?? '0');
+    if (!qty || qty <= 0) return;
+    ret.mutate(
+      { itemId, guardId, quantity: qty, action: 'RETURNED' },
+      {
+        onSuccess: () => showToast('Item returned successfully', 'success'),
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed to record return', 'danger'),
+      },
+    );
+  };
+
+  if (isLoading) return <div className="text-center py-4"><Spinner /></div>;
+  if (!items || items.length === 0) {
+    return <Alert variant="light" className="small py-2">No items currently issued to this guard.</Alert>;
+  }
+
+  return (
+    <Table hover size="sm" responsive className="mt-2">
+      <thead className="table-light">
+        <tr>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>Type</th>
+          <th className="text-center">Outstanding</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map(row => (
+          <tr key={row.item.id}>
+            <td><code style={{ fontSize: 12 }}>{row.item.itemCode}</code></td>
+            <td className="fw-medium">{row.item.itemName}</td>
+            <td><Badge bg="secondary" style={{ fontSize: 10 }}>{row.item.itemType}</Badge></td>
+            <td className="text-center fw-bold">{row.outstanding}</td>
+            <td>
+              <Button
+                size="sm"
+                variant="outline-warning"
+                style={{ fontSize: 11, padding: '1px 6px' }}
+                onClick={() => handleReturn(row.item.id, guardId)}
+              >
+                Return
+              </Button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
 
 export default function GuardDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -471,6 +529,11 @@ export default function GuardDetailPage() {
             </div>
           </RoleGuard>
         </Tab>
+
+        {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
+        {canViewDeductions && <Tab eventKey="issued-items" title="Issued Items">
+          <IssuedItemsTab guardId={id!} />
+        </Tab>}
 
         {/* ── Deductions Tab ────────────────────────────────────────────────── */}
         {canViewDeductions && <Tab eventKey="deductions" title="Deductions">

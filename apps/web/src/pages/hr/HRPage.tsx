@@ -1,0 +1,1027 @@
+import React, { useState } from 'react';
+import {
+  Alert, Badge, Button, Col, Form, ListGroup, Modal,
+  Row, Spinner, Tab, Table, Tabs,
+} from 'react-bootstrap';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import RoleGuard from '../../components/RoleGuard';
+import {
+  ROLES, HR_ROLES, INTERNAL_ROLES, APPLICANT_STAGES, LETTER_TYPES, type UserRole,
+} from '@stap/shared';
+import type {
+  ApplicantResponse, TrainingSessionResponse, LeaveRequestResponse, LetterTemplateResponse,
+} from '@stap/shared';
+import {
+  useApplicants, usePipelineSummary, useCreateApplicant, useUpdateApplicantStage,
+  useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
+  useLeaveRequests, useRequestLeave, useApproveLeave,
+  useLetterTemplates, useSaveLetterTemplate, usePreviewTemplate,
+} from '../../hooks/useHR';
+import { useGuardList } from '../../hooks/useGuards';
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const HR_VIEW_ROLES: UserRole[] = [...HR_ROLES, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
+
+const STAGE_COLORS: Record<string, string> = {
+  APPLICATION_RECEIVED:  '#f8f9fa',
+  SCREENING:             '#d0e4f7',
+  INTERVIEW_SCHEDULED:   '#fff3cd',
+  INTERVIEW_DONE:        '#d1ecf1',
+  OFFER_MADE:            '#ffe5cc',
+  ACCEPTED:              '#d4edda',
+  REJECTED:              '#f8d7da',
+  ONBOARDING:            '#e2d9f3',
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  APPLICATION_RECEIVED:  'Received',
+  SCREENING:             'Screening',
+  INTERVIEW_SCHEDULED:   'Interview Scheduled',
+  INTERVIEW_DONE:        'Interview Done',
+  OFFER_MADE:            'Offer Made',
+  ACCEPTED:              'Accepted',
+  REJECTED:              'Rejected',
+  ONBOARDING:            'Onboarding',
+};
+
+const NEXT_STAGE: Record<string, string | null> = {
+  APPLICATION_RECEIVED:  'SCREENING',
+  SCREENING:             'INTERVIEW_SCHEDULED',
+  INTERVIEW_SCHEDULED:   'INTERVIEW_DONE',
+  INTERVIEW_DONE:        'OFFER_MADE',
+  OFFER_MADE:            'ACCEPTED',
+  ACCEPTED:              'ONBOARDING',
+  ONBOARDING:            null,
+  REJECTED:              null,
+};
+
+const LEAVE_TYPE_BADGES: Record<string, string> = {
+  ANNUAL:    'success',
+  SICK:      'warning',
+  EMERGENCY: 'danger',
+  MATERNITY: 'info',
+  PATERNITY: 'info',
+};
+
+const STATUS_BADGES: Record<string, string> = {
+  PENDING:   'warning',
+  APPROVED:  'success',
+  REJECTED:  'danger',
+  SCHEDULED: 'primary',
+  COMPLETED: 'success',
+  CANCELLED: 'secondary',
+};
+
+const LETTER_TYPE_LABELS: Record<string, string> = {
+  VERBAL_WARNING:             'Verbal Warning',
+  FIRST_WARNING:              'First Written Warning',
+  FINAL_WARNING:              'Final Written Warning',
+  TERMINATION_NOTICE:         'Termination Notice',
+  APPOINTMENT_LETTER:         'Appointment Letter',
+  CONTRACT_EXTENSION:         'Contract Extension',
+  CONFIRMATION_OF_EMPLOYMENT: 'Confirmation of Employment',
+  SALARY_REVIEW:              'Salary Review',
+};
+
+const SAMPLE_DATA: Record<string, string> = {
+  guard_name:      'David Ochieng',
+  national_id:     'CM90123456JXKL',
+  date:            new Date().toLocaleDateString('en-UG'),
+  reason:          'Repeated tardiness and failure to report on time',
+  outcome:         'Formal warning issued; probationary monitoring for 30 days',
+  director_name:   'Taraka Joel',
+  salary:          '650,000',
+  contract_start:  '01/01/2026',
+  contract_end:    '31/12/2026',
+  ref_number:      'STAP/HR/2026/001',
+  company_name:    'STAP Security Ltd',
+  company_address: 'Kampala, Uganda',
+};
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function ApplicantFormModal({
+  show,
+  onHide,
+}: {
+  show: boolean;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const create = useCreateApplicant();
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', phone: '', email: '', source: 'WALK_IN' as 'WALK_IN' | 'REFERRAL' | 'ADVERT' | 'OTHER',
+    nationalId: '', address: '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    create.mutate(
+      { ...form, email: form.email || undefined, nationalId: form.nationalId || undefined, address: form.address || undefined },
+      {
+        onSuccess: () => { showToast('Applicant added', 'success'); onHide(); },
+        onError: (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show={show} onHide={onHide} centered>
+      <Modal.Header closeButton><Modal.Title>Add Applicant</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Row className="mb-2">
+            <Col>
+              <Form.Label className="small fw-medium">First Name *</Form.Label>
+              <Form.Control size="sm" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
+            </Col>
+            <Col>
+              <Form.Label className="small fw-medium">Last Name *</Form.Label>
+              <Form.Control size="sm" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
+            </Col>
+          </Row>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Phone *</Form.Label>
+            <Form.Control size="sm" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Email</Form.Label>
+            <Form.Control size="sm" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">National ID</Form.Label>
+            <Form.Control size="sm" value={form.nationalId} onChange={e => setForm(f => ({ ...f, nationalId: e.target.value }))} />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Source</Form.Label>
+            <Form.Select size="sm" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value as 'WALK_IN' | 'REFERRAL' | 'ADVERT' | 'OTHER' }))}>
+              <option value="WALK_IN">Walk-in</option>
+              <option value="REFERRAL">Referral</option>
+              <option value="ADVERT">Advertisement</option>
+              <option value="OTHER">Other</option>
+            </Form.Select>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Address</Form.Label>
+            <Form.Control size="sm" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+          </Form.Group>
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={create.isPending}>
+              {create.isPending ? <Spinner size="sm" /> : 'Add Applicant'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function StageUpdateModal({
+  applicant,
+  onHide,
+}: {
+  applicant: ApplicantResponse | null;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const update = useUpdateApplicantStage();
+  const nextStage = applicant ? NEXT_STAGE[applicant.stage] : null;
+  const [form, setForm] = useState({ stage: '', interviewDate: '', interviewNotes: '', offerSalary: '', rejectionReason: '' });
+
+  if (!applicant) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: any = { stage: form.stage || nextStage };
+    if (form.interviewDate) payload.interviewDate = new Date(form.interviewDate).toISOString();
+    if (form.interviewNotes) payload.interviewNotes = form.interviewNotes;
+    if (form.offerSalary) payload.offerSalary = Number(form.offerSalary);
+    if (form.rejectionReason) payload.rejectionReason = form.rejectionReason;
+
+    update.mutate(
+      { id: applicant.id, data: payload },
+      {
+        onSuccess: () => { showToast('Stage updated', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  const selectedStage = form.stage || nextStage || '';
+
+  return (
+    <Modal show={!!applicant} onHide={onHide} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Update Stage — {applicant.fullName}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">New Stage</Form.Label>
+            <Form.Select size="sm" value={selectedStage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}>
+              {APPLICANT_STAGES.filter(s => {
+                if (s === 'REJECTED') return true;
+                const fromIdx = APPLICANT_STAGES.indexOf(applicant.stage as any);
+                const toIdx = APPLICANT_STAGES.indexOf(s as any);
+                return toIdx > fromIdx;
+              }).map(s => (
+                <option key={s} value={s}>{STAGE_LABELS[s]}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+          {selectedStage === 'INTERVIEW_SCHEDULED' && (
+            <>
+              <Form.Group className="mb-2">
+                <Form.Label className="small fw-medium">Interview Date</Form.Label>
+                <Form.Control size="sm" type="datetime-local" value={form.interviewDate} onChange={e => setForm(f => ({ ...f, interviewDate: e.target.value }))} />
+              </Form.Group>
+            </>
+          )}
+          {selectedStage === 'INTERVIEW_DONE' && (
+            <Form.Group className="mb-2">
+              <Form.Label className="small fw-medium">Interview Notes</Form.Label>
+              <Form.Control as="textarea" rows={3} size="sm" value={form.interviewNotes} onChange={e => setForm(f => ({ ...f, interviewNotes: e.target.value }))} />
+            </Form.Group>
+          )}
+          {selectedStage === 'OFFER_MADE' && (
+            <Form.Group className="mb-2">
+              <Form.Label className="small fw-medium">Offer Salary (UGX)</Form.Label>
+              <Form.Control size="sm" type="number" value={form.offerSalary} onChange={e => setForm(f => ({ ...f, offerSalary: e.target.value }))} />
+            </Form.Group>
+          )}
+          {selectedStage === 'REJECTED' && (
+            <Form.Group className="mb-2">
+              <Form.Label className="small fw-medium">Rejection Reason *</Form.Label>
+              <Form.Control as="textarea" rows={3} size="sm" value={form.rejectionReason} onChange={e => setForm(f => ({ ...f, rejectionReason: e.target.value }))} required />
+            </Form.Group>
+          )}
+          <div className="d-flex justify-content-end gap-2 mt-3">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={update.isPending}>
+              {update.isPending ? <Spinner size="sm" /> : 'Update Stage'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => void }) {
+  const { showToast } = useToast();
+  const create = useCreateTrainingSession();
+  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
+  const guards = guardsData?.data ?? [];
+
+  const [form, setForm] = useState({
+    title: '', trainerId: '', location: '', scheduledAt: '',
+    durationHours: '1', passMark: '70', guardIds: [] as string[], description: '',
+  });
+
+  const handleGuardToggle = (id: string) => {
+    setForm(f => ({
+      ...f,
+      guardIds: f.guardIds.includes(id) ? f.guardIds.filter(g => g !== id) : [...f.guardIds, id],
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    create.mutate(
+      {
+        ...form,
+        scheduledAt:   new Date(form.scheduledAt).toISOString(),
+        durationHours: Number(form.durationHours),
+        passMark:      Number(form.passMark),
+      },
+      {
+        onSuccess: () => { showToast('Training session scheduled', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show={show} onHide={onHide} centered size="lg">
+      <Modal.Header closeButton><Modal.Title>Schedule Training Session</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Row className="mb-2">
+            <Col md={8}>
+              <Form.Label className="small fw-medium">Title *</Form.Label>
+              <Form.Control size="sm" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
+            </Col>
+            <Col md={4}>
+              <Form.Label className="small fw-medium">Duration (hrs)</Form.Label>
+              <Form.Control size="sm" type="number" min="0.5" step="0.5" value={form.durationHours} onChange={e => setForm(f => ({ ...f, durationHours: e.target.value }))} />
+            </Col>
+          </Row>
+          <Row className="mb-2">
+            <Col md={6}>
+              <Form.Label className="small fw-medium">Date & Time *</Form.Label>
+              <Form.Control size="sm" type="datetime-local" value={form.scheduledAt} onChange={e => setForm(f => ({ ...f, scheduledAt: e.target.value }))} required />
+            </Col>
+            <Col md={6}>
+              <Form.Label className="small fw-medium">Location</Form.Label>
+              <Form.Control size="sm" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} />
+            </Col>
+          </Row>
+          <Row className="mb-2">
+            <Col md={6}>
+              <Form.Label className="small fw-medium">Trainer ID *</Form.Label>
+              <Form.Control size="sm" placeholder="cuid of trainer user" value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))} required />
+            </Col>
+            <Col md={6}>
+              <Form.Label className="small fw-medium">Pass Mark (%)</Form.Label>
+              <Form.Control size="sm" type="number" min="0" max="100" value={form.passMark} onChange={e => setForm(f => ({ ...f, passMark: e.target.value }))} />
+            </Col>
+          </Row>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Description</Form.Label>
+            <Form.Control as="textarea" rows={2} size="sm" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Select Guards * ({form.guardIds.length} selected)</Form.Label>
+            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: 8 }}>
+              {guards.map(g => (
+                <Form.Check
+                  key={g.id}
+                  type="checkbox"
+                  id={`guard-${g.id}`}
+                  label={`${g.firstName} ${g.lastName}`}
+                  checked={form.guardIds.includes(g.id)}
+                  onChange={() => handleGuardToggle(g.id)}
+                  className="small"
+                />
+              ))}
+            </div>
+          </Form.Group>
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={create.isPending || form.guardIds.length === 0}>
+              {create.isPending ? <Spinner size="sm" /> : 'Schedule Training'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function RecordResultsModal({
+  session,
+  onHide,
+}: {
+  session: TrainingSessionResponse | null;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const record = useRecordTrainingResults();
+  const [results, setResults] = useState<Record<string, { attended: boolean; score: string; notes: string }>>({});
+
+  React.useEffect(() => {
+    if (session) {
+      const init: typeof results = {};
+      session.attendees.forEach(a => {
+        init[a.guard.id] = { attended: false, score: '', notes: '' };
+      });
+      setResults(init);
+    }
+  }, [session]);
+
+  if (!session) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload = session.attendees.map(a => ({
+      guardId:  a.guard.id,
+      attended: results[a.guard.id]?.attended ?? false,
+      score:    results[a.guard.id]?.score ? Number(results[a.guard.id].score) : undefined,
+      notes:    results[a.guard.id]?.notes || undefined,
+    }));
+    record.mutate(
+      { id: session.id, data: { results: payload } },
+      {
+        onSuccess: () => { showToast('Results recorded', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show={!!session} onHide={onHide} centered size="lg">
+      <Modal.Header closeButton><Modal.Title>Record Results — {session.title}</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Table size="sm" hover>
+            <thead className="table-light">
+              <tr>
+                <th>Guard</th>
+                <th className="text-center">Attended</th>
+                <th>Score (%)</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {session.attendees.map(a => (
+                <tr key={a.guard.id}>
+                  <td className="fw-medium small">{a.guard.fullName}</td>
+                  <td className="text-center">
+                    <Form.Check
+                      checked={results[a.guard.id]?.attended ?? false}
+                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], attended: e.target.checked } }))}
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      size="sm"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={results[a.guard.id]?.score ?? ''}
+                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], score: e.target.value } }))}
+                      style={{ width: 80 }}
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      size="sm"
+                      value={results[a.guard.id]?.notes ?? ''}
+                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], notes: e.target.value } }))}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={record.isPending}>
+              {record.isPending ? <Spinner size="sm" /> : 'Save Results'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void }) {
+  const { showToast } = useToast();
+  const request = useRequestLeave();
+  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
+  const guards = guardsData?.data ?? [];
+  const [form, setForm] = useState({ guardId: '', type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    request.mutate(
+      {
+        guardId:   form.guardId,
+        type:      form.type as any,
+        startDate: new Date(form.startDate).toISOString(),
+        endDate:   new Date(form.endDate).toISOString(),
+        reason:    form.reason,
+      },
+      {
+        onSuccess: () => { showToast('Leave request submitted', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show={show} onHide={onHide} centered>
+      <Modal.Header closeButton><Modal.Title>Request Leave</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Guard *</Form.Label>
+            <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required>
+              <option value="">Select guard…</option>
+              {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
+            </Form.Select>
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Leave Type *</Form.Label>
+            <Form.Select size="sm" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+              {['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY'].map(t => (
+                <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+          <Row className="mb-2">
+            <Col>
+              <Form.Label className="small fw-medium">Start Date *</Form.Label>
+              <Form.Control size="sm" type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required />
+            </Col>
+            <Col>
+              <Form.Label className="small fw-medium">End Date *</Form.Label>
+              <Form.Control size="sm" type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required />
+            </Col>
+          </Row>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Reason *</Form.Label>
+            <Form.Control as="textarea" rows={3} size="sm" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} required minLength={10} />
+          </Form.Group>
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={request.isPending}>
+              {request.isPending ? <Spinner size="sm" /> : 'Submit Request'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function TemplateEditorModal({
+  template,
+  onHide,
+}: {
+  template: LetterTemplateResponse | null;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const save    = useSaveLetterTemplate();
+  const preview = usePreviewTemplate();
+  const [name, setName]       = useState('');
+  const [content, setContent] = useState('');
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+
+  React.useEffect(() => {
+    if (template) {
+      setName(template.name);
+      setContent(template.content);
+    }
+  }, [template]);
+
+  if (!template) return null;
+
+  const handleSave = () => {
+    save.mutate(
+      { letterType: template.letterType, data: { name, content } },
+      {
+        onSuccess: () => { showToast('Template saved', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  const handlePreview = () => {
+    preview.mutate(
+      { letterType: template.letterType, sampleData: SAMPLE_DATA },
+      {
+        onSuccess: (html) => { setPreviewHtml(html); setShowPreview(true); },
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Preview failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <>
+      <Modal show={!!template} onHide={onHide} size="xl" fullscreen="lg-down">
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Template: {LETTER_TYPE_LABELS[template.letterType]}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Template Name</Form.Label>
+            <Form.Control size="sm" value={name} onChange={e => setName(e.target.value)} />
+          </Form.Group>
+          <Alert variant="info" className="small py-2">
+            <strong>Available placeholders:</strong>{' '}
+            {['{guard_name}', '{national_id}', '{date}', '{reason}', '{outcome}', '{director_name}',
+              '{salary}', '{contract_start}', '{contract_end}', '{ref_number}', '{company_name}', '{company_address}']
+              .map(p => <code key={p} className="me-1">{p}</code>)}
+          </Alert>
+          <Form.Group>
+            <Form.Label className="small fw-medium">HTML Content</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={20}
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              style={{ fontFamily: 'monospace', fontSize: 13 }}
+            />
+            <Form.Text className="text-muted small">
+              Use standard HTML. Placeholders in {'{curly_braces}'} will be replaced automatically.
+            </Form.Text>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" size="sm" onClick={onHide}>Cancel</Button>
+          <Button variant="outline-info" size="sm" onClick={handlePreview} disabled={preview.isPending}>
+            {preview.isPending ? <Spinner size="sm" /> : 'Preview'}
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={save.isPending}>
+            {save.isPending ? <Spinner size="sm" /> : 'Save Template'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showPreview} onHide={() => setShowPreview(false)} size="xl">
+        <Modal.Header closeButton><Modal.Title>Template Preview</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        </Modal.Body>
+      </Modal>
+    </>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+
+export default function HRPage() {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const approve = useApproveLeave();
+
+  const [showAddApplicant, setShowAddApplicant]   = useState(false);
+  const [stageApplicant, setStageApplicant]       = useState<ApplicantResponse | null>(null);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [resultsSession, setResultsSession]       = useState<TrainingSessionResponse | null>(null);
+  const [showLeaveModal, setShowLeaveModal]       = useState(false);
+  const [editTemplate, setEditTemplate]           = useState<LetterTemplateResponse | null>(null);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('');
+  const [trainingStatusFilter, setTrainingStatusFilter] = useState('');
+
+  const { data: applicantsData, isLoading: loadingApplicants } = useApplicants({ limit: 200 });
+  const { data: pipeline } = usePipelineSummary();
+  const { data: sessionsData, isLoading: loadingSessions } = useTrainingSessions({
+    status: trainingStatusFilter || undefined,
+    limit: 50,
+  });
+  const { data: leaveData, isLoading: loadingLeave } = useLeaveRequests({
+    status: leaveStatusFilter || undefined,
+    limit: 50,
+  });
+  const { data: templates, isLoading: loadingTemplates } = useLetterTemplates();
+
+  const applicants = applicantsData?.data ?? [];
+  const sessions   = sessionsData?.data   ?? [];
+  const leaves     = leaveData?.data      ?? [];
+
+  const DISPLAY_STAGES = APPLICANT_STAGES.filter(s => s !== 'ONBOARDING');
+
+  const handleApproveLeave = (id: string, action: 'APPROVE' | 'REJECT', reason?: string) => {
+    approve.mutate(
+      { id, data: { action, rejectionReason: reason } },
+      {
+        onSuccess: () => showToast(`Leave ${action === 'APPROVE' ? 'approved' : 'rejected'}`, 'success'),
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <div className="container-fluid py-4">
+      <div className="mb-4">
+        <h4 className="fw-bold mb-0">Human Resources</h4>
+        <p className="text-muted small mb-0">Recruitment, training, leave management and letter templates</p>
+      </div>
+
+      <Tabs defaultActiveKey="recruitment" className="mb-3">
+        {/* ── TAB 1: Recruitment ────────────────────────────────────────────── */}
+        <Tab eventKey="recruitment" title="Recruitment Pipeline">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Recruitment Pipeline</h6>
+            <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+              <Button size="sm" onClick={() => setShowAddApplicant(true)}>
+                <i className="bi bi-plus-lg me-1" />Add Applicant
+              </Button>
+            </RoleGuard>
+          </div>
+
+          {/* KPI row */}
+          {pipeline && (
+            <Row className="g-3 mb-4">
+              {[
+                { label: 'Total Active', value: pipeline.totalActive, color: '#1B3A6B' },
+                { label: 'Interviews This Week', value: pipeline.byStage.find(s => s.stage === 'INTERVIEW_SCHEDULED')?.count ?? 0, color: '#fd7e14' },
+                { label: 'Offers Made', value: pipeline.byStage.find(s => s.stage === 'OFFER_MADE')?.count ?? 0, color: '#6f42c1' },
+                { label: `Accepted (${pipeline.conversionRate}%)`, value: pipeline.byStage.find(s => s.stage === 'ACCEPTED')?.count ?? 0, color: '#198754' },
+              ].map(kpi => (
+                <Col key={kpi.label} xs={6} md={3}>
+                  <div className="card border-0 shadow-sm h-100">
+                    <div className="card-body py-3 px-3">
+                      <div className="small text-muted">{kpi.label}</div>
+                      <div className="fw-bold fs-4" style={{ color: kpi.color }}>{kpi.value}</div>
+                    </div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          )}
+
+          {loadingApplicants ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <div className="d-flex gap-3 pb-3" style={{ minWidth: DISPLAY_STAGES.length * 220 }}>
+                {DISPLAY_STAGES.map(stage => {
+                  const stageApplicants = applicants.filter(a => a.stage === stage);
+                  return (
+                    <div key={stage} style={{ minWidth: 210, flex: '0 0 210px' }}>
+                      <div
+                        className="rounded-top px-2 py-2 d-flex justify-content-between align-items-center"
+                        style={{ background: STAGE_COLORS[stage], border: '1px solid #dee2e6' }}
+                      >
+                        <span className="small fw-semibold">{STAGE_LABELS[stage]}</span>
+                        <Badge bg="secondary" className="rounded-pill">{stageApplicants.length}</Badge>
+                      </div>
+                      <div
+                        className="d-flex flex-column gap-2 p-2 rounded-bottom"
+                        style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderTop: 'none', minHeight: 120 }}
+                      >
+                        {stageApplicants.map(a => (
+                          <div key={a.id} className="card border-0 shadow-sm" style={{ fontSize: 12 }}>
+                            <div className="card-body p-2">
+                              <div className="fw-bold">{a.fullName}</div>
+                              <div className="text-muted">{a.phone}</div>
+                              <div className="d-flex gap-1 mt-1 flex-wrap">
+                                <Badge bg="light" text="dark" style={{ fontSize: 10 }}>{a.source}</Badge>
+                                <span className="text-muted" style={{ fontSize: 10 }}>{a.daysInPipeline}d</span>
+                              </div>
+                              <div className="d-flex gap-1 mt-2">
+                                {NEXT_STAGE[stage] && (
+                                  <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-primary"
+                                      style={{ fontSize: 11, padding: '1px 6px' }}
+                                      onClick={() => setStageApplicant(a)}
+                                    >
+                                      Move →
+                                    </Button>
+                                  </RoleGuard>
+                                )}
+                                {stage === 'REJECTED' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline-secondary"
+                                    style={{ fontSize: 11, padding: '1px 6px' }}
+                                    onClick={() => setStageApplicant(a)}
+                                  >
+                                    View
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {stageApplicants.length === 0 && (
+                          <div className="text-muted text-center small py-3">Empty</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </Tab>
+
+        {/* ── TAB 2: Training ────────────────────────────────────────────────── */}
+        <Tab eventKey="training" title="Training Sessions">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Training Sessions</h6>
+            <div className="d-flex gap-2 align-items-center">
+              <Form.Select
+                size="sm"
+                style={{ width: 160 }}
+                value={trainingStatusFilter}
+                onChange={e => setTrainingStatusFilter(e.target.value)}
+              >
+                <option value="">All Statuses</option>
+                <option value="SCHEDULED">Scheduled</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+              </Form.Select>
+              <RoleGuard allowedRoles={[...HR_ROLES, ROLES.TRAINER] as UserRole[]}>
+                <Button size="sm" onClick={() => setShowTrainingModal(true)}>
+                  <i className="bi bi-plus-lg me-1" />Schedule Training
+                </Button>
+              </RoleGuard>
+            </div>
+          </div>
+
+          {loadingSessions ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : sessions.length === 0 ? (
+            <Alert variant="info">No training sessions found.</Alert>
+          ) : (
+            <Table hover size="sm" responsive>
+              <thead className="table-light">
+                <tr>
+                  <th>Title</th>
+                  <th>Date</th>
+                  <th>Trainer</th>
+                  <th>Location</th>
+                  <th className="text-center">Attendees</th>
+                  <th className="text-center">Pass Rate</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map(s => {
+                  const passRate = s.attendeeCount > 0
+                    ? `${s.passCount}/${s.attendeeCount}`
+                    : '—';
+                  const allPassed = s.passCount === s.attendeeCount && s.attendeeCount > 0;
+                  return (
+                    <tr key={s.id}>
+                      <td className="fw-medium">{s.title}</td>
+                      <td>{new Date(s.scheduledAt).toLocaleDateString('en-UG')}</td>
+                      <td>{s.trainer.name}</td>
+                      <td>{s.location ?? '—'}</td>
+                      <td className="text-center">{s.attendeeCount}</td>
+                      <td className="text-center">
+                        {s.status === 'COMPLETED' ? (
+                          <span className={allPassed ? 'text-success fw-medium' : 'text-warning fw-medium'}>
+                            {passRate}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td>
+                        <Badge bg={STATUS_BADGES[s.status] ?? 'secondary'}>
+                          {s.status}
+                        </Badge>
+                      </td>
+                      <td>
+                        <RoleGuard allowedRoles={[...HR_ROLES, ROLES.TRAINER] as UserRole[]}>
+                          {s.status === 'SCHEDULED' && (
+                            <Button
+                              size="sm"
+                              variant="outline-success"
+                              style={{ fontSize: 11 }}
+                              onClick={() => setResultsSession(s)}
+                            >
+                              Record Results
+                            </Button>
+                          )}
+                        </RoleGuard>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </Tab>
+
+        {/* ── TAB 3: Leave ───────────────────────────────────────────────────── */}
+        <Tab eventKey="leave" title="Leave Management">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Leave Requests</h6>
+            <div className="d-flex gap-2">
+              <div className="btn-group btn-group-sm">
+                {['', 'PENDING', 'APPROVED', 'REJECTED'].map(s => (
+                  <Button
+                    key={s}
+                    variant={leaveStatusFilter === s ? 'primary' : 'outline-secondary'}
+                    onClick={() => setLeaveStatusFilter(s)}
+                  >
+                    {s || 'All'}
+                  </Button>
+                ))}
+              </div>
+              <Button size="sm" onClick={() => setShowLeaveModal(true)}>
+                <i className="bi bi-plus-lg me-1" />Request Leave
+              </Button>
+            </div>
+          </div>
+
+          {loadingLeave ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : leaves.length === 0 ? (
+            <Alert variant="info">No leave requests found.</Alert>
+          ) : (
+            <Table hover size="sm" responsive>
+              <thead className="table-light">
+                <tr>
+                  <th>Guard</th>
+                  <th>Type</th>
+                  <th>Period</th>
+                  <th className="text-center">Days</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaves.map(l => (
+                  <tr key={l.id}>
+                    <td className="fw-medium">{l.guard.fullName}</td>
+                    <td>
+                      <Badge bg={LEAVE_TYPE_BADGES[l.type] ?? 'secondary'} text={l.type === 'SICK' ? 'dark' : undefined}>
+                        {l.type}
+                      </Badge>
+                    </td>
+                    <td className="small text-nowrap">
+                      {new Date(l.startDate).toLocaleDateString('en-UG')} — {new Date(l.endDate).toLocaleDateString('en-UG')}
+                    </td>
+                    <td className="text-center">{l.daysRequested}</td>
+                    <td className="small text-muted" style={{ maxWidth: 200 }}>
+                      <span title={l.reason}>{l.reason.length > 60 ? l.reason.slice(0, 60) + '…' : l.reason}</span>
+                    </td>
+                    <td>
+                      <Badge bg={STATUS_BADGES[l.status] ?? 'secondary'} text={l.status === 'PENDING' ? 'dark' : undefined}>
+                        {l.status}
+                      </Badge>
+                    </td>
+                    <td>
+                      {l.status === 'PENDING' && (
+                        <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+                          <div className="d-flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline-success"
+                              style={{ fontSize: 11, padding: '1px 6px' }}
+                              onClick={() => handleApproveLeave(l.id, 'APPROVE')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              style={{ fontSize: 11, padding: '1px 6px' }}
+                              onClick={() => {
+                                const reason = prompt('Rejection reason (min 10 chars):');
+                                if (reason && reason.length >= 10) handleApproveLeave(l.id, 'REJECT', reason);
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </RoleGuard>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Tab>
+
+        {/* ── TAB 4: Letter Templates ─────────────────────────────────────────── */}
+        <Tab eventKey="templates" title="Letter Templates">
+          <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+            <div className="mb-3">
+              <h6 className="fw-semibold">Letter Template Library</h6>
+              <p className="text-muted small">Edit the templates used to generate formal letters for guards.</p>
+            </div>
+            {loadingTemplates ? (
+              <div className="text-center py-5"><Spinner /></div>
+            ) : (
+              <ListGroup>
+                {LETTER_TYPES.map(lt => {
+                  const tmpl = templates?.find(t => t.letterType === lt);
+                  return (
+                    <ListGroup.Item key={lt} className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <div className="fw-medium small">{LETTER_TYPE_LABELS[lt]}</div>
+                        {tmpl && (
+                          <div className="text-muted" style={{ fontSize: 11 }}>
+                            v{tmpl.version} · Last updated {new Date(tmpl.updatedAt).toLocaleDateString('en-UG')}
+                          </div>
+                        )}
+                        {!tmpl && <Badge bg="warning" text="dark" style={{ fontSize: 10 }}>Not configured</Badge>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        onClick={() => setEditTemplate(tmpl ?? {
+                          id: '', name: LETTER_TYPE_LABELS[lt], letterType: lt,
+                          content: '', version: 0, isActive: true,
+                          createdBy: '', updatedBy: null,
+                          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+                        })}
+                      >
+                        Edit
+                      </Button>
+                    </ListGroup.Item>
+                  );
+                })}
+              </ListGroup>
+            )}
+          </RoleGuard>
+        </Tab>
+      </Tabs>
+
+      {/* Modals */}
+      <ApplicantFormModal show={showAddApplicant} onHide={() => setShowAddApplicant(false)} />
+      <StageUpdateModal applicant={stageApplicant} onHide={() => setStageApplicant(null)} />
+      <TrainingSessionModal show={showTrainingModal} onHide={() => setShowTrainingModal(false)} />
+      <RecordResultsModal session={resultsSession} onHide={() => setResultsSession(null)} />
+      <LeaveRequestModal show={showLeaveModal} onHide={() => setShowLeaveModal(false)} />
+      <TemplateEditorModal template={editTemplate} onHide={() => setEditTemplate(null)} />
+    </div>
+  );
+}
