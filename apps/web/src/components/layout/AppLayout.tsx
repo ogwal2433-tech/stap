@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Button, Navbar } from 'react-bootstrap';
 import Sidebar from './Sidebar';
+import NotificationBell from './NotificationBell';
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -21,6 +22,9 @@ export default function AppLayout() {
           ☰
         </Button>
         <Navbar.Brand className="ms-3 fw-bold">STAP Security</Navbar.Brand>
+        <div className="ms-auto">
+          <NotificationBell />
+        </div>
       </Navbar>
 
       {/* Content area — offset by sidebar width on desktop */}

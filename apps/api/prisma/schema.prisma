@@ -126,6 +126,8 @@ model User {
   auditLogs           AuditLog[]
   reportedIncidents   Incident[]           @relation("IncidentReporter")
   raisedRequisitions  Requisition[]        @relation("RaisedRequisitions")
+  notifications       Notification[]
+  clientOf            Client?              @relation("ClientUser")
 }
 
 model Guard {
@@ -216,9 +218,11 @@ model Client {
   billingAddress  String?
   billingTerms    Int
   contractStatus  ClientContractStatus @default(ACTIVE)
+  clientUserId    String?              @unique
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
+  clientUser User?             @relation("ClientUser", fields: [clientUserId], references: [id])
   sites      Site[]
   contracts  Contract[]
   complaints ClientComplaint[]
@@ -281,6 +285,8 @@ model ClientComplaint {
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   site     Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
   assignee User?  @relation("ComplaintAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  resolution String?
 }
 
 model Deployment {
@@ -532,4 +538,41 @@ model PurchaseOrder {
   createdBy        String
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+}
+
+// ─── Notification Models ───────────────────────────────────────────────────────
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  message    String
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  entityType String?
+  entityId   String?
+  createdAt  DateTime  @default(now())
+}
+
+model NotificationPreference {
+  id          String   @id @default(cuid())
+  role        String   @unique
+  preferences Json
+  updatedAt   DateTime @updatedAt
+}
+
+model ScheduledReport {
+  id         String    @id @default(cuid())
+  name       String
+  reportType String
+  schedule   String
+  recipients String[]
+  isActive   Boolean   @default(true)
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }

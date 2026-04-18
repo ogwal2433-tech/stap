@@ -30,6 +30,7 @@ import apiRouter from './routes/index';
 // ── Services ───────────────────────────────────────────────────────────────────
 import { contractService } from './services/contractService';
 import { invoiceService } from './services/invoiceService';
+import { reportService } from './services/reportService';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -82,6 +83,9 @@ cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
 cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
   timezone: 'Africa/Kampala',
 });
+
+// Initialise any persisted scheduled reports on startup
+reportService.initScheduledReports();
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];

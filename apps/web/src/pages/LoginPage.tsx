@@ -10,13 +10,13 @@ import {
   InputGroup,
   Spinner,
 } from 'react-bootstrap';
-import { LoginSchema, type LoginInput } from '@stap/shared';
+import { LoginSchema, ROLES, type LoginInput } from '@stap/shared';
 import { useAuth } from '../context/AuthContext';
 import type { AxiosError } from 'axios';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -37,8 +37,8 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) navigate('/dashboard', { replace: true });
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) navigate(user?.role === ROLES.CLIENT ? '/portal' : '/dashboard', { replace: true });
+  }, [isAuthenticated, navigate, user]);
 
   const { ref: emailFormRef, ...emailRest } = register('email');
 
@@ -47,8 +47,8 @@ export default function LoginPage() {
     setIsLocked(false);
 
     try {
-      await login(values.email, values.password);
-      navigate('/dashboard', { replace: true });
+      const loggedInUser = await login(values.email, values.password);
+      navigate((loggedInUser as any)?.role === ROLES.CLIENT ? '/portal' : '/dashboard', { replace: true });
     } catch (err) {
       const axiosErr = err as AxiosError<{ error: string }>;
       if (axiosErr.response?.status === 423) {

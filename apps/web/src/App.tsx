@@ -4,26 +4,33 @@ import { AuthProvider } from '@/context/AuthContext';
 import { ToastProvider } from '@/context/ToastContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
+import PortalLayout from '@/components/layout/PortalLayout';
 import RoleGuard from '@/components/RoleGuard';
 import PageSpinner from '@/components/ui/PageSpinner';
 import LoginPage from '@/pages/LoginPage';
 import UnauthorisedPage from '@/pages/UnauthorisedPage';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, INTERNAL_ROLES, REPORT_ROLES, FINANCE_ROLES, type UserRole } from '@stap/shared';
 
 // Code-split all page-level components
-const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
-const GuardsListPage = lazy(() => import('@/pages/guards/GuardsListPage'));
-const GuardFormPage = lazy(() => import('@/pages/guards/GuardFormPage'));
-const GuardDetailPage = lazy(() => import('@/pages/guards/GuardDetailPage'));
-const ClientsListPage = lazy(() => import('@/pages/clients/ClientsListPage'));
-const ClientFormPage = lazy(() => import('@/pages/clients/ClientFormPage'));
-const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'));
-const AttendancePage = lazy(() => import('@/pages/attendance/AttendancePage'));
-const CheckinPage = lazy(() => import('@/pages/attendance/CheckinPage'));
-const BulkImportPage = lazy(() => import('@/pages/guards/BulkImportPage'));
-const GuardDashboardPage = lazy(() => import('@/pages/guards/GuardDashboardPage'));
-const FinancePage = lazy(() => import('@/pages/finance/FinancePage'));
-const RequisitionsPage = lazy(() => import('@/pages/requisitions/RequisitionsPage'));
+const DashboardPage                = lazy(() => import('@/pages/DashboardPage'));
+const GuardsListPage               = lazy(() => import('@/pages/guards/GuardsListPage'));
+const GuardFormPage                = lazy(() => import('@/pages/guards/GuardFormPage'));
+const GuardDetailPage              = lazy(() => import('@/pages/guards/GuardDetailPage'));
+const ClientsListPage              = lazy(() => import('@/pages/clients/ClientsListPage'));
+const ClientFormPage               = lazy(() => import('@/pages/clients/ClientFormPage'));
+const ClientDetailPage             = lazy(() => import('@/pages/clients/ClientDetailPage'));
+const AttendancePage               = lazy(() => import('@/pages/attendance/AttendancePage'));
+const CheckinPage                  = lazy(() => import('@/pages/attendance/CheckinPage'));
+const BulkImportPage               = lazy(() => import('@/pages/guards/BulkImportPage'));
+const GuardDashboardPage           = lazy(() => import('@/pages/guards/GuardDashboardPage'));
+const FinancePage                  = lazy(() => import('@/pages/finance/FinancePage'));
+const RequisitionsPage             = lazy(() => import('@/pages/requisitions/RequisitionsPage'));
+const ComplaintsPage               = lazy(() => import('@/pages/complaints/ComplaintsPage'));
+const ComplaintsDashboard          = lazy(() => import('@/pages/complaints/ComplaintsDashboard'));
+const ReportsPage                  = lazy(() => import('@/pages/reports/ReportsPage'));
+const NotificationsPage            = lazy(() => import('@/pages/notifications/NotificationsPage'));
+const NotificationSettingsPage     = lazy(() => import('@/pages/settings/NotificationSettingsPage'));
+const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
 
 const GUARD_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
@@ -34,16 +41,16 @@ const REQUISITION_ROLES: UserRole[] = [
 ];
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const DEPLOYMENT_ROLES: UserRole[] = [
-  ROLES.DIRECTOR,
-  ROLES.OPERATIONS_SUPERVISOR,
-  ROLES.FIELD_SUPERVISOR,
-  ROLES.ADMINISTRATOR,
+  ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR,
 ];
+const COMPLAINT_VIEW_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT);
+const REPORT_ACCESS: UserRole[]        = [...new Set([...REPORT_ROLES, ROLES.OPERATIONS_SUPERVISOR])];
 
-// Example of role-gated routes (uncomment in Sprint 2 as modules ship):
-// <Route element={<ProtectedRoute allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} />}>
-//   <Route path="/payroll" element={<PayrollPage />} />
-// </Route>
+function L({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<PageSpinner />}>{children}</Suspense>;
+}
+
+import React from 'react';
 
 function App() {
   return (
@@ -51,171 +58,57 @@ function App() {
       <AuthProvider>
         <Routes>
           {/* Public */}
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login"        element={<LoginPage />} />
           <Route path="/unauthorised" element={<UnauthorisedPage />} />
 
-          {/* Protected — wrapped in AppLayout (sidebar + main) */}
+          {/* Client portal — separate layout, no sidebar */}
+          <Route element={<ProtectedRoute allowedRoles={[ROLES.CLIENT]} />}>
+            <Route element={<PortalLayout />}>
+              <Route path="/portal" element={<L><ClientPortalPage /></L>} />
+            </Route>
+          </Route>
+
+          {/* Protected — AppLayout (sidebar + main) */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route
-                path="/dashboard"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <DashboardPage />
-                  </Suspense>
-                }
-              />
+              <Route path="/dashboard" element={<L><DashboardPage /></L>} />
 
               {/* Guards */}
-              <Route
-                path="/guards"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <GuardsListPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/guards/new"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
-                      <GuardFormPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/guards/dashboard"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard
-                      allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]}
-                      fallback={<UnauthorisedPage />}
-                    >
-                      <GuardDashboardPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/guards/import"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
-                      <BulkImportPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/guards/:id"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <GuardDetailPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/guards/:id/edit"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}>
-                      <GuardFormPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
+              <Route path="/guards"              element={<L><GuardsListPage /></L>} />
+              <Route path="/guards/new"          element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
+              <Route path="/guards/dashboard"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><GuardDashboardPage /></RoleGuard></L>} />
+              <Route path="/guards/import"       element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><BulkImportPage /></RoleGuard></L>} />
+              <Route path="/guards/:id"          element={<L><GuardDetailPage /></L>} />
+              <Route path="/guards/:id/edit"     element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
 
               {/* Attendance */}
-              <Route
-                path="/attendance"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard
-                      allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}
-                      fallback={<UnauthorisedPage />}
-                    >
-                      <AttendancePage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/checkin"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard
-                      allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]}
-                      fallback={<UnauthorisedPage />}
-                    >
-                      <CheckinPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
+              <Route path="/attendance" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
+              <Route path="/checkin"    element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
 
               {/* Finance */}
-              <Route
-                path="/finance"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}>
-                      <FinancePage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
+              <Route path="/finance" element={<L><RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}><FinancePage /></RoleGuard></L>} />
 
               {/* Requisitions */}
-              <Route
-                path="/requisitions"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}>
-                      <RequisitionsPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
+              <Route path="/requisitions" element={<L><RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}><RequisitionsPage /></RoleGuard></L>} />
 
               {/* Clients */}
-              <Route
-                path="/clients"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <ClientsListPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/clients/new"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}>
-                      <ClientFormPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/clients/:id"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <ClientDetailPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/clients/:id/edit"
-                element={
-                  <Suspense fallback={<PageSpinner />}>
-                    <RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}>
-                      <ClientFormPage />
-                    </RoleGuard>
-                  </Suspense>
-                }
-              />
+              <Route path="/clients"          element={<L><ClientsListPage /></L>} />
+              <Route path="/clients/new"      element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+              <Route path="/clients/:id"      element={<L><ClientDetailPage /></L>} />
+              <Route path="/clients/:id/edit" element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+
+              {/* Complaints */}
+              <Route path="/complaints"           element={<L><RoleGuard allowedRoles={COMPLAINT_VIEW_ROLES} fallback={<UnauthorisedPage />}><ComplaintsPage /></RoleGuard></L>} />
+              <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
+
+              {/* Reports */}
+              <Route path="/reports" element={<L><RoleGuard allowedRoles={REPORT_ACCESS} fallback={<UnauthorisedPage />}><ReportsPage /></RoleGuard></L>} />
+
+              {/* Notifications */}
+              <Route path="/notifications" element={<L><NotificationsPage /></L>} />
+
+              {/* Settings */}
+              <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
             </Route>
           </Route>
 

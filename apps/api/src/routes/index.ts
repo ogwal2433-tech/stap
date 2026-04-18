@@ -7,6 +7,10 @@ import { contractsRouter } from './contracts';
 import { usersRouter } from './users';
 import { financeRouter } from './finance';
 import { requisitionsRouter } from './requisitions';
+import { notificationsRouter } from './notifications';
+import { complaintsRouter } from './complaints';
+import { reportsRouter } from './reports';
+import { portalRouter } from './portal';
 
 const router: IRouter = Router();
 
@@ -20,8 +24,9 @@ router.use('/contracts', contractsRouter);
 router.use('/users', usersRouter);
 router.use('/finance', financeRouter);
 router.use('/requisitions', requisitionsRouter);
-
-// Sprint 4 routes:
-// router.use('/reports', reportsRouter)        // Sprint 4
+router.use('/notifications', notificationsRouter);
+router.use('/complaints', complaintsRouter);
+router.use('/reports', reportsRouter);
+router.use('/portal', portalRouter);
 
 export default router;

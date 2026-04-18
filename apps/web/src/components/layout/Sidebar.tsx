@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Nav, Offcanvas } from 'react-bootstrap';
+import { Badge, Nav, Offcanvas } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
+import { useUnreadCount } from '../../hooks/useNotifications';
 import RoleGuard from '../RoleGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import {
@@ -27,9 +28,10 @@ const NAV_ITEMS = [
   { icon: 'bi-box-seam-fill',       label: 'Inventory',     to: '/inventory',     roles: ADMIN_ONLY },
   { icon: 'bi-clipboard2-fill',     label: 'Requisitions',  to: '/requisitions',  roles: NON_GUARD_INTERNAL },
   { icon: 'bi-people-fill',         label: 'HR',            to: '/hr',            roles: HR_ROLES },
+  { icon: 'bi-chat-left-text-fill',  label: 'Complaints',    to: '/complaints',    roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) },
   { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
   { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
-  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] },
+  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings/notifications', roles: [ROLES.DIRECTOR] },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
@@ -54,11 +56,14 @@ const ACTIVE_PATHS = new Set([
   '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
   '/guards/dashboard', '/guards/import',
   '/finance', '/requisitions',
+  '/complaints', '/reports', '/notifications', '/settings',
 ]);
 
 function NavContent({ onNavigate }: NavContentProps) {
   const { user, logout } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname }     = useLocation();
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData?.count ?? 0;
 
   return (
     <div className="d-flex flex-column h-100">
@@ -92,6 +97,11 @@ function NavContent({ onNavigate }: NavContentProps) {
                 >
                   <i className={`bi ${item.icon}`} style={{ fontSize: '1rem', width: 18, textAlign: 'center' }} />
                   <span className="small">{item.label}</span>
+                  {item.to === '/notifications' && unreadCount > 0 && (
+                    <Badge bg="danger" pill style={{ fontSize: '0.6rem', marginLeft: 'auto' }}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Badge>
+                  )}
                 </NavLink>
               ) : (
                 <div

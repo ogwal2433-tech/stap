@@ -6,5 +6,8 @@ export * from './schemas/attendance';
 export * from './schemas/contract';
 export * from './schemas/finance';
 export * from './schemas/requisition';
+export * from './schemas/notification';
+export * from './schemas/reports';
+export * from './schemas/complaint';
 export * from './types/api';
 export * from './types/roles';
