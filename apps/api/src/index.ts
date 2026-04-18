@@ -27,6 +27,10 @@ import { queues } from './jobs/queues';
 // ── Routes ─────────────────────────────────────────────────────────────────────
 import apiRouter from './routes/index';
 
+// ── Swagger ────────────────────────────────────────────────────────────────────
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './lib/swagger';
+
 // ── Services ───────────────────────────────────────────────────────────────────
 import { contractService } from './services/contractService';
 import { invoiceService } from './services/invoiceService';
@@ -64,6 +68,15 @@ app.get('/api/v1/health', (_req, res) => {
 });
 
 app.use('/api/v1', apiRouter);
+
+// ── Swagger UI (dev + staging) ─────────────────────────────────────────────────
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: 'STAP Security API Docs',
+  }));
+  app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
+  console.log('📖 API docs: http://localhost:3001/api/docs');
+}
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);

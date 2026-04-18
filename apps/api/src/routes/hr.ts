@@ -1,3 +1,172 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: HR
+ *     description: Recruitment pipeline, training sessions, leave management, letter templates
+ *
+ * /api/v1/hr/applicants:
+ *   get:
+ *     tags: [HR]
+ *     summary: List applicants (pipeline view, paginated)
+ *     parameters:
+ *       - in: query
+ *         name: stage
+ *         schema: { type: string, enum: [APPLICATION_RECEIVED, SCREENING, INTERVIEW_SCHEDULED, INTERVIEW_DONE, OFFER_MADE, ACCEPTED, REJECTED, ONBOARDING] }
+ *     responses:
+ *       200:
+ *         description: Paginated applicant list
+ *   post:
+ *     tags: [HR]
+ *     summary: Add a new applicant to the pipeline
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, phone, source]
+ *             properties:
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               phone: { type: string }
+ *               source: { type: string, enum: [WALK_IN, REFERRAL, ADVERT, OTHER] }
+ *               email: { type: string, format: email }
+ *     responses:
+ *       201:
+ *         description: Applicant created
+ *
+ * /api/v1/hr/applicants/{id}/stage:
+ *   patch:
+ *     tags: [HR]
+ *     summary: Advance or reject applicant stage
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stage]
+ *             properties:
+ *               stage: { type: string, enum: [APPLICATION_RECEIVED, SCREENING, INTERVIEW_SCHEDULED, INTERVIEW_DONE, OFFER_MADE, ACCEPTED, REJECTED, ONBOARDING] }
+ *     responses:
+ *       200:
+ *         description: Stage updated
+ *       400:
+ *         description: Invalid stage transition
+ *
+ * /api/v1/hr/training:
+ *   get:
+ *     tags: [HR]
+ *     summary: List training sessions
+ *     responses:
+ *       200:
+ *         description: Paginated training sessions
+ *   post:
+ *     tags: [HR]
+ *     summary: Schedule a training session
+ *     responses:
+ *       201:
+ *         description: Session created
+ *
+ * /api/v1/hr/training/{id}/results:
+ *   post:
+ *     tags: [HR]
+ *     summary: Record attendance and pass/fail results for a session
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Results recorded
+ *
+ * /api/v1/hr/leave:
+ *   get:
+ *     tags: [HR]
+ *     summary: List leave requests (GUARD sees own requests only)
+ *     responses:
+ *       200:
+ *         description: Paginated leave requests
+ *   post:
+ *     tags: [HR]
+ *     summary: Submit a leave request
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [guardId, leaveType, startDate, endDate]
+ *             properties:
+ *               guardId: { type: string, format: uuid }
+ *               leaveType: { type: string, enum: [ANNUAL, SICK, MATERNITY, PATERNITY, UNPAID, OTHER] }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *               reason: { type: string }
+ *     responses:
+ *       201:
+ *         description: Leave request submitted
+ *       400:
+ *         description: Insufficient leave balance or invalid dates
+ *
+ * /api/v1/hr/leave/{id}/approve:
+ *   post:
+ *     tags: [HR]
+ *     summary: Approve or reject a leave request
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action: { type: string, enum: [APPROVE, REJECT] }
+ *               comment: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request approved or rejected
+ *
+ * /api/v1/hr/letter-templates:
+ *   get:
+ *     tags: [HR]
+ *     summary: List all letter templates
+ *     responses:
+ *       200:
+ *         description: Array of letter templates with HTML content
+ *
+ * /api/v1/hr/letter-templates/{type}:
+ *   put:
+ *     tags: [HR]
+ *     summary: Save (upsert) a letter template
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         required: true
+ *         schema: { type: string, enum: [VERBAL_WARNING, FIRST_WARNING, FINAL_WARNING, TERMINATION_NOTICE, APPOINTMENT_LETTER, CONTRACT_EXTENSION, CONFIRMATION_OF_EMPLOYMENT, SALARY_REVIEW] }
+ *     responses:
+ *       200:
+ *         description: Template saved
+ *
+ * /api/v1/hr/letter-templates/{type}/preview:
+ *   post:
+ *     tags: [HR]
+ *     summary: Render a template with sample data
+ *     responses:
+ *       200:
+ *         description: Rendered HTML string
+ */
 import { Router, type IRouter } from 'express';
 import { hrService } from '../services/hrService';
 import { authenticate } from '../middleware/authenticate';

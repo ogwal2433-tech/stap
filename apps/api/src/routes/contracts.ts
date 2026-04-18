@@ -1,3 +1,58 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Contracts
+ *     description: Service contracts linking clients to deployed guards and billing rates
+ *
+ * /api/v1/contracts:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: List all contracts (paginated)
+ *     responses:
+ *       200:
+ *         description: Paginated contracts
+ *   post:
+ *     tags: [Contracts]
+ *     summary: Create a new contract
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, guardsRequired, billingPerGuard, startDate]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               guardsRequired: { type: integer }
+ *               billingPerGuard: { type: integer }
+ *               startDate: { type: string, format: date-time }
+ *               endDate: { type: string, format: date-time }
+ *               billingDay: { type: integer, minimum: 1, maximum: 28 }
+ *     responses:
+ *       201:
+ *         description: Contract created
+ *
+ * /api/v1/contracts/{id}:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: Get contract details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Contract detail
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *   patch:
+ *     tags: [Contracts]
+ *     summary: Update contract
+ *     responses:
+ *       200:
+ *         description: Updated contract
+ */
 import { Router, type IRouter } from 'express';
 import { contractService } from '../services/contractService';
 import { authenticate } from '../middleware/authenticate';

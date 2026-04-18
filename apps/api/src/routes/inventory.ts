@@ -1,3 +1,146 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Inventory
+ *     description: Inventory catalogue, issue/return tracking, stock adjustments
+ *
+ * /api/v1/inventory/items:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: List inventory items (paginated, filterable)
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: itemType
+ *         schema: { type: string, enum: [UNIFORM, EQUIPMENT, STATIONERY, OTHER] }
+ *       - in: query
+ *         name: isLowStock
+ *         schema: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Paginated inventory items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Create a new inventory item (DIRECTOR only)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemName, itemType, unitCost]
+ *             properties:
+ *               itemName: { type: string }
+ *               itemType: { type: string, enum: [UNIFORM, EQUIPMENT, STATIONERY, OTHER] }
+ *               unitCost: { type: integer }
+ *               stockQuantity: { type: integer, default: 0 }
+ *               reorderThreshold: { type: integer, default: 5 }
+ *     responses:
+ *       201:
+ *         description: Item created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/InventoryItem'
+ *       400:
+ *         $ref: '#/components/schemas/Error400'
+ *
+ * /api/v1/inventory/items/issue:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Issue an item to a guard
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, guardId, quantity]
+ *             properties:
+ *               itemId: { type: string, format: uuid }
+ *               guardId: { type: string, format: uuid }
+ *               quantity: { type: integer, minimum: 1 }
+ *               conditionNote: { type: string }
+ *     responses:
+ *       200:
+ *         description: Item issued, stock decremented
+ *       400:
+ *         description: Insufficient stock
+ *
+ * /api/v1/inventory/items/return:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Record item return — RETURNED restores stock; LOST/DAMAGED creates deduction
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, guardId, quantity, action]
+ *             properties:
+ *               itemId: { type: string, format: uuid }
+ *               guardId: { type: string, format: uuid }
+ *               quantity: { type: integer, minimum: 1 }
+ *               action: { type: string, enum: [RETURNED, LOST, DAMAGED] }
+ *     responses:
+ *       200:
+ *         description: Return recorded
+ *
+ * /api/v1/inventory/items/adjust-stock:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Manual stock adjustment (positive = stock-in, negative = write-off)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, quantity]
+ *             properties:
+ *               itemId: { type: string, format: uuid }
+ *               quantity: { type: integer }
+ *               reference: { type: string }
+ *     responses:
+ *       200:
+ *         description: Stock adjusted
+ *
+ * /api/v1/inventory/items/low-stock:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: List items at or below reorder threshold
+ *     responses:
+ *       200:
+ *         description: Low stock items
+ *
+ * /api/v1/inventory/transactions:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: List all inventory transactions (paginated)
+ *     responses:
+ *       200:
+ *         description: Paginated transaction ledger
+ *
+ * /api/v1/inventory/guard/{guardId}:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Outstanding items held by a specific guard
+ *     parameters:
+ *       - in: path
+ *         name: guardId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: List of outstanding items
+ */
 import { Router, type IRouter } from 'express';
 import { inventoryService } from '../services/inventoryService';
 import { authenticate } from '../middleware/authenticate';

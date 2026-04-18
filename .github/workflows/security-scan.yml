@@ -1,0 +1,75 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 02:00 UTC
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  owasp-zap-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start application for scanning
+        run: |
+          docker compose --env-file .env.test up -d api postgres redis
+          echo "Waiting for API to be ready..."
+          timeout 60 bash -c 'until curl -sf http://localhost:3001/api/v1/health; do sleep 2; done'
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:3001'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+          fail_action: false
+          artifact_name: 'zap-scan-report'
+
+      - name: Run OWASP ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.7.0
+        with:
+          target: 'http://localhost:3001/api/docs.json'
+          format: openapi
+          fail_action: false
+          artifact_name: 'zap-api-scan-report'
+
+      - name: Parse ZAP results
+        run: python3 .zap/parse-results.py zap-report.json
+        continue-on-error: true
+
+      - name: Post results to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            try {
+              const report = JSON.parse(fs.readFileSync('zap-summary.json'))
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## Security Scan Results\n\n- High: ${report.high}\n- Medium: ${report.medium}\n- Low: ${report.low}\n\n${report.high > 0 ? 'HIGH severity findings require review before merge.' : 'No HIGH severity findings.'}`
+              })
+            } catch (e) {
+              console.log('No ZAP summary found:', e.message)
+            }
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down

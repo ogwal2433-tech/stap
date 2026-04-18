@@ -1,3 +1,49 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Portal
+ *     description: Client self-service portal — overview, invoices, complaints, incidents (CLIENT role only)
+ *
+ * /api/v1/portal/overview:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Client portal overview — guards deployed, outstanding invoices, open complaints
+ *     responses:
+ *       200:
+ *         description: Portal overview data
+ *       403:
+ *         description: Non-CLIENT roles cannot access the portal
+ *
+ * /api/v1/portal/invoices:
+ *   get:
+ *     tags: [Portal]
+ *     summary: List invoices belonging to the authenticated client
+ *     responses:
+ *       200:
+ *         description: Client invoices
+ *
+ * /api/v1/portal/complaints:
+ *   get:
+ *     tags: [Portal]
+ *     summary: List complaints submitted by this client
+ *   post:
+ *     tags: [Portal]
+ *     summary: Submit a new complaint via the portal
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category, severity, description]
+ *             properties:
+ *               category: { type: string }
+ *               severity: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Complaint submitted
+ */
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { validate } from '../middleware/validate';

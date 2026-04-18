@@ -45,7 +45,11 @@
       "Bash(PGPASSWORD=12345678 psql -U postgres -d stap_security -c \"SELECT \\\\\"passwordHash\\\\\" FROM \\\\\"User\\\\\" WHERE email='director@stapsecurity.co.ug';\")",
       "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"director@stapsecurity.co.ug\",\"password\":\"StapAdmin2026!\"}')",
       "Bash(PRISMA_FORCE_TRANSACTIONS=1 pnpm exec prisma migrate dev --name hr_inventory_settings_modules --skip-seed)",
-      "Bash(pnpm --filter apps/api tsc --noEmit)"
+      "Bash(pnpm --filter apps/api tsc --noEmit)",
+      "Bash(pnpm --filter api add swagger-jsdoc swagger-ui-express)",
+      "Bash(pnpm --filter api add -D @types/swagger-ui-express)",
+      "Bash(pnpm --filter web add -D @playwright/test)",
+      "Bash(pnpm --filter api add -D @types/swagger-jsdoc)"
     ],
     "additionalDirectories": [
       "/tmp"

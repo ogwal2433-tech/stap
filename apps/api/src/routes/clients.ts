@@ -1,3 +1,92 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Clients
+ *     description: Client management, sites, incidents, and contracts
+ *
+ * /api/v1/clients:
+ *   get:
+ *     tags: [Clients]
+ *     summary: List clients (paginated)
+ *     responses:
+ *       200:
+ *         description: Paginated client list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *   post:
+ *     tags: [Clients]
+ *     summary: Create a new client
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientName, contactPerson, contactPhone, physicalAddress]
+ *             properties:
+ *               clientName: { type: string }
+ *               contactPerson: { type: string }
+ *               contactPhone: { type: string }
+ *               physicalAddress: { type: string }
+ *               billingTerms: { type: integer, default: 30 }
+ *     responses:
+ *       201:
+ *         description: Client created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Client'
+ *
+ * /api/v1/clients/{id}:
+ *   get:
+ *     tags: [Clients]
+ *     summary: Get client details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Client detail with contracts and sites
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *   patch:
+ *     tags: [Clients]
+ *     summary: Update client details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Updated client
+ *
+ * /api/v1/clients/{id}/sites:
+ *   get:
+ *     tags: [Clients]
+ *     summary: List sites for a client
+ *   post:
+ *     tags: [Clients]
+ *     summary: Add a site to a client
+ *     responses:
+ *       201:
+ *         description: Site created
+ *
+ * /api/v1/clients/{id}/incidents:
+ *   get:
+ *     tags: [Clients]
+ *     summary: List incidents at a client site
+ *   post:
+ *     tags: [Clients]
+ *     summary: Report an incident
+ *     responses:
+ *       201:
+ *         description: Incident recorded
+ */
 import { Router, type IRouter } from 'express';
 import { clientService } from '../services/clientService';
 import { siteService } from '../services/siteService';

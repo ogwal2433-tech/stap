@@ -1,3 +1,171 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Guards
+ *     description: Guard management — CRUD, documents, status changes, payslips
+ *
+ * /api/v1/guards:
+ *   get:
+ *     tags: [Guards]
+ *     summary: List all guards (paginated, filterable)
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, SUSPENDED, TERMINATED] }
+ *     responses:
+ *       200:
+ *         description: Paginated list of guards
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *       401:
+ *         $ref: '#/components/schemas/Error401'
+ *       403:
+ *         $ref: '#/components/schemas/Error403'
+ *   post:
+ *     tags: [Guards]
+ *     summary: Create a new guard
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, nationalId, phone, dateOfBirth, salaryRate, contractStart]
+ *             properties:
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               nationalId: { type: string }
+ *               phone: { type: string }
+ *               dateOfBirth: { type: string, format: date-time }
+ *               salaryRate: { type: integer }
+ *               contractStart: { type: string, format: date-time }
+ *               nextOfKinName: { type: string }
+ *               nextOfKinPhone: { type: string }
+ *     responses:
+ *       201:
+ *         description: Guard created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Guard'
+ *       400:
+ *         $ref: '#/components/schemas/Error400'
+ *       409:
+ *         description: National ID already registered
+ *
+ * /api/v1/guards/{id}:
+ *   get:
+ *     tags: [Guards]
+ *     summary: Get a single guard by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Guard detail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Guard'
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *   patch:
+ *     tags: [Guards]
+ *     summary: Update guard details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               phone: { type: string }
+ *               salaryRate: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Updated guard
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *
+ * /api/v1/guards/{id}/status:
+ *   patch:
+ *     tags: [Guards]
+ *     summary: Change guard employment status (SUSPEND, TERMINATE, REINSTATE)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status, reason]
+ *             properties:
+ *               status: { type: string, enum: [ACTIVE, SUSPENDED, TERMINATED] }
+ *               reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Status changed
+ *       403:
+ *         $ref: '#/components/schemas/Error403'
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *
+ * /api/v1/guards/{id}/documents:
+ *   get:
+ *     tags: [Guards]
+ *     summary: List documents uploaded for a guard
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: List of documents
+ *   post:
+ *     tags: [Guards]
+ *     summary: Upload a document for a guard
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file: { type: string, format: binary }
+ *               docType: { type: string }
+ *     responses:
+ *       201:
+ *         description: Document uploaded
+ */
 import { Router, type IRouter } from 'express';
 import fs from 'fs';
 import multer from 'multer';

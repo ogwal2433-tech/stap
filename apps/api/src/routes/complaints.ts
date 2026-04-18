@@ -1,3 +1,77 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Complaints
+ *     description: Complaint management — submit, assign, resolve, dashboard
+ *
+ * /api/v1/complaints:
+ *   get:
+ *     tags: [Complaints]
+ *     summary: List complaints (paginated, filterable)
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED] }
+ *       - in: query
+ *         name: severity
+ *         schema: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+ *     responses:
+ *       200:
+ *         description: Paginated complaint list
+ *   post:
+ *     tags: [Complaints]
+ *     summary: Submit a new complaint (CLIENT or internal user)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category, severity, description]
+ *             properties:
+ *               category: { type: string, enum: [GUARD_CONDUCT, SERVICE_DELIVERY, BILLING, SAFETY, OTHER] }
+ *               severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+ *               description: { type: string, minLength: 20 }
+ *               siteId: { type: string, format: uuid }
+ *     responses:
+ *       201:
+ *         description: Complaint submitted
+ *
+ * /api/v1/complaints/{id}/assign:
+ *   patch:
+ *     tags: [Complaints]
+ *     summary: Assign complaint to a staff member
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Complaint assigned, status → IN_PROGRESS
+ *
+ * /api/v1/complaints/{id}/resolve:
+ *   patch:
+ *     tags: [Complaints]
+ *     summary: Resolve a complaint
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [resolution]
+ *             properties:
+ *               resolution: { type: string }
+ *     responses:
+ *       200:
+ *         description: Complaint resolved, client notified
+ */
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';

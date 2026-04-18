@@ -1,3 +1,137 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Finance
+ *     description: Invoicing, AR aging, payroll, deductions, cashbook, Yo! Payments
+ *
+ * /api/v1/finance/invoices:
+ *   get:
+ *     tags: [Finance]
+ *     summary: List invoices (paginated, filterable by status/client)
+ *     responses:
+ *       200:
+ *         description: Paginated invoices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *   post:
+ *     tags: [Finance]
+ *     summary: Create invoice manually
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, periodStart, periodEnd, guardsDeployed, ratePerGuard, dueDate]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               periodStart: { type: string, format: date-time }
+ *               periodEnd: { type: string, format: date-time }
+ *               guardsDeployed: { type: integer }
+ *               ratePerGuard: { type: integer }
+ *               taxAmount: { type: integer, default: 0 }
+ *               dueDate: { type: string, format: date-time }
+ *     responses:
+ *       201:
+ *         description: Invoice created, PDF queued, email queued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Invoice'
+ *       404:
+ *         description: Client not found
+ *
+ * /api/v1/finance/invoices/aging:
+ *   get:
+ *     tags: [Finance]
+ *     summary: AR aging report — buckets current, 1-30, 31-60, 61-90, 90+ days
+ *     responses:
+ *       200:
+ *         description: Aging report with totals per bucket
+ *
+ * /api/v1/finance/invoices/{id}/pay:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Record manual payment against an invoice
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amountPaid, mode]
+ *             properties:
+ *               amountPaid: { type: integer }
+ *               mode: { type: string, enum: [CASH, BANK, MOBILE_MONEY, CHEQUE] }
+ *               referenceNumber: { type: string }
+ *     responses:
+ *       200:
+ *         description: Payment recorded; invoice status updated to PAID if fully paid
+ *
+ * /api/v1/finance/payroll/calculate:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Run payroll calculation for a given month/year
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [month, year]
+ *             properties:
+ *               month: { type: integer, minimum: 1, maximum: 12 }
+ *               year: { type: integer }
+ *     responses:
+ *       201:
+ *         description: Payroll run created (DRAFT status)
+ *       409:
+ *         description: Run already exists for this period
+ *
+ * /api/v1/finance/payroll/{id}/approve:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Approve a payroll run — queues payslip PDFs (DIRECTOR only)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Run approved, payslip generation queued
+ *       400:
+ *         description: Run is not in DRAFT status
+ *
+ * /api/v1/finance/deductions:
+ *   get:
+ *     tags: [Finance]
+ *     summary: List deductions for a guard
+ *   post:
+ *     tags: [Finance]
+ *     summary: Create a deduction for a guard
+ *     responses:
+ *       201:
+ *         description: Deduction created
+ *
+ * /api/v1/finance/cashbook:
+ *   get:
+ *     tags: [Finance]
+ *     summary: List cashbook entries
+ *   post:
+ *     tags: [Finance]
+ *     summary: Add cashbook entry
+ *     responses:
+ *       201:
+ *         description: Entry added
+ */
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';

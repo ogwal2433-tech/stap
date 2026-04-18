@@ -1,3 +1,60 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Notifications
+ *     description: In-app notifications — read, mark read, unread count
+ *
+ * /api/v1/notifications:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: List notifications for the authenticated user
+ *     parameters:
+ *       - in: query
+ *         name: unreadOnly
+ *         schema: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Paginated notifications
+ *
+ * /api/v1/notifications/unread-count:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Get unread notification count (used for bell badge)
+ *     responses:
+ *       200:
+ *         description: Unread count
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     count: { type: integer }
+ *
+ * /api/v1/notifications/{id}/read:
+ *   post:
+ *     tags: [Notifications]
+ *     summary: Mark a single notification as read
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ *
+ * /api/v1/notifications/read-all:
+ *   post:
+ *     tags: [Notifications]
+ *     summary: Mark all notifications as read for the current user
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ */
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';

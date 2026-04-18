@@ -1,3 +1,40 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Reports
+ *     description: Director-level reporting — guard performance, finance, attendance summaries
+ *
+ * /api/v1/reports/guard-performance:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Guard performance report (attendance, deductions, disciplinary)
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Guard performance data
+ *
+ * /api/v1/reports/finance-summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Financial summary — revenue, payroll, outstanding AR
+ *     responses:
+ *       200:
+ *         description: Finance KPIs
+ *
+ * /api/v1/reports/attendance-summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Attendance summary by site
+ *     responses:
+ *       200:
+ *         description: Attendance rates and absences
+ */
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';

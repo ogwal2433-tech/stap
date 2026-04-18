@@ -28,6 +28,50 @@ const loginRateLimiter = rateLimit({
   message: { success: false, error: 'Too many login attempts. Try again later.' },
 });
 
+/**
+ * @openapi
+ * /api/v1/auth/login:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Login with email and password
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: director@stapsecurity.co.ug
+ *               password:
+ *                 type: string
+ *                 example: "12345678"
+ *     responses:
+ *       200:
+ *         description: Login successful — returns accessToken and user profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *       400:
+ *         description: Validation error (missing/invalid fields)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error400'
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error401'
+ *       423:
+ *         description: Account locked after too many failed attempts
+ */
 // POST /login
 router.post(
   '/login',

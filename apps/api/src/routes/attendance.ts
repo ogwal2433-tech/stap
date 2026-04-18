@@ -1,3 +1,71 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Attendance
+ *     description: Deployment sheets, daily attendance, check-ins, and roster management
+ *
+ * /api/v1/attendance/today:
+ *   get:
+ *     tags: [Attendance]
+ *     summary: Get today's deployment sheet for all active sites
+ *     responses:
+ *       200:
+ *         description: Today's deployment with guard attendance status
+ *
+ * /api/v1/attendance/save:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Save attendance records for a date
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, records]
+ *             properties:
+ *               date: { type: string, format: date }
+ *               records:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     deploymentId: { type: string }
+ *                     status: { type: string, enum: [PRESENT, ABSENT, LATE, HALF_DAY] }
+ *                     timeIn: { type: string }
+ *                     timeOut: { type: string }
+ *     responses:
+ *       200:
+ *         description: Attendance saved
+ *
+ * /api/v1/attendance/checkin:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Field supervisor submits a site check-in
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [siteId]
+ *             properties:
+ *               siteId: { type: string, format: uuid }
+ *               notes: { type: string }
+ *               latitude: { type: number }
+ *               longitude: { type: number }
+ *     responses:
+ *       201:
+ *         description: Check-in recorded
+ *
+ * /api/v1/attendance/roster:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Create or update deployment roster for a site
+ *     responses:
+ *       201:
+ *         description: Roster created
+ */
 import { Router, type IRouter } from 'express';
 import prisma from '../db/prisma';
 import { deploymentService } from '../services/deploymentService';

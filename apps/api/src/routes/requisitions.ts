@@ -1,3 +1,57 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Requisitions
+ *     description: Purchase requisitions workflow — submit, approve, create PO, manage suppliers
+ *
+ * /api/v1/requisitions:
+ *   get:
+ *     tags: [Requisitions]
+ *     summary: List requisitions (paginated, filterable by status)
+ *     responses:
+ *       200:
+ *         description: Paginated requisitions
+ *   post:
+ *     tags: [Requisitions]
+ *     summary: Submit a new requisition
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemDescription, quantity, estimatedCost, reason]
+ *             properties:
+ *               itemDescription: { type: string }
+ *               quantity: { type: integer }
+ *               estimatedCost: { type: integer }
+ *               reason: { type: string }
+ *               supplierId: { type: string, format: uuid }
+ *     responses:
+ *       201:
+ *         description: Requisition submitted
+ *
+ * /api/v1/requisitions/{id}/approve:
+ *   post:
+ *     tags: [Requisitions]
+ *     summary: Approve a requisition (Director/Assistant Manager only)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Requisition approved
+ *
+ * /api/v1/requisitions/{id}/purchase-order:
+ *   post:
+ *     tags: [Requisitions]
+ *     summary: Generate purchase order for an approved requisition
+ *     responses:
+ *       201:
+ *         description: PO created, PDF queued
+ */
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';

@@ -1,3 +1,161 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Settings
+ *     description: System settings and user management (DIRECTOR only)
+ *
+ * /api/v1/settings:
+ *   get:
+ *     tags: [Settings]
+ *     summary: List all system settings
+ *     responses:
+ *       200:
+ *         description: All settings grouped by category
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/SystemSetting'
+ *
+ * /api/v1/settings/{key}:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Update a single setting by key (DIRECTOR only)
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [value]
+ *             properties:
+ *               value: { type: string }
+ *     responses:
+ *       200:
+ *         description: Setting updated
+ *       400:
+ *         description: Value fails dataType validation
+ *       404:
+ *         $ref: '#/components/schemas/Error404'
+ *
+ * /api/v1/settings/bulk:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Update multiple settings at once (DIRECTOR only)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [settings]
+ *             properties:
+ *               settings:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     key: { type: string }
+ *                     value: { type: string }
+ *     responses:
+ *       200:
+ *         description: All settings updated
+ *
+ * /api/v1/settings/users:
+ *   get:
+ *     tags: [Settings]
+ *     summary: List all system users (DIRECTOR only)
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE] }
+ *     responses:
+ *       200:
+ *         description: Paginated user list
+ *   post:
+ *     tags: [Settings]
+ *     summary: Create a new system user (DIRECTOR only)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password, role]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
+ *               role: { type: string }
+ *     responses:
+ *       201:
+ *         description: User created, welcome email queued
+ *       409:
+ *         description: Email already in use
+ *
+ * /api/v1/settings/users/{id}:
+ *   patch:
+ *     tags: [Settings]
+ *     summary: Update user name, role or status
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: User updated
+ *
+ * /api/v1/settings/users/{id}/reset-password:
+ *   post:
+ *     tags: [Settings]
+ *     summary: Admin reset of user password (DIRECTOR only)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [newPassword]
+ *             properties:
+ *               newPassword: { type: string, minLength: 8 }
+ *     responses:
+ *       200:
+ *         description: Password reset, refresh tokens invalidated
+ *
+ * /api/v1/settings/users/{id}/deactivate:
+ *   post:
+ *     tags: [Settings]
+ *     summary: Deactivate a user (DIRECTOR only — cannot deactivate self)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: User deactivated, session invalidated
+ *       403:
+ *         description: Cannot deactivate your own account
+ */
 import { Router, type IRouter } from 'express';
 import { settingsService } from '../services/settingsService';
 import { authenticate } from '../middleware/authenticate';
