@@ -160,7 +160,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={v => fmtUGX(v as number)} tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: number) => `UGX ${v.toLocaleString()}`} />
+                    <Tooltip formatter={(v) => `UGX ${Number(v).toLocaleString()}`} />
                     <Legend />
                     <Bar dataKey="revenue" name="Revenue"      fill={NAVY} radius={[4,4,0,0]} />
                     <Bar dataKey="payroll" name="Payroll Cost" fill={TEAL} radius={[4,4,0,0]} />
@@ -183,7 +183,7 @@ export default function DashboardPage() {
                           <Cell key={entry.name} fill={PIE_COLORS[entry.name] ?? '#8884d8'} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v: number) => `${v} guards`} />
+                      <Tooltip formatter={(v) => `${Number(v)} guards`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
