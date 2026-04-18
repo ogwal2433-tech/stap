@@ -8,6 +8,7 @@ import { useGuard, useGuardDeploymentHistory } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { guardsApi } from '../../lib/guards.api';
+import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
@@ -37,10 +38,14 @@ interface StatusModal {
   targetStatus: 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
 }
 
+const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+
 export default function GuardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
@@ -468,8 +473,7 @@ export default function GuardDetailPage() {
         </Tab>
 
         {/* ── Deductions Tab ────────────────────────────────────────────────── */}
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER] as UserRole[]}>
-          <Tab eventKey="deductions" title="Deductions">
+        {canViewDeductions && <Tab eventKey="deductions" title="Deductions">
             <div className="d-flex justify-content-between align-items-center mb-3">
               <span className="fw-semibold small">Guard Deductions</span>
               <Button size="sm" variant="outline-danger" onClick={() => setShowDeductionModal(true)}>
@@ -536,8 +540,7 @@ export default function GuardDetailPage() {
                 </Alert>
               </>
             )}
-          </Tab>
-        </RoleGuard>
+          </Tab>}
       </Tabs>
 
       {/* Modals */}
