@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, Col, Container, ListGroup, Row, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Container, ListGroup, Row, Spinner } from 'react-bootstrap';
 import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -155,17 +155,23 @@ export default function DashboardPage() {
             <Card className="border-0 shadow-sm">
               <Card.Header className="fw-semibold small bg-white border-0 pt-3 pb-0">Revenue vs Payroll Cost (6 months)</Card.Header>
               <Card.Body>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={stats.revenueVsPayroll}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={v => fmtUGX(v as number)} tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v) => `UGX ${Number(v).toLocaleString()}`} />
-                    <Legend />
-                    <Bar dataKey="revenue" name="Revenue"      fill={NAVY} radius={[4,4,0,0]} />
-                    <Bar dataKey="payroll" name="Payroll Cost" fill={TEAL} radius={[4,4,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {stats.revenueVsPayroll.length === 0 || stats.revenueVsPayroll.every(r => r.revenue === 0 && r.payroll === 0) ? (
+                  <Alert variant="info" className="mb-0 small">
+                    No revenue or payroll data yet. Data will appear here once invoices are paid and payroll is approved.
+                  </Alert>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={stats.revenueVsPayroll}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tickFormatter={v => fmtUGX(v as number)} tick={{ fontSize: 10 }} />
+                      <Tooltip formatter={(v) => `UGX ${Number(v).toLocaleString()}`} />
+                      <Legend />
+                      <Bar dataKey="revenue" name="Revenue"      fill={NAVY} radius={[4,4,0,0]} />
+                      <Bar dataKey="payroll" name="Payroll Cost" fill={TEAL} radius={[4,4,0,0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </Card.Body>
             </Card>
           </Col>
