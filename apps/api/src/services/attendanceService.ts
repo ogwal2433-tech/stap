@@ -20,47 +20,39 @@ class AttendanceService {
     const absentGuards: { guardId: string; siteId: string; date: string }[] = [];
 
     for (const record of records) {
-      const dateVal = new Date(record.date);
-      dateVal.setUTCHours(0, 0, 0, 0);
-      const dateEnd = new Date(dateVal);
-      dateEnd.setUTCHours(23, 59, 59, 999);
+      const date = new Date(record.date);
+      date.setUTCHours(0, 0, 0, 0);
 
-      // Check if attendance record already exists
-      const existing = await prisma.attendanceRecord.findFirst({
+      const timeIn  = record.timeIn  ? new Date(`1970-01-01T${record.timeIn}:00Z`)  : null;
+      const timeOut = record.timeOut ? new Date(`1970-01-01T${record.timeOut}:00Z`) : null;
+
+      const existing = await prisma.attendanceRecord.findUnique({
+        where: { guardId_siteId_date: { guardId: record.guardId, siteId: record.siteId, date } },
+        select: { id: true },
+      });
+
+      await prisma.attendanceRecord.upsert({
         where: {
+          guardId_siteId_date: { guardId: record.guardId, siteId: record.siteId, date },
+        },
+        create: {
           guardId: record.guardId,
-          siteId: record.siteId,
-          date: { gte: dateVal, lte: dateEnd },
+          siteId:  record.siteId,
+          date,
+          status:  record.status,
+          timeIn,
+          timeOut,
+          notes:   record.notes ?? null,
+        },
+        update: {
+          status:  record.status,
+          timeIn,
+          timeOut,
+          notes:   record.notes ?? null,
         },
       });
 
-      if (existing) {
-        // Update existing record
-        await prisma.attendanceRecord.update({
-          where: { id: existing.id },
-          data: {
-            status: record.status,
-            timeIn: record.timeIn ? new Date(`1970-01-01T${record.timeIn}:00Z`) : null,
-            timeOut: record.timeOut ? new Date(`1970-01-01T${record.timeOut}:00Z`) : null,
-            notes: record.notes ?? null,
-          },
-        });
-        updated++;
-      } else {
-        // Create new record
-        await prisma.attendanceRecord.create({
-          data: {
-            guardId: record.guardId,
-            siteId: record.siteId,
-            date: dateVal,
-            status: record.status,
-            timeIn: record.timeIn ? new Date(`1970-01-01T${record.timeIn}:00Z`) : null,
-            timeOut: record.timeOut ? new Date(`1970-01-01T${record.timeOut}:00Z`) : null,
-            notes: record.notes ?? null,
-          },
-        });
-        marked++;
-      }
+      if (existing) { updated++; } else { marked++; }
 
       // Collect absent/AWOL guards for notification
       if (record.status === 'ABSENT' || record.status === 'AWOL') {

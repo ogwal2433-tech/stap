@@ -14,7 +14,7 @@ import type {
 } from '@stap/shared';
 import {
   useApplicants, usePipelineSummary, useCreateApplicant, useUpdateApplicantStage,
-  useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
+  useTrainers, useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
   useLeaveRequests, useRequestLeave, useApproveLeave,
   useLetterTemplates, useSaveLetterTemplate, usePreviewTemplate,
 } from '../../hooks/useHR';
@@ -273,8 +273,10 @@ function StageUpdateModal({
 function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => void }) {
   const { showToast } = useToast();
   const create = useCreateTrainingSession();
-  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
-  const guards = guardsData?.data ?? [];
+  const { data: guardsData } = useGuardList({ page: 1, limit: 200, status: 'ACTIVE' });
+  const { data: trainersData, isLoading: loadingTrainers } = useTrainers();
+  const guards   = guardsData?.data  ?? [];
+  const trainers = trainersData      ?? [];
 
   const [form, setForm] = useState({
     title: '', trainerId: '', location: '', scheduledAt: '',
@@ -331,8 +333,17 @@ function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => v
           </Row>
           <Row className="mb-2">
             <Col md={6}>
-              <Form.Label className="small fw-medium">Trainer ID *</Form.Label>
-              <Form.Control size="sm" placeholder="cuid of trainer user" value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))} required />
+              <Form.Label className="small fw-medium">Trainer *</Form.Label>
+              <Form.Select
+                size="sm"
+                value={form.trainerId}
+                onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
+                required
+                disabled={loadingTrainers}
+              >
+                <option value="">{loadingTrainers ? 'Loading trainers…' : 'Select trainer…'}</option>
+                {trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Form.Select>
             </Col>
             <Col md={6}>
               <Form.Label className="small fw-medium">Pass Mark (%)</Form.Label>
@@ -472,7 +483,7 @@ function RecordResultsModal({
 function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void }) {
   const { showToast } = useToast();
   const request = useRequestLeave();
-  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
+  const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200, status: 'ACTIVE' });
   const guards = guardsData?.data ?? [];
   const [form, setForm] = useState({ guardId: '', type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
 
@@ -500,10 +511,25 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
         <Form onSubmit={handleSubmit}>
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
-            <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required>
-              <option value="">Select guard…</option>
-              {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
-            </Form.Select>
+            {guardsError ? (
+              <Alert variant="danger" className="small py-1 px-2 mb-0 d-flex align-items-center justify-content-between">
+                Failed to load guards.
+                <Button size="sm" variant="link" className="p-0 ms-2" onClick={() => refetchGuards()}>Retry</Button>
+              </Alert>
+            ) : (
+              <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required disabled={guardsLoading}>
+                {guardsLoading ? (
+                  <option value="">Loading guards…</option>
+                ) : guards.length === 0 ? (
+                  <option value="">No active guards found</option>
+                ) : (
+                  <>
+                    <option value="">Select guard…</option>
+                    {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
+                  </>
+                )}
+              </Form.Select>
+            )}
           </Form.Group>
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Leave Type *</Form.Label>

@@ -4,6 +4,7 @@ import {
   Accordion,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDailySheet, useMarkAttendance, useDeleteDeployment } from '../../hooks/useAttendance';
 import { useClientList } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
@@ -58,6 +59,7 @@ function todayStr() {
 export default function AttendancePage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
@@ -136,6 +138,8 @@ export default function AttendancePage() {
       const result = await markAttendance.mutateAsync(records);
       showToast(`Attendance saved for ${result.marked + result.updated} guard(s)`, 'success');
       setEdits({});
+      queryClient.invalidateQueries({ queryKey: ['deployments-today'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
       refetch();
     } catch {
       showToast('Failed to save attendance', 'danger');

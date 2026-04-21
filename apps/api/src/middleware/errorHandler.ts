@@ -26,10 +26,9 @@ export function errorHandler(
   }
 
   if (err instanceof AppError) {
-    return res.status(err.statusCode).json({
-      success: false,
-      error: err.message,
-    });
+    const body: Record<string, unknown> = { success: false, error: err.message };
+    if (err.statusCode === 409) body.code = 'DUPLICATE_ENTRY';
+    return res.status(err.statusCode).json(body);
   }
 
   // Default 500

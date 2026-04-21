@@ -62,6 +62,14 @@ export function useConvertToGuard() {
 
 // ── Training ───────────────────────────────────────────────────────────────────
 
+export function useTrainers() {
+  return useQuery({
+    queryKey: ['hr-trainers'],
+    queryFn:  () => hrApi.getTrainers(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useTrainingSessions(params?: Parameters<typeof hrApi.listSessions>[0]) {
   return useQuery({
     queryKey: ['training-sessions', params],

@@ -154,7 +154,7 @@ function IssueItemModal({
   const { showToast } = useToast();
   const issue = useIssueItem();
   const { data: itemsData } = useInventoryItems({ page: 1, limit: 200 });
-  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
+  const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200 });
   const items  = itemsData?.data  ?? [];
   const guards = guardsData?.data ?? [];
   const [form, setForm] = useState({ itemId: preItem?.id ?? '', guardId: '', quantity: '1', conditionNote: '' });
@@ -194,10 +194,17 @@ function IssueItemModal({
           </Form.Group>
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
-            <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required>
-              <option value="">Select guard…</option>
-              {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
-            </Form.Select>
+            {guardsError ? (
+              <Alert variant="danger" className="small py-1 px-2 mb-0 d-flex align-items-center justify-content-between">
+                Failed to load guards.
+                <Button size="sm" variant="link" className="p-0 ms-2" onClick={() => refetchGuards()}>Retry</Button>
+              </Alert>
+            ) : (
+              <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required disabled={guardsLoading}>
+                <option value="">{guardsLoading ? 'Loading guards…' : 'Select guard…'}</option>
+                {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
+              </Form.Select>
+            )}
           </Form.Group>
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Quantity *</Form.Label>
@@ -248,7 +255,7 @@ function ReturnItemModal({
   const { showToast } = useToast();
   const ret = useReturnItem();
   const { data: itemsData } = useInventoryItems({ page: 1, limit: 200 });
-  const { data: guardsData } = useGuardList({ page: 1, limit: 200 });
+  const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200 });
   const items  = itemsData?.data  ?? [];
   const guards = guardsData?.data ?? [];
   const [form, setForm] = useState({
@@ -304,10 +311,17 @@ function ReturnItemModal({
           </Form.Group>
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
-            <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required>
-              <option value="">Select guard…</option>
-              {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
-            </Form.Select>
+            {guardsError ? (
+              <Alert variant="danger" className="small py-1 px-2 mb-0 d-flex align-items-center justify-content-between">
+                Failed to load guards.
+                <Button size="sm" variant="link" className="p-0 ms-2" onClick={() => refetchGuards()}>Retry</Button>
+              </Alert>
+            ) : (
+              <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required disabled={guardsLoading}>
+                <option value="">{guardsLoading ? 'Loading guards…' : 'Select guard…'}</option>
+                {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
+              </Form.Select>
+            )}
           </Form.Group>
           <Row className="mb-2">
             <Col>

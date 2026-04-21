@@ -12,8 +12,13 @@ import fs from 'fs';
 import cron from 'node-cron';
 
 // ── Ensure upload directories exist ───────────────────────────────────────────
-fs.mkdirSync('./public/uploads/temp', { recursive: true });
-fs.mkdirSync('./public/uploads/guards', { recursive: true });
+[
+  './public/uploads/temp',
+  './public/uploads/guards',
+  './public/uploads/invoices',
+  './public/uploads/payslips',
+  './public/uploads/letters',
+].forEach(dir => fs.mkdirSync(dir, { recursive: true }));
 
 // ── Queue workers (initialise on startup) ──────────────────────────────────────
 import { auditWorker } from './jobs/workers/auditWorker';

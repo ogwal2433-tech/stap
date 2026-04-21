@@ -4,6 +4,7 @@ import {
   Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
   useRunPayroll, useApprovePayroll, useDisbursePayroll,
@@ -54,6 +55,7 @@ function InvoicesTab() {
   const [payInvoice, setPayInvoice]       = useState<InvoiceResponse | null>(null);
   const { data, isLoading }               = useInvoices();
   const { showToast }                     = useToast();
+  const queryClient                       = useQueryClient();
 
   const invoices = data?.data ?? [];
 
@@ -150,7 +152,15 @@ function InvoicesTab() {
       )}
 
       {showCreate && <InvoiceFormModal onClose={() => setShowCreate(false)} />}
-      {payInvoice && <RecordPaymentModal invoice={payInvoice} onClose={() => setPayInvoice(null)} />}
+      {payInvoice && (
+        <RecordPaymentModal
+          invoice={payInvoice}
+          onClose={() => {
+            setPayInvoice(null);
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+          }}
+        />
+      )}
     </>
   );
 }

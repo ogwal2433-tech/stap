@@ -23,6 +23,7 @@ export default function ClientFormPage() {
   const updateClient = useUpdateClient();
 
   const [sameAddress, setSameAddress] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const {
     register,
@@ -60,6 +61,7 @@ export default function ClientFormPage() {
   }, [sameAddress, physicalAddress, setValue]);
 
   const onSubmit = async (data: CreateClientInput) => {
+    setApiError(null);
     try {
       if (isEdit && id) {
         await updateClient.mutateAsync({ id, data });
@@ -70,8 +72,14 @@ export default function ClientFormPage() {
         showToast('Client created', 'success');
         navigate(`/clients/${created.id}`);
       }
-    } catch {
-      showToast('Failed to save client', 'danger');
+    } catch (error) {
+      console.error('Create client error:', error);
+      const msg =
+        (error as any)?.response?.data?.error ||
+        (error as any)?.response?.data?.message ||
+        (error as any)?.message ||
+        'Failed to save client. Please try again.';
+      setApiError(msg);
     }
   };
 
@@ -101,6 +109,12 @@ export default function ClientFormPage() {
       </div>
 
       <Form onSubmit={handleSubmit(onSubmit)}>
+        {apiError && (
+          <Alert variant="danger" dismissible onClose={() => setApiError(null)}>
+            <strong>Error:</strong> {apiError}
+          </Alert>
+        )}
+
         {/* Section 1 — Company Information */}
         <Card className="border-0 shadow-sm mb-4">
           <Card.Header className="bg-white fw-semibold" style={{ color: '#1B3A6B' }}>

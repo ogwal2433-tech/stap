@@ -15,7 +15,7 @@ export const CreateInvoiceSchema = z.object({
 
 export const RecordPaymentSchema = z.object({
   invoiceId:       z.string().min(1),
-  amountPaid:      z.number().int().positive(),
+  amountPaid:      z.coerce.number().int().positive(),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),
 });

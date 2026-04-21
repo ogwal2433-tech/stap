@@ -2,16 +2,23 @@ import { useEffect } from 'react';
 import { Modal, Form, Button, Row, Col, Alert } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { UpdateSiteSchema } from '@stap/shared';
 import { useCreateSite, useUpdateSite } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
 import type { SiteResponse } from '@stap/shared';
 import { z } from 'zod';
 
-const SiteFormSchema = UpdateSiteSchema.extend({
-  siteName: z.string().min(1, 'Site name is required'),
-  location: z.string().min(1, 'Location is required'),
-  guardsRequired: z.number().int().min(1).default(1),
+const toOptionalNum = (v: unknown) =>
+  v === '' || (typeof v === 'number' && isNaN(v)) ? undefined : v;
+
+const SiteFormSchema = z.object({
+  siteName:            z.string().min(1, 'Site name is required'),
+  location:            z.string().min(1, 'Location is required'),
+  gpsLat:              z.preprocess(toOptionalNum, z.number().min(-90).max(90).optional()),
+  gpsLon:              z.preprocess(toOptionalNum, z.number().min(-180).max(180).optional()),
+  siteManagerName:     z.string().max(100).optional().transform((v) => v || undefined),
+  siteManagerContact:  z.string().optional().transform((v) => v || undefined),
+  specialInstructions: z.string().max(1000).optional().transform((v) => v || undefined),
+  guardsRequired:      z.coerce.number().int().min(1).default(1),
 });
 
 type SiteFormValues = z.infer<typeof SiteFormSchema>;
@@ -37,28 +44,28 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   } = useForm<SiteFormValues>({
     resolver: zodResolver(SiteFormSchema),
     defaultValues: {
-      siteName: site?.siteName ?? '',
-      location: site?.location ?? '',
-      gpsLat: site?.gpsLat ?? undefined,
-      gpsLon: site?.gpsLon ?? undefined,
-      siteManagerName: site?.siteManagerName ?? '',
-      siteManagerContact: site?.siteManagerContact ?? '',
-      guardsRequired: site?.guardsRequired ?? 1,
-      specialInstructions: site?.specialInstructions ?? '',
+      siteName:            site?.siteName ?? '',
+      location:            site?.location ?? '',
+      gpsLat:              site?.gpsLat ?? undefined,
+      gpsLon:              site?.gpsLon ?? undefined,
+      siteManagerName:     site?.siteManagerName ?? undefined,
+      siteManagerContact:  site?.siteManagerContact ?? undefined,
+      guardsRequired:      site?.guardsRequired ?? 1,
+      specialInstructions: site?.specialInstructions ?? undefined,
     },
   });
 
   useEffect(() => {
     if (site) {
       reset({
-        siteName: site.siteName,
-        location: site.location,
-        gpsLat: site.gpsLat ?? undefined,
-        gpsLon: site.gpsLon ?? undefined,
-        siteManagerName: site.siteManagerName ?? '',
-        siteManagerContact: site.siteManagerContact ?? '',
-        guardsRequired: site.guardsRequired,
-        specialInstructions: site.specialInstructions ?? '',
+        siteName:            site.siteName,
+        location:            site.location,
+        gpsLat:              site.gpsLat ?? undefined,
+        gpsLon:              site.gpsLon ?? undefined,
+        siteManagerName:     site.siteManagerName ?? undefined,
+        siteManagerContact:  site.siteManagerContact ?? undefined,
+        guardsRequired:      site.guardsRequired,
+        specialInstructions: site.specialInstructions ?? undefined,
       });
     }
   }, [site, reset]);

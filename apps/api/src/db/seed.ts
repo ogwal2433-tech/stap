@@ -78,6 +78,22 @@ async function main() {
   });
   console.log(`✅ Client created: ${ura.clientName}`);
 
+  const kakooza = await prisma.client.upsert({
+    where: { id: 'seed-client-kakooza' },
+    update: { clientUserId: users[Role.CLIENT].id },
+    create: {
+      id:              'seed-client-kakooza',
+      clientName:      'Kakooza Enterprises Ltd',
+      contactPerson:   'Michael Kakooza',
+      contactPhone:    '+256700000090',
+      physicalAddress: 'Kampala, Uganda',
+      billingTerms:    30,
+      contractStatus:  ClientContractStatus.ACTIVE,
+      clientUserId:    users[Role.CLIENT].id,
+    },
+  });
+  console.log(`✅ Client created and linked: ${kakooza.clientName}`);
+
   // ── Sites ───────────────────────────────────────────────────────────────────
 
   const kccaSite = await prisma.site.upsert({

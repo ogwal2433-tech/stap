@@ -7,7 +7,7 @@ import { useToast } from '../../context/ToastContext';
 import type { InvoiceResponse } from '@stap/shared';
 
 const Schema = z.object({
-  amountPaid:      z.number().int().positive('Amount must be positive'),
+  amountPaid:      z.coerce.number().int().positive('Amount must be positive'),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),
 });

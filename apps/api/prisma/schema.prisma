@@ -325,6 +325,8 @@ model AttendanceRecord {
   guard             Guard              @relation(fields: [guardId], references: [id], onDelete: Restrict)
   site              Site               @relation(fields: [siteId], references: [id], onDelete: Restrict)
   supervisorCheckin SupervisorCheckin? @relation(fields: [supervisorCheckinId], references: [id], onDelete: SetNull)
+
+  @@unique([guardId, siteId, date])
 }
 
 model SupervisorCheckin {

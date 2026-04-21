@@ -237,7 +237,7 @@ class InvoiceService {
   async recordManualPayment(data: RecordPaymentInput, recordedBy: string): Promise<PaymentResponse> {
     const invoice = await prisma.invoice.findUnique({
       where: { id: data.invoiceId },
-      include: { payments: true },
+      select: { totalAmount: true },
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
@@ -251,9 +251,14 @@ class InvoiceService {
       },
     });
 
-    // Check if fully paid
-    const totalPaid = invoice.payments.reduce((s, p) => s + p.amountPaid, 0) + data.amountPaid;
-    if (totalPaid >= invoice.totalAmount) {
+    // Sum all payments including the one just created
+    const agg = await prisma.payment.aggregate({
+      where: { invoiceId: data.invoiceId },
+      _sum:  { amountPaid: true },
+    });
+    const sumPaid = agg._sum.amountPaid ?? 0;
+
+    if (sumPaid >= invoice.totalAmount) {
       await prisma.invoice.update({
         where: { id: data.invoiceId },
         data:  { status: 'PAID', paidAt: new Date() },

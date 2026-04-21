@@ -63,11 +63,16 @@ COPY apps/api/prisma ./apps/api/prisma
 # Copy entrypoint script
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
 
-# Create uploads directory
-RUN mkdir -p /app/public/uploads/temp /app/public/uploads/guards
+# Create uploads directories
+RUN mkdir -p /app/public/uploads/temp \
+             /app/public/uploads/guards \
+             /app/public/uploads/invoices \
+             /app/public/uploads/payslips \
+             /app/public/uploads/letters
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN chown -R nodejs:nodejs /app/public
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 

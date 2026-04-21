@@ -10,7 +10,7 @@ export const CreateClientSchema = z.object({
   physicalAddress: z.string().min(1).max(500),
   billingAddress: z.string().max(500).optional(),
   billingTerms: z
-    .number()
+    .coerce.number()
     .int()
     .min(1)
     .max(90)
@@ -40,10 +40,7 @@ export const CreateSiteSchema = z.object({
   gpsLat: z.number().min(-90).max(90).optional(),
   gpsLon: z.number().min(-180).max(180).optional(),
   siteManagerName: z.string().max(100).optional(),
-  siteManagerContact: z
-    .string()
-    .regex(/^\+?[0-9]{10,15}$/)
-    .optional(),
+  siteManagerContact: z.string().optional(),
   specialInstructions: z.string().max(1000).optional(),
   guardsRequired: z.number().int().min(1).default(1),
 });

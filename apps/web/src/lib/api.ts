@@ -3,7 +3,6 @@ import type { AxiosRequestConfig } from 'axios';
 
 // ── In-memory token store (never localStorage — XSS protection) ───────────────
 let _accessToken: string | null = null;
-let _isRefreshing = false;
 
 export function setAccessToken(token: string | null): void {
   _accessToken = token;
@@ -32,28 +31,23 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retried?: boolean };
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
     const url = originalRequest?.url ?? '';
 
     // Skip refresh loop for auth endpoints themselves
     const isAuthEndpoint = url.includes('/auth/refresh') || url.includes('/auth/login');
 
-    if (error.response?.status === 401 && !originalRequest._retried && !isAuthEndpoint) {
-      if (_isRefreshing) {
-        return Promise.reject(error);
-      }
-
-      _isRefreshing = true;
-      originalRequest._retried = true;
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+      originalRequest._retry = true;
 
       try {
         // Call refresh directly (withCredentials sends the httpOnly cookie)
-        const { data } = await axios.post(
+        const refreshRes = await axios.post(
           '/api/v1/auth/refresh',
           {},
           { withCredentials: true },
         );
-        const newToken: string = data.data.accessToken;
+        const newToken: string = refreshRes.data.data.accessToken;
         setAccessToken(newToken);
 
         if (originalRequest.headers) {
@@ -64,8 +58,6 @@ api.interceptors.response.use(
         setAccessToken(null);
         window.location.href = '/login';
         return Promise.reject(error);
-      } finally {
-        _isRefreshing = false;
       }
     }
 

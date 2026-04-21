@@ -119,7 +119,7 @@ function App() {
               <Route path="/inventory" element={<L><RoleGuard allowedRoles={INV_ROLES} fallback={<UnauthorisedPage />}><InventoryPage /></RoleGuard></L>} />
 
               {/* Settings */}
-              <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
+              <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
             </Route>
           </Route>

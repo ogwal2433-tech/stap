@@ -172,7 +172,7 @@ router.use(authenticate);
 
 router.get(
   '/',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requireRole(ROLES.DIRECTOR),
   asyncHandler(async (_req, res) => {
     const data = await settingsService.getAll();
     res.json({ success: true, data });
@@ -181,7 +181,7 @@ router.get(
 
 router.get(
   '/group/:group',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requireRole(ROLES.DIRECTOR),
   asyncHandler(async (req, res) => {
     const data = await settingsService.getGroup(req.params.group);
     res.json({ success: true, data });

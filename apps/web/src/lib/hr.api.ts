@@ -53,6 +53,12 @@ export const hrApi = {
 
   // ── Training ────────────────────────────────────────────────────────────────
 
+  getTrainers(): Promise<{ id: string; name: string }[]> {
+    return api
+      .get<{ success: boolean; data: { id: string; name: string }[] }>('/hr/trainers')
+      .then((r) => r.data.data);
+  },
+
   listSessions(params?: { status?: string; trainerId?: string; page?: number; limit?: number }) {
     return api
       .get<{ success: boolean } & PaginatedResponse<TrainingSessionResponse>>('/hr/training', { params })

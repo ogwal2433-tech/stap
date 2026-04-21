@@ -15,9 +15,9 @@ const REFRESH_COOKIE = 'refreshToken';
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
-  path: '/api/v1/auth/refresh',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+  sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
 const loginRateLimiter = rateLimit({

@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { icon: 'bi-chat-left-text-fill',  label: 'Complaints',    to: '/complaints',    roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) },
   { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
   { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
-  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',               roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER] },
+  { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',               roles: [ROLES.DIRECTOR] },
 ];
 
 const ROLE_BADGE: Record<string, string> = {

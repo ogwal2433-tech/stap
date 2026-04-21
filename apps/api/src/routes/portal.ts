@@ -64,7 +64,7 @@ async function clientPortalGuard(req: Request, res: Response, next: NextFunction
   }
   const client = await prisma.client.findFirst({ where: { clientUserId: req.user.userId } });
   if (!client) {
-    return res.status(403).json({ success: false, message: 'No client account linked to this user' });
+    return res.status(403).json({ success: false, message: 'No client account linked to this user. Contact administrator.' });
   }
   (req as any).clientId = client.id;
   next();
@@ -149,6 +149,20 @@ router.get(
       date:       d.date,
     }));
     res.json({ success: true, data });
+  }),
+);
+
+// GET /portal/sites
+router.get(
+  '/sites',
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+    const sites = await prisma.site.findMany({
+      where:   { clientId },
+      select:  { id: true, siteName: true },
+      orderBy: { siteName: 'asc' },
+    });
+    res.json({ success: true, data: sites });
   }),
 );
 

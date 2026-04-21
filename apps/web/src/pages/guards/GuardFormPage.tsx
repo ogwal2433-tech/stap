@@ -33,7 +33,7 @@ export default function GuardFormPage() {
   const { user } = useAuth();
 
   const { data: existing, isLoading: loadingExisting } = useGuard(id ?? '');
-  const { mutateAsync: createGuard } = useCreateGuard();
+  const { mutate: createGuard, isPending: isCreating } = useCreateGuard();
   const { mutateAsync: updateGuard } = useUpdateGuard();
 
   const [apiError, setApiError] = useState('');
@@ -99,22 +99,35 @@ export default function GuardFormPage() {
 
   const onSubmit = async (data: CreateGuardInput) => {
     setApiError('');
-    try {
-      if (isEdit && id) {
+    if (isEdit && id) {
+      try {
         await updateGuard({ id, data });
         showToast('Changes saved', 'success');
-      } else {
-        const created = await createGuard(data);
-        showToast('Guard created successfully', 'success');
-        navigate(`/guards/${created.id}`, { replace: true });
-      }
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
-      if (axiosErr.response?.status === 409) {
-        setError('nationalId', { message: 'A guard with this National ID already exists' });
-      } else {
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
         setApiError(axiosErr.response?.data?.error ?? 'An unexpected error occurred');
       }
+    } else {
+      createGuard(data, {
+        onSuccess: (created) => {
+          showToast('Guard created successfully', 'success');
+          navigate(`/guards/${created.id}`, { replace: true });
+        },
+        onError: (err: any) => {
+          const status  = err?.response?.status;
+          const message = err?.response?.data?.error;
+          if (status === 409) {
+            setError('nationalId', {
+              type: 'manual',
+              message: message || 'This National ID already exists',
+            });
+            document.querySelector('[name="nationalId"]')
+              ?.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            showToast(message || 'Failed to create guard', 'danger');
+          }
+        },
+      });
     }
   };
 
@@ -434,9 +447,9 @@ export default function GuardFormPage() {
           <Button
             type="submit"
             style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCreating}
           >
-            {isSubmitting ? (
+            {(isSubmitting || isCreating) ? (
               <Spinner as="span" animation="border" size="sm" className="me-2" />
             ) : null}
             {isEdit ? 'Save Changes' : 'Create Guard'}

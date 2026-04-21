@@ -30,7 +30,7 @@ function CatBadge({ c }: { c: string }) {
 function ComplaintFormModal({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast();
   const qc            = useQueryClient();
-  const { data: clientsRes } = useClients();
+  const { data: clientsRes, isLoading: clientsLoading } = useClients({ limit: 200 });
   const clients = clientsRes?.data ?? [];
 
   const [form, setForm] = useState({ clientId: '', category: 'GUARD_CONDUCT', description: '', severity: 'MEDIUM' });
@@ -51,10 +51,20 @@ function ComplaintFormModal({ onClose }: { onClose: () => void }) {
       <Modal.Body>
         <Form.Group className="mb-3">
           <Form.Label>Client <span className="text-danger">*</span></Form.Label>
-          <Form.Select value={form.clientId} onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))}>
-            <option value="">Select client…</option>
-            {clients.map((c: any) => <option key={c.id} value={c.id}>{c.clientName}</option>)}
-          </Form.Select>
+          {!clientsLoading && clients.length === 0 ? (
+            <Alert variant="warning" className="small py-2 mb-0">
+              No clients found — add a client before logging a complaint.
+            </Alert>
+          ) : (
+            <Form.Select
+              value={form.clientId}
+              onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))}
+              disabled={clientsLoading}
+            >
+              <option value="">{clientsLoading ? 'Loading clients…' : 'Select client…'}</option>
+              {clients.map((c: any) => <option key={c.id} value={c.id}>{c.clientName}</option>)}
+            </Form.Select>
+          )}
         </Form.Group>
         <Row className="g-3">
           <Col md={6}>

@@ -169,6 +169,7 @@
  */
 import { Router, type IRouter } from 'express';
 import { hrService } from '../services/hrService';
+import prisma from '../db/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
@@ -242,6 +243,21 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = await hrService.convertToGuard(req.params.id, req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
+  }),
+);
+
+// ── Trainers lookup (dropdown data for scheduling form) ───────────────────────
+
+router.get(
+  '/trainers',
+  requireRole(...HR_ROLES, ROLES.TRAINER),
+  asyncHandler(async (_req, res) => {
+    const trainers = await prisma.user.findMany({
+      where:   { role: ROLES.TRAINER, status: 'ACTIVE' },
+      select:  { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: trainers });
   }),
 );
 

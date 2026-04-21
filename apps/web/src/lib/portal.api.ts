@@ -37,6 +37,10 @@ export const portalApi = {
     return api.get('/portal/guards').then(r => r.data.data);
   },
 
+  getSites(): Promise<{ id: string; siteName: string }[]> {
+    return api.get('/portal/sites').then(r => r.data.data);
+  },
+
   submitComplaint(data: Omit<CreateComplaintInput, 'clientId'>): Promise<ComplaintResponse> {
     return api.post('/portal/complaints', data).then(r => r.data.data);
   },

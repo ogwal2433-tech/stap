@@ -49,7 +49,9 @@
       "Bash(pnpm --filter api add swagger-jsdoc swagger-ui-express)",
       "Bash(pnpm --filter api add -D @types/swagger-ui-express)",
       "Bash(pnpm --filter web add -D @playwright/test)",
-      "Bash(pnpm --filter api add -D @types/swagger-jsdoc)"
+      "Bash(pnpm --filter api add -D @types/swagger-jsdoc)",
+      "Bash(PRISMA_MIGRATE_SKIP_GENERATE=false pnpm exec prisma migrate dev --name add_attendance_unique_constraint --skip-seed)",
+      "Bash(pnpm tsc *)"
     ],
     "additionalDirectories": [
       "/tmp"

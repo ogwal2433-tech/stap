@@ -42,8 +42,8 @@ export const CreateTrainingSessionSchema = z.object({
   trainerId:     z.string().cuid(),
   location:      z.string().optional(),
   scheduledAt:   z.string().datetime(),
-  durationHours: z.number().positive().default(1),
-  passMark:      z.number().int().min(0).max(100).default(70),
+  durationHours: z.coerce.number().positive().default(1),
+  passMark:      z.coerce.number().int().min(0).max(100).default(70),
   guardIds:      z.array(z.string().cuid()).min(1),
 });
 export type CreateTrainingSessionInput = z.infer<typeof CreateTrainingSessionSchema>;

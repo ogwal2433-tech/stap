@@ -241,6 +241,7 @@ export default function SettingsPage() {
   const deactivate = useDeactivateUser();
 
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState<{ group: string; message: string } | null>(null);
   const [editUser, setEditUser]   = useState<UserResponse | 'new' | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
 
@@ -259,18 +260,30 @@ export default function SettingsPage() {
 
   const handleSaveGroup = (group: string) => {
     const groupSettings = (allSettings ?? []).filter(s => s.group === group);
-    const changed = groupSettings
-      .filter(s => pendingChanges[s.key] !== undefined && pendingChanges[s.key] !== s.value)
-      .map(s => ({ key: s.key, value: pendingChanges[s.key] }));
-
-    if (changed.length === 0) {
-      showToast('No changes to save', 'info');
+    if (groupSettings.length === 0) {
+      showToast('No settings to save', 'info');
       return;
     }
 
-    updateSettings.mutate(changed, {
-      onSuccess: () => showToast(`${group} settings saved`, 'success'),
-      onError:   (err: any) => showToast(err?.response?.data?.error || 'Save failed', 'danger'),
+    // Send ALL settings in the group (not just changed ones) to avoid silent no-op
+    const settings = groupSettings.map(s => ({
+      key:   s.key,
+      value: pendingChanges[s.key] ?? s.value,
+    }));
+
+    setSaveError(null);
+    updateSettings.mutate(settings, {
+      onSuccess: () => {
+        setSaveError(null);
+        showToast(`${group} settings saved`, 'success');
+      },
+      onError: (err: any) => {
+        const message = err?.response?.data?.error
+          || err?.response?.data?.message
+          || err?.message
+          || 'Save failed. Please try again.';
+        setSaveError({ group, message });
+      },
     });
   };
 
@@ -319,6 +332,16 @@ export default function SettingsPage() {
                       {updateSettings.isPending ? <Spinner size="sm" /> : 'Save Changes'}
                     </Button>
                   </div>
+                  {saveError?.group === group && (
+                    <Alert
+                      variant="danger"
+                      className="small py-2"
+                      dismissible
+                      onClose={() => setSaveError(null)}
+                    >
+                      <strong>Error:</strong> {saveError.message}
+                    </Alert>
+                  )}
                   {settingsByGroup[group]?.length === 0 ? (
                     <Alert variant="info" className="small">No settings in this group.</Alert>
                   ) : (
