@@ -52,7 +52,12 @@
       "Bash(pnpm --filter api add -D @types/swagger-jsdoc)",
       "Bash(PRISMA_MIGRATE_SKIP_GENERATE=false pnpm exec prisma migrate dev --name add_attendance_unique_constraint --skip-seed)",
       "Bash(pnpm tsc *)",
-      "Bash(pnpm --filter @stap/web tsc --noEmit)"
+      "Bash(pnpm --filter @stap/web tsc --noEmit)",
+      "Bash(PRISMA_MIGRATE_SKIP_GENERATE=true pnpm exec prisma migrate dev --name extend_guard_vetting_form_fields)",
+      "Bash(pnpm --filter shared exec tsc --noEmit)",
+      "Bash(pnpm --filter api exec vitest run src/__tests__/guards/)",
+      "Bash(psql postgresql://postgres:12345678@localhost:5432/stap_security -c \"SELECT id, email, role, status, \\\\\"passwordHash\\\\\" IS NOT NULL as has_hash FROM \\\\\"User\\\\\" LIMIT 10;\")",
+      "Bash(psql postgresql://postgres:12345678@localhost:5432/stap_security -c \"SELECT email, role, status FROM \\\\\"User\\\\\" ORDER BY role;\")"
     ],
     "additionalDirectories": [
       "/tmp"

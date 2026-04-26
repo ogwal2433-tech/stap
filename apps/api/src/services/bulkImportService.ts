@@ -20,13 +20,24 @@ function parseDMY(value: string): string | null {
   return iso;
 }
 
-const COLUMNS = [
+// Original 14 columns
+const BASE_COLUMNS = [
   'firstName', 'lastName', 'otherNames', 'nationalId', 'phone',
   'dateOfBirth', 'nextOfKinName', 'nextOfKinPhone', 'bankName',
   'accountNumber', 'salaryRate', 'contractStart', 'contractEnd', 'psoCertNumber',
 ] as const;
 
-const HEADERS = [
+// Extended vetting columns (O onwards)
+const EXT_COLUMNS = [
+  'gender', 'tribe', 'placeOfBirth', 'educationLevel', 'maritalStatus',
+  'district', 'subCounty', 'parish', 'village',
+  'nssfNumber', 'tinNumber', 'previousEmployer', 'previousPosition',
+  'preferredPaymentContact',
+] as const;
+
+const COLUMNS = [...BASE_COLUMNS, ...EXT_COLUMNS] as const;
+
+const BASE_HEADERS = [
   'First Name *', 'Last Name *', 'Other Names', 'National ID (NIN) *',
   'Phone *', 'Date of Birth (DD/MM/YYYY) *', 'Next of Kin Name *',
   'Next of Kin Phone *', 'Bank Name', 'Account Number',
@@ -34,24 +45,54 @@ const HEADERS = [
   'Contract End (DD/MM/YYYY)', 'PSO Certificate Number',
 ];
 
+const EXT_HEADERS = [
+  'Gender (MALE/FEMALE/OTHER)',
+  'Tribe',
+  'Place of Birth',
+  'Education Level',
+  'Marital Status (SINGLE/MARRIED/DIVORCED/WIDOWED)',
+  'District',
+  'Sub-county',
+  'Parish',
+  'Village',
+  'NSSF Number',
+  'TIN Number',
+  'Previous Employer',
+  'Previous Position',
+  'Preferred Payment Contact (MoMo)',
+];
+
+const HEADERS = [...BASE_HEADERS, ...EXT_HEADERS];
+
 const EXAMPLE_ROWS = [
   ['David', 'Ochieng', '', 'CM90210198412', '+256772345678', '15/03/1990',
    'Mary Ochieng', '+256701234567', 'Centenary Bank', '1234567890',
-   450000, '01/01/2026', '31/12/2026', 'PSO/2024/001'],
+   450000, '01/01/2026', '31/12/2026', 'PSO/2024/001',
+   'MALE', 'Acholi', 'Gulu', 'O_LEVEL', 'MARRIED',
+   'Kampala', 'Rubaga', 'Nateete', 'Kizungu',
+   'NSSF001', 'TIN001', 'Alpha Security', 'Guard', '+256772345678'],
   ['Amina', 'Nakato', '', 'CM80115197534', '+256782456789', '22/07/1985',
    'Robert Nakato', '+256711234567', 'Stanbic Bank', '9876543210',
-   520000, '01/02/2026', '31/01/2027', 'PSO/2024/022'],
+   520000, '01/02/2026', '31/01/2027', 'PSO/2024/022',
+   'FEMALE', 'Muganda', 'Kampala', 'DIPLOMA', 'SINGLE',
+   'Wakiso', 'Makindye', 'Kibuye', 'Zone 2',
+   '', '', '', '', ''],
   ['Samuel', 'Mugisha', 'Patrick', 'CM91330200145', '+256701567890', '10/11/1991',
    'Grace Mugisha', '+256723456789', '', '',
-   480000, '01/03/2026', '', ''],
+   480000, '01/03/2026', '', '',
+   'MALE', '', '', 'A_LEVEL', '',
+   '', '', '', '', '', '', '', '', ''],
 ];
 
-const COLUMN_WIDTHS = [14, 14, 14, 18, 16, 24, 18, 18, 16, 16, 20, 24, 22, 20];
+const BASE_WIDTHS = [14, 14, 14, 18, 16, 24, 18, 18, 16, 16, 20, 24, 22, 20];
+const EXT_WIDTHS  = [22, 14, 16, 18, 34, 14, 14, 14, 14, 14, 14, 18, 18, 28];
+const COLUMN_WIDTHS = [...BASE_WIDTHS, ...EXT_WIDTHS];
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const NAVY  = '1B3A6B';
 const TEAL  = '0F7173';
+const TEAL2 = '0F6B6B'; // slightly different for ext columns
 const GREY  = 'F5F5F5';
 const WHITE = 'FFFFFF';
 
@@ -76,7 +117,7 @@ class BulkImportService {
     // ── Sheet 1: Template ──────────────────────────────────────────────────────
     const ws: XLSX.WorkSheet = {};
 
-    // Row 1: Title (merged A1:N1)
+    // Row 1: Title (merged A1 to last column)
     ws['A1'] = {
       v: 'STAP Security Ltd — Guard Import Template', t: 's',
       s: {
@@ -87,10 +128,10 @@ class BulkImportService {
     };
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: COLUMNS.length - 1 } }];
 
-    // Row 2: Column headers
+    // Row 2: Column headers (base = TEAL, extended = TEAL2)
     HEADERS.forEach((h, c) => {
       const addr = XLSX.utils.encode_cell({ r: 1, c });
-      ws[addr] = boldCell(h, TEAL);
+      ws[addr] = boldCell(h, c < BASE_COLUMNS.length ? TEAL : TEAL2);
     });
 
     // Rows 3-5: Example data (greyed)
@@ -121,7 +162,7 @@ class BulkImportService {
 
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 104, c: COLUMNS.length - 1 } });
     ws['!cols'] = COLUMN_WIDTHS.map((w) => ({ wch: w }));
-    ws['!rows'] = [{ hpt: 28 }, { hpt: 36 }];
+    ws['!rows'] = [{ hpt: 28 }, { hpt: 40 }];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Guards Import Template');
 
@@ -140,23 +181,41 @@ class BulkImportService {
       ['Date of Birth, Next of Kin Name, Next of Kin Phone,'],
       ['Monthly Salary, Contract Start'],
       [''],
-      ['OPTIONAL COLUMNS'],
+      ['OPTIONAL COLUMNS (A–N)'],
       ['Other Names, Bank Name, Account Number,'],
       ['Contract End, PSO Certificate Number'],
+      [''],
+      ['EXTENDED VETTING COLUMNS (O onwards — optional but recommended)'],
+      ['Columns O onwards are optional but recommended for full vetting compliance.'],
+      ['Relatives, associates, and health details must be entered individually'],
+      ['on each guard\'s profile page after import.'],
+      [''],
+      ['O: Gender (MALE/FEMALE/OTHER)'],
+      ['P: Tribe'],
+      ['Q: Place of Birth'],
+      ['R: Education Level (PRIMARY/O_LEVEL/A_LEVEL/CERTIFICATE/DIPLOMA/DEGREE/MASTERS/OTHER)'],
+      ['S: Marital Status (SINGLE/MARRIED/DIVORCED/WIDOWED)'],
+      ['T: District'],
+      ['U: Sub-county'],
+      ['V: Parish'],
+      ['W: Village'],
+      ['X: NSSF Number'],
+      ['Y: TIN Number'],
+      ['Z: Previous Employer'],
+      ['AA: Previous Position'],
+      ['AB: Preferred Payment Contact (MoMo number)'],
       [''],
       ['FORMAT RULES'],
       ['Phone:         +256XXXXXXXXX (10–15 digits, optional leading +)'],
       ['Date fields:   DD/MM/YYYY (e.g. 15/03/1990)'],
       ['Salary:        Whole number in UGX — no commas (e.g. 480000)'],
       ['NIN:           Must be unique — duplicates will be skipped'],
-      [''],
-      ['EXAMPLE'],
-      ['First Name: David   Last Name: Ochieng'],
-      ['Phone: +256772345678   DOB: 15/03/1990'],
-      ['Salary: 450000   Contract Start: 01/01/2026'],
+      ['Gender:        MALE, FEMALE, or OTHER (uppercase)'],
+      ['Education:     PRIMARY, O_LEVEL, A_LEVEL, CERTIFICATE, DIPLOMA, DEGREE, MASTERS, or OTHER'],
+      ['Marital:       SINGLE, MARRIED, DIVORCED, or WIDOWED (uppercase)'],
     ];
     const wsInstr = XLSX.utils.aoa_to_sheet(instructions);
-    wsInstr['!cols'] = [{ wch: 70 }];
+    wsInstr['!cols'] = [{ wch: 80 }];
     XLSX.utils.book_append_sheet(wb, wsInstr, 'Instructions');
 
     return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
@@ -205,14 +264,12 @@ class BulkImportService {
       const errors: string[] = [];
       const partial: Partial<BulkImportRow> = {};
 
-      // Copy raw values for error reporting
       (COLUMNS as readonly string[]).forEach((col) => {
         (partial as Record<string, unknown>)[col] = raw[col];
       });
 
       const nid = String(raw.nationalId ?? '').trim();
 
-      // Check NIN uniqueness
       if (existingNids.has(nid)) {
         results.push({
           rowNumber,
@@ -223,7 +280,7 @@ class BulkImportService {
         return;
       }
 
-      // Zod validation
+      // Zod validation (all columns including extended)
       const parsed = BulkImportRowSchema.safeParse(raw);
       if (!parsed.success) {
         parsed.error.errors.forEach((e) =>
@@ -255,6 +312,12 @@ class BulkImportService {
       }
 
       const row = parsed.data!;
+
+      // Normalise optional extended fields
+      const gender          = String(raw.gender ?? '').trim().toUpperCase() || null;
+      const educationLevel  = String(raw.educationLevel ?? '').trim().toUpperCase() || null;
+      const maritalStatus   = String(raw.maritalStatus ?? '').trim().toUpperCase() || null;
+
       validGuards.push({
         firstName:      row.firstName,
         lastName:       row.lastName,
@@ -270,6 +333,23 @@ class BulkImportService {
         contractStart:  new Date(contractStartIso!),
         contractEnd:    contractEndIso ? new Date(contractEndIso) : null,
         psoCertNumber:  row.psoCertNumber ?? null,
+        // Extended vetting fields
+        gender:                  ['MALE', 'FEMALE', 'OTHER'].includes(gender ?? '') ? gender : null,
+        tribe:                   String(raw.tribe ?? '').trim() || null,
+        placeOfBirth:            String(raw.placeOfBirth ?? '').trim() || null,
+        educationLevel:          ['PRIMARY','O_LEVEL','A_LEVEL','CERTIFICATE','DIPLOMA','DEGREE','MASTERS','OTHER'].includes(educationLevel ?? '')
+                                   ? educationLevel : null,
+        maritalStatus:           ['SINGLE','MARRIED','DIVORCED','WIDOWED'].includes(maritalStatus ?? '')
+                                   ? maritalStatus : null,
+        district:                String(raw.district ?? '').trim() || null,
+        subCounty:               String(raw.subCounty ?? '').trim() || null,
+        parish:                  String(raw.parish ?? '').trim() || null,
+        village:                 String(raw.village ?? '').trim() || null,
+        nssfNumber:              String(raw.nssfNumber ?? '').trim() || null,
+        tinNumber:               String(raw.tinNumber ?? '').trim() || null,
+        previousEmployer:        String(raw.previousEmployer ?? '').trim() || null,
+        previousPosition:        String(raw.previousPosition ?? '').trim() || null,
+        preferredPaymentContact: String(raw.preferredPaymentContact ?? '').trim() || null,
       });
 
       results.push({ rowNumber, status: 'SUCCESS', guardName, errors: [], data: partial });
@@ -295,7 +375,6 @@ class BulkImportService {
       results,
     };
 
-    // Generate error report if any failures
     if (failed > 0) {
       result.downloadUrl = await this.generateErrorReport(results);
     }
@@ -320,7 +399,7 @@ class BulkImportService {
       ['Row #', ...HEADERS, 'Errors'],
       ...errorRows.map((r) => [
         r.rowNumber,
-        ...(COLUMNS.map((c) => r.data[c] ?? '') as unknown[]),
+        ...(COLUMNS.map((c) => r.data[c as keyof BulkImportRow] ?? '') as unknown[]),
         r.errors.join('; '),
       ]),
     ];

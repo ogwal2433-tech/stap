@@ -190,6 +190,7 @@ import {
   UpdateGuardSchema,
   GuardStatusSchema,
   GuardListQuerySchema,
+  GuardVettingDataSchema,
   CreateDisciplinarySchema,
   LetterGenerationSchema,
 } from '@stap/shared';
@@ -335,6 +336,22 @@ router.patch(
       req.user!.userId,
     );
     res.status(200).json({ success: true, data: guard });
+  }),
+);
+
+// ── PUT /:id/vetting-data — replace relatives + associates ────────────────────
+router.put(
+  '/:id/vetting-data',
+  requireRole(...GUARD_WRITE_ROLES),
+  validate(GuardVettingDataSchema),
+  asyncHandler(async (req, res) => {
+    await guardService.updateVettingData(
+      req.params.id,
+      req.body.relatives ?? [],
+      req.body.associates ?? [],
+      req.user!.userId,
+    );
+    res.status(200).json({ success: true });
   }),
 );
 

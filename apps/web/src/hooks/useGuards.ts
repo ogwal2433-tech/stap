@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardsApi } from '../lib/guards.api';
-import type { CreateGuardInput, GuardListQuery } from '@stap/shared';
+import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput } from '@stap/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
   return useQuery({
@@ -78,6 +78,24 @@ export function useBulkImport() {
   return useMutation({
     mutationFn: (file: File) => guardsApi.bulkImport(file),
     onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['guards'] }); },
+  });
+}
+
+export function useUpdateVettingData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      guardId,
+      relatives,
+      associates,
+    }: {
+      guardId: string;
+      relatives?: GuardRelativeInput[];
+      associates?: GuardAssociateInput[];
+    }) => guardsApi.updateVettingData(guardId, { relatives, associates }),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['guard', variables.guardId] });
+    },
   });
 }
 

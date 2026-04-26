@@ -8,6 +8,8 @@ import type {
   GuardListQuery,
   BulkImportResult,
   GuardDashboardStats,
+  GuardRelativeInput,
+  GuardAssociateInput,
 } from '@stap/shared';
 
 export const guardsApi = {
@@ -113,6 +115,15 @@ export const guardsApi = {
     return api
       .get<{ success: boolean; data: GuardDashboardStats }>('/guards/dashboard')
       .then((r) => r.data.data);
+  },
+
+  updateVettingData(
+    guardId: string,
+    data: { relatives?: GuardRelativeInput[]; associates?: GuardAssociateInput[] },
+  ): Promise<void> {
+    return api
+      .put(`/guards/${guardId}/vetting-data`, data)
+      .then(() => undefined);
   },
 
   getRecentActivity(): Promise<{ id: string; fullName: string; employmentStatus: string; updatedAt: string }[]> {
