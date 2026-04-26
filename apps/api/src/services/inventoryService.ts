@@ -28,6 +28,8 @@ function fmtItem(item: any, issuedCount = 0): InventoryItemResponse {
     description:      item.description ?? null,
     isLowStock:       item.stockQuantity <= item.reorderThreshold,
     isActive:         item.isActive,
+    issuedFree:       item.issuedFree ?? false,
+    isShoeItem:       item.isShoeItem ?? false,
     issuedCount,
     createdAt:        item.createdAt.toISOString(),
   };
@@ -155,6 +157,8 @@ class InventoryService {
       throw new AppError(`Insufficient stock. Available: ${item.stockQuantity}`, 400);
     }
 
+    const conditionNote = data.conditionNote ?? ((item as any).issuedFree ? 'Issued free of charge' : null);
+
     const txn = await prisma.$transaction(async (tx) => {
       const t = await tx.inventoryTransaction.create({
         data: {
@@ -162,7 +166,7 @@ class InventoryService {
           guardId:      data.guardId,
           action:       'ISSUED',
           quantity:     data.quantity,
-          conditionNote: data.conditionNote,
+          conditionNote,
           recordedBy,
         },
         include: TXN_INCLUDE,
@@ -389,6 +393,50 @@ class InventoryService {
         message: `${item.itemName} (${item.itemCode}) is below reorder threshold. Current stock: ${item.stockQuantity}, Threshold: ${item.reorderThreshold}`,
       });
     }
+  }
+
+  async issueFullUniformSet(
+    guardId: string,
+    issuedBy: string,
+  ): Promise<InventoryTransactionResponse[]> {
+    const uniformItems = await prisma.inventoryItem.findMany({
+      where: { itemType: 'UNIFORM', isActive: true },
+    });
+
+    const results: InventoryTransactionResponse[] = [];
+
+    for (const item of uniformItems) {
+      // Idempotent: skip if guard already has an issued record for this item
+      const alreadyIssued = await prisma.inventoryTransaction.count({
+        where: { itemId: item.id, guardId, action: 'ISSUED' },
+      });
+      if (alreadyIssued > 0) continue;
+
+      if (item.stockQuantity < 1) continue;
+
+      const txn = await prisma.$transaction(async (tx) => {
+        const t = await tx.inventoryTransaction.create({
+          data: {
+            itemId:        item.id,
+            guardId,
+            action:        'ISSUED',
+            quantity:       1,
+            conditionNote: (item as any).issuedFree ? 'Issued free of charge' : 'Issued on joining',
+            recordedBy:    issuedBy,
+          },
+          include: TXN_INCLUDE,
+        });
+        await tx.inventoryItem.update({
+          where: { id: item.id },
+          data:  { stockQuantity: { decrement: 1 } },
+        });
+        return t;
+      });
+
+      results.push(fmtTxn(txn));
+    }
+
+    return results;
   }
 }
 

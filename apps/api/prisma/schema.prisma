@@ -612,6 +612,32 @@ model Applicant {
   createdBy       String
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  // ── Document verification checklist ──────────────────────────────────────────
+  relativesIdVerified    Boolean   @default(false)
+  relativesIdVerifiedAt  DateTime?
+  nationalIdVerified     Boolean   @default(false)
+  nationalIdVerifiedAt   DateTime?
+  academicDocsVerified   Boolean   @default(false)
+  academicDocsVerifiedAt DateTime?
+
+  // ── Vetting requirements ──────────────────────────────────────────────────────
+  applicationLetterUploaded Boolean  @default(false)
+  applicationLetterPath     String?
+  contractSigned            Boolean  @default(false)
+  contractSignedAt          DateTime?
+  vettingFormUploaded       Boolean  @default(false)
+  vettingFormPath           String?
+
+  // ── Training tracking ─────────────────────────────────────────────────────────
+  trainingStartedAt       DateTime?
+  trainingCompletedAt     DateTime?
+  trainingSessionId       String?
+  trainingSession         TrainingSession? @relation(fields: [trainingSessionId], references: [id])
+
+  // ── Site assignment ───────────────────────────────────────────────────────────
+  siteAssignedAt          DateTime?
+  shoeDeductionCreated    Boolean  @default(false)
 }
 
 model TrainingSession {
@@ -629,6 +655,7 @@ model TrainingSession {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   attendees           TrainingAttendee[]
+  applicants          Applicant[]
 }
 
 model TrainingAttendee {
@@ -689,6 +716,8 @@ model InventoryItem {
   reorderThreshold Int       @default(5)
   description      String?
   isActive         Boolean   @default(true)
+  issuedFree       Boolean   @default(false)
+  isShoeItem       Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   transactions     InventoryTransaction[]

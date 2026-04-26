@@ -6,6 +6,8 @@ import { guardService } from './guardService';
 import type {
   CreateApplicantInput,
   UpdateApplicantStageInput,
+  DocumentVerificationInput,
+  VettingRequirementsInput,
   CreateTrainingSessionInput,
   RecordTrainingResultsInput,
   CreateLeaveRequestInput,
@@ -26,6 +28,11 @@ import type {
 
 function fmtApplicant(a: any): ApplicantResponse {
   const days = Math.floor((Date.now() - new Date(a.createdAt).getTime()) / 86_400_000);
+  const allDocumentsVerified =
+    a.relativesIdVerified && a.nationalIdVerified && a.academicDocsVerified;
+  const allVettingComplete =
+    a.applicationLetterUploaded && a.contractSigned && a.vettingFormUploaded;
+
   return {
     id:                 a.id,
     firstName:          a.firstName,
@@ -41,6 +48,28 @@ function fmtApplicant(a: any): ApplicantResponse {
     convertedToGuardId: a.convertedToGuardId ?? null,
     daysInPipeline:     days,
     createdAt:          a.createdAt.toISOString(),
+    // Document verification
+    relativesIdVerified:       a.relativesIdVerified ?? false,
+    relativesIdVerifiedAt:     a.relativesIdVerifiedAt?.toISOString() ?? null,
+    nationalIdVerified:        a.nationalIdVerified ?? false,
+    nationalIdVerifiedAt:      a.nationalIdVerifiedAt?.toISOString() ?? null,
+    academicDocsVerified:      a.academicDocsVerified ?? false,
+    academicDocsVerifiedAt:    a.academicDocsVerifiedAt?.toISOString() ?? null,
+    allDocumentsVerified,
+    // Vetting requirements
+    applicationLetterUploaded: a.applicationLetterUploaded ?? false,
+    applicationLetterPath:     a.applicationLetterPath ?? null,
+    contractSigned:            a.contractSigned ?? false,
+    contractSignedAt:          a.contractSignedAt?.toISOString() ?? null,
+    vettingFormUploaded:       a.vettingFormUploaded ?? false,
+    vettingFormPath:           a.vettingFormPath ?? null,
+    allVettingComplete,
+    // Training
+    trainingSessionId:         a.trainingSessionId ?? null,
+    trainingStartedAt:         a.trainingStartedAt?.toISOString() ?? null,
+    trainingCompletedAt:       a.trainingCompletedAt?.toISOString() ?? null,
+    // Joining
+    shoeDeductionCreated:      a.shoeDeductionCreated ?? false,
   };
 }
 
@@ -117,6 +146,10 @@ function countWorkingDays(start: Date, end: Date): number {
   return count;
 }
 
+const APPLICANT_INCLUDE = {
+  assignedUser: { select: { id: true, name: true } },
+};
+
 const SESSION_INCLUDE = {
   trainer:  { select: { id: true, name: true } },
   attendees: {
@@ -169,7 +202,7 @@ class HRService {
         source:      data.source,
         createdBy,
       },
-      include: { assignedUser: { select: { id: true, name: true } } },
+      include: APPLICANT_INCLUDE,
     });
 
     await QueueService.logAudit({
@@ -186,7 +219,7 @@ class HRService {
   async updateStage(id: string, data: UpdateApplicantStageInput, updatedBy: string): Promise<ApplicantResponse> {
     const applicant = await prisma.applicant.findUnique({
       where:   { id },
-      include: { assignedUser: { select: { id: true, name: true } } },
+      include: APPLICANT_INCLUDE,
     });
     if (!applicant) throw new NotFoundError('Applicant not found');
 
@@ -195,6 +228,38 @@ class HRService {
     }
     if (data.stage === 'REJECTED' && !data.rejectionReason) {
       throw new AppError('Rejection reason is required', 400);
+    }
+
+    // Stage gate: moving to INTERVIEW_SCHEDULED means starting training
+    if (data.stage === 'INTERVIEW_SCHEDULED') {
+      const allDocs = applicant.relativesIdVerified && applicant.nationalIdVerified && applicant.academicDocsVerified;
+      if (!allDocs) {
+        throw new AppError(
+          'Cannot start training: document verification incomplete. Relatives ID, National ID, and Academic Documents must all be confirmed.',
+          400,
+        );
+      }
+      const allVetting = (applicant as any).applicationLetterUploaded && (applicant as any).contractSigned && (applicant as any).vettingFormUploaded;
+      if (!allVetting) {
+        throw new AppError(
+          'Cannot start training: vetting requirements incomplete. Application letter, signed contract, and vetting form must all be completed.',
+          400,
+        );
+      }
+    }
+
+    // Stage gate: moving to ACCEPTED requires training to be completed
+    if (data.stage === 'ACCEPTED') {
+      const trainingSessionId = (applicant as any).trainingSessionId;
+      if (trainingSessionId) {
+        const session = await prisma.trainingSession.findUnique({
+          where:  { id: trainingSessionId },
+          select: { status: true },
+        });
+        if (!session || session.status !== 'COMPLETED') {
+          throw new AppError('Cannot accept applicant: training has not been completed yet.', 400);
+        }
+      }
     }
 
     const updated = await prisma.applicant.update({
@@ -206,8 +271,9 @@ class HRService {
         offerSalary:     data.offerSalary,
         rejectionReason: data.rejectionReason,
         offerDate:       data.stage === 'OFFER_MADE' ? new Date() : undefined,
+        trainingStartedAt: data.stage === 'INTERVIEW_SCHEDULED' ? new Date() : undefined,
       },
-      include: { assignedUser: { select: { id: true, name: true } } },
+      include: APPLICANT_INCLUDE,
     });
 
     if (data.stage === 'ACCEPTED') {
@@ -218,6 +284,176 @@ class HRService {
         message: `${applicant.firstName} ${applicant.lastName} has been accepted. Please begin onboarding.`,
       });
     }
+
+    return fmtApplicant(updated);
+  }
+
+  async verifyDocuments(
+    applicantId: string,
+    data: DocumentVerificationInput,
+    verifiedBy: string,
+  ): Promise<ApplicantResponse> {
+    const applicant = await prisma.applicant.findUnique({
+      where:   { id: applicantId },
+      include: APPLICANT_INCLUDE,
+    });
+    if (!applicant) throw new NotFoundError('Applicant not found');
+
+    const now = new Date();
+    const updateData: any = {
+      relativesIdVerified:  data.relativesIdVerified,
+      nationalIdVerified:   data.nationalIdVerified,
+      academicDocsVerified: data.academicDocsVerified,
+    };
+
+    if (data.relativesIdVerified && !(applicant as any).relativesIdVerified) {
+      updateData.relativesIdVerifiedAt = now;
+    }
+    if (data.nationalIdVerified && !(applicant as any).nationalIdVerified) {
+      updateData.nationalIdVerifiedAt = now;
+    }
+    if (data.academicDocsVerified && !(applicant as any).academicDocsVerified) {
+      updateData.academicDocsVerifiedAt = now;
+    }
+
+    // Auto-advance from APPLICATION_RECEIVED → SCREENING when all 3 docs verified
+    if (
+      data.relativesIdVerified &&
+      data.nationalIdVerified &&
+      data.academicDocsVerified &&
+      applicant.stage === 'APPLICATION_RECEIVED'
+    ) {
+      updateData.stage = 'SCREENING';
+    }
+
+    const updated = await prisma.applicant.update({
+      where:   { id: applicantId },
+      data:    updateData,
+      include: APPLICANT_INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   verifiedBy,
+      action:   'DOCUMENTS_VERIFIED',
+      entity:   'Applicant',
+      entityId: applicantId,
+      newValue: {
+        relativesIdVerified:  data.relativesIdVerified,
+        nationalIdVerified:   data.nationalIdVerified,
+        academicDocsVerified: data.academicDocsVerified,
+      },
+    });
+
+    return fmtApplicant(updated);
+  }
+
+  async updateVettingRequirements(
+    applicantId: string,
+    data: VettingRequirementsInput,
+    updatedBy: string,
+  ): Promise<ApplicantResponse> {
+    const applicant = await prisma.applicant.findUnique({
+      where:   { id: applicantId },
+      include: APPLICANT_INCLUDE,
+    });
+    if (!applicant) throw new NotFoundError('Applicant not found');
+
+    const updateData: any = {};
+    if (data.applicationLetterUploaded !== undefined) {
+      updateData.applicationLetterUploaded = data.applicationLetterUploaded;
+    }
+    if (data.contractSigned !== undefined) {
+      updateData.contractSigned = data.contractSigned;
+      if (data.contractSigned && !(applicant as any).contractSigned) {
+        updateData.contractSignedAt = data.contractSignedAt
+          ? new Date(data.contractSignedAt)
+          : new Date();
+      }
+    }
+    if (data.vettingFormUploaded !== undefined) {
+      updateData.vettingFormUploaded = data.vettingFormUploaded;
+    }
+
+    const updated = await prisma.applicant.update({
+      where:   { id: applicantId },
+      data:    updateData,
+      include: APPLICANT_INCLUDE,
+    });
+
+    // Notify when all 3 vetting requirements now complete AND docs also verified
+    const allDocs    = (updated as any).relativesIdVerified && (updated as any).nationalIdVerified && (updated as any).academicDocsVerified;
+    const allVetting = (updated as any).applicationLetterUploaded && (updated as any).contractSigned && (updated as any).vettingFormUploaded;
+    const wasAlreadyComplete =
+      (applicant as any).applicationLetterUploaded &&
+      (applicant as any).contractSigned &&
+      (applicant as any).vettingFormUploaded;
+
+    if (allDocs && allVetting && !wasAlreadyComplete) {
+      await notificationService.sendToRole({
+        role:    'ASSISTANT_MANAGER',
+        type:    'SYSTEM',
+        title:   'Applicant Ready for Training',
+        message: `Applicant ${applicant.firstName} ${applicant.lastName} is ready to start training. All documents verified and vetting complete.`,
+      });
+    }
+
+    await QueueService.logAudit({
+      userId:   updatedBy,
+      action:   'VETTING_REQUIREMENTS_UPDATED',
+      entity:   'Applicant',
+      entityId: applicantId,
+      newValue: data,
+    });
+
+    return fmtApplicant(updated);
+  }
+
+  async uploadApplicationLetter(
+    applicantId: string,
+    filePath: string,
+    updatedBy: string,
+  ): Promise<ApplicantResponse> {
+    const applicant = await prisma.applicant.findUnique({ where: { id: applicantId } });
+    if (!applicant) throw new NotFoundError('Applicant not found');
+
+    const updated = await prisma.applicant.update({
+      where:   { id: applicantId },
+      data:    { applicationLetterPath: filePath, applicationLetterUploaded: true },
+      include: APPLICANT_INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   updatedBy,
+      action:   'APPLICATION_LETTER_UPLOADED',
+      entity:   'Applicant',
+      entityId: applicantId,
+      newValue: { filePath },
+    });
+
+    return fmtApplicant(updated);
+  }
+
+  async uploadVettingForm(
+    applicantId: string,
+    filePath: string,
+    updatedBy: string,
+  ): Promise<ApplicantResponse> {
+    const applicant = await prisma.applicant.findUnique({ where: { id: applicantId } });
+    if (!applicant) throw new NotFoundError('Applicant not found');
+
+    const updated = await prisma.applicant.update({
+      where:   { id: applicantId },
+      data:    { vettingFormPath: filePath, vettingFormUploaded: true },
+      include: APPLICANT_INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   updatedBy,
+      action:   'VETTING_FORM_UPLOADED',
+      entity:   'Applicant',
+      entityId: applicantId,
+      newValue: { filePath },
+    });
 
     return fmtApplicant(updated);
   }
@@ -240,6 +476,9 @@ class HRService {
       data:  { convertedToGuardId: guard.id, stage: 'ONBOARDING' },
     });
 
+    // Auto-issue uniform and create shoe deduction
+    await this._issueUniformAndShoeDeduction(guard.id, applicantId, convertedBy, `${applicant.firstName} ${applicant.lastName}`);
+
     await notificationService.sendToRole({
       role:    'ASSISTANT_MANAGER',
       type:    'SYSTEM',
@@ -248,6 +487,71 @@ class HRService {
     });
 
     return guard;
+  }
+
+  private async _issueUniformAndShoeDeduction(
+    guardId: string,
+    applicantId: string,
+    issuedBy: string,
+    guardName: string,
+  ): Promise<void> {
+    const uniformItems = await prisma.inventoryItem.findMany({
+      where: { itemType: 'UNIFORM', isActive: true },
+    });
+
+    for (const item of uniformItems) {
+      if (item.stockQuantity < 1) continue;
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.inventoryTransaction.create({
+            data: {
+              itemId:        item.id,
+              guardId,
+              action:        'ISSUED',
+              quantity:       1,
+              conditionNote: item.issuedFree ? 'Issued free on joining' : 'Issued on joining',
+              recordedBy:    issuedBy,
+            },
+          });
+          await tx.inventoryItem.update({
+            where: { id: item.id },
+            data:  { stockQuantity: { decrement: 1 } },
+          });
+        });
+      } catch {
+        // Stock exhausted mid-loop — skip silently
+      }
+
+      if (item.isShoeItem) {
+        const applicant = await prisma.applicant.findUnique({
+          where:  { id: applicantId },
+          select: { shoeDeductionCreated: true },
+        });
+        if (!applicant?.shoeDeductionCreated) {
+          await prisma.guardDeduction.create({
+            data: {
+              guardId,
+              type:          'UNIFORM_RECOVERY',
+              amount:        30000,
+              description:   'Shoes deduction — one-off charge on joining (UGX 30,000)',
+              effectiveDate: new Date(),
+              createdBy:     issuedBy,
+            },
+          });
+          await prisma.applicant.update({
+            where: { id: applicantId },
+            data:  { shoeDeductionCreated: true, siteAssignedAt: new Date() },
+          });
+        }
+      }
+    }
+
+    await notificationService.sendToRole({
+      role:    'ASSISTANT_MANAGER',
+      type:    'SYSTEM',
+      title:   'Uniform Issued',
+      message: `Guard ${guardName} uniform issued and shoe deduction of UGX 30,000 created automatically.`,
+    });
   }
 
   async listApplicants(query: {
@@ -265,7 +569,7 @@ class HRService {
         skip,
         take:    limit,
         orderBy: { createdAt: 'desc' },
-        include: { assignedUser: { select: { id: true, name: true } } },
+        include: APPLICANT_INCLUDE,
       }),
       prisma.applicant.count({ where }),
     ]);
@@ -275,6 +579,15 @@ class HRService {
       data: data.map(fmtApplicant),
       pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     };
+  }
+
+  async getApplicant(id: string): Promise<ApplicantResponse> {
+    const applicant = await prisma.applicant.findUnique({
+      where:   { id },
+      include: APPLICANT_INCLUDE,
+    });
+    if (!applicant) throw new NotFoundError('Applicant not found');
+    return fmtApplicant(applicant);
   }
 
   async getPipelineSummary(): Promise<PipelineSummary> {
@@ -480,7 +793,6 @@ class HRService {
     // Notify guard if they have a user account
     const guardUserId = (leave.guard as any).userId;
     if (guardUserId) {
-      const guardName = `${leave.guard.firstName} ${leave.guard.lastName}`;
       await notificationService.send({
         userId:  guardUserId,
         type:    'SYSTEM',

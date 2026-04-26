@@ -174,13 +174,16 @@ import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ForbiddenError } from '../errors/AppError';
+import { ForbiddenError, AppError } from '../errors/AppError';
+import { guardDocumentUpload } from '../config/multer';
 import {
   ROLES,
   HR_ROLES,
   INTERNAL_ROLES,
   CreateApplicantSchema,
   UpdateApplicantStageSchema,
+  DocumentVerificationSchema,
+  VettingRequirementsSchema,
   CreateTrainingSessionSchema,
   RecordTrainingResultsSchema,
   CreateLeaveRequestSchema,
@@ -236,6 +239,15 @@ router.patch(
   }),
 );
 
+router.get(
+  '/applicants/:id',
+  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  asyncHandler(async (req, res) => {
+    const data = await hrService.getApplicant(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
 router.post(
   '/applicants/:id/convert',
   requireRole(...HR_ROLES),
@@ -243,6 +255,56 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = await hrService.convertToGuard(req.params.id, req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/applicants/:id/verify-documents',
+  requireRole(...HR_ROLES),
+  validate(DocumentVerificationSchema),
+  asyncHandler(async (req, res) => {
+    const data = await hrService.verifyDocuments(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/applicants/:id/vetting-requirements',
+  requireRole(...HR_ROLES),
+  validate(VettingRequirementsSchema),
+  asyncHandler(async (req, res) => {
+    const data = await hrService.updateVettingRequirements(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/applicants/:id/application-letter',
+  requireRole(...HR_ROLES),
+  guardDocumentUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const data = await hrService.uploadApplicationLetter(
+      req.params.id,
+      req.file.path,
+      req.user!.userId,
+    );
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/applicants/:id/vetting-form',
+  requireRole(...HR_ROLES),
+  guardDocumentUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const data = await hrService.uploadVettingForm(
+      req.params.id,
+      req.file.path,
+      req.user!.userId,
+    );
+    res.json({ success: true, data });
   }),
 );
 

@@ -55,6 +55,8 @@ export interface InventoryItemResponse {
   description:      string | null;
   isLowStock:       boolean;
   isActive:         boolean;
+  issuedFree:       boolean;
+  isShoeItem:       boolean;
   issuedCount:      number;
   createdAt:        string;
 }

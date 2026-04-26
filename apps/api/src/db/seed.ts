@@ -482,6 +482,75 @@ async function main() {
   }
   console.log(`✅ ${letterTemplates.length} letter templates seeded`);
 
+  // ── Uniform Inventory ────────────────────────────────────────────────────────
+
+  const uniformItems = [
+    {
+      itemCode:         'STAP-UNI-SHIRT',
+      itemName:         'Guard Shirt',
+      itemType:         'UNIFORM',
+      unitCost:         30000,
+      stockQuantity:    50,
+      reorderThreshold: 10,
+      description:      'Issued free on joining. Replacement if lost: UGX 30,000',
+      issuedFree:       true,
+      isShoeItem:       false,
+    },
+    {
+      itemCode:         'STAP-UNI-TROUSER',
+      itemName:         'Guard Trouser',
+      itemType:         'UNIFORM',
+      unitCost:         30000,
+      stockQuantity:    50,
+      reorderThreshold: 10,
+      description:      'Issued free on joining. Replacement if lost: UGX 30,000',
+      issuedFree:       true,
+      isShoeItem:       false,
+    },
+    {
+      itemCode:         'STAP-UNI-CAP',
+      itemName:         'Guard Cap',
+      itemType:         'UNIFORM',
+      unitCost:         15000,
+      stockQuantity:    50,
+      reorderThreshold: 10,
+      description:      'Issued free on joining. Replacement if lost: UGX 15,000',
+      issuedFree:       true,
+      isShoeItem:       false,
+    },
+    {
+      itemCode:         'STAP-UNI-BELT',
+      itemName:         'Guard Belt',
+      itemType:         'UNIFORM',
+      unitCost:         15000,
+      stockQuantity:    50,
+      reorderThreshold: 10,
+      description:      'Issued free on joining. Replacement if lost: UGX 15,000',
+      issuedFree:       true,
+      isShoeItem:       false,
+    },
+    {
+      itemCode:         'STAP-UNI-SHOES',
+      itemName:         'Guard Shoes',
+      itemType:         'UNIFORM',
+      unitCost:         30000,
+      stockQuantity:    30,
+      reorderThreshold: 5,
+      description:      'UGX 30,000 deducted from guard first payroll on joining. Not replaced free if lost.',
+      issuedFree:       false,
+      isShoeItem:       true,
+    },
+  ];
+
+  for (const item of uniformItems) {
+    await prisma.inventoryItem.upsert({
+      where:  { itemCode: item.itemCode },
+      update: item,
+      create: item,
+    });
+    console.log(`✅ Seeded inventory: ${item.itemName}`);
+  }
+
   console.log('\n🎉 Seed completed successfully!\n');
 }
 

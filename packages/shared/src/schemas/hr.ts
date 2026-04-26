@@ -107,6 +107,23 @@ export const SaveLetterTemplateSchema = z.object({
 });
 export type SaveLetterTemplateInput = z.infer<typeof SaveLetterTemplateSchema>;
 
+// ── Document verification + vetting schemas ────────────────────────────────────
+
+export const DocumentVerificationSchema = z.object({
+  relativesIdVerified:  z.boolean(),
+  nationalIdVerified:   z.boolean(),
+  academicDocsVerified: z.boolean(),
+});
+export type DocumentVerificationInput = z.infer<typeof DocumentVerificationSchema>;
+
+export const VettingRequirementsSchema = z.object({
+  applicationLetterUploaded: z.boolean().optional(),
+  contractSigned:            z.boolean().optional(),
+  vettingFormUploaded:       z.boolean().optional(),
+  contractSignedAt:          z.string().datetime().optional(),
+});
+export type VettingRequirementsInput = z.infer<typeof VettingRequirementsSchema>;
+
 // ── Response Interfaces ────────────────────────────────────────────────────────
 
 export interface ApplicantResponse {
@@ -124,6 +141,28 @@ export interface ApplicantResponse {
   convertedToGuardId: string | null;
   daysInPipeline:     number;
   createdAt:          string;
+  // Document verification
+  relativesIdVerified:       boolean;
+  relativesIdVerifiedAt:     string | null;
+  nationalIdVerified:        boolean;
+  nationalIdVerifiedAt:      string | null;
+  academicDocsVerified:      boolean;
+  academicDocsVerifiedAt:    string | null;
+  allDocumentsVerified:      boolean;
+  // Vetting requirements
+  applicationLetterUploaded: boolean;
+  applicationLetterPath:     string | null;
+  contractSigned:            boolean;
+  contractSignedAt:          string | null;
+  vettingFormUploaded:       boolean;
+  vettingFormPath:           string | null;
+  allVettingComplete:        boolean;
+  // Training
+  trainingSessionId:         string | null;
+  trainingStartedAt:         string | null;
+  trainingCompletedAt:       string | null;
+  // Joining
+  shoeDeductionCreated:      boolean;
 }
 
 export interface PipelineSummary {
