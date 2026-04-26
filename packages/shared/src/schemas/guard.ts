@@ -3,20 +3,105 @@ import { z } from 'zod';
 // ── Input schemas (Zod) ────────────────────────────────────────────────────────
 
 export const CreateGuardSchema = z.object({
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
-  otherNames: z.string().max(100).optional(),
-  nationalId: z.string().min(1).max(50),
-  phone: z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
-  dateOfBirth: z.string().datetime(),
+  // Existing required fields
+  firstName:     z.string().min(1).max(100),
+  lastName:      z.string().min(1).max(100),
+  otherNames:    z.string().max(100).optional(),
+  nationalId:    z.string().min(1).max(50),
+  phone:         z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
+  dateOfBirth:   z.string().datetime(),
   nextOfKinName: z.string().min(1).max(100),
-  nextOfKinPhone: z.string().regex(/^\+?[0-9]{10,15}$/),
-  bankName: z.string().max(100).optional(),
+  nextOfKinPhone:z.string().regex(/^\+?[0-9]{10,15}$/),
+  bankName:      z.string().max(100).optional(),
   accountNumber: z.string().max(50).optional(),
-  salaryRate: z.number().int().positive().describe('Monthly salary in UGX'),
+  salaryRate:    z.number().int().positive().describe('Monthly salary in UGX'),
   contractStart: z.string().datetime(),
-  contractEnd: z.string().datetime().optional(),
+  contractEnd:   z.string().datetime().optional(),
   psoCertNumber: z.string().max(50).optional(),
+
+  // ── Section A: Personal Particulars ──────────────────────────────────────────
+  gender:                  z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+  tribe:                   z.string().max(100).optional(),
+  placeOfBirth:            z.string().max(200).optional(),
+  educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
+  registeredNames:         z.string().max(200).optional(),
+  maritalStatus:           z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
+  spouseName:              z.string().max(100).optional(),
+  spouseWorkplace:         z.string().max(200).optional(),
+  spouseTelephone:         z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  preferredPaymentContact: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+
+  // ── Section A: Address ────────────────────────────────────────────────────────
+  village:   z.string().max(100).optional(),
+  parish:    z.string().max(100).optional(),
+  subCounty: z.string().max(100).optional(),
+  county:    z.string().max(100).optional(),
+  district:  z.string().max(100).optional(),
+
+  // ── Section B(2): LC Official ─────────────────────────────────────────────────
+  lc1Zone:            z.string().max(100).optional(),
+  lcOfficialName:     z.string().max(100).optional(),
+  lcOfficialPosition: z.string().max(100).optional(),
+  lcOfficialPhone:    z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+
+  // ── Section B(3-5): ID Numbers + Employment ───────────────────────────────────
+  nssfNumber:        z.string().max(50).optional(),
+  tinNumber:         z.string().max(50).optional(),
+  previousEmployer:  z.string().max(200).optional(),
+  previousPosition:  z.string().max(200).optional(),
+  talentsExperience: z.string().optional(),
+
+  // ── Section C: Father Details ─────────────────────────────────────────────────
+  fatherName:        z.string().max(100).optional(),
+  fatherResidence:   z.string().max(200).optional(),
+  fatherVillage:     z.string().max(100).optional(),
+  fatherParish:      z.string().max(100).optional(),
+  fatherSubCounty:   z.string().max(100).optional(),
+  fatherCounty:      z.string().max(100).optional(),
+  fatherDistrict:    z.string().max(100).optional(),
+  fatherNationality: z.string().max(100).optional(),
+  fatherOccupation:  z.string().max(200).optional(),
+  fatherPhone:       z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+
+  // ── Section C: Mother Details ─────────────────────────────────────────────────
+  motherName:        z.string().max(100).optional(),
+  motherResidence:   z.string().max(200).optional(),
+  motherVillage:     z.string().max(100).optional(),
+  motherParish:      z.string().max(100).optional(),
+  motherSubCounty:   z.string().max(100).optional(),
+  motherCounty:      z.string().max(100).optional(),
+  motherDistrict:    z.string().max(100).optional(),
+  motherNationality: z.string().max(100).optional(),
+  motherOccupation:  z.string().max(200).optional(),
+  motherPhone:       z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+
+  // ── Section C: Dependents ─────────────────────────────────────────────────────
+  numberOfDependents: z.coerce.number().int().min(0).optional(),
+
+  // ── Section D: Health ─────────────────────────────────────────────────────────
+  hasDisability:     z.boolean().optional(),
+  disabilityDetails: z.string().max(500).optional(),
+  takesAlcohol:      z.boolean().optional(),
+  hasAllergies:      z.boolean().optional(),
+  allergyDetails:    z.string().max(500).optional(),
+
+  // ── Vetting data (relatives + associates) ─────────────────────────────────────
+  vettingData: z.object({
+    relatives:  z.array(z.object({
+      relativeName:    z.string().min(1).max(100),
+      phone:           z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+      relationship:    z.string().max(100).optional(),
+      occupation:      z.string().max(200).optional(),
+      placeOfResidence:z.string().max(200).optional(),
+    })).max(3).optional(),
+    associates: z.array(z.object({
+      associateName: z.string().min(1).max(100),
+      placeOfWork:   z.string().max(200).optional(),
+      workDetails:   z.string().max(200).optional(),
+      residence:     z.string().max(200).optional(),
+      phone:         z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+    })).max(2).optional(),
+  }).optional(),
 });
 
 /** All fields optional — used for PATCH updates. */
@@ -28,93 +113,201 @@ export const GuardStatusSchema = z.object({
 });
 
 export const GuardListQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  search: z
-    .string()
-    .optional()
-    .describe('Search by name, nationalId, or phone'),
-  status: z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
-  siteId: z.string().optional(),
-  sortBy: z
-    .enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart'])
-    .default('createdAt'),
+  page:      z.coerce.number().int().positive().default(1),
+  limit:     z.coerce.number().int().min(1).max(100).default(20),
+  search:    z.string().optional().describe('Search by name, nationalId, or phone'),
+  status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
+  siteId:    z.string().optional(),
+  sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+
+// ── Vetting sub-schemas (standalone, for the PUT /vetting-data route) ──────────
+
+export const GuardRelativeSchema = z.object({
+  relativeName:    z.string().min(1).max(100),
+  phone:           z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  relationship:    z.string().max(100).optional(),
+  occupation:      z.string().max(200).optional(),
+  placeOfResidence:z.string().max(200).optional(),
+});
+
+export const GuardAssociateSchema = z.object({
+  associateName: z.string().min(1).max(100),
+  placeOfWork:   z.string().max(200).optional(),
+  workDetails:   z.string().max(200).optional(),
+  residence:     z.string().max(200).optional(),
+  phone:         z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+});
+
+export const GuardVettingDataSchema = z.object({
+  relatives:  z.array(GuardRelativeSchema).max(3).optional(),
+  associates: z.array(GuardAssociateSchema).max(2).optional(),
 });
 
 // ── Inferred input types ───────────────────────────────────────────────────────
 
-export type CreateGuardInput = z.infer<typeof CreateGuardSchema>;
-export type UpdateGuardInput = z.infer<typeof UpdateGuardSchema>;
-export type GuardStatusInput = z.infer<typeof GuardStatusSchema>;
-export type GuardListQuery = z.infer<typeof GuardListQuerySchema>;
+export type CreateGuardInput  = z.infer<typeof CreateGuardSchema>;
+export type UpdateGuardInput  = z.infer<typeof UpdateGuardSchema>;
+export type GuardStatusInput  = z.infer<typeof GuardStatusSchema>;
+export type GuardListQuery    = z.infer<typeof GuardListQuerySchema>;
+export type GuardRelativeInput  = z.infer<typeof GuardRelativeSchema>;
+export type GuardAssociateInput = z.infer<typeof GuardAssociateSchema>;
+export type GuardVettingDataInput = z.infer<typeof GuardVettingDataSchema>;
 
-// ── Response types (TypeScript interfaces) ────────────────────────────────────
+// ── Response types (TypeScript interfaces) ─────────────────────────────────────
+
+export interface GuardRelativeResponse {
+  id:              string;
+  relativeName:    string;
+  phone:           string | null;
+  relationship:    string | null;
+  occupation:      string | null;
+  placeOfResidence:string | null;
+  createdAt:       string;
+}
+
+export interface GuardAssociateResponse {
+  id:           string;
+  associateName:string;
+  placeOfWork:  string | null;
+  workDetails:  string | null;
+  residence:    string | null;
+  phone:        string | null;
+  createdAt:    string;
+}
 
 export interface GuardResponse {
-  id: string;
-  firstName: string;
-  lastName: string;
-  otherNames: string | null;
+  id:          string;
+  firstName:   string;
+  lastName:    string;
+  otherNames:  string | null;
   /** Computed: firstName + otherNames (if any) + lastName */
-  fullName: string;
-  nationalId: string;
-  phone: string;
-  photoUrl: string | null;
+  fullName:    string;
+  nationalId:  string;
+  phone:       string;
+  photoUrl:    string | null;
   dateOfBirth: string;
-  nextOfKinName: string;
+  nextOfKinName:  string;
   nextOfKinPhone: string;
-  bankName: string | null;
+  bankName:       string | null;
   /**
    * Only returned in single-record GET responses for DIRECTOR and
    * ASSISTANT_MANAGER roles. Absent in list responses and for other roles.
    */
   accountNumber?: string | null;
-  salaryRate: number;
-  employmentStatus: 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
-  contractStart: string;
-  contractEnd: string | null;
-  psoCertNumber: string | null;
-  createdAt: string;
-  updatedAt: string;
+  salaryRate:      number;
+  employmentStatus:'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
+  contractStart:   string;
+  contractEnd:     string | null;
+  psoCertNumber:   string | null;
+  createdAt:       string;
+  updatedAt:       string;
+
+  // ── Section A ────────────────────────────────────────────────────────────────
+  gender:                  string | null;
+  tribe:                   string | null;
+  placeOfBirth:            string | null;
+  educationLevel:          string | null;
+  registeredNames:         string | null;
+  maritalStatus:           string | null;
+  spouseName:              string | null;
+  spouseWorkplace:         string | null;
+  spouseTelephone:         string | null;
+  preferredPaymentContact: string | null;
+
+  // ── Section A Address ─────────────────────────────────────────────────────────
+  village:   string | null;
+  parish:    string | null;
+  subCounty: string | null;
+  county:    string | null;
+  district:  string | null;
+
+  // ── Section B ────────────────────────────────────────────────────────────────
+  lc1Zone:            string | null;
+  lcOfficialName:     string | null;
+  lcOfficialPosition: string | null;
+  lcOfficialPhone:    string | null;
+  nssfNumber:         string | null;
+  tinNumber:          string | null;
+  previousEmployer:   string | null;
+  previousPosition:   string | null;
+  talentsExperience:  string | null;
+
+  // ── Section C: Father ─────────────────────────────────────────────────────────
+  fatherName:        string | null;
+  fatherResidence:   string | null;
+  fatherVillage:     string | null;
+  fatherParish:      string | null;
+  fatherSubCounty:   string | null;
+  fatherCounty:      string | null;
+  fatherDistrict:    string | null;
+  fatherNationality: string | null;
+  fatherOccupation:  string | null;
+  fatherPhone:       string | null;
+
+  // ── Section C: Mother ─────────────────────────────────────────────────────────
+  motherName:        string | null;
+  motherResidence:   string | null;
+  motherVillage:     string | null;
+  motherParish:      string | null;
+  motherSubCounty:   string | null;
+  motherCounty:      string | null;
+  motherDistrict:    string | null;
+  motherNationality: string | null;
+  motherOccupation:  string | null;
+  motherPhone:       string | null;
+
+  // ── Section C: Dependents + Relatives + Associates ────────────────────────────
+  numberOfDependents: number | null;
+  relatives:          GuardRelativeResponse[];
+  associates:         GuardAssociateResponse[];
+
+  // ── Section D: Health ─────────────────────────────────────────────────────────
+  hasDisability:     boolean;
+  disabilityDetails: string | null;
+  takesAlcohol:      boolean;
+  hasAllergies:      boolean;
+  allergyDetails:    string | null;
+
   _count?: {
     deployments: number;
-    attendance: number;
-    disciplinary: number;
-    documents: number;
+    attendance:  number;
+    disciplinary:number;
+    documents:   number;
   };
 }
 
 export interface GuardDocumentResponse {
-  id: string;
+  id:           string;
   documentType: string;
-  filePath: string;
-  version: number;
-  uploadedAt: string;
-  uploadedBy: { name: string };
-  deletedAt?: string | null;
+  filePath:     string;
+  version:      number;
+  uploadedAt:   string;
+  uploadedBy:   { name: string };
+  deletedAt?:   string | null;
 }
 
 export interface DeploymentHistoryEntry {
-  id: string;
-  site: { siteName: string };
-  client: { clientName: string };
-  shiftType: string;
-  startDate: string;
-  endDate: string | null;
+  id:         string;
+  site:       { siteName: string };
+  client:     { clientName: string };
+  shiftType:  string;
+  startDate:  string;
+  endDate:    string | null;
   supervisor: { name: string };
-  createdAt: string;
+  createdAt:  string;
 }
 
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
-    page: number;
-    limit: number;
-    total: number;
+    page:       number;
+    limit:      number;
+    total:      number;
     totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
+    hasNext:    boolean;
+    hasPrev:    boolean;
   };
 }
 
@@ -135,6 +328,21 @@ export const BulkImportRowSchema = z.object({
   contractStart:  z.string().describe('DD/MM/YYYY format'),
   contractEnd:    z.string().optional().describe('DD/MM/YYYY format'),
   psoCertNumber:  z.string().max(50).optional(),
+  // Extended vetting columns (O onwards — all optional)
+  gender:                  z.string().optional(),
+  tribe:                   z.string().max(100).optional(),
+  placeOfBirth:            z.string().max(200).optional(),
+  educationLevel:          z.string().optional(),
+  maritalStatus:           z.string().optional(),
+  district:                z.string().max(100).optional(),
+  subCounty:               z.string().max(100).optional(),
+  parish:                  z.string().max(100).optional(),
+  village:                 z.string().max(100).optional(),
+  nssfNumber:              z.string().max(50).optional(),
+  tinNumber:               z.string().max(50).optional(),
+  previousEmployer:        z.string().max(200).optional(),
+  previousPosition:        z.string().max(200).optional(),
+  preferredPaymentContact: z.string().max(20).optional(),
 });
 
 export type BulkImportRow = z.infer<typeof BulkImportRowSchema>;

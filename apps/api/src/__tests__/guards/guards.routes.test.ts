@@ -184,3 +184,119 @@ describe('GET /api/v1/guards/:id/deployment-history', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ── PUT /api/v1/guards/:id/vetting-data ───────────────────────────────────────
+
+describe('PUT /api/v1/guards/:id/vetting-data', () => {
+  const validVettingBody = {
+    relatives: [
+      {
+        relativeName: 'Paul Ssekandi',
+        phone: '+256703000001',
+        relationship: 'Brother',
+        occupation: 'Driver',
+        placeOfResidence: 'Nateete',
+      },
+    ],
+    associates: [],
+  };
+
+  it('403 — ACCOUNTS_OFFICER cannot update vetting data', async () => {
+    const res = await request(app)
+      .put('/api/v1/guards/some-id/vetting-data')
+      .set('Authorization', `Bearer ${accToken}`)
+      .send(validVettingBody);
+    expect(res.status).toBe(403);
+  });
+
+  it('401 — no token', async () => {
+    const res = await request(app)
+      .put('/api/v1/guards/some-id/vetting-data')
+      .send(validVettingBody);
+    expect(res.status).toBe(401);
+  });
+
+  it('200 or 404 — DIRECTOR with valid body passes auth + validation', async () => {
+    const res = await request(app)
+      .put('/api/v1/guards/some-id/vetting-data')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send(validVettingBody);
+    // 200 if DB connected; 404/500 if not — auth + validation passed
+    expect([200, 404, 500]).toContain(res.status);
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+  });
+
+  it('400 — relativeName missing fails Zod validation', async () => {
+    const res = await request(app)
+      .put('/api/v1/guards/some-id/vetting-data')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send({ relatives: [{ phone: '+256703000001' }], associates: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+});
+
+// ── POST /api/v1/guards — new fields ──────────────────────────────────────────
+
+describe('POST /api/v1/guards — extended vetting fields', () => {
+  const baseBody = {
+    firstName: 'John',
+    lastName: 'Ssekandi',
+    nationalId: `NIN-EXT-${Date.now()}`,
+    phone: '+256701000001',
+    dateOfBirth: '1990-01-01T00:00:00.000Z',
+    nextOfKinName: 'Jane Ssekandi',
+    nextOfKinPhone: '+256771000001',
+    salaryRate: 450000,
+    contractStart: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('201 or 500 — DIRECTOR with full vetting fields passes validation', async () => {
+    const res = await request(app)
+      .post('/api/v1/guards')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send({
+        ...baseBody,
+        gender: 'MALE',
+        tribe: 'Muganda',
+        placeOfBirth: 'Masaka',
+        educationLevel: 'O_LEVEL',
+        maritalStatus: 'MARRIED',
+        spouseName: 'Jane',
+        district: 'Kampala',
+        nssfNumber: 'NSSF001',
+        fatherName: 'Robert Ssekandi',
+        fatherDistrict: 'Masaka',
+        numberOfDependents: 2,
+        hasDisability: false,
+        takesAlcohol: false,
+        hasAllergies: false,
+        vettingData: {
+          relatives: [{ relativeName: 'Paul', relationship: 'Brother' }],
+          associates: [{ associateName: 'David', placeOfWork: 'Market' }],
+        },
+      });
+    expect([201, 500]).toContain(res.status);
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(403);
+  });
+
+  it('400 — invalid gender value fails Zod', async () => {
+    const res = await request(app)
+      .post('/api/v1/guards')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send({ ...baseBody, gender: 'MALE_INVALID' });
+    expect(res.status).toBe(400);
+  });
+
+  it('201 or 500 — DIRECTOR without new fields (backward compatibility)', async () => {
+    const res = await request(app)
+      .post('/api/v1/guards')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send({ ...baseBody, nationalId: `NIN-COMPAT-${Date.now()}` });
+    expect([201, 409, 500]).toContain(res.status);
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(403);
+  });
+});

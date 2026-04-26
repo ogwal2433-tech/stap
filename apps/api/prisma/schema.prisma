@@ -155,6 +155,72 @@ model Guard {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  // ── Section A: Personal Particulars ──────────────────────────────────────────
+  gender                  String?   // MALE | FEMALE | OTHER
+  tribe                   String?
+  placeOfBirth            String?
+  educationLevel          String?   // PRIMARY | O_LEVEL | A_LEVEL | CERTIFICATE | DIPLOMA | DEGREE | MASTERS | OTHER
+  registeredNames         String?   // Full name as on National ID
+  maritalStatus           String?   // SINGLE | MARRIED | DIVORCED | WIDOWED
+  spouseName              String?
+  spouseWorkplace         String?
+  spouseTelephone         String?
+  preferredPaymentContact String?   // MoMo number for salary disbursement
+
+  // ── Section A: Full Address ───────────────────────────────────────────────────
+  village     String?
+  parish      String?
+  subCounty   String?
+  county      String?
+  district    String?
+
+  // ── Section B(2): LC Official ─────────────────────────────────────────────────
+  lc1Zone            String?
+  lcOfficialName     String?
+  lcOfficialPosition String?
+  lcOfficialPhone    String?
+
+  // ── Section B(3-5): ID Numbers + Employment ───────────────────────────────────
+  nssfNumber        String?
+  tinNumber         String?
+  previousEmployer  String?
+  previousPosition  String?
+  talentsExperience String?  @db.Text
+
+  // ── Section C: Father Details ─────────────────────────────────────────────────
+  fatherName        String?
+  fatherResidence   String?
+  fatherVillage     String?
+  fatherParish      String?
+  fatherSubCounty   String?
+  fatherCounty      String?
+  fatherDistrict    String?
+  fatherNationality String?
+  fatherOccupation  String?
+  fatherPhone       String?
+
+  // ── Section C: Mother Details ─────────────────────────────────────────────────
+  motherName        String?
+  motherResidence   String?
+  motherVillage     String?
+  motherParish      String?
+  motherSubCounty   String?
+  motherCounty      String?
+  motherDistrict    String?
+  motherNationality String?
+  motherOccupation  String?
+  motherPhone       String?
+
+  // ── Section C: Dependents ─────────────────────────────────────────────────────
+  numberOfDependents Int?
+
+  // ── Section D: Health ─────────────────────────────────────────────────────────
+  hasDisability     Boolean  @default(false)
+  disabilityDetails String?
+  takesAlcohol      Boolean  @default(false)
+  hasAllergies      Boolean  @default(false)
+  allergyDetails    String?
+
   user              User?                @relation("GuardUser", fields: [userId], references: [id], onDelete: SetNull)
   documents         GuardDocument[]
   deploymentHistory DeploymentHistory[]
@@ -168,6 +234,32 @@ model Guard {
   leaveRequests     LeaveRequest[]
   inventoryTxns     InventoryTransaction[]
   convertedApplicant Applicant?
+  relatives         GuardRelative[]
+  associates        GuardAssociate[]
+}
+
+model GuardRelative {
+  id               String   @id @default(cuid())
+  guardId          String
+  guard            Guard    @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  relativeName     String
+  phone            String?
+  relationship     String?
+  occupation       String?
+  placeOfResidence String?
+  createdAt        DateTime @default(now())
+}
+
+model GuardAssociate {
+  id            String   @id @default(cuid())
+  guardId       String
+  guard         Guard    @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  associateName String
+  placeOfWork   String?
+  workDetails   String?
+  residence     String?
+  phone         String?
+  createdAt     DateTime @default(now())
 }
 
 model GuardDocument {
