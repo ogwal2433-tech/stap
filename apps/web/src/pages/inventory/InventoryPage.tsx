@@ -192,6 +192,16 @@ function IssueItemModal({
               ))}
             </Form.Select>
           </Form.Group>
+          {selectedItem?.issuedFree && (
+            <Alert variant="info" className="small py-1 px-2 mb-2">
+              This item is issued <strong>free of charge</strong> — no payroll deduction will be applied.
+            </Alert>
+          )}
+          {selectedItem?.isShoeItem && (
+            <Alert variant="warning" className="small py-2 mb-2">
+              Issuing shoes will automatically create a <strong>UGX 30,000 payroll deduction</strong> for the guard on joining.
+            </Alert>
+          )}
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
             {guardsError ? (
@@ -532,7 +542,15 @@ export default function InventoryPage() {
                         {item.itemCode}
                       </code>
                     </td>
-                    <td className="fw-medium">{item.itemName}</td>
+                    <td className="fw-medium">
+                      {item.itemName}
+                      {item.issuedFree && (
+                        <Badge bg="success" className="ms-1" style={{ fontSize: 10 }}>FREE</Badge>
+                      )}
+                      {item.isShoeItem && (
+                        <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: 10 }}>30K DEDUCTION</Badge>
+                      )}
+                    </td>
                     <td>
                       <Badge bg={TYPE_BADGES[item.itemType] ?? 'secondary'} style={{ fontSize: 11 }}>
                         {item.itemType}

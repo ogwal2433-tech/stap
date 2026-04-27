@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-  Alert, Badge, Button, Col, Form, ListGroup, Modal,
-  Row, Spinner, Tab, Table, Tabs,
+  Alert, Badge, Button, Col, Form, ListGroup, Modal, Offcanvas,
+  ProgressBar, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -13,7 +13,10 @@ import type {
   ApplicantResponse, TrainingSessionResponse, LeaveRequestResponse, LetterTemplateResponse,
 } from '@stap/shared';
 import {
-  useApplicants, usePipelineSummary, useCreateApplicant, useUpdateApplicantStage,
+  useApplicants, useApplicant, usePipelineSummary,
+  useCreateApplicant, useUpdateApplicantStage, useConvertToGuard,
+  useVerifyDocuments, useUpdateVettingRequirements,
+  useUploadApplicationLetter, useUploadVettingForm,
   useTrainers, useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
   useLeaveRequests, useRequestLeave, useApproveLeave,
   useLetterTemplates, useSaveLetterTemplate, usePreviewTemplate,
@@ -661,6 +664,531 @@ function TemplateEditorModal({
   );
 }
 
+// ── Applicant Detail Panel ────────────────────────────────────────────────────
+
+function ConvertToGuardModal({
+  applicant,
+  onHide,
+}: {
+  applicant: ApplicantResponse | null;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const convert = useConvertToGuard();
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', nationalId: '', phone: '',
+    dateOfBirth: '', nextOfKinName: '', nextOfKinPhone: '',
+    salaryRate: '', contractStart: '',
+  });
+
+  React.useEffect(() => {
+    if (applicant) {
+      setForm(f => ({
+        ...f,
+        firstName: applicant.firstName,
+        lastName:  applicant.lastName,
+        phone:     applicant.phone,
+      }));
+    }
+  }, [applicant]);
+
+  if (!applicant) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    convert.mutate(
+      {
+        id:   applicant.id,
+        data: {
+          ...form,
+          salaryRate:    Number(form.salaryRate),
+          dateOfBirth:   form.dateOfBirth ? new Date(form.dateOfBirth).toISOString() : undefined as any,
+          contractStart: new Date(form.contractStart).toISOString(),
+        },
+      },
+      {
+        onSuccess: () => {
+          showToast('Guard created. Uniform issued automatically. Shoe deduction of UGX 30,000 created.', 'success');
+          onHide();
+        },
+        onError: (err: any) => showToast(err?.response?.data?.error || 'Conversion failed', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show={!!applicant} onHide={onHide} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Convert to Guard — {applicant.fullName}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form onSubmit={handleSubmit}>
+          <Row className="mb-2">
+            <Col>
+              <Form.Label className="small fw-medium">First Name *</Form.Label>
+              <Form.Control size="sm" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
+            </Col>
+            <Col>
+              <Form.Label className="small fw-medium">Last Name *</Form.Label>
+              <Form.Control size="sm" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
+            </Col>
+          </Row>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">National ID *</Form.Label>
+            <Form.Control size="sm" value={form.nationalId} onChange={e => setForm(f => ({ ...f, nationalId: e.target.value }))} required />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Phone *</Form.Label>
+            <Form.Control size="sm" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="small fw-medium">Date of Birth *</Form.Label>
+            <Form.Control size="sm" type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} required />
+          </Form.Group>
+          <Row className="mb-2">
+            <Col>
+              <Form.Label className="small fw-medium">Next of Kin Name *</Form.Label>
+              <Form.Control size="sm" value={form.nextOfKinName} onChange={e => setForm(f => ({ ...f, nextOfKinName: e.target.value }))} required />
+            </Col>
+            <Col>
+              <Form.Label className="small fw-medium">Next of Kin Phone *</Form.Label>
+              <Form.Control size="sm" value={form.nextOfKinPhone} onChange={e => setForm(f => ({ ...f, nextOfKinPhone: e.target.value }))} required />
+            </Col>
+          </Row>
+          <Row className="mb-3">
+            <Col>
+              <Form.Label className="small fw-medium">Salary (UGX) *</Form.Label>
+              <Form.Control size="sm" type="number" value={form.salaryRate} onChange={e => setForm(f => ({ ...f, salaryRate: e.target.value }))} required />
+            </Col>
+            <Col>
+              <Form.Label className="small fw-medium">Contract Start *</Form.Label>
+              <Form.Control size="sm" type="date" value={form.contractStart} onChange={e => setForm(f => ({ ...f, contractStart: e.target.value }))} required />
+            </Col>
+          </Row>
+          <Alert variant="info" className="small py-2 mb-3">
+            Uniform will be issued automatically and a UGX 30,000 shoe deduction will be created on the guard's first payroll.
+          </Alert>
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
+            <Button type="submit" size="sm" variant="success" disabled={convert.isPending}>
+              {convert.isPending ? <Spinner size="sm" /> : 'Convert to Guard'}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+function ApplicantDetailPanel({
+  applicantId,
+  onHide,
+}: {
+  applicantId: string | null;
+  onHide: () => void;
+}) {
+  const { showToast } = useToast();
+  const { data: applicant, isLoading } = useApplicant(applicantId ?? '');
+  const verifyDocs     = useVerifyDocuments();
+  const updateVetting  = useUpdateVettingRequirements();
+  const uploadLetter   = useUploadApplicationLetter();
+  const uploadVetting  = useUploadVettingForm();
+  const updateStage    = useUpdateApplicantStage();
+  const letterRef      = useRef<HTMLInputElement>(null);
+  const vettingRef     = useRef<HTMLInputElement>(null);
+  const [showConvert, setShowConvert] = useState(false);
+  const [contractDate, setContractDate] = useState('');
+
+  if (!applicantId) return null;
+
+  const a = applicant;
+
+  const toggleDoc = (field: 'relativesIdVerified' | 'nationalIdVerified' | 'academicDocsVerified', current: boolean) => {
+    if (!a) return;
+    verifyDocs.mutate(
+      {
+        id:   a.id,
+        data: {
+          relativesIdVerified:  field === 'relativesIdVerified'  ? !current : a.relativesIdVerified,
+          nationalIdVerified:   field === 'nationalIdVerified'   ? !current : a.nationalIdVerified,
+          academicDocsVerified: field === 'academicDocsVerified' ? !current : a.academicDocsVerified,
+        },
+      },
+      { onError: (err: any) => showToast(err?.response?.data?.error || 'Update failed', 'danger') },
+    );
+  };
+
+  const toggleVetting = (field: 'contractSigned', current: boolean) => {
+    if (!a) return;
+    updateVetting.mutate(
+      {
+        id:   a.id,
+        data: {
+          contractSigned:   !current,
+          contractSignedAt: !current && contractDate ? new Date(contractDate).toISOString() : undefined,
+        },
+      },
+      { onError: (err: any) => showToast(err?.response?.data?.error || 'Update failed', 'danger') },
+    );
+  };
+
+  const handleLetterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !a) return;
+    uploadLetter.mutate(
+      { id: a.id, file },
+      {
+        onSuccess: () => showToast('Application letter uploaded', 'success'),
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Upload failed', 'danger'),
+      },
+    );
+  };
+
+  const handleVettingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !a) return;
+    uploadVetting.mutate(
+      { id: a.id, file },
+      {
+        onSuccess: () => showToast('Vetting form uploaded', 'success'),
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Upload failed', 'danger'),
+      },
+    );
+  };
+
+  const handleMoveToTraining = () => {
+    if (!a) return;
+    updateStage.mutate(
+      { id: a.id, data: { stage: 'INTERVIEW_SCHEDULED' } },
+      {
+        onSuccess: () => showToast('Moved to training', 'success'),
+        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+      },
+    );
+  };
+
+  const docCount   = a ? [a.relativesIdVerified, a.nationalIdVerified, a.academicDocsVerified].filter(Boolean).length : 0;
+  const vettingCount = a ? [a.applicationLetterUploaded, a.contractSigned, a.vettingFormUploaded].filter(Boolean).length : 0;
+  const pendingCount = 3 - docCount + 3 - vettingCount;
+
+  return (
+    <>
+      <Offcanvas show={!!applicantId} onHide={onHide} placement="end" style={{ width: 480 }}>
+        <Offcanvas.Header closeButton style={{ background: '#1B3A6B', color: '#fff' }}>
+          <div>
+            {isLoading ? (
+              <Spinner size="sm" variant="light" />
+            ) : a ? (
+              <>
+                <div className="fw-bold fs-5">{a.fullName}</div>
+                <div className="d-flex gap-2 align-items-center mt-1">
+                  <Badge bg="light" text="dark" style={{ fontSize: 11 }}>{a.source}</Badge>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>
+                    {a.daysInPipeline} days in pipeline
+                  </span>
+                  <Badge bg={a.stage === 'REJECTED' ? 'danger' : 'warning'} text="dark" style={{ fontSize: 11 }}>
+                    {STAGE_LABELS[a.stage] ?? a.stage}
+                  </Badge>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </Offcanvas.Header>
+
+        <Offcanvas.Body className="p-0">
+          {isLoading ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : !a ? (
+            <Alert variant="danger" className="m-3">Failed to load applicant.</Alert>
+          ) : (
+            <Tabs defaultActiveKey="progress" className="px-3 pt-2">
+
+              {/* ── TAB: Progress ──────────────────────────────────────────────── */}
+              <Tab eventKey="progress" title="Progress" tabClassName="small">
+                <div className="p-3">
+
+                  {/* Document Verification */}
+                  <div className="card border-0 shadow-sm mb-3">
+                    <div className="card-header bg-white fw-semibold small py-2">
+                      Document Verification
+                    </div>
+                    <div className="card-body py-2 px-3">
+                      {[
+                        {
+                          field:   'relativesIdVerified' as const,
+                          label:   'Relatives ID',
+                          desc:    'Original ID of a close relative',
+                          checked: a.relativesIdVerified,
+                          date:    a.relativesIdVerifiedAt,
+                        },
+                        {
+                          field:   'nationalIdVerified' as const,
+                          label:   'National ID (Original)',
+                          desc:    "Applicant's own original National ID card",
+                          checked: a.nationalIdVerified,
+                          date:    a.nationalIdVerifiedAt,
+                        },
+                        {
+                          field:   'academicDocsVerified' as const,
+                          label:   'Academic Documents',
+                          desc:    'School certificates or transcripts',
+                          checked: a.academicDocsVerified,
+                          date:    a.academicDocsVerifiedAt,
+                        },
+                      ].map(row => (
+                        <div key={row.field} className="d-flex justify-content-between align-items-start py-2 border-bottom">
+                          <div>
+                            <div className="small fw-medium d-flex align-items-center gap-1">
+                              {row.checked
+                                ? <span className="text-success">✓</span>
+                                : <span className="text-muted">○</span>}
+                              {row.label}
+                            </div>
+                            <div className="text-muted" style={{ fontSize: 11 }}>{row.desc}</div>
+                            {row.checked && row.date && (
+                              <div className="text-success" style={{ fontSize: 11 }}>
+                                Verified {new Date(row.date).toLocaleDateString('en-UG')}
+                              </div>
+                            )}
+                          </div>
+                          <Form.Check
+                            type="switch"
+                            checked={row.checked}
+                            onChange={() => toggleDoc(row.field, row.checked)}
+                            disabled={verifyDocs.isPending}
+                          />
+                        </div>
+                      ))}
+                      <div className="mt-2">
+                        <div className="d-flex justify-content-between small mb-1">
+                          <span className="text-muted">Documents</span>
+                          <span className={docCount === 3 ? 'text-success fw-medium' : 'text-muted'}>
+                            {docCount} of 3 verified
+                          </span>
+                        </div>
+                        <ProgressBar
+                          now={(docCount / 3) * 100}
+                          variant={docCount === 3 ? 'success' : 'primary'}
+                          style={{ height: 6 }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vetting Requirements */}
+                  <div className="card border-0 shadow-sm mb-3">
+                    <div className="card-header bg-white fw-semibold small py-2">
+                      Vetting Requirements
+                    </div>
+                    <div className="card-body py-2 px-3">
+
+                      {/* Application Letter */}
+                      <div className="d-flex justify-content-between align-items-start py-2 border-bottom">
+                        <div>
+                          <div className="small fw-medium d-flex align-items-center gap-1">
+                            {a.applicationLetterUploaded
+                              ? <span className="text-success">✓</span>
+                              : <span className="text-muted">○</span>}
+                            Application Letter
+                          </div>
+                          {a.applicationLetterUploaded ? (
+                            <div className="text-success" style={{ fontSize: 11 }}>Uploaded</div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              style={{ fontSize: 11, padding: '1px 8px', marginTop: 4 }}
+                              onClick={() => letterRef.current?.click()}
+                              disabled={uploadLetter.isPending}
+                            >
+                              {uploadLetter.isPending ? <Spinner size="sm" /> : 'Upload'}
+                            </Button>
+                          )}
+                          <input ref={letterRef} type="file" accept=".pdf,.doc,.docx" className="d-none" onChange={handleLetterUpload} />
+                        </div>
+                        <Form.Check type="switch" checked={a.applicationLetterUploaded} readOnly disabled />
+                      </div>
+
+                      {/* Contract Signed */}
+                      <div className="d-flex justify-content-between align-items-start py-2 border-bottom">
+                        <div>
+                          <div className="small fw-medium d-flex align-items-center gap-1">
+                            {a.contractSigned
+                              ? <span className="text-success">✓</span>
+                              : <span className="text-muted">○</span>}
+                            Contract Signed
+                          </div>
+                          {!a.contractSigned && (
+                            <Form.Control
+                              type="date"
+                              size="sm"
+                              value={contractDate}
+                              onChange={e => setContractDate(e.target.value)}
+                              style={{ fontSize: 11, marginTop: 4, width: 140 }}
+                            />
+                          )}
+                          {a.contractSigned && a.contractSignedAt && (
+                            <div className="text-success" style={{ fontSize: 11 }}>
+                              Signed {new Date(a.contractSignedAt).toLocaleDateString('en-UG')}
+                            </div>
+                          )}
+                        </div>
+                        <Form.Check
+                          type="switch"
+                          checked={a.contractSigned}
+                          onChange={() => toggleVetting('contractSigned', a.contractSigned)}
+                          disabled={updateVetting.isPending}
+                        />
+                      </div>
+
+                      {/* Vetting Form */}
+                      <div className="d-flex justify-content-between align-items-start py-2">
+                        <div>
+                          <div className="small fw-medium d-flex align-items-center gap-1">
+                            {a.vettingFormUploaded
+                              ? <span className="text-success">✓</span>
+                              : <span className="text-muted">○</span>}
+                            Vetting Form (Physical)
+                          </div>
+                          {a.vettingFormUploaded ? (
+                            <div className="text-success" style={{ fontSize: 11 }}>Uploaded</div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              style={{ fontSize: 11, padding: '1px 8px', marginTop: 4 }}
+                              onClick={() => vettingRef.current?.click()}
+                              disabled={uploadVetting.isPending}
+                            >
+                              {uploadVetting.isPending ? <Spinner size="sm" /> : 'Upload scan'}
+                            </Button>
+                          )}
+                          <input ref={vettingRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="d-none" onChange={handleVettingUpload} />
+                        </div>
+                        <Form.Check type="switch" checked={a.vettingFormUploaded} readOnly disabled />
+                      </div>
+
+                      <div className="mt-2">
+                        <div className="d-flex justify-content-between small mb-1">
+                          <span className="text-muted">Vetting</span>
+                          <span className={vettingCount === 3 ? 'text-success fw-medium' : 'text-muted'}>
+                            {vettingCount} of 3 complete
+                          </span>
+                        </div>
+                        <ProgressBar
+                          now={(vettingCount / 3) * 100}
+                          variant={vettingCount === 3 ? 'success' : 'warning'}
+                          style={{ height: 6 }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Readiness indicator */}
+                  {a.allDocumentsVerified && a.allVettingComplete ? (
+                    <Alert variant="success" className="small py-2 mb-3">
+                      <div className="fw-semibold">Ready to start training</div>
+                      <div>All requirements met.</div>
+                      {!['INTERVIEW_SCHEDULED', 'INTERVIEW_DONE', 'OFFER_MADE', 'ACCEPTED', 'ONBOARDING'].includes(a.stage) && (
+                        <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            className="mt-2"
+                            onClick={handleMoveToTraining}
+                            disabled={updateStage.isPending}
+                          >
+                            {updateStage.isPending ? <Spinner size="sm" /> : 'Move to Training'}
+                          </Button>
+                        </RoleGuard>
+                      )}
+                    </Alert>
+                  ) : (
+                    <Alert variant="warning" className="small py-2 mb-3">
+                      <strong>{pendingCount} requirement{pendingCount !== 1 ? 's' : ''} still pending</strong> before training can begin.
+                    </Alert>
+                  )}
+
+                  {/* Convert to Guard */}
+                  {a.stage === 'ACCEPTED' && (
+                    <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+                      <div className="d-grid">
+                        <Button variant="success" size="sm" onClick={() => setShowConvert(true)}>
+                          Convert to Guard
+                        </Button>
+                      </div>
+                    </RoleGuard>
+                  )}
+                </div>
+              </Tab>
+
+              {/* ── TAB: Details ───────────────────────────────────────────────── */}
+              <Tab eventKey="details" title="Details" tabClassName="small">
+                <div className="p-3">
+                  <dl className="row small mb-0">
+                    {[
+                      ['Phone', a.phone],
+                      ['Email', a.email ?? '—'],
+                      ['National ID', (a as any).nationalId ?? '—'],
+                      ['Date of Birth', (a as any).dateOfBirth ? new Date((a as any).dateOfBirth).toLocaleDateString('en-UG') : '—'],
+                      ['Address', (a as any).address ?? '—'],
+                      ['Source', a.source],
+                      ['Stage', STAGE_LABELS[a.stage] ?? a.stage],
+                      ['Interview Date', a.interviewDate ? new Date(a.interviewDate).toLocaleDateString('en-UG') : '—'],
+                      ['Offer Salary', a.offerSalary ? `UGX ${a.offerSalary.toLocaleString()}` : '—'],
+                      ['Assigned To', a.assignedTo?.name ?? '—'],
+                      ['Added', new Date(a.createdAt).toLocaleDateString('en-UG')],
+                    ].map(([label, value]) => (
+                      <React.Fragment key={label as string}>
+                        <dt className="col-5 fw-medium text-muted">{label}</dt>
+                        <dd className="col-7 mb-1">{value}</dd>
+                      </React.Fragment>
+                    ))}
+                  </dl>
+                </div>
+              </Tab>
+
+              {/* ── TAB: Training ──────────────────────────────────────────────── */}
+              <Tab eventKey="training" title="Training" tabClassName="small">
+                <div className="p-3">
+                  {a.trainingSessionId ? (
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body small">
+                        <div className="fw-semibold mb-1">Training Session Linked</div>
+                        {a.trainingStartedAt && (
+                          <div className="text-muted">
+                            Started: {new Date(a.trainingStartedAt).toLocaleDateString('en-UG')}
+                          </div>
+                        )}
+                        {a.trainingCompletedAt && (
+                          <div className="text-success">
+                            Completed: {new Date(a.trainingCompletedAt).toLocaleDateString('en-UG')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <Alert variant="info" className="small py-2">
+                      No training session assigned yet. Go to the Training tab to schedule one.
+                    </Alert>
+                  )}
+                </div>
+              </Tab>
+            </Tabs>
+          )}
+        </Offcanvas.Body>
+      </Offcanvas>
+
+      {showConvert && a && (
+        <ConvertToGuardModal
+          applicant={a}
+          onHide={() => setShowConvert(false)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function HRPage() {
@@ -670,6 +1198,7 @@ export default function HRPage() {
 
   const [showAddApplicant, setShowAddApplicant]   = useState(false);
   const [stageApplicant, setStageApplicant]       = useState<ApplicantResponse | null>(null);
+  const [detailApplicantId, setDetailApplicantId] = useState<string | null>(null);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
   const [resultsSession, setResultsSession]       = useState<TrainingSessionResponse | null>(null);
   const [showLeaveModal, setShowLeaveModal]       = useState(false);
@@ -766,7 +1295,12 @@ export default function HRPage() {
                         style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderTop: 'none', minHeight: 120 }}
                       >
                         {stageApplicants.map(a => (
-                          <div key={a.id} className="card border-0 shadow-sm" style={{ fontSize: 12 }}>
+                          <div
+                            key={a.id}
+                            className="card border-0 shadow-sm"
+                            style={{ fontSize: 12, cursor: 'pointer' }}
+                            onClick={() => setDetailApplicantId(a.id)}
+                          >
                             <div className="card-body p-2">
                               <div className="fw-bold">{a.fullName}</div>
                               <div className="text-muted">{a.phone}</div>
@@ -774,7 +1308,7 @@ export default function HRPage() {
                                 <Badge bg="light" text="dark" style={{ fontSize: 10 }}>{a.source}</Badge>
                                 <span className="text-muted" style={{ fontSize: 10 }}>{a.daysInPipeline}d</span>
                               </div>
-                              <div className="d-flex gap-1 mt-2">
+                              <div className="d-flex gap-1 mt-2" onClick={e => e.stopPropagation()}>
                                 {NEXT_STAGE[stage] && (
                                   <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
                                     <Button
@@ -1048,6 +1582,7 @@ export default function HRPage() {
       <RecordResultsModal session={resultsSession} onHide={() => setResultsSession(null)} />
       <LeaveRequestModal show={showLeaveModal} onHide={() => setShowLeaveModal(false)} />
       <TemplateEditorModal template={editTemplate} onHide={() => setEditTemplate(null)} />
+      <ApplicantDetailPanel applicantId={detailApplicantId} onHide={() => setDetailApplicantId(null)} />
     </div>
   );
 }

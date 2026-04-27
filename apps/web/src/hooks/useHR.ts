@@ -3,6 +3,8 @@ import { hrApi } from '../lib/hr.api';
 import type {
   CreateApplicantInput,
   UpdateApplicantStageInput,
+  DocumentVerificationInput,
+  VettingRequirementsInput,
   CreateTrainingSessionInput,
   RecordTrainingResultsInput,
   CreateLeaveRequestInput,
@@ -17,6 +19,14 @@ export function useApplicants(params?: Parameters<typeof hrApi.listApplicants>[0
   return useQuery({
     queryKey: ['applicants', params],
     queryFn:  () => hrApi.listApplicants(params),
+  });
+}
+
+export function useApplicant(id: string) {
+  return useQuery({
+    queryKey: ['applicant', id],
+    queryFn:  () => hrApi.getApplicant(id),
+    enabled:  !!id,
   });
 }
 
@@ -42,8 +52,55 @@ export function useUpdateApplicantStage() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateApplicantStageInput }) =>
       hrApi.updateStage(id, data),
-    onSuccess: () => {
+    onSuccess: (_r, vars) => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
+    },
+  });
+}
+
+export function useVerifyDocuments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: DocumentVerificationInput }) =>
+      hrApi.verifyDocuments(id, data),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
+    },
+  });
+}
+
+export function useUpdateVettingRequirements() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: VettingRequirementsInput }) =>
+      hrApi.updateVettingRequirements(id, data),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
+    },
+  });
+}
+
+export function useUploadApplicationLetter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      hrApi.uploadApplicationLetter(id, file),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
+    },
+  });
+}
+
+export function useUploadVettingForm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      hrApi.uploadVettingForm(id, file),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
     },
   });
 }
@@ -53,8 +110,9 @@ export function useConvertToGuard() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: CreateGuardInput }) =>
       hrApi.convertToGuard(id, data),
-    onSuccess: () => {
+    onSuccess: (_r, vars) => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicant', vars.id] });
       qc.invalidateQueries({ queryKey: ['guards'] });
     },
   });

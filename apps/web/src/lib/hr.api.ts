@@ -9,6 +9,8 @@ import type {
   PaginatedResponse,
   CreateApplicantInput,
   UpdateApplicantStageInput,
+  DocumentVerificationInput,
+  VettingRequirementsInput,
   CreateTrainingSessionInput,
   RecordTrainingResultsInput,
   CreateLeaveRequestInput,
@@ -45,9 +47,43 @@ export const hrApi = {
       .then((r) => r.data.data);
   },
 
+  getApplicant(id: string): Promise<ApplicantResponse> {
+    return api
+      .get<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}`)
+      .then((r) => r.data.data);
+  },
+
   getPipelineSummary(): Promise<PipelineSummary> {
     return api
       .get<{ success: boolean; data: PipelineSummary }>('/hr/applicants/pipeline')
+      .then((r) => r.data.data);
+  },
+
+  verifyDocuments(id: string, data: DocumentVerificationInput): Promise<ApplicantResponse> {
+    return api
+      .patch<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/verify-documents`, data)
+      .then((r) => r.data.data);
+  },
+
+  updateVettingRequirements(id: string, data: VettingRequirementsInput): Promise<ApplicantResponse> {
+    return api
+      .patch<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/vetting-requirements`, data)
+      .then((r) => r.data.data);
+  },
+
+  uploadApplicationLetter(id: string, file: File): Promise<ApplicantResponse> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/application-letter`, fd)
+      .then((r) => r.data.data);
+  },
+
+  uploadVettingForm(id: string, file: File): Promise<ApplicantResponse> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/vetting-form`, fd)
       .then((r) => r.data.data);
   },
 
