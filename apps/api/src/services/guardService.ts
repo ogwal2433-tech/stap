@@ -675,6 +675,18 @@ class GuardService {
       response.accountNumber = guard.accountNumber ?? null;
     }
 
+    if (guard.documents) {
+      response.documents = guard.documents.map((d: any) => ({
+        id:           d.id,
+        documentType: d.documentType,
+        filePath:     d.filePath,
+        version:      d.version,
+        uploadedAt:   d.uploadedAt instanceof Date ? d.uploadedAt.toISOString() : d.uploadedAt,
+        uploadedBy:   { name: d.uploader?.name ?? '' },
+        deletedAt:    d.deletedAt instanceof Date ? d.deletedAt.toISOString() : (d.deletedAt ?? null),
+      }));
+    }
+
     if (guard._count) {
       response._count = guard._count;
     }

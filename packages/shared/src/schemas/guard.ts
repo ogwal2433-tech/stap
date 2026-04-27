@@ -270,6 +270,8 @@ export interface GuardResponse {
   hasAllergies:      boolean;
   allergyDetails:    string | null;
 
+  documents?: GuardDocumentResponse[];
+
   _count?: {
     deployments: number;
     attendance:  number;

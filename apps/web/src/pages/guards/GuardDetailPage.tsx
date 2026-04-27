@@ -20,6 +20,7 @@ import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  type GuardDocumentResponse,
 } from '@stap/shared';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -521,7 +522,7 @@ export default function GuardDetailPage() {
               </Button>
             </RoleGuard>
           </div>
-          {(guard as { documents?: { id: string; documentType: string; filePath: string; version: number; uploadedAt: string; uploader: { name: string } }[] }).documents?.length === 0 ? (
+          {(guard.documents ?? []).length === 0 ? (
             <Alert variant="light">No documents uploaded yet.</Alert>
           ) : (
             <Table size="sm" hover responsive className="align-middle small">
@@ -535,11 +536,11 @@ export default function GuardDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {(guard as { documents?: { id: string; documentType: string; filePath: string; version: number; uploadedAt: string; uploader: { name: string } }[] }).documents?.map((doc) => (
+                {(guard.documents ?? []).map((doc: GuardDocumentResponse) => (
                   <tr key={doc.id}>
                     <td><Badge bg="secondary">{doc.documentType.replace(/_/g, ' ')}</Badge></td>
                     <td>v{doc.version}</td>
-                    <td>{doc.uploader?.name}</td>
+                    <td>{doc.uploadedBy?.name}</td>
                     <td>{new Date(doc.uploadedAt).toLocaleDateString()}</td>
                     <td>
                       <ButtonGroup size="sm">
