@@ -18,11 +18,15 @@ ALTER TABLE "Applicant"
   ADD COLUMN IF NOT EXISTS "siteAssignedAt"            TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "shoeDeductionCreated"      BOOLEAN NOT NULL DEFAULT false;
 
--- AddForeignKey: Applicant → TrainingSession
-ALTER TABLE "Applicant"
-  ADD CONSTRAINT IF NOT EXISTS "Applicant_trainingSessionId_fkey"
-  FOREIGN KEY ("trainingSessionId") REFERENCES "TrainingSession"("id")
-  ON DELETE SET NULL ON UPDATE CASCADE;
+-- AddForeignKey: Applicant → TrainingSession (idempotent)
+DO $$ BEGIN
+  ALTER TABLE "Applicant"
+    ADD CONSTRAINT "Applicant_trainingSessionId_fkey"
+    FOREIGN KEY ("trainingSessionId") REFERENCES "TrainingSession"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AlterTable: Add issuedFree + isShoeItem to InventoryItem
 ALTER TABLE "InventoryItem"
