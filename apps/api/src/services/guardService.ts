@@ -156,6 +156,7 @@ class GuardService {
         tribe:                   guardFields.tribe,
         placeOfBirth:            guardFields.placeOfBirth,
         educationLevel:          guardFields.educationLevel,
+        rank:                    guardFields.rank ?? 'GUARD',
         registeredNames:         guardFields.registeredNames,
         maritalStatus:           guardFields.maritalStatus,
         spouseName:              guardFields.spouseName,
@@ -285,6 +286,7 @@ class GuardService {
     if (guardFields.tribe !== undefined)                   updateData.tribe                   = guardFields.tribe;
     if (guardFields.placeOfBirth !== undefined)            updateData.placeOfBirth            = guardFields.placeOfBirth;
     if (guardFields.educationLevel !== undefined)          updateData.educationLevel          = guardFields.educationLevel;
+    if (guardFields.rank !== undefined)                    updateData.rank                    = guardFields.rank;
     if (guardFields.registeredNames !== undefined)         updateData.registeredNames         = guardFields.registeredNames;
     if (guardFields.maritalStatus !== undefined)           updateData.maritalStatus           = guardFields.maritalStatus;
     if (guardFields.spouseName !== undefined)              updateData.spouseName              = guardFields.spouseName;
@@ -609,6 +611,7 @@ class GuardService {
       tribe:                   guard.tribe ?? null,
       placeOfBirth:            guard.placeOfBirth ?? null,
       educationLevel:          guard.educationLevel ?? null,
+      rank:                    guard.rank ?? 'GUARD',
       registeredNames:         guard.registeredNames ?? null,
       maritalStatus:           guard.maritalStatus ?? null,
       spouseName:              guard.spouseName ?? null,

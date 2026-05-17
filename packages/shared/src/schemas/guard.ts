@@ -24,6 +24,7 @@ export const CreateGuardSchema = z.object({
   tribe:                   z.string().max(100).optional(),
   placeOfBirth:            z.string().max(200).optional(),
   educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
+  rank:                    z.enum(['GUARD', 'SENIOR_GUARD', 'CORPORAL', 'SERGEANT', 'SUPERVISOR']).default('GUARD').optional(),
   registeredNames:         z.string().max(200).optional(),
   maritalStatus:           z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
   spouseName:              z.string().max(100).optional(),
@@ -145,6 +146,16 @@ export const GuardVettingDataSchema = z.object({
   associates: z.array(GuardAssociateSchema).max(2).optional(),
 });
 
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+export const GUARD_RANKS: Record<string, string> = {
+  GUARD:        'Guard',
+  SENIOR_GUARD: 'Senior Guard',
+  CORPORAL:     'Corporal',
+  SERGEANT:     'Sergeant',
+  SUPERVISOR:   'Supervisor',
+};
+
 // ── Inferred input types ───────────────────────────────────────────────────────
 
 export type CreateGuardInput  = z.infer<typeof CreateGuardSchema>;
@@ -209,6 +220,7 @@ export interface GuardResponse {
   tribe:                   string | null;
   placeOfBirth:            string | null;
   educationLevel:          string | null;
+  rank:                    string;
   registeredNames:         string | null;
   maritalStatus:           string | null;
   spouseName:              string | null;

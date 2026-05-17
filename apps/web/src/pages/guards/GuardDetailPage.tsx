@@ -19,7 +19,7 @@ import LetterGenerationModal from '../../components/guards/LetterGenerationModal
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   type GuardDocumentResponse,
 } from '@stap/shared';
 
@@ -27,6 +27,14 @@ const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
   SUSPENDED: 'warning',
   TERMINATED: 'danger',
+};
+
+const RANK_BADGE: Record<string, string> = {
+  GUARD:        'secondary',
+  SENIOR_GUARD: 'info',
+  CORPORAL:     'primary',
+  SERGEANT:     'warning',
+  SUPERVISOR:   'dark',
 };
 
 const DISCIPLINARY_BADGE: Record<string, { bg: string; text?: string; style?: React.CSSProperties }> = {
@@ -231,6 +239,13 @@ export default function GuardDetailPage() {
                 className="fs-6 px-3 py-2 mb-2 d-block"
               >
                 {guard.employmentStatus}
+              </Badge>
+              <Badge
+                bg={RANK_BADGE[guard.rank] ?? 'secondary'}
+                text={guard.rank === 'SERGEANT' ? 'dark' : undefined}
+                className="fs-6 px-3 py-2 mb-2 d-block"
+              >
+                {GUARD_RANKS[guard.rank] ?? guard.rank}
               </Badge>
               <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                 <div className="text-muted small">

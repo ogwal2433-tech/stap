@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
-import { CreateGuardSchema, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { CreateGuardSchema, GUARD_RANKS, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -181,6 +181,7 @@ export default function GuardFormPage() {
         tribe:           existing.tribe ?? undefined,
         placeOfBirth:    existing.placeOfBirth ?? undefined,
         educationLevel:  (existing.educationLevel as any) ?? undefined,
+        rank:            (existing.rank as any) ?? 'GUARD',
         registeredNames: existing.registeredNames ?? undefined,
         maritalStatus:   (existing.maritalStatus as any) ?? undefined,
         spouseName:      existing.spouseName ?? undefined,
@@ -499,7 +500,7 @@ export default function GuardFormPage() {
               </Col>
             </Row>
 
-            {/* Row 4: Nationality (static) | Education Level | Marital Status */}
+            {/* Row 4: Nationality (static) | Education Level | Rank */}
             <Row className="g-3 mb-3">
               <Col md={4}>
                 <Form.Group>
@@ -523,6 +524,20 @@ export default function GuardFormPage() {
                   </Form.Select>
                 </Form.Group>
               </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Rank</Form.Label>
+                  <Form.Select {...register('rank')}>
+                    {Object.entries(GUARD_RANKS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {/* Row 5: Marital Status */}
+            <Row className="g-3 mb-3">
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>Marital Status</Form.Label>

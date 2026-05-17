@@ -10,7 +10,7 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_RANKS, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
 import type { GuardResponse } from '@stap/shared';
 
@@ -18,6 +18,14 @@ const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
   SUSPENDED: 'warning',
   TERMINATED: 'danger',
+};
+
+const RANK_BADGE: Record<string, string> = {
+  GUARD:        'secondary',
+  SENIOR_GUARD: 'info',
+  CORPORAL:     'primary',
+  SERGEANT:     'warning',
+  SUPERVISOR:   'dark',
 };
 
 function contractExpiringSoon(contractEnd: string | null): boolean {
@@ -204,6 +212,7 @@ export default function GuardsListPage() {
                 <tr>
                   <th>Photo</th>
                   <th>Name / NIN</th>
+                  <th>Rank</th>
                   <th>Phone</th>
                   <th>Status</th>
                   <th>Contract</th>
@@ -233,6 +242,14 @@ export default function GuardsListPage() {
                     <td>
                       <div className="fw-semibold">{g.fullName}</div>
                       <div className="text-muted">{g.nationalId}</div>
+                    </td>
+                    <td>
+                      <Badge
+                        bg={RANK_BADGE[g.rank] ?? 'secondary'}
+                        text={g.rank === 'SERGEANT' ? 'dark' : undefined}
+                      >
+                        {GUARD_RANKS[g.rank] ?? g.rank}
+                      </Badge>
                     </td>
                     <td>{g.phone}</td>
                     <td>
