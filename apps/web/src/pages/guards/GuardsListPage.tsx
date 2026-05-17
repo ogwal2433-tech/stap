@@ -10,7 +10,7 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_RANKS, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
 import type { GuardResponse } from '@stap/shared';
 
@@ -46,6 +46,7 @@ export default function GuardsListPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [contractType, setContractType] = useState('');
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -62,6 +63,7 @@ export default function GuardsListPage() {
     limit,
     search: debouncedSearch || undefined,
     status: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
+    contractType: contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
     sortBy,
     sortOrder: 'desc',
   });
@@ -141,6 +143,13 @@ export default function GuardsListPage() {
           </Form.Select>
         </Col>
         <Col md={2}>
+          <Form.Select value={contractType} onChange={(e) => { setContractType(e.target.value); setPage(1); }}>
+            <option value="">All Contracts</option>
+            <option value="PERMANENT">Permanent</option>
+            <option value="TEMPORARY">Temporary</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
           <Form.Select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
             <option value="createdAt">Date Added</option>
             <option value="firstName">First Name</option>
@@ -213,6 +222,7 @@ export default function GuardsListPage() {
                   <th>Photo</th>
                   <th>Name / NIN</th>
                   <th>Rank</th>
+                  <th>Contract Type</th>
                   <th>Phone</th>
                   <th>Status</th>
                   <th>Contract</th>
@@ -249,6 +259,15 @@ export default function GuardsListPage() {
                         text={g.rank === 'SERGEANT' ? 'dark' : undefined}
                       >
                         {GUARD_RANKS[g.rank] ?? g.rank}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge
+                        bg={g.contractType === 'PERMANENT' ? 'success' : 'warning'}
+                        text={g.contractType === 'TEMPORARY' ? 'dark' : undefined}
+                        style={{ fontSize: '0.7rem' }}
+                      >
+                        {GUARD_CONTRACT_TYPES[g.contractType] ?? g.contractType}
                       </Badge>
                     </td>
                     <td>{g.phone}</td>

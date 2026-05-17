@@ -167,8 +167,7 @@ model Guard {
   spouseTelephone         String?
   preferredPaymentContact String?   // MoMo number for salary disbursement
   rank                    String    @default("GUARD") // GUARD | SENIOR_GUARD | CORPORAL | SERGEANT | SUPERVISOR
-
-  // ── Section A: Full Address ───────────────────────────────────────────────────
+  contractType            String    @default("PERMANENT") // TEMPORARY | PERMANENT
   village     String?
   parish      String?
   subCounty   String?

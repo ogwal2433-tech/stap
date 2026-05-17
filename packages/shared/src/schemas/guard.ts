@@ -25,6 +25,7 @@ export const CreateGuardSchema = z.object({
   placeOfBirth:            z.string().max(200).optional(),
   educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
   rank:                    z.enum(['GUARD', 'SENIOR_GUARD', 'CORPORAL', 'SERGEANT', 'SUPERVISOR']).default('GUARD').optional(),
+  contractType:            z.enum(['TEMPORARY', 'PERMANENT']).default('PERMANENT').optional(),
   registeredNames:         z.string().max(200).optional(),
   maritalStatus:           z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
   spouseName:              z.string().max(100).optional(),
@@ -118,6 +119,7 @@ export const GuardListQuerySchema = z.object({
   limit:     z.coerce.number().int().min(1).max(100).default(20),
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
   status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
+  contractType:            z.enum(['TEMPORARY', 'PERMANENT']).optional(),
   siteId:    z.string().optional(),
   sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -154,6 +156,11 @@ export const GUARD_RANKS: Record<string, string> = {
   CORPORAL:     'Corporal',
   SERGEANT:     'Sergeant',
   SUPERVISOR:   'Supervisor',
+};
+
+export const GUARD_CONTRACT_TYPES: Record<string, string> = {
+  PERMANENT: 'Permanent',
+  TEMPORARY: 'Temporary',
 };
 
 // ── Inferred input types ───────────────────────────────────────────────────────
@@ -221,6 +228,7 @@ export interface GuardResponse {
   placeOfBirth:            string | null;
   educationLevel:          string | null;
   rank:                    string;
+  contractType:            string;
   registeredNames:         string | null;
   maritalStatus:           string | null;
   spouseName:              string | null;

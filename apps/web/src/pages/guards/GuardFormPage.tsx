@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
-import { CreateGuardSchema, GUARD_RANKS, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -182,6 +182,7 @@ export default function GuardFormPage() {
         placeOfBirth:    existing.placeOfBirth ?? undefined,
         educationLevel:  (existing.educationLevel as any) ?? undefined,
         rank:            (existing.rank as any) ?? 'GUARD',
+        contractType:    (existing.contractType as any) ?? 'PERMANENT',
         registeredNames: existing.registeredNames ?? undefined,
         maritalStatus:   (existing.maritalStatus as any) ?? undefined,
         spouseName:      existing.spouseName ?? undefined,
@@ -741,6 +742,29 @@ export default function GuardFormPage() {
                 <Form.Group>
                   <Form.Label>Contract End</Form.Label>
                   <Form.Control type="date" {...register('contractEnd', { setValueAs: (v) => v ? new Date(v).toISOString() : undefined })} />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Contract Type</Form.Label>
+                  <div>
+                    <Form.Check
+                      inline
+                      type="radio"
+                      id="contractType-permanent"
+                      label="Permanent"
+                      value="PERMANENT"
+                      {...register('contractType')}
+                    />
+                    <Form.Check
+                      inline
+                      type="radio"
+                      id="contractType-temporary"
+                      label="Temporary"
+                      value="TEMPORARY"
+                      {...register('contractType')}
+                    />
+                  </div>
                 </Form.Group>
               </Col>
             </Row>

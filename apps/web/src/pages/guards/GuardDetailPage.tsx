@@ -19,7 +19,7 @@ import LetterGenerationModal from '../../components/guards/LetterGenerationModal
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   type GuardDocumentResponse,
 } from '@stap/shared';
 
@@ -246,6 +246,13 @@ export default function GuardDetailPage() {
                 className="fs-6 px-3 py-2 mb-2 d-block"
               >
                 {GUARD_RANKS[guard.rank] ?? guard.rank}
+              </Badge>
+              <Badge
+                bg={guard.contractType === 'PERMANENT' ? 'success' : 'warning'}
+                text={guard.contractType === 'TEMPORARY' ? 'dark' : undefined}
+                className="fs-6 px-3 py-2 mb-2 d-block"
+              >
+                {GUARD_CONTRACT_TYPES[guard.contractType] ?? guard.contractType}
               </Badge>
               <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                 <div className="text-muted small">

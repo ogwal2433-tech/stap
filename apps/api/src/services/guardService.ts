@@ -26,12 +26,16 @@ class GuardService {
     query: GuardListQuery,
     requestingUserRole: UserRole,
   ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, sortBy, sortOrder } = query;
+    const { page, limit, search, status, contractType, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
 
     if (status) {
+
+    if (contractType) {
+      where.contractType = contractType;
+    }
       where.employmentStatus = status;
     }
 
@@ -157,6 +161,7 @@ class GuardService {
         placeOfBirth:            guardFields.placeOfBirth,
         educationLevel:          guardFields.educationLevel,
         rank:                    guardFields.rank ?? 'GUARD',
+        contractType:            guardFields.contractType ?? 'PERMANENT',
         registeredNames:         guardFields.registeredNames,
         maritalStatus:           guardFields.maritalStatus,
         spouseName:              guardFields.spouseName,
@@ -287,6 +292,7 @@ class GuardService {
     if (guardFields.placeOfBirth !== undefined)            updateData.placeOfBirth            = guardFields.placeOfBirth;
     if (guardFields.educationLevel !== undefined)          updateData.educationLevel          = guardFields.educationLevel;
     if (guardFields.rank !== undefined)                    updateData.rank                    = guardFields.rank;
+    if (guardFields.contractType !== undefined)              updateData.contractType              = guardFields.contractType;
     if (guardFields.registeredNames !== undefined)         updateData.registeredNames         = guardFields.registeredNames;
     if (guardFields.maritalStatus !== undefined)           updateData.maritalStatus           = guardFields.maritalStatus;
     if (guardFields.spouseName !== undefined)              updateData.spouseName              = guardFields.spouseName;
@@ -612,6 +618,7 @@ class GuardService {
       placeOfBirth:            guard.placeOfBirth ?? null,
       educationLevel:          guard.educationLevel ?? null,
       rank:                    guard.rank ?? 'GUARD',
+      contractType:            guard.contractType ?? 'PERMANENT',
       registeredNames:         guard.registeredNames ?? null,
       maritalStatus:           guard.maritalStatus ?? null,
       spouseName:              guard.spouseName ?? null,
