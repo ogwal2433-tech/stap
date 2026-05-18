@@ -27,10 +27,19 @@ class DeploymentService {
     // Verify all guards exist
     const guards = await prisma.guard.findMany({
       where: { id: { in: data.guardIds } },
-      select: { id: true, firstName: true, lastName: true, otherNames: true },
+      select: { id: true, firstName: true, lastName: true, otherNames: true, isIncompleteNID: true },
     });
     if (guards.length !== data.guardIds.length) {
       throw new NotFoundError('One or more guards not found');
+    }
+
+    // Block deployment of guards with a pending National ID
+    const pendingNid = guards.find((g) => g.isIncompleteNID);
+    if (pendingNid) {
+      throw new AppError(
+        `${pendingNid.firstName} ${pendingNid.lastName} cannot be deployed — National ID is pending. Please update their profile before deploying.`,
+        400,
+      );
     }
 
     // Verify supervisor exists and has correct role

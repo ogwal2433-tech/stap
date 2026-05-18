@@ -26,7 +26,7 @@ class GuardService {
     query: GuardListQuery,
     requestingUserRole: UserRole,
   ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, contractType, probationStatus, sortBy, sortOrder } = query;
+    const { page, limit, search, status, contractType, probationStatus, nidStatus, sortBy, sortOrder } = query as typeof query & { nidStatus?: 'PENDING' | 'PROVIDED' };
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
@@ -41,6 +41,12 @@ class GuardService {
 
     if (probationStatus) {
       where.probationStatus = probationStatus;
+    }
+
+    if (nidStatus === 'PENDING') {
+      where.isIncompleteNID = true;
+    } else if (nidStatus === 'PROVIDED') {
+      where.isIncompleteNID = false;
     }
 
     if (search) {
@@ -128,13 +134,14 @@ class GuardService {
   // ── Create ─────────────────────────────────────────────────────────────────
 
   async create(data: CreateGuardInput, createdBy: string): Promise<GuardResponse> {
-    const existing = await prisma.guard.findUnique({
-      where: { nationalId: data.nationalId },
-      select: { id: true },
-    });
-
-    if (existing) {
-      throw new AppError('A guard with this National ID already exists', 409);
+    if (data.nationalId) {
+      const existing = await prisma.guard.findUnique({
+        where: { nationalId: data.nationalId },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new AppError('A guard with this National ID already exists', 409);
+      }
     }
 
     // TODO Sprint 3 security: replace with AES-256 encryption using the
@@ -166,6 +173,7 @@ class GuardService {
         educationLevel:          guardFields.educationLevel,
         rank:                    guardFields.rank ?? 'GUARD',
         contractType:            guardFields.contractType ?? 'PERMANENT',
+        isIncompleteNID:         !guardFields.nationalId,
         probationStatus:         'ON_PROBATION',
         probationEndDate:        data.probationEndDate ? new Date(data.probationEndDate) : undefined,
         registeredNames:         guardFields.registeredNames,
@@ -278,6 +286,7 @@ class GuardService {
       if (conflict) throw new AppError('A guard with this National ID already exists', 409);
     }
 
+
     const { vettingData, ...guardFields } = data;
 
     const updateData: Parameters<typeof prisma.guard.update>[0]['data'] = {};
@@ -286,7 +295,13 @@ class GuardService {
     if (guardFields.firstName !== undefined)    updateData.firstName    = guardFields.firstName;
     if (guardFields.lastName !== undefined)     updateData.lastName     = guardFields.lastName;
     if (guardFields.otherNames !== undefined)   updateData.otherNames   = guardFields.otherNames;
-    if (guardFields.nationalId !== undefined)   updateData.nationalId   = guardFields.nationalId;
+    if (guardFields.nationalId !== undefined)   updateData.nationalId   = guardFields.nationalId ?? null;
+    // Explicit flag from form, or auto-clear when an NID is now being provided
+    if ((guardFields as Record<string, unknown>).isIncompleteNID !== undefined) {
+      updateData.isIncompleteNID = (guardFields as Record<string, unknown>).isIncompleteNID as boolean;
+    } else if (guardFields.nationalId && existing.isIncompleteNID) {
+      updateData.isIncompleteNID = false;
+    }
     if (guardFields.phone !== undefined)        updateData.phone        = guardFields.phone;
     if (guardFields.dateOfBirth !== undefined)  updateData.dateOfBirth  = new Date(guardFields.dateOfBirth);
     if (guardFields.nextOfKinName !== undefined)  updateData.nextOfKinName  = guardFields.nextOfKinName;
@@ -603,7 +618,8 @@ class GuardService {
       lastName:  guard.lastName,
       otherNames:guard.otherNames ?? null,
       fullName,
-      nationalId:guard.nationalId,
+      nationalId: guard.nationalId ?? null,
+      isIncompleteNID: guard.isIncompleteNID ?? false,
       phone:     guard.phone,
       photoUrl:  guard.photoUrl ?? null,
       dateOfBirth: guard.dateOfBirth instanceof Date

@@ -10,7 +10,7 @@ import type { LetterGenerationInput } from '@stap/shared';
 
 interface LetterData {
   guardName: string;
-  nationalId: string;
+  nationalId: string | undefined;
   position: string;
   incidentDate?: string;
   reason?: string;
@@ -384,7 +384,7 @@ class LetterService {
     // Build template data
     const data: LetterData = {
       guardName,
-      nationalId: guard.nationalId,
+      nationalId: guard.nationalId ?? undefined,
       position: 'Security Guard',
       directorName: input.directorName,
       issueDate,

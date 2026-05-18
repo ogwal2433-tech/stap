@@ -138,7 +138,8 @@ model Guard {
   firstName        String
   lastName         String
   otherNames       String?
-  nationalId       String           @unique
+  nationalId       String?          @unique
+  isIncompleteNID  Boolean          @default(false)
   phone            String
   photoUrl         String?
   dateOfBirth      DateTime

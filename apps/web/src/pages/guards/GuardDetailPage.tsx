@@ -229,7 +229,9 @@ export default function GuardDetailPage() {
             </Col>
             <Col>
               <h5 className="mb-1 fw-bold">{guard.fullName}</h5>
-              <div className="text-muted small mb-1">NIN: {guard.nationalId}</div>
+              <div className="text-muted small mb-1">
+                NIN: {guard.nationalId ?? <span className="text-warning fw-semibold">Pending</span>}
+              </div>
               <div className="text-muted small">{guard.phone}</div>
             </Col>
             <Col xs="auto" className="text-end">
@@ -285,6 +287,24 @@ export default function GuardDetailPage() {
           </Row>
         </div>
       </div>
+
+      {/* NID pending warning */}
+      {guard.isIncompleteNID && (
+        <Alert variant="warning" className="d-flex align-items-center gap-3 mb-4">
+          <div className="flex-grow-1">
+            <strong>National ID not yet provided.</strong> This guard cannot be deployed until their NID is updated.
+          </div>
+          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <Button
+              size="sm"
+              variant="warning"
+              onClick={() => navigate(`/guards/${id}/edit`)}
+            >
+              Update NID
+            </Button>
+          </RoleGuard>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <Tabs defaultActiveKey="details" className="mb-3">

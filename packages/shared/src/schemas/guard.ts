@@ -7,7 +7,8 @@ export const CreateGuardSchema = z.object({
   firstName:     z.string().min(1).max(100),
   lastName:      z.string().min(1).max(100),
   otherNames:    z.string().max(100).optional(),
-  nationalId:    z.string().min(1).max(50),
+  nationalId:    z.string().min(1).max(50).optional(),
+  isIncompleteNID: z.boolean().default(false).optional(),
   phone:         z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
   dateOfBirth:   z.string().datetime(),
   nextOfKinName: z.string().min(1).max(100),
@@ -123,6 +124,7 @@ export const GuardListQuerySchema = z.object({
   status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
   contractType:            z.enum(['TEMPORARY', 'PERMANENT']).optional(),
   probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
+  nidStatus:  z.enum(['PENDING', 'PROVIDED']).optional(),
   siteId:    z.string().optional(),
   sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -205,7 +207,8 @@ export interface GuardResponse {
   otherNames:  string | null;
   /** Computed: firstName + otherNames (if any) + lastName */
   fullName:    string;
-  nationalId:  string;
+  nationalId:  string | null;
+  isIncompleteNID: boolean;
   phone:       string;
   photoUrl:    string | null;
   dateOfBirth: string;

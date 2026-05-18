@@ -149,6 +149,7 @@ export default function GuardFormPage() {
     watch,
     control,
     setError,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CreateGuardInput>({
     resolver: zodResolver(CreateGuardSchema),
@@ -156,6 +157,7 @@ export default function GuardFormPage() {
       hasDisability: false,
       takesAlcohol: false,
       hasAllergies: false,
+      isIncompleteNID: false,
     },
   });
 
@@ -166,7 +168,7 @@ export default function GuardFormPage() {
         firstName:   existing.firstName,
         lastName:    existing.lastName,
         otherNames:  existing.otherNames ?? undefined,
-        nationalId:  existing.nationalId,
+        nationalId:  existing.nationalId ?? undefined,
         phone:       existing.phone,
         dateOfBirth: existing.dateOfBirth,
         nextOfKinName:  existing.nextOfKinName,
@@ -183,6 +185,7 @@ export default function GuardFormPage() {
         educationLevel:  (existing.educationLevel as any) ?? undefined,
         rank:            (existing.rank as any) ?? 'GUARD',
         contractType:    (existing.contractType as any) ?? 'PERMANENT',
+        isIncompleteNID: existing.isIncompleteNID ?? false,
         registeredNames: existing.registeredNames ?? undefined,
         maritalStatus:   (existing.maritalStatus as any) ?? undefined,
         spouseName:      existing.spouseName ?? undefined,
@@ -268,11 +271,12 @@ export default function GuardFormPage() {
     }
   }, [isEdit, existing, reset]);
 
-  const dobValue       = watch('dateOfBirth');
-  const contractStart  = watch('contractStart');
-  const maritalStatus  = watch('maritalStatus');
-  const hasDisability  = watch('hasDisability');
-  const hasAllergies   = watch('hasAllergies');
+  const dobValue         = watch('dateOfBirth');
+  const contractStart    = watch('contractStart');
+  const maritalStatus    = watch('maritalStatus');
+  const hasDisability    = watch('hasDisability');
+  const hasAllergies     = watch('hasAllergies');
+  const isIncompleteNID  = watch('isIncompleteNID');
   const age = dobValue ? calcAge(dobValue.split('T')[0]) : null;
 
   // ── Photo upload ───────────────────────────────────────────────────────────
@@ -602,9 +606,25 @@ export default function GuardFormPage() {
             <Row className="g-3 mb-3">
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>National ID (NIN) *</Form.Label>
-                  <Form.Control {...register('nationalId')} isInvalid={!!errors.nationalId} placeholder="CM90210..." />
+                  <Form.Label>National ID (NIN)</Form.Label>
+                  <Form.Control
+                    {...register('nationalId')}
+                    isInvalid={!!errors.nationalId}
+                    placeholder="CM90210..."
+                    disabled={!!isIncompleteNID}
+                  />
                   <Form.Control.Feedback type="invalid">{errors.nationalId?.message}</Form.Control.Feedback>
+                  <Form.Check
+                    className="mt-1"
+                    type="checkbox"
+                    id="isIncompleteNID"
+                    label="National ID not yet available — save as pending"
+                    {...register('isIncompleteNID')}
+                    onChange={(e) => {
+                      setValue('isIncompleteNID', e.target.checked);
+                      if (e.target.checked) setValue('nationalId', undefined);
+                    }}
+                  />
                 </Form.Group>
               </Col>
               <Col md={4}>

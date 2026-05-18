@@ -48,6 +48,7 @@ export default function GuardsListPage() {
   const [status, setStatus] = useState('');
   const [contractType, setContractType] = useState('');
   const [probationStatus, setProbationStatus] = useState('');
+  const [nidStatus, setNidStatus] = useState('');
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -66,6 +67,7 @@ export default function GuardsListPage() {
     status: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
     contractType: contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
     probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
+    nidStatus: nidStatus as 'PENDING' | 'PROVIDED' | undefined || undefined,
     sortBy,
     sortOrder: 'desc',
   });
@@ -156,6 +158,13 @@ export default function GuardsListPage() {
             <option value="">All Probation</option>
             <option value="ON_PROBATION">On Probation</option>
             <option value="CONFIRMED">Confirmed</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={nidStatus} onChange={(e) => { setNidStatus(e.target.value); setPage(1); }}>
+            <option value="">All NID Status</option>
+            <option value="PENDING">NID Pending</option>
+            <option value="PROVIDED">NID Provided</option>
           </Form.Select>
         </Col>
         <Col md={2}>
@@ -270,8 +279,13 @@ export default function GuardsListPage() {
                             ⏰
                           </span>
                         )}
+                        {g.isIncompleteNID && (
+                          <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: '0.65rem' }}>
+                            NID PENDING
+                          </Badge>
+                        )}
                       </div>
-                      <div className="text-muted">{g.nationalId}</div>
+                      <div className="text-muted">{g.nationalId ?? '—'}</div>
                     </td>
                     <td>
                       <Badge
