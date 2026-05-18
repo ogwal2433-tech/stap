@@ -26,6 +26,8 @@ export const CreateGuardSchema = z.object({
   educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
   rank:                    z.enum(['GUARD', 'SENIOR_GUARD', 'CORPORAL', 'SERGEANT', 'SUPERVISOR']).default('GUARD').optional(),
   contractType:            z.enum(['TEMPORARY', 'PERMANENT']).default('PERMANENT').optional(),
+  probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).default('ON_PROBATION').optional(),
+  probationEndDate:        z.string().datetime().optional(),
   registeredNames:         z.string().max(200).optional(),
   maritalStatus:           z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
   spouseName:              z.string().max(100).optional(),
@@ -120,6 +122,7 @@ export const GuardListQuerySchema = z.object({
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
   status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
   contractType:            z.enum(['TEMPORARY', 'PERMANENT']).optional(),
+  probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
   siteId:    z.string().optional(),
   sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -229,6 +232,8 @@ export interface GuardResponse {
   educationLevel:          string | null;
   rank:                    string;
   contractType:            string;
+  probationStatus:         string;
+  probationEndDate:        string | null;
   registeredNames:         string | null;
   maritalStatus:           string | null;
   spouseName:              string | null;

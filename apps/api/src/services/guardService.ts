@@ -26,17 +26,21 @@ class GuardService {
     query: GuardListQuery,
     requestingUserRole: UserRole,
   ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, contractType, sortBy, sortOrder } = query;
+    const { page, limit, search, status, contractType, probationStatus, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
 
     if (status) {
+      where.employmentStatus = status;
+    }
 
     if (contractType) {
       where.contractType = contractType;
     }
-      where.employmentStatus = status;
+
+    if (probationStatus) {
+      where.probationStatus = probationStatus;
     }
 
     if (search) {
@@ -162,6 +166,8 @@ class GuardService {
         educationLevel:          guardFields.educationLevel,
         rank:                    guardFields.rank ?? 'GUARD',
         contractType:            guardFields.contractType ?? 'PERMANENT',
+        probationStatus:         'ON_PROBATION',
+        probationEndDate:        data.probationEndDate ? new Date(data.probationEndDate) : undefined,
         registeredNames:         guardFields.registeredNames,
         maritalStatus:           guardFields.maritalStatus,
         spouseName:              guardFields.spouseName,
@@ -236,6 +242,15 @@ class GuardService {
       });
     }
 
+
+    // Auto-calculate probation end date: 6 months from contract start
+    const probationEndDate = new Date(guard.contractStart);
+    probationEndDate.setMonth(probationEndDate.getMonth() + 6);
+    await prisma.guard.update({
+      where: { id: guard.id },
+      data: { probationEndDate },
+    });
+
     await QueueService.logAudit({
       userId: createdBy,
       action: 'GUARD_CREATED',
@@ -293,6 +308,9 @@ class GuardService {
     if (guardFields.educationLevel !== undefined)          updateData.educationLevel          = guardFields.educationLevel;
     if (guardFields.rank !== undefined)                    updateData.rank                    = guardFields.rank;
     if (guardFields.contractType !== undefined)              updateData.contractType              = guardFields.contractType;
+    if (guardFields.probationStatus !== undefined)           updateData.probationStatus           = guardFields.probationStatus;
+    if (guardFields.probationEndDate !== undefined)
+      updateData.probationEndDate = guardFields.probationEndDate ? new Date(guardFields.probationEndDate) : null;
     if (guardFields.registeredNames !== undefined)         updateData.registeredNames         = guardFields.registeredNames;
     if (guardFields.maritalStatus !== undefined)           updateData.maritalStatus           = guardFields.maritalStatus;
     if (guardFields.spouseName !== undefined)              updateData.spouseName              = guardFields.spouseName;
@@ -619,6 +637,12 @@ class GuardService {
       educationLevel:          guard.educationLevel ?? null,
       rank:                    guard.rank ?? 'GUARD',
       contractType:            guard.contractType ?? 'PERMANENT',
+      probationStatus:         guard.probationStatus ?? 'ON_PROBATION',
+      probationEndDate:        guard.probationEndDate
+        ? guard.probationEndDate instanceof Date
+          ? guard.probationEndDate.toISOString()
+          : guard.probationEndDate
+        : null,
       registeredNames:         guard.registeredNames ?? null,
       maritalStatus:           guard.maritalStatus ?? null,
       spouseName:              guard.spouseName ?? null,

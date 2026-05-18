@@ -47,6 +47,7 @@ export default function GuardsListPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [contractType, setContractType] = useState('');
+  const [probationStatus, setProbationStatus] = useState('');
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -64,6 +65,7 @@ export default function GuardsListPage() {
     search: debouncedSearch || undefined,
     status: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
     contractType: contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
+    probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
     sortBy,
     sortOrder: 'desc',
   });
@@ -147,6 +149,13 @@ export default function GuardsListPage() {
             <option value="">All Contracts</option>
             <option value="PERMANENT">Permanent</option>
             <option value="TEMPORARY">Temporary</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={probationStatus} onChange={(e) => { setProbationStatus(e.target.value); setPage(1); }}>
+            <option value="">All Probation</option>
+            <option value="ON_PROBATION">On Probation</option>
+            <option value="CONFIRMED">Confirmed</option>
           </Form.Select>
         </Col>
         <Col md={2}>
@@ -250,7 +259,18 @@ export default function GuardsListPage() {
                       )}
                     </td>
                     <td>
-                      <div className="fw-semibold">{g.fullName}</div>
+                      <div className="fw-semibold">
+                        {g.fullName}
+                        {g.probationStatus === 'ON_PROBATION' && (
+                          <span
+                            className="ms-1"
+                            style={{ cursor: 'help', fontSize: '0.85rem' }}
+                            title={'On probation until ' + (g.probationEndDate ? new Date(g.probationEndDate).toLocaleDateString('en-GB') : 'N/A')}
+                          >
+                            ⏰
+                          </span>
+                        )}
+                      </div>
                       <div className="text-muted">{g.nationalId}</div>
                     </td>
                     <td>

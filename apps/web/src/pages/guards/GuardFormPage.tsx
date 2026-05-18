@@ -269,6 +269,7 @@ export default function GuardFormPage() {
   }, [isEdit, existing, reset]);
 
   const dobValue       = watch('dateOfBirth');
+  const contractStart  = watch('contractStart');
   const maritalStatus  = watch('maritalStatus');
   const hasDisability  = watch('hasDisability');
   const hasAllergies   = watch('hasAllergies');
@@ -764,6 +765,27 @@ export default function GuardFormPage() {
                       value="TEMPORARY"
                       {...register('contractType')}
                     />
+                  </div>
+                </Form.Group>
+              </Col>
+            </Row>
+            <Row className="g-3 mb-3">
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Probation Period</Form.Label>
+                  <div className="text-muted small">
+                    <i className="bi bi-info-circle me-1"></i>
+                    Probation ends:{' '}
+                    <strong>
+                      {contractStart
+                        ? new Date(new Date(contractStart).getTime() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })
+                        : '—'}
+                    </strong>
+                    {' '}(6 months from start)
                   </div>
                 </Form.Group>
               </Col>

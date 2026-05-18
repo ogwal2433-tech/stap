@@ -254,6 +254,24 @@ export default function GuardDetailPage() {
               >
                 {GUARD_CONTRACT_TYPES[guard.contractType] ?? guard.contractType}
               </Badge>
+              {guard.probationStatus === 'ON_PROBATION' ? (
+                <Badge
+                  bg="warning"
+                  text="dark"
+                  className="fs-6 px-3 py-2 mb-2 d-block"
+                >
+                  On Probation
+                  {guard.probationEndDate && (
+                    <span className="fw-normal ms-1 small">
+                      — Ends: {new Date(guard.probationEndDate).toLocaleDateString('en-GB')}
+                    </span>
+                  )}
+                </Badge>
+              ) : (
+                <Badge bg="success" className="fs-6 px-3 py-2 mb-2 d-block">
+                  Confirmed
+                </Badge>
+              )}
               <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                 <div className="text-muted small">
                   UGX {guard.salaryRate.toLocaleString()} / month

@@ -168,6 +168,8 @@ model Guard {
   preferredPaymentContact String?   // MoMo number for salary disbursement
   rank                    String    @default("GUARD") // GUARD | SENIOR_GUARD | CORPORAL | SERGEANT | SUPERVISOR
   contractType            String    @default("PERMANENT") // TEMPORARY | PERMANENT
+  probationStatus         String    @default("ON_PROBATION") // ON_PROBATION | CONFIRMED
+  probationEndDate        DateTime?
   village     String?
   parish      String?
   subCounty   String?
