@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
-  Pagination, Row, Spinner, Tab, Table, Tabs,
+  Form, Modal, Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
-import { useGuard, useGuardDeploymentHistory } from '../../hooks/useGuards';
+import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
@@ -16,11 +16,12 @@ import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
 import DisciplinaryRecordModal from '../../components/guards/DisciplinaryRecordModal';
 import LetterGenerationModal from '../../components/guards/LetterGenerationModal';
+import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
-  type GuardDocumentResponse,
+  type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -37,11 +38,18 @@ const RANK_BADGE: Record<string, string> = {
   SUPERVISOR:   'dark',
 };
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+}
+
 const DISCIPLINARY_BADGE: Record<string, { bg: string; text?: string; style?: React.CSSProperties }> = {
   VERBAL_WARNING: { bg: 'warning', text: 'dark' },
   WRITTEN_WARNING: { bg: 'warning', text: 'dark', style: { backgroundColor: '#E8701A', borderColor: '#E8701A' } },
   SUSPENSION: { bg: 'danger' },
   TERMINATION: { bg: 'dark' },
+  REINSTATEMENT: { bg: 'success' },
 };
 
 interface StatusModal {
@@ -49,6 +57,71 @@ interface StatusModal {
 }
 
 const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+
+interface ReinstateModalProps {
+  guardId: string;
+  guardName: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function ReinstateModal({ guardId, guardName, onClose, onSuccess }: ReinstateModalProps) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const reinstate = useReinstateGuard();
+
+  const handleConfirm = () => {
+    if (reason.trim().length < 10) {
+      setError('Reason must be at least 10 characters.');
+      return;
+    }
+    setError('');
+    reinstate.mutate(
+      { guardId, reason: reason.trim() },
+      {
+        onSuccess: () => { onSuccess(); onClose(); },
+        onError: (err: any) => setError(err?.response?.data?.error || 'Reinstatement failed.'),
+      },
+    );
+  };
+
+  return (
+    <Modal show onHide={onClose} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Re-instate Guard</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p className="mb-3">
+          <strong>{guardName}</strong> will be reinstated and their status returned to{' '}
+          <Badge bg="success">ACTIVE</Badge>.
+        </p>
+        <Form.Group>
+          <Form.Label>Reason for reinstatement <span className="text-danger">*</span></Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={4}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Disciplinary matter resolved. Guard has completed counselling and acknowledged the code of conduct."
+          />
+          {error && <Form.Text className="text-danger">{error}</Form.Text>}
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={reinstate.isPending}>
+          Cancel
+        </Button>
+        <Button
+          variant="success"
+          onClick={handleConfirm}
+          disabled={reinstate.isPending}
+        >
+          {reinstate.isPending ? <Spinner size="sm" /> : 'Confirm Re-instatement'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
 
 function IssuedItemsTab({ guardId }: { guardId: string }) {
   const { data: items, isLoading } = useGuardInventory(guardId);
@@ -129,6 +202,12 @@ export default function GuardDetailPage() {
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
+  const [showReinstateModal, setShowReinstateModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [idCardError, setIdCardError] = useState('');
+
+  const { data: transferHistory, isLoading: transfersLoading } = useTransferHistory(id ?? '');
+  const downloadIdCard = useDownloadIdCard();
 
   const { data: deductions = [], refetch: refetchDeductions } = useDeductions({ guardId: id });
   const cancelDeduction = useCancelDeduction();
@@ -178,37 +257,89 @@ export default function GuardDetailPage() {
             </Button>
           </RoleGuard>
           <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
-            <Dropdown as={ButtonGroup}>
-              <Dropdown.Toggle variant="outline-secondary" id="status-action">
-                Change Status
-              </Dropdown.Toggle>
-              <Dropdown.Menu>
-                {guard.employmentStatus !== 'ACTIVE' && (
-                  <Dropdown.Item onClick={() => setStatusModal({ targetStatus: 'ACTIVE' })}>
-                    ✅ Activate
-                  </Dropdown.Item>
-                )}
-                {guard.employmentStatus !== 'SUSPENDED' && (
+            {guard.employmentStatus === 'SUSPENDED' ? (
+              <>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setStatusModal({ targetStatus: 'ACTIVE' })}
+                >
+                  Activate
+                </Button>
+                <Button
+                  variant="success"
+                  onClick={() => setShowReinstateModal(true)}
+                >
+                  Re-instate
+                </Button>
+              </>
+            ) : (
+              <Dropdown as={ButtonGroup}>
+                <Dropdown.Toggle variant="outline-secondary" id="status-action">
+                  Change Status
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  {guard.employmentStatus !== 'ACTIVE' && (
+                    <Dropdown.Item onClick={() => setStatusModal({ targetStatus: 'ACTIVE' })}>
+                      ✅ Activate
+                    </Dropdown.Item>
+                  )}
                   <Dropdown.Item onClick={() => setStatusModal({ targetStatus: 'SUSPENDED' })}>
                     ⚠️ Suspend
                   </Dropdown.Item>
-                )}
-                {guard.employmentStatus !== 'TERMINATED' && (
-                  <Dropdown.Item
-                    className="text-danger"
-                    onClick={() => setStatusModal({ targetStatus: 'TERMINATED' })}
-                  >
-                    <i className="bi bi-x-circle-fill me-1" />Terminate
-                  </Dropdown.Item>
-                )}
-              </Dropdown.Menu>
-            </Dropdown>
+                  {guard.employmentStatus !== 'TERMINATED' && (
+                    <Dropdown.Item
+                      className="text-danger"
+                      onClick={() => setStatusModal({ targetStatus: 'TERMINATED' })}
+                    >
+                      <i className="bi bi-x-circle-fill me-1" />Terminate
+                    </Dropdown.Item>
+                  )}
+                </Dropdown.Menu>
+              </Dropdown>
+            )}
           </RoleGuard>
+          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as UserRole[]}>
+            <Button
+              variant="outline-dark"
+              disabled={downloadIdCard.isPending}
+              onClick={() => {
+                setIdCardError('');
+                downloadIdCard.mutate(id!, {
+                  onError: (err: any) =>
+                    setIdCardError(err?.response?.data?.error || 'Failed to generate ID card.'),
+                });
+              }}
+            >
+              {downloadIdCard.isPending ? (
+                <><Spinner as="span" size="sm" animation="border" className="me-1" /> Generating…</>
+              ) : (
+                'Generate ID Card'
+              )}
+            </Button>
+          </RoleGuard>
+          {guard.employmentStatus === 'ACTIVE' && (
+            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+              <Button variant="outline-info" onClick={() => setShowTransferModal(true)}>
+                Transfer
+              </Button>
+            </RoleGuard>
+          )}
           <Button variant="outline-secondary" onClick={() => navigate('/guards')}>
             ← Back
           </Button>
         </ButtonGroup>
       </div>
+
+      {idCardError && (
+        <Alert variant="danger" dismissible onClose={() => setIdCardError('')} className="mb-3 py-2 small">
+          {idCardError}
+        </Alert>
+      )}
+      {downloadIdCard.isSuccess && (
+        <p className="text-muted small mb-3">
+          Print and laminate before issuing to guard.
+        </p>
+      )}
 
       {/* Profile header */}
       <div className="card border-0 shadow-sm mb-4">
@@ -287,6 +418,25 @@ export default function GuardDetailPage() {
           </Row>
         </div>
       </div>
+
+      {/* Suspension banner */}
+      {guard.employmentStatus === 'SUSPENDED' && guard.latestSuspension && (
+        <Alert variant="warning" className="mb-3">
+          <div className="d-flex align-items-start gap-2">
+            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+            <div>
+              <strong>Guard is currently suspended</strong>
+              <div className="mt-1 small">
+                Suspended by: <strong>{guard.latestSuspension.officerName}</strong>
+                &nbsp;on&nbsp;{formatDate(guard.latestSuspension.incidentDate)}
+              </div>
+              <div className="small text-muted mt-1">
+                Reason: {guard.latestSuspension.reason}
+              </div>
+            </div>
+          </div>
+        </Alert>
+      )}
 
       {/* NID pending warning */}
       {guard.isIncompleteNID && (
@@ -416,6 +566,22 @@ export default function GuardDetailPage() {
                     <div className={`fw-medium ${!value ? 'text-muted fst-italic' : ''}`}>{value || 'Open-ended'}</div>
                   </Col>
                 ))}
+                {(guard as any).reinstatedCount > 0 && (
+                  <>
+                    <Col md={4}>
+                      <div className="text-muted small">Times Reinstated</div>
+                      <div className="fw-medium">{(guard as any).reinstatedCount}</div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="text-muted small">Last Reinstated</div>
+                      <div className="fw-medium">
+                        {(guard as any).lastReinstatedAt
+                          ? new Date((guard as any).lastReinstatedAt).toLocaleDateString('en-GB')
+                          : '—'}
+                      </div>
+                    </Col>
+                  </>
+                )}
                 <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
                   <Col md={4}>
                     <div className="text-muted small">Bank Name</div>
@@ -687,7 +853,57 @@ export default function GuardDetailPage() {
           )}
         </Tab>
 
-        {/* ── Tab 4: Disciplinary Records ───────────────────────────────────── */}
+        {/* ── Tab 4: Transfer History ───────────────────────────────────────── */}
+        <Tab eventKey="transfer-history" title="Transfer History">
+          {transfersLoading ? (
+            <div className="py-3 text-center">
+              <Spinner animation="border" size="sm" />
+            </div>
+          ) : !transferHistory || transferHistory.length === 0 ? (
+            <Alert variant="light">No transfers on record for this guard.</Alert>
+          ) : (
+            <Table size="sm" hover responsive className="align-middle small">
+              <thead className="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>From Site</th>
+                  <th>To Site</th>
+                  <th>Reason</th>
+                  <th>Authorised By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transferHistory.map((t: GuardTransferResponse) => (
+                  <tr key={t.id}>
+                    <td>{new Date(t.transferDate).toLocaleDateString('en-GB')}</td>
+                    <td>
+                      {t.fromSite ? (
+                        <>
+                          {t.fromSite.siteName}
+                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            {t.fromSite.clientName}
+                          </div>
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td style={{ color: '#0d9e8e' }}>
+                      {t.toSite.siteName}
+                      <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        {t.toSite.clientName}
+                      </div>
+                    </td>
+                    <td title={t.reason}>
+                      {t.reason.length > 60 ? t.reason.slice(0, 60) + '…' : t.reason}
+                    </td>
+                    <td>{t.authorisedBy.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Tab>
+
+        {/* ── Tab 5: Disciplinary Records ───────────────────────────────────── */}
         <Tab eventKey="disciplinary" title="Disciplinary Records">
           {/* Action bar */}
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -927,6 +1143,29 @@ export default function GuardDetailPage() {
         <DeductionFormModal
           guardId={id!}
           onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
+        />
+      )}
+      {showReinstateModal && (
+        <ReinstateModal
+          guardId={id!}
+          guardName={guard.fullName}
+          onClose={() => setShowReinstateModal(false)}
+          onSuccess={() => {
+            showToast('Guard reinstated successfully', 'success');
+            refetch();
+            refetchDisciplinary();
+          }}
+        />
+      )}
+      {showTransferModal && (
+        <TransferModal
+          guardId={id!}
+          guardName={guard.fullName}
+          currentSiteName={
+            deployHistory?.data.find((d) => !d.endDate)?.site.siteName ?? null
+          }
+          onClose={() => setShowTransferModal(false)}
+          onSuccess={() => refetch()}
         />
       )}
     </div>

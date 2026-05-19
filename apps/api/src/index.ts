@@ -41,6 +41,7 @@ import { contractService } from './services/contractService';
 import { invoiceService } from './services/invoiceService';
 import { reportService } from './services/reportService';
 import { inventoryService } from './services/inventoryService';
+import { guardService } from './services/guardService';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -110,6 +111,12 @@ reportService.initScheduledReports();
 cron.schedule('0 7 * * *', () => inventoryService.runLowStockCheck(), {
   timezone: 'Africa/Kampala',
 });
+
+// Daily probation status check at 06:00 EAT
+cron.schedule('0 6 * * *', async () => {
+  console.log('⏰ Running probation check...');
+  await guardService.runProbationCheck();
+}, { timezone: 'Africa/Kampala' });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];

@@ -46,15 +46,16 @@ export default function GuardsListPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [rank, setRank] = useState('');
   const [contractType, setContractType] = useState('');
   const [probationStatus, setProbationStatus] = useState('');
-  const [nidStatus, setNidStatus] = useState('');
+  const [nidFilter, setNidFilter] = useState('');   // '' | 'true'
+  const [onLeave, setOnLeave] = useState('');        // '' | 'true'
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(t);
@@ -63,11 +64,13 @@ export default function GuardsListPage() {
   const { data, isLoading, isError, error, refetch } = useGuardList({
     page,
     limit,
-    search: debouncedSearch || undefined,
-    status: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
-    contractType: contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
+    search:          debouncedSearch || undefined,
+    status:          status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
+    rank:            rank || undefined,
+    contractType:    contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
     probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
-    nidStatus: nidStatus as 'PENDING' | 'PROVIDED' | undefined || undefined,
+    isIncompleteNID: nidFilter === 'true' ? true : undefined,
+    onLeave:         onLeave === 'true' ? true : undefined,
     sortBy,
     sortOrder: 'desc',
   });
@@ -76,6 +79,28 @@ export default function GuardsListPage() {
     setSearch(e.target.value);
     setPage(1);
   }, []);
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setStatus('');
+    setRank('');
+    setContractType('');
+    setProbationStatus('');
+    setNidFilter('');
+    setOnLeave('');
+    setPage(1);
+  };
+
+  const hasAnyFilter = !!(debouncedSearch || status || rank || contractType || probationStatus || nidFilter || onLeave);
+
+  const activeFilterBadges: { label: string; clear: () => void }[] = [
+    ...(status ? [{ label: status === 'ACTIVE' ? 'Active' : status === 'SUSPENDED' ? 'Suspended' : 'Terminated', clear: () => { setStatus(''); setPage(1); } }] : []),
+    ...(rank ? [{ label: GUARD_RANKS[rank] ?? rank, clear: () => { setRank(''); setPage(1); } }] : []),
+    ...(contractType ? [{ label: GUARD_CONTRACT_TYPES[contractType] ?? contractType, clear: () => { setContractType(''); setPage(1); } }] : []),
+    ...(probationStatus ? [{ label: probationStatus === 'ON_PROBATION' ? 'On Probation' : 'Confirmed', clear: () => { setProbationStatus(''); setPage(1); } }] : []),
+    ...(nidFilter ? [{ label: 'NID Pending', clear: () => { setNidFilter(''); setPage(1); } }] : []),
+    ...(onLeave ? [{ label: 'Currently on Leave', clear: () => { setOnLeave(''); setPage(1); } }] : []),
+  ];
 
   const guards = data?.data ?? [];
   const pagination = data?.pagination;
@@ -129,9 +154,9 @@ export default function GuardsListPage() {
         </div>
       </div>
 
-      {/* Filter bar */}
-      <Row className="g-2 mb-3">
-        <Col md={4}>
+      {/* Filter row 1: Search + Status + Sort + Limit */}
+      <Row className="g-2 mb-2">
+        <Col md={5}>
           <Form.Control
             placeholder="Search by name, NIN or phone…"
             value={search}
@@ -144,27 +169,6 @@ export default function GuardsListPage() {
             <option value="ACTIVE">Active</option>
             <option value="SUSPENDED">Suspended</option>
             <option value="TERMINATED">Terminated</option>
-          </Form.Select>
-        </Col>
-        <Col md={2}>
-          <Form.Select value={contractType} onChange={(e) => { setContractType(e.target.value); setPage(1); }}>
-            <option value="">All Contracts</option>
-            <option value="PERMANENT">Permanent</option>
-            <option value="TEMPORARY">Temporary</option>
-          </Form.Select>
-        </Col>
-        <Col md={2}>
-          <Form.Select value={probationStatus} onChange={(e) => { setProbationStatus(e.target.value); setPage(1); }}>
-            <option value="">All Probation</option>
-            <option value="ON_PROBATION">On Probation</option>
-            <option value="CONFIRMED">Confirmed</option>
-          </Form.Select>
-        </Col>
-        <Col md={2}>
-          <Form.Select value={nidStatus} onChange={(e) => { setNidStatus(e.target.value); setPage(1); }}>
-            <option value="">All NID Status</option>
-            <option value="PENDING">NID Pending</option>
-            <option value="PROVIDED">NID Provided</option>
           </Form.Select>
         </Col>
         <Col md={2}>
@@ -182,7 +186,73 @@ export default function GuardsListPage() {
             <option value={50}>50 per page</option>
           </Form.Select>
         </Col>
+        <Col md={1} className="d-flex align-items-center">
+          {hasAnyFilter && (
+            <Button variant="link" size="sm" className="text-decoration-none p-0 text-muted" onClick={clearAllFilters}>
+              Clear Filters
+            </Button>
+          )}
+        </Col>
       </Row>
+
+      {/* Filter row 2: Rank + Contract + Probation + NID + On Leave */}
+      <Row className="g-2 mb-3">
+        <Col md={2}>
+          <Form.Select value={rank} onChange={(e) => { setRank(e.target.value); setPage(1); }}>
+            <option value="">All Ranks</option>
+            <option value="GUARD">Guard</option>
+            <option value="SENIOR_GUARD">Senior Guard</option>
+            <option value="CORPORAL">Corporal</option>
+            <option value="SERGEANT">Sergeant</option>
+            <option value="SUPERVISOR">Supervisor</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={contractType} onChange={(e) => { setContractType(e.target.value); setPage(1); }}>
+            <option value="">All Contracts</option>
+            <option value="PERMANENT">Permanent</option>
+            <option value="TEMPORARY">Temporary</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={probationStatus} onChange={(e) => { setProbationStatus(e.target.value); setPage(1); }}>
+            <option value="">All Probation</option>
+            <option value="ON_PROBATION">On Probation</option>
+            <option value="CONFIRMED">Confirmed</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={nidFilter} onChange={(e) => { setNidFilter(e.target.value); setPage(1); }}>
+            <option value="">All NID Status</option>
+            <option value="true">NID Pending</option>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Form.Select value={onLeave} onChange={(e) => { setOnLeave(e.target.value); setPage(1); }}>
+            <option value="">All Leave Status</option>
+            <option value="true">Currently on Leave</option>
+          </Form.Select>
+        </Col>
+      </Row>
+
+      {/* Active filter badges */}
+      {activeFilterBadges.length > 0 && (
+        <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+          <span className="text-muted small">Showing:</span>
+          {activeFilterBadges.map(({ label, clear }) => (
+            <Badge
+              key={label}
+              bg="secondary"
+              as="button"
+              className="border-0 d-inline-flex align-items-center gap-1"
+              style={{ fontSize: '0.78rem', cursor: 'pointer' }}
+              onClick={clear}
+            >
+              {label} <span aria-hidden>✕</span>
+            </Badge>
+          ))}
+        </div>
+      )}
 
       {/* Results summary */}
       {pagination && (
@@ -229,8 +299,8 @@ export default function GuardsListPage() {
         <>
           {guards.length === 0 ? (
             <Alert variant="info">
-              {debouncedSearch || status
-                ? 'No guards match your search. Try different filters.'
+              {hasAnyFilter
+                ? 'No guards match your filters. Try adjusting or clearing them.'
                 : "No guards have been added yet. Click 'Add Guard' to get started."}
             </Alert>
           ) : (

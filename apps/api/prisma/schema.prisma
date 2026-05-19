@@ -56,6 +56,7 @@ enum DisciplinaryType {
   WRITTEN_WARNING
   SUSPENSION
   TERMINATION
+  REINSTATEMENT
 }
 
 enum ClientContractStatus {
@@ -131,6 +132,7 @@ model User {
   assignedApplicants  Applicant[]          @relation("ApplicantAssignee")
   trainerSessions     TrainingSession[]    @relation("TrainerSessions")
   recordedInventory   InventoryTransaction[] @relation("InventoryRecorder")
+  authorisedTransfers GuardTransfer[]        @relation("TransferAuthoriser")
 }
 
 model Guard {
@@ -171,6 +173,11 @@ model Guard {
   contractType            String    @default("PERMANENT") // TEMPORARY | PERMANENT
   probationStatus         String    @default("ON_PROBATION") // ON_PROBATION | CONFIRMED
   probationEndDate        DateTime?
+  reinstatedCount         Int       @default(0)
+  lastReinstatedAt        DateTime?
+  lastReinstatedBy        String?
+  incrementCount          Int       @default(0)
+  lastIncrementDate       DateTime?
   village     String?
   parish      String?
   subCounty   String?
@@ -239,6 +246,7 @@ model Guard {
   convertedApplicant Applicant?
   relatives         GuardRelative[]
   associates        GuardAssociate[]
+  transfers         GuardTransfer[]
 }
 
 model GuardRelative {
@@ -263,6 +271,21 @@ model GuardAssociate {
   residence     String?
   phone         String?
   createdAt     DateTime @default(now())
+}
+
+model GuardTransfer {
+  id           String   @id @default(cuid())
+  guardId      String
+  guard        Guard    @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  fromSiteId   String?
+  fromSite     Site?    @relation("TransferFromSite", fields: [fromSiteId], references: [id])
+  toSiteId     String
+  toSite       Site     @relation("TransferToSite", fields: [toSiteId], references: [id])
+  reason       String
+  transferDate DateTime
+  authorisedBy String
+  authorisedByUser User @relation("TransferAuthoriser", fields: [authorisedBy], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 model GuardDocument {
@@ -352,6 +375,8 @@ model Site {
   checkins          SupervisorCheckin[]
   complaints        ClientComplaint[]
   incidents         Incident[]
+  transfersFrom     GuardTransfer[]     @relation("TransferFromSite")
+  transfersTo       GuardTransfer[]     @relation("TransferToSite")
 }
 
 model Contract {

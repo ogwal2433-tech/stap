@@ -117,14 +117,28 @@ export const GuardStatusSchema = z.object({
   reason: z.string().min(1).describe('Required reason for status change'),
 });
 
+export const ReinstateGuardSchema = z.object({
+  reason: z.string().min(10, 'Reason must be at least 10 characters').describe('Reason for reinstatement'),
+});
+
+export const CreateGuardTransferSchema = z.object({
+  fromSiteId:   z.string().cuid().optional(),
+  toSiteId:     z.string().cuid(),
+  reason:       z.string().min(10).max(1000),
+  transferDate: z.string().datetime(),
+});
+
 export const GuardListQuerySchema = z.object({
   page:      z.coerce.number().int().positive().default(1),
   limit:     z.coerce.number().int().min(1).max(100).default(20),
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
   status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
-  contractType:            z.enum(['TEMPORARY', 'PERMANENT']).optional(),
-  probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
-  nidStatus:  z.enum(['PENDING', 'PROVIDED']).optional(),
+  rank:            z.string().optional(),
+  contractType:    z.enum(['TEMPORARY', 'PERMANENT']).optional(),
+  probationStatus: z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
+  nidStatus:       z.enum(['PENDING', 'PROVIDED']).optional(),
+  isIncompleteNID: z.coerce.boolean().optional(),
+  onLeave:         z.coerce.boolean().optional(),
   siteId:    z.string().optional(),
   sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -170,13 +184,15 @@ export const GUARD_CONTRACT_TYPES: Record<string, string> = {
 
 // ── Inferred input types ───────────────────────────────────────────────────────
 
-export type CreateGuardInput  = z.infer<typeof CreateGuardSchema>;
-export type UpdateGuardInput  = z.infer<typeof UpdateGuardSchema>;
-export type GuardStatusInput  = z.infer<typeof GuardStatusSchema>;
-export type GuardListQuery    = z.infer<typeof GuardListQuerySchema>;
-export type GuardRelativeInput  = z.infer<typeof GuardRelativeSchema>;
-export type GuardAssociateInput = z.infer<typeof GuardAssociateSchema>;
-export type GuardVettingDataInput = z.infer<typeof GuardVettingDataSchema>;
+export type CreateGuardInput       = z.infer<typeof CreateGuardSchema>;
+export type UpdateGuardInput       = z.infer<typeof UpdateGuardSchema>;
+export type GuardStatusInput       = z.infer<typeof GuardStatusSchema>;
+export type ReinstateGuardInput    = z.infer<typeof ReinstateGuardSchema>;
+export type CreateGuardTransferInput = z.infer<typeof CreateGuardTransferSchema>;
+export type GuardListQuery         = z.infer<typeof GuardListQuerySchema>;
+export type GuardRelativeInput     = z.infer<typeof GuardRelativeSchema>;
+export type GuardAssociateInput    = z.infer<typeof GuardAssociateSchema>;
+export type GuardVettingDataInput  = z.infer<typeof GuardVettingDataSchema>;
 
 // ── Response types (TypeScript interfaces) ─────────────────────────────────────
 
@@ -237,6 +253,9 @@ export interface GuardResponse {
   contractType:            string;
   probationStatus:         string;
   probationEndDate:        string | null;
+  reinstatedCount:         number;
+  lastReinstatedAt:        string | null;
+  lastReinstatedBy:        string | null;
   registeredNames:         string | null;
   maritalStatus:           string | null;
   spouseName:              string | null;
@@ -298,6 +317,12 @@ export interface GuardResponse {
   hasAllergies:      boolean;
   allergyDetails:    string | null;
 
+  latestSuspension?: {
+    reason:      string;
+    incidentDate:string;
+    officerName: string;
+  } | null;
+
   documents?: GuardDocumentResponse[];
 
   _count?: {
@@ -306,6 +331,17 @@ export interface GuardResponse {
     disciplinary:number;
     documents:   number;
   };
+}
+
+export interface GuardTransferResponse {
+  id:           string;
+  guard:        { id: string; fullName: string };
+  fromSite:     { id: string; siteName: string; clientName: string } | null;
+  toSite:       { id: string; siteName: string; clientName: string };
+  reason:       string;
+  transferDate: string;
+  authorisedBy: { id: string; name: string };
+  createdAt:    string;
 }
 
 export interface GuardDocumentResponse {

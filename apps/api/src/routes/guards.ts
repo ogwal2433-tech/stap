@@ -189,6 +189,8 @@ import {
   CreateGuardSchema,
   UpdateGuardSchema,
   GuardStatusSchema,
+  ReinstateGuardSchema,
+  CreateGuardTransferSchema,
   GuardListQuerySchema,
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
@@ -336,6 +338,46 @@ router.patch(
       req.user!.userId,
     );
     res.status(200).json({ success: true, data: guard });
+  }),
+);
+
+// ── POST /:id/reinstate — reinstate a SUSPENDED guard ─────────────────────────
+router.post(
+  '/:id/reinstate',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(ReinstateGuardSchema),
+  asyncHandler(async (req, res) => {
+    const guard = await guardService.reinstateGuard(
+      req.params.id,
+      req.body.reason,
+      req.user!.userId,
+    );
+    res.status(200).json({ success: true, data: guard });
+  }),
+);
+
+// ── POST /:id/transfer — record a guard transfer to a new site ────────────────
+router.post(
+  '/:id/transfer',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR),
+  validate(CreateGuardTransferSchema),
+  asyncHandler(async (req, res) => {
+    const transfer = await guardService.transferGuard(
+      req.params.id,
+      req.body,
+      req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: transfer });
+  }),
+);
+
+// ── GET /:id/transfers — list transfer history for a guard ────────────────────
+router.get(
+  '/:id/transfers',
+  requireRole(...INTERNAL_ROLES),
+  asyncHandler(async (req, res) => {
+    const transfers = await guardService.getTransferHistory(req.params.id);
+    res.status(200).json({ success: true, data: transfers });
   }),
 );
 
@@ -559,6 +601,18 @@ router.get(
         createdAt: r.createdAt.toISOString(),
       })),
     });
+  }),
+);
+
+// ── GET /:id/id-card — generate a printable PDF ID card ───────────────────────
+router.get(
+  '/:id/id-card',
+  requireRole(...GUARD_WRITE_ROLES, ROLES.ADMINISTRATOR),
+  asyncHandler(async (req, res) => {
+    const buffer = await guardService.generateIdCard(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=STAP-Guard-ID-${req.params.id}.pdf`);
+    res.send(buffer);
   }),
 );
 

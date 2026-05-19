@@ -1,5 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+import puppeteer from 'puppeteer';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
+import { notificationService } from './notificationService';
+import { settingsService } from './settingsService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, type UserRole } from '@stap/shared';
 import type {
@@ -14,6 +19,8 @@ import type {
   PaginatedResponse,
   DeploymentHistoryEntry,
   GuardDashboardStats,
+  CreateGuardTransferInput,
+  GuardTransferResponse,
 } from '@stap/shared';
 
 // Roles allowed to see the accountNumber field
@@ -26,13 +33,17 @@ class GuardService {
     query: GuardListQuery,
     requestingUserRole: UserRole,
   ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, contractType, probationStatus, nidStatus, sortBy, sortOrder } = query as typeof query & { nidStatus?: 'PENDING' | 'PROVIDED' };
+    const { page, limit, search, status, rank, contractType, probationStatus, nidStatus, isIncompleteNID, onLeave, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
 
     if (status) {
       where.employmentStatus = status;
+    }
+
+    if (rank) {
+      where.rank = rank;
     }
 
     if (contractType) {
@@ -47,6 +58,17 @@ class GuardService {
       where.isIncompleteNID = true;
     } else if (nidStatus === 'PROVIDED') {
       where.isIncompleteNID = false;
+    }
+
+    if (isIncompleteNID !== undefined) {
+      where.isIncompleteNID = isIncompleteNID;
+    }
+
+    if (onLeave !== undefined) {
+      const today = new Date();
+      where.leaveRequests = onLeave
+        ? { some: { status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today } } }
+        : { none: { status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today } } };
     }
 
     if (search) {
@@ -115,6 +137,12 @@ class GuardService {
         },
         relatives: { orderBy: { createdAt: 'asc' } },
         associates: { orderBy: { createdAt: 'asc' } },
+        disciplinary: {
+          where:   { type: 'SUSPENSION' },
+          orderBy: { incidentDate: 'desc' },
+          take:    1,
+          include: { officer: { select: { name: true } } },
+        },
         _count: {
           select: {
             deployments: true,
@@ -659,6 +687,13 @@ class GuardService {
           ? guard.probationEndDate.toISOString()
           : guard.probationEndDate
         : null,
+      reinstatedCount:         (guard as any).reinstatedCount ?? 0,
+      lastReinstatedAt:        (guard as any).lastReinstatedAt
+        ? (guard as any).lastReinstatedAt instanceof Date
+          ? (guard as any).lastReinstatedAt.toISOString()
+          : (guard as any).lastReinstatedAt
+        : null,
+      lastReinstatedBy:        (guard as any).lastReinstatedBy ?? null,
       registeredNames:         guard.registeredNames ?? null,
       maritalStatus:           guard.maritalStatus ?? null,
       spouseName:              guard.spouseName ?? null,
@@ -741,7 +776,247 @@ class GuardService {
       response._count = guard._count;
     }
 
+    if (guard.employmentStatus === 'SUSPENDED' && guard.disciplinary?.length) {
+      const rec = guard.disciplinary[0];
+      response.latestSuspension = {
+        reason:      rec.reason,
+        incidentDate: rec.incidentDate instanceof Date
+          ? rec.incidentDate.toISOString()
+          : rec.incidentDate,
+        officerName: rec.officer?.name ?? 'Unknown',
+      };
+    } else {
+      response.latestSuspension = null;
+    }
+
     return response;
+  }
+
+  // ── Reinstate ──────────────────────────────────────────────────────────────
+
+  async reinstateGuard(
+    guardId: string,
+    reason: string,
+    reinstatedBy: string,
+  ): Promise<GuardResponse> {
+    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
+    if (!guard) throw new NotFoundError('Guard not found');
+    if (guard.employmentStatus !== 'SUSPENDED') {
+      throw new AppError('Only SUSPENDED guards can be reinstated.', 400);
+    }
+
+    const updated = await prisma.guard.update({
+      where: { id: guardId },
+      data: {
+        employmentStatus: 'ACTIVE',
+        reinstatedCount:  guard.reinstatedCount + 1,
+        lastReinstatedAt: new Date(),
+        lastReinstatedBy: reinstatedBy,
+      },
+      include: {
+        relatives:  { orderBy: { createdAt: 'asc' } },
+        associates: { orderBy: { createdAt: 'asc' } },
+        _count: {
+          select: { deployments: true, attendance: true, disciplinary: true, documents: true },
+        },
+      },
+    });
+
+    await prisma.disciplinaryRecord.create({
+      data: {
+        guardId,
+        type:        'REINSTATEMENT',
+        incidentDate: new Date(),
+        reason,
+        outcome:     `Guard reinstated on ${new Date().toLocaleDateString('en-GB')} by ${reinstatedBy}`,
+        officerId:   reinstatedBy,
+      },
+    });
+
+    await notificationService.sendToRole({
+      role:    ROLES.OPERATIONS_SUPERVISOR,
+      type:    'SYSTEM',
+      title:   'Guard Reinstated',
+      message: `Guard ${guard.firstName} ${guard.lastName} has been reinstated and is now Active.`,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action:   'GUARD_REINSTATED',
+        entity:   'guard',
+        entityId: guardId,
+        newValue: { reason, reinstatedBy },
+      },
+    });
+
+    return this.sanitiseGuard(updated, ROLES.DIRECTOR, false);
+  }
+
+  // ── Transfer ───────────────────────────────────────────────────────────────
+
+  async transferGuard(
+    guardId: string,
+    data: CreateGuardTransferInput,
+    authorisedBy: string,
+  ): Promise<GuardTransferResponse> {
+    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
+    if (!guard) throw new NotFoundError('Guard not found');
+    if (guard.employmentStatus !== 'ACTIVE') {
+      throw new AppError('Only ACTIVE guards can be transferred.', 400);
+    }
+
+    const toSite = await prisma.site.findUnique({
+      where: { id: data.toSiteId },
+      include: { client: { select: { clientName: true } } },
+    });
+    if (!toSite) throw new NotFoundError('Site not found');
+
+    const transfer = await prisma.guardTransfer.create({
+      data: {
+        guardId,
+        fromSiteId:   data.fromSiteId ?? null,
+        toSiteId:     data.toSiteId,
+        reason:       data.reason,
+        transferDate: new Date(data.transferDate),
+        authorisedBy,
+      },
+      include: {
+        guard:            { select: { firstName: true, lastName: true, otherNames: true } },
+        fromSite:         { include: { client: { select: { clientName: true } } } },
+        toSite:           { include: { client: { select: { clientName: true } } } },
+        authorisedByUser: { select: { name: true } },
+      },
+    });
+
+    await prisma.deploymentHistory.create({
+      data: {
+        guardId,
+        siteId:      data.toSiteId,
+        startDate:   new Date(data.transferDate),
+        shiftType:   'DAY',
+        supervisorId: authorisedBy,
+      },
+    });
+
+    await notificationService.sendToRole({
+      role:    ROLES.OPERATIONS_SUPERVISOR,
+      type:    'SYSTEM',
+      title:   'Guard Transferred',
+      message: `Guard ${guard.firstName} ${guard.lastName} has been transferred to ${toSite.siteName}. Reason: ${data.reason}`,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action:   'GUARD_TRANSFERRED',
+        entity:   'guard',
+        entityId: guardId,
+        newValue: {
+          toSiteId:   data.toSiteId,
+          toSiteName: toSite.siteName,
+          reason:     data.reason,
+        },
+      },
+    });
+
+    return this.mapTransferResponse(transfer);
+  }
+
+  async getTransferHistory(guardId: string): Promise<GuardTransferResponse[]> {
+    const guard = await prisma.guard.findUnique({ where: { id: guardId }, select: { id: true } });
+    if (!guard) throw new NotFoundError('Guard not found');
+
+    const transfers = await prisma.guardTransfer.findMany({
+      where:   { guardId },
+      orderBy: { transferDate: 'desc' },
+      include: {
+        guard:            { select: { firstName: true, lastName: true, otherNames: true } },
+        fromSite:         { include: { client: { select: { clientName: true } } } },
+        toSite:           { include: { client: { select: { clientName: true } } } },
+        authorisedByUser: { select: { name: true } },
+      },
+    });
+
+    return transfers.map((t) => this.mapTransferResponse(t));
+  }
+
+  private mapTransferResponse(transfer: any): GuardTransferResponse {
+    const fullName = [transfer.guard.firstName, transfer.guard.otherNames, transfer.guard.lastName]
+      .filter(Boolean)
+      .join(' ');
+    return {
+      id:    transfer.id,
+      guard: { id: transfer.guardId, fullName },
+      fromSite: transfer.fromSite
+        ? {
+            id:         transfer.fromSite.id,
+            siteName:   transfer.fromSite.siteName,
+            clientName: transfer.fromSite.client?.clientName ?? '',
+          }
+        : null,
+      toSite: {
+        id:         transfer.toSite.id,
+        siteName:   transfer.toSite.siteName,
+        clientName: transfer.toSite.client?.clientName ?? '',
+      },
+      reason:       transfer.reason,
+      transferDate: transfer.transferDate instanceof Date
+        ? transfer.transferDate.toISOString()
+        : transfer.transferDate,
+      authorisedBy: {
+        id:   transfer.authorisedBy,
+        name: transfer.authorisedByUser.name,
+      },
+      createdAt: transfer.createdAt instanceof Date
+        ? transfer.createdAt.toISOString()
+        : transfer.createdAt,
+    };
+  }
+
+  // ── Probation check ────────────────────────────────────────────────────────
+
+  async runProbationCheck(): Promise<void> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const eligible = await prisma.guard.findMany({
+      where: {
+        probationStatus:  'ON_PROBATION',
+        probationEndDate: { lte: today },
+        employmentStatus: 'ACTIVE',
+      },
+      select: {
+        id:        true,
+        firstName: true,
+        lastName:  true,
+      },
+    });
+
+    for (const guard of eligible) {
+      await prisma.guard.update({
+        where: { id: guard.id },
+        data:  { probationStatus: 'CONFIRMED' },
+      });
+
+      await notificationService.sendToRole({
+        role:    ROLES.ASSISTANT_MANAGER,
+        type:    'SYSTEM',
+        title:   'Probation Period Ended',
+        message: `Guard ${guard.firstName} ${guard.lastName} has completed their probation period and is now Confirmed.`,
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          action:   'PROBATION_COMPLETED',
+          entity:   'guard',
+          entityId: guard.id,
+          newValue: { probationStatus: 'CONFIRMED' },
+        },
+      });
+
+      console.log(`✅ Probation confirmed: ${guard.firstName} ${guard.lastName}`);
+    }
+
+    console.log(`Probation check complete. ${eligible.length} guard(s) confirmed.`);
   }
 
   // ── Dashboard stats ────────────────────────────────────────────────────────
@@ -839,6 +1114,173 @@ class GuardService {
         };
       }),
     };
+  }
+  // ── Salary Increments ──────────────────────────────────────────────────────
+
+  async runSalaryIncrements(): Promise<void> {
+    const today = new Date();
+    const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+
+    const eligible = await prisma.guard.findMany({
+      where: {
+        employmentStatus: 'ACTIVE',
+        contractType: 'PERMANENT',
+        contractStart: { lte: oneYearAgo },
+        OR: [
+          { lastIncrementDate: null },
+          { lastIncrementDate: { lt: yearStart } },
+        ],
+      },
+      select: {
+        id:               true,
+        firstName:        true,
+        lastName:         true,
+        salaryRate:       true,
+        incrementCount:   true,
+        lastIncrementDate:true,
+      },
+    });
+
+    for (const guard of eligible) {
+      const increment = guard.incrementCount === 0 ? 20000 : 10000;
+      const newSalary  = guard.salaryRate + increment;
+
+      await prisma.guard.update({
+        where: { id: guard.id },
+        data: {
+          salaryRate:        newSalary,
+          incrementCount:    { increment: 1 },
+          lastIncrementDate: today,
+        },
+      });
+
+      await notificationService.sendToRole({
+        role:    ROLES.ASSISTANT_MANAGER,
+        type:    'SYSTEM',
+        title:   'Salary Increment Applied',
+        message: `Guard ${guard.firstName} ${guard.lastName}'s salary has been incremented from UGX ${guard.salaryRate.toLocaleString()} to UGX ${newSalary.toLocaleString()}.`,
+      });
+
+      await notificationService.sendToRole({
+        role:    ROLES.ACCOUNTS_OFFICER,
+        type:    'SYSTEM',
+        title:   'Salary Increment Applied',
+        message: `Guard ${guard.firstName} ${guard.lastName}'s salary has been incremented from UGX ${guard.salaryRate.toLocaleString()} to UGX ${newSalary.toLocaleString()}.`,
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          action:   'SALARY_INCREMENTED',
+          entity:   'guard',
+          entityId: guard.id,
+          oldValue: { salaryRate: guard.salaryRate },
+          newValue: { salaryRate: newSalary, increment },
+        },
+      });
+
+      console.log(`✅ Salary incremented: ${guard.firstName} ${guard.lastName} — UGX ${guard.salaryRate} → ${newSalary}`);
+    }
+
+    console.log(`Salary increment run complete. ${eligible.length} guard(s) updated.`);
+  }
+
+  // ── Generate ID Card ───────────────────────────────────────────────────────
+
+  async generateIdCard(guardId: string): Promise<Buffer> {
+    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
+    if (!guard) throw new NotFoundError('Guard not found');
+
+    const [companyName, companyPhone, directorName] = await Promise.all([
+      settingsService.get('company_name'),
+      settingsService.get('company_phone'),
+      settingsService.get('director_name'),
+    ]);
+
+    const photoHtml = guard.photoUrl
+      ? `<img src="/app/public${guard.photoUrl}"
+               style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid #1B3A6B;">`
+      : `<div style="width:70px;height:70px;border-radius:50%;background:#1B3A6B;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;font-weight:bold;">${guard.firstName[0]}${guard.lastName[0]}</div>`;
+
+    const maskedNid = guard.nationalId
+      ? '****' + guard.nationalId.slice(-4)
+      : 'PENDING';
+
+    const contractTypeBg    = guard.contractType === 'TEMPORARY' ? '#FEF9E7' : '#D5F5E3';
+    const contractTypeColor = guard.contractType === 'TEMPORARY' ? '#E8701A' : '#1E8449';
+
+    const expiryText = guard.contractEnd
+      ? new Date(guard.contractEnd).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+      : 'Ongoing';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { width:321px; height:204px; font-family:Arial,sans-serif; overflow:hidden; }
+    .card { width:321px; height:204px; border-radius:8px; overflow:hidden; border:1px solid #1B3A6B; }
+    .header { background:#1B3A6B; color:white; padding:6px 10px; display:flex; align-items:center; gap:8px; }
+    .header .company { font-size:11px; font-weight:bold; line-height:1.3; }
+    .header .tagline { font-size:8px; opacity:0.8; }
+    .body { display:flex; padding:8px 10px; gap:10px; background:white; }
+    .photo { flex-shrink:0; }
+    .info { flex:1; }
+    .name { font-size:13px; font-weight:bold; color:#1B3A6B; line-height:1.2; }
+    .rank { font-size:9px; color:#0F7B6C; text-transform:uppercase; letter-spacing:0.5px; margin:2px 0; }
+    .field { font-size:8px; color:#4A5568; margin-top:2px; }
+    .field span { font-weight:bold; color:#1A1A1A; }
+    .footer { background:#F2F4F7; padding:4px 10px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #D0D5DD; }
+    .footer .phone { font-size:8px; color:#4A5568; }
+    .footer .type { font-size:8px; font-weight:bold; padding:1px 6px; border-radius:3px; background:${contractTypeBg}; color:${contractTypeColor}; }
+    .footer .expiry { font-size:7px; color:#4A5568; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <div class="company">${companyName ?? 'STAP Security Ltd'}</div>
+        <div class="tagline">24/7 Protection Guarantee</div>
+      </div>
+      <div style="margin-left:auto;font-size:9px;opacity:0.7;">GUARD ID CARD</div>
+    </div>
+    <div class="body">
+      <div class="photo">${photoHtml}</div>
+      <div class="info">
+        <div class="name">${guard.firstName} ${guard.lastName}</div>
+        <div class="rank">${guard.rank.replace(/_/g, ' ')}</div>
+        <div class="field">Guard ID: <span>${guard.id.slice(-8).toUpperCase()}</span></div>
+        <div class="field">NIN: <span>${maskedNid}</span></div>
+        <div class="field">Emergency: <span>${guard.nextOfKinPhone ?? '—'}</span></div>
+        ${directorName ? `<div class="field">Director: <span>${directorName}</span></div>` : ''}
+      </div>
+    </div>
+    <div class="footer">
+      <div class="phone">${companyPhone ?? ''}</div>
+      <div class="type">${guard.contractType}</div>
+      <div class="expiry">Exp: ${expiryText}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const dir = path.join(process.cwd(), 'public', 'uploads', 'id-cards');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${guardId}.pdf`);
+
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    let pdfBuffer: Buffer;
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      pdfBuffer = Buffer.from(await page.pdf({ width: '321px', height: '204px', printBackground: true }));
+    } finally {
+      await browser.close();
+    }
+
+    fs.writeFileSync(filePath, pdfBuffer);
+    return pdfBuffer;
   }
 }
 

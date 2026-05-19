@@ -10,6 +10,8 @@ import type {
   GuardDashboardStats,
   GuardRelativeInput,
   GuardAssociateInput,
+  CreateGuardTransferInput,
+  GuardTransferResponse,
 } from '@stap/shared';
 
 export const guardsApi = {
@@ -40,6 +42,12 @@ export const guardsApi = {
   updateStatus(id: string, status: string, reason: string): Promise<GuardResponse> {
     return api
       .patch<{ success: boolean; data: GuardResponse }>(`/guards/${id}/status`, { status, reason })
+      .then((r) => r.data.data);
+  },
+
+  reinstateGuard(guardId: string, reason: string): Promise<GuardResponse> {
+    return api
+      .post<{ success: boolean; data: GuardResponse }>(`/guards/${guardId}/reinstate`, { reason })
       .then((r) => r.data.data);
   },
 
@@ -129,6 +137,31 @@ export const guardsApi = {
   getRecentActivity(): Promise<{ id: string; fullName: string; employmentStatus: string; updatedAt: string }[]> {
     return api
       .get<{ success: boolean; data: { id: string; fullName: string; employmentStatus: string; updatedAt: string }[] }>('/guards/recent-activity')
+      .then((r) => r.data.data);
+  },
+
+  downloadIdCard(guardId: string): Promise<void> {
+    return api
+      .get(`/guards/${guardId}/id-card`, { responseType: 'blob' })
+      .then((r) => {
+        const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `STAP-Guard-ID-${guardId}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  },
+
+  transferGuard(guardId: string, data: CreateGuardTransferInput): Promise<GuardTransferResponse> {
+    return api
+      .post<{ success: boolean; data: GuardTransferResponse }>(`/guards/${guardId}/transfer`, data)
+      .then((r) => r.data.data);
+  },
+
+  getTransferHistory(guardId: string): Promise<GuardTransferResponse[]> {
+    return api
+      .get<{ success: boolean; data: GuardTransferResponse[] }>(`/guards/${guardId}/transfers`)
       .then((r) => r.data.data);
   },
 };

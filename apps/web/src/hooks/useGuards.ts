@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardsApi } from '../lib/guards.api';
-import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput } from '@stap/shared';
+import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput, CreateGuardTransferInput } from '@stap/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
   return useQuery({
@@ -48,6 +48,18 @@ export function useUpdateGuardStatus() {
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['guards'] });
       queryClient.invalidateQueries({ queryKey: ['guard', variables.id] });
+    },
+  });
+}
+
+export function useReinstateGuard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guardId, reason }: { guardId: string; reason: string }) =>
+      guardsApi.reinstateGuard(guardId, reason),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['guards'] });
+      queryClient.invalidateQueries({ queryKey: ['guard', variables.guardId] });
     },
   });
 }
@@ -104,5 +116,30 @@ export function useRecentGuardActivity() {
     queryKey:  ['guard-recent-activity'],
     queryFn:   () => guardsApi.getRecentActivity(),
     staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useDownloadIdCard() {
+  return useMutation({
+    mutationFn: (guardId: string) => guardsApi.downloadIdCard(guardId),
+  });
+}
+
+export function useTransferGuard(guardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateGuardTransferInput) => guardsApi.transferGuard(guardId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard', guardId] });
+      queryClient.invalidateQueries({ queryKey: ['transfers', guardId] });
+    },
+  });
+}
+
+export function useTransferHistory(guardId: string) {
+  return useQuery({
+    queryKey: ['transfers', guardId],
+    queryFn:  () => guardsApi.getTransferHistory(guardId),
+    enabled:  Boolean(guardId),
   });
 }
