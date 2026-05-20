@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../lib/settings.api';
-import type { UserRole } from '@stap/shared';
+import type { UserRole, CreateGuardRankInput, UpdateGuardRankInput } from '@stap/shared';
 
 export function useSystemSettings() {
   return useQuery({
@@ -67,5 +67,68 @@ export function useDeactivateUser() {
   return useMutation({
     mutationFn: (id: string) => settingsApi.deactivateUser(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['users-mgmt'] }),
+  });
+}
+
+// ── Guard Rank hooks ───────────────────────────────────────────────────────────
+
+export function useGuardRanks(activeOnly = true) {
+  return useQuery({
+    queryKey:  ['guard-ranks', activeOnly],
+    queryFn:   () => settingsApi.getRanks(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAllGuardRanks() {
+  return useGuardRanks(false);
+}
+
+export function useCreateRank() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateGuardRankInput) => settingsApi.createRank(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+export function useUpdateRank() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateGuardRankInput }) =>
+      settingsApi.updateRank(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+export function useDeactivateRank() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deactivateRank(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+export function useActivateRank() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.activateRank(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+export function useDeleteRank() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deleteRank(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+export function useReorderRanks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => settingsApi.reorderRanks(orderedIds),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
   });
 }

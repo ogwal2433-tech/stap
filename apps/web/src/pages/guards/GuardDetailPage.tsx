@@ -20,9 +20,10 @@ import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
+import { useGuardRanks } from '../../hooks/useSettings';
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -30,13 +31,7 @@ const STATUS_BADGE: Record<string, string> = {
   TERMINATED: 'danger',
 };
 
-const RANK_BADGE: Record<string, string> = {
-  GUARD:        'secondary',
-  SENIOR_GUARD: 'info',
-  CORPORAL:     'primary',
-  SERGEANT:     'warning',
-  SUPERVISOR:   'dark',
-};
+const RANK_BADGE_COLORS = ['secondary', 'info', 'primary', 'warning', 'dark'];
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -188,6 +183,7 @@ export default function GuardDetailPage() {
   const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
+  const { data: ranks = [] } = useGuardRanks(false);
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [deployPage, setDeployPage] = useState(1);
@@ -374,11 +370,10 @@ export default function GuardDetailPage() {
                 {guard.employmentStatus}
               </Badge>
               <Badge
-                bg={RANK_BADGE[guard.rank] ?? 'secondary'}
-                text={guard.rank === 'SERGEANT' ? 'dark' : undefined}
+                bg={RANK_BADGE_COLORS[((ranks.find((r) => r.name === guard.rank)?.displayOrder ?? 1) - 1) % RANK_BADGE_COLORS.length]}
                 className="fs-6 px-3 py-2 mb-2 d-block"
               >
-                {GUARD_RANKS[guard.rank] ?? guard.rank}
+                {guard.rank}
               </Badge>
               <Badge
                 bg={guard.contractType === 'PERMANENT' ? 'success' : 'warning'}

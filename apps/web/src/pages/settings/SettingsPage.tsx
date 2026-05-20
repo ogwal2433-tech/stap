@@ -6,9 +6,12 @@ import { useToast } from '../../context/ToastContext';
 import {
   useSystemSettings, useUpdateSettings,
   useUsers, useCreateUser, useUpdateUser, useResetPassword, useDeactivateUser,
+  useAllGuardRanks, useDeactivateRank, useActivateRank, useDeleteRank, useReorderRanks,
 } from '../../hooks/useSettings';
 import { ROLES, type UserRole } from '@stap/shared';
-import type { SystemSettingResponse, UserResponse } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, GuardRankResponse } from '@stap/shared';
+import AddRankModal from '../../components/settings/AddRankModal';
+import EditRankModal from '../../components/settings/EditRankModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -240,10 +243,19 @@ export default function SettingsPage() {
   const { data: usersData, isLoading: loadingUsers } = useUsers({ page: 1, limit: 100 });
   const deactivate = useDeactivateUser();
 
+  const { data: allRanks = [], isLoading: loadingRanks } = useAllGuardRanks();
+  const deactivateRank = useDeactivateRank();
+  const activateRank   = useActivateRank();
+  const deleteRank     = useDeleteRank();
+  const reorderRanks   = useReorderRanks();
+
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<{ group: string; message: string } | null>(null);
   const [editUser, setEditUser]   = useState<UserResponse | 'new' | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [showAddRank, setShowAddRank] = useState(false);
+  const [editRank, setEditRank] = useState<GuardRankResponse | null>(null);
+  const [deactivateConfirm, setDeactivateConfirm] = useState<GuardRankResponse | null>(null);
 
   // Initialize pending changes from loaded settings
   useEffect(() => {
@@ -301,6 +313,42 @@ export default function SettingsPage() {
   }, {});
 
   const users = usersData?.data ?? [];
+
+  const handleDeactivateRank = (rank: GuardRankResponse) => {
+    deactivateRank.mutate(rank.id, {
+      onSuccess: (result) => {
+        showToast(`"${rank.name}" deactivated`, 'success');
+        setDeactivateConfirm(null);
+      },
+      onError: (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleActivateRank = (id: string) => {
+    activateRank.mutate(id, {
+      onSuccess: () => showToast('Rank activated', 'success'),
+      onError:   (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleDeleteRank = (rank: GuardRankResponse) => {
+    if (!confirm(`Permanently delete "${rank.name}"? This cannot be undone.`)) return;
+    deleteRank.mutate(rank.id, {
+      onSuccess: () => showToast(`"${rank.name}" deleted`, 'success'),
+      onError:   (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleMoveRank = (index: number, direction: 'up' | 'down') => {
+    const sorted = [...allRanks].sort((a, b) => a.displayOrder - b.displayOrder);
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= sorted.length) return;
+    [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+    reorderRanks.mutate(
+      sorted.map((r) => r.id),
+      { onError: (err: any) => showToast(err?.response?.data?.error ?? 'Reorder failed', 'danger') },
+    );
+  };
 
   return (
     <div className="container-fluid py-4">
@@ -366,6 +414,125 @@ export default function SettingsPage() {
             )}
           </Tab>
         ))}
+
+        {/* ── Guard Ranks ──────────────────────────────────────────────────────── */}
+        <Tab eventKey="ranks" title={<><i className="bi bi-award me-1" />Ranks</>}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Guard Ranks</h6>
+            <Button size="sm" onClick={() => setShowAddRank(true)}>
+              <i className="bi bi-plus-lg me-1" />Add Rank
+            </Button>
+          </div>
+
+          <Alert variant="info" className="small py-2 px-3 mb-3">
+            Ranks appear in the guard profile form dropdown in the order shown below. Use ▲ ▼ to
+            reorder. Deactivating a rank hides it from the form but keeps it on existing guard
+            records.
+          </Alert>
+
+          {loadingRanks ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : allRanks.length === 0 ? (
+            <Alert variant="secondary">
+              No ranks configured. Click <strong>Add Rank</strong> to create the first rank.
+            </Alert>
+          ) : (
+            <div className="card border-0 shadow-sm">
+              <ul className="list-group list-group-flush">
+                {[...allRanks]
+                  .sort((a, b) => a.displayOrder - b.displayOrder)
+                  .map((rank, idx, arr) => (
+                    <li
+                      key={rank.id}
+                      className="list-group-item d-flex align-items-center gap-2 py-2"
+                    >
+                      {/* Order controls */}
+                      <div className="d-flex flex-column" style={{ gap: 0 }}>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 lh-1 text-muted"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveRank(idx, 'up')}
+                          title="Move up"
+                        >
+                          ▲
+                        </Button>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 lh-1 text-muted"
+                          disabled={idx === arr.length - 1}
+                          onClick={() => handleMoveRank(idx, 'down')}
+                          title="Move down"
+                        >
+                          ▼
+                        </Button>
+                      </div>
+
+                      {/* Order badge */}
+                      <Badge bg="light" text="dark" className="small">#{rank.displayOrder}</Badge>
+
+                      {/* Name */}
+                      <span
+                        className={`flex-grow-1 ${rank.isActive ? 'fw-medium' : 'text-muted text-decoration-line-through'}`}
+                      >
+                        {rank.name}
+                        {!rank.isActive && (
+                          <span className="ms-2 badge bg-secondary" style={{ fontSize: 10 }}>
+                            inactive
+                          </span>
+                        )}
+                      </span>
+
+                      {/* Actions */}
+                      <div className="d-flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => setEditRank(rank)}
+                          title="Edit rank"
+                        >
+                          <i className="bi bi-pencil" />
+                        </Button>
+                        {rank.isActive ? (
+                          <Button
+                            size="sm"
+                            variant="outline-warning"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => setDeactivateConfirm(rank)}
+                            title="Deactivate rank"
+                          >
+                            <i className="bi bi-eye-slash" />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline-success"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => handleActivateRank(rank.id)}
+                            title="Activate rank"
+                          >
+                            <i className="bi bi-eye" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline-danger"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => handleDeleteRank(rank)}
+                          title="Delete rank"
+                        >
+                          <i className="bi bi-trash" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </Tab>
 
         {/* ── User Management ──────────────────────────────────────────────────── */}
         <Tab eventKey="users" title={<><i className="bi bi-people me-1" />Users</>}>
@@ -449,6 +616,36 @@ export default function SettingsPage() {
       {/* Modals */}
       <UserModal user={editUser} onHide={() => setEditUser(null)} />
       <ResetPasswordModal userId={resetUserId} onHide={() => setResetUserId(null)} />
+      <AddRankModal show={showAddRank} onHide={() => setShowAddRank(false)} />
+      <EditRankModal show={!!editRank} onHide={() => setEditRank(null)} rank={editRank} />
+
+      {/* Deactivate Rank confirmation */}
+      <Modal show={!!deactivateConfirm} onHide={() => setDeactivateConfirm(null)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6">Deactivate Rank</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="small">
+          {deactivateConfirm && (
+            <>
+              This will hide <strong>"{deactivateConfirm.name}"</strong> from the guard form
+              dropdown. Existing guard records will not be affected.
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setDeactivateConfirm(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="warning"
+            size="sm"
+            disabled={deactivateRank.isPending}
+            onClick={() => deactivateConfirm && handleDeactivateRank(deactivateConfirm)}
+          >
+            {deactivateRank.isPending ? <Spinner size="sm" /> : 'Deactivate'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

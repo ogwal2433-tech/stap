@@ -25,7 +25,7 @@ export const CreateGuardSchema = z.object({
   tribe:                   z.string().max(100).optional(),
   placeOfBirth:            z.string().max(200).optional(),
   educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
-  rank:                    z.enum(['GUARD', 'SENIOR_GUARD', 'CORPORAL', 'SERGEANT', 'SUPERVISOR']).default('GUARD').optional(),
+  rank:                    z.string().min(1).max(100).optional(),
   contractType:            z.enum(['TEMPORARY', 'PERMANENT']).default('PERMANENT').optional(),
   probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).default('ON_PROBATION').optional(),
   probationEndDate:        z.string().datetime().optional(),
@@ -168,14 +168,6 @@ export const GuardVettingDataSchema = z.object({
 });
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-export const GUARD_RANKS: Record<string, string> = {
-  GUARD:        'Guard',
-  SENIOR_GUARD: 'Senior Guard',
-  CORPORAL:     'Corporal',
-  SERGEANT:     'Sergeant',
-  SUPERVISOR:   'Supervisor',
-};
 
 export const GUARD_CONTRACT_TYPES: Record<string, string> = {
   PERMANENT: 'Permanent',

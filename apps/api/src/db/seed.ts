@@ -551,6 +551,25 @@ async function main() {
     console.log(`✅ Seeded inventory: ${item.itemName}`);
   }
 
+  // ── Guard Ranks ─────────────────────────────────────────────────────────────
+
+  const defaultRanks = [
+    { name: 'Guard',        displayOrder: 1 },
+    { name: 'Senior Guard', displayOrder: 2 },
+    { name: 'Corporal',     displayOrder: 3 },
+    { name: 'Sergeant',     displayOrder: 4 },
+    { name: 'Supervisor',   displayOrder: 5 },
+  ];
+
+  for (const rank of defaultRanks) {
+    await prisma.guardRank.upsert({
+      where:  { name: rank.name },
+      update: {},
+      create: rank,
+    });
+    console.log(`✅ Seeded rank: ${rank.name}`);
+  }
+
   console.log('\n🎉 Seed completed successfully!\n');
 }
 

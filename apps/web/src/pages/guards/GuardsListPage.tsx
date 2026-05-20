@@ -10,9 +10,10 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
 import type { GuardResponse } from '@stap/shared';
+import { useGuardRanks } from '../../hooks/useSettings';
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -20,13 +21,7 @@ const STATUS_BADGE: Record<string, string> = {
   TERMINATED: 'danger',
 };
 
-const RANK_BADGE: Record<string, string> = {
-  GUARD:        'secondary',
-  SENIOR_GUARD: 'info',
-  CORPORAL:     'primary',
-  SERGEANT:     'warning',
-  SUPERVISOR:   'dark',
-};
+const RANK_BADGE_COLORS = ['secondary', 'info', 'primary', 'warning', 'dark'];
 
 function contractExpiringSoon(contractEnd: string | null): boolean {
   if (!contractEnd) return false;
@@ -42,6 +37,7 @@ interface StatusModal {
 export default function GuardsListPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { data: ranks = [] } = useGuardRanks(false);
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -95,7 +91,7 @@ export default function GuardsListPage() {
 
   const activeFilterBadges: { label: string; clear: () => void }[] = [
     ...(status ? [{ label: status === 'ACTIVE' ? 'Active' : status === 'SUSPENDED' ? 'Suspended' : 'Terminated', clear: () => { setStatus(''); setPage(1); } }] : []),
-    ...(rank ? [{ label: GUARD_RANKS[rank] ?? rank, clear: () => { setRank(''); setPage(1); } }] : []),
+    ...(rank ? [{ label: rank, clear: () => { setRank(''); setPage(1); } }] : []),
     ...(contractType ? [{ label: GUARD_CONTRACT_TYPES[contractType] ?? contractType, clear: () => { setContractType(''); setPage(1); } }] : []),
     ...(probationStatus ? [{ label: probationStatus === 'ON_PROBATION' ? 'On Probation' : 'Confirmed', clear: () => { setProbationStatus(''); setPage(1); } }] : []),
     ...(nidFilter ? [{ label: 'NID Pending', clear: () => { setNidFilter(''); setPage(1); } }] : []),
@@ -200,11 +196,9 @@ export default function GuardsListPage() {
         <Col md={2}>
           <Form.Select value={rank} onChange={(e) => { setRank(e.target.value); setPage(1); }}>
             <option value="">All Ranks</option>
-            <option value="GUARD">Guard</option>
-            <option value="SENIOR_GUARD">Senior Guard</option>
-            <option value="CORPORAL">Corporal</option>
-            <option value="SERGEANT">Sergeant</option>
-            <option value="SUPERVISOR">Supervisor</option>
+            {ranks.map((r) => (
+              <option key={r.id} value={r.name}>{r.name}</option>
+            ))}
           </Form.Select>
         </Col>
         <Col md={2}>
@@ -359,10 +353,9 @@ export default function GuardsListPage() {
                     </td>
                     <td>
                       <Badge
-                        bg={RANK_BADGE[g.rank] ?? 'secondary'}
-                        text={g.rank === 'SERGEANT' ? 'dark' : undefined}
+                        bg={RANK_BADGE_COLORS[((ranks.find((r) => r.name === g.rank)?.displayOrder ?? 1) - 1) % RANK_BADGE_COLORS.length]}
                       >
-                        {GUARD_RANKS[g.rank] ?? g.rank}
+                        {g.rank}
                       </Badge>
                     </td>
                     <td>

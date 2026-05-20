@@ -11,5 +11,6 @@ export * from './schemas/reports';
 export * from './schemas/complaint';
 export * from './schemas/hr';
 export * from './schemas/inventory';
+export * from './schemas/settings';
 export * from './types/api';
 export * from './types/roles';

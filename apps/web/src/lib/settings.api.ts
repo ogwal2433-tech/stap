@@ -1,5 +1,5 @@
 import api from './api';
-import type { SystemSettingResponse, UserResponse, PaginatedResponse, UserRole } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, PaginatedResponse, UserRole, GuardRankResponse, CreateGuardRankInput, UpdateGuardRankInput } from '@stap/shared';
 
 export const settingsApi = {
   getAll(): Promise<SystemSettingResponse[]> {
@@ -56,5 +56,49 @@ export const settingsApi = {
     return api
       .post(`/settings/users/${id}/deactivate`)
       .then(() => undefined);
+  },
+
+  // ── Guard Ranks ──────────────────────────────────────────────────────────────
+
+  getRanks(activeOnly = true): Promise<GuardRankResponse[]> {
+    return api
+      .get<{ success: boolean; data: GuardRankResponse[] }>('/settings/ranks', {
+        params: { activeOnly: activeOnly ? 'true' : 'false' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  createRank(data: CreateGuardRankInput): Promise<GuardRankResponse> {
+    return api
+      .post<{ success: boolean; data: GuardRankResponse }>('/settings/ranks', data)
+      .then((r) => r.data.data);
+  },
+
+  updateRank(id: string, data: UpdateGuardRankInput): Promise<GuardRankResponse> {
+    return api
+      .patch<{ success: boolean; data: GuardRankResponse }>(`/settings/ranks/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  deactivateRank(id: string): Promise<{ rank: GuardRankResponse; guardsWithRank: number }> {
+    return api
+      .patch<{ success: boolean; data: GuardRankResponse; guardsWithRank: number }>(`/settings/ranks/${id}/deactivate`)
+      .then((r) => ({ rank: r.data.data, guardsWithRank: r.data.guardsWithRank }));
+  },
+
+  activateRank(id: string): Promise<GuardRankResponse> {
+    return api
+      .patch<{ success: boolean; data: GuardRankResponse }>(`/settings/ranks/${id}/activate`)
+      .then((r) => r.data.data);
+  },
+
+  deleteRank(id: string): Promise<void> {
+    return api.delete(`/settings/ranks/${id}`).then(() => undefined);
+  },
+
+  reorderRanks(orderedIds: string[]): Promise<GuardRankResponse[]> {
+    return api
+      .put<{ success: boolean; data: GuardRankResponse[] }>('/settings/ranks/reorder', { orderedIds })
+      .then((r) => r.data.data);
   },
 };

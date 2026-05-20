@@ -11,7 +11,8 @@ import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
-import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { useGuardRanks } from '../../hooks/useSettings';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ export default function GuardFormPage() {
   const { data: existing, isLoading: loadingExisting } = useGuard(id ?? '');
   const { mutate: createGuard, isPending: isCreating } = useCreateGuard();
   const { mutateAsync: updateGuard } = useUpdateGuard();
+  const { data: ranks = [], isLoading: ranksLoading, isError: ranksError } = useGuardRanks(true);
 
   const [apiError, setApiError] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -600,11 +602,21 @@ export default function GuardFormPage() {
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>Rank</Form.Label>
-                  <Form.Select {...register('rank')}>
-                    {Object.entries(GUARD_RANKS).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
+                  <Form.Select {...register('rank')} disabled={ranksLoading}>
+                    <option value="">
+                      {ranksLoading ? 'Loading ranks...' : 'Select rank'}
+                    </option>
+                    {ranks.map((rank) => (
+                      <option key={rank.id} value={rank.name}>
+                        {rank.name}
+                      </option>
                     ))}
                   </Form.Select>
+                  {ranksError && (
+                    <Alert variant="warning" className="mt-1 py-1 px-2 small mb-0">
+                      Could not load ranks. Please refresh the page or contact the administrator.
+                    </Alert>
+                  )}
                 </Form.Group>
               </Col>
             </Row>

@@ -157,12 +157,14 @@
  *         description: Cannot deactivate your own account
  */
 import { Router, type IRouter } from 'express';
+import { z } from 'zod';
 import { settingsService } from '../services/settingsService';
+import { rankService } from '../services/rankService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ForbiddenError } from '../errors/AppError';
-import { ROLES } from '@stap/shared';
+import { AppError, ForbiddenError } from '../errors/AppError';
+import { ROLES, CreateGuardRankSchema, UpdateGuardRankSchema, ReorderGuardRanksSchema } from '@stap/shared';
 
 const router: IRouter = Router();
 
@@ -250,6 +252,79 @@ router.post(
   asyncHandler(async (req, res) => {
     await settingsService.deactivateUser(req.params.id, req.user!.userId);
     res.json({ success: true, message: 'User deactivated' });
+  }),
+);
+
+// ── Guard Rank Management ──────────────────────────────────────────────────────
+
+// GET /ranks — all authenticated users (needed for guard form dropdown)
+router.get(
+  '/ranks',
+  asyncHandler(async (req, res) => {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const data = await rankService.listRanks(activeOnly);
+    res.json({ success: true, data });
+  }),
+);
+
+// PUT /ranks/reorder — must come before /ranks/:id to avoid param conflict
+router.put(
+  '/ranks/reorder',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = ReorderGuardRanksSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await rankService.reorderRanks(parsed.data.orderedIds);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/ranks',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = CreateGuardRankSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await rankService.createRank(parsed.data, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/ranks/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = UpdateGuardRankSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await rankService.updateRank(req.params.id, parsed.data, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/ranks/:id/deactivate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const result = await rankService.deactivateRank(req.params.id, req.user!.userId);
+    res.json({ success: true, data: result.rank, guardsWithRank: result.guardsWithRank });
+  }),
+);
+
+router.patch(
+  '/ranks/:id/activate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await rankService.activateRank(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+router.delete(
+  '/ranks/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    await rankService.deleteRank(req.params.id, req.user!.userId);
+    res.json({ success: true });
   }),
 );
 
