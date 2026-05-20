@@ -4,9 +4,31 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
-import type { SystemSettingResponse, UserResponse, PaginatedResponse, UserRole } from '@stap/shared';
+import type {
+  SystemSettingResponse,
+  UserResponse,
+  PaginatedResponse,
+  UserRole,
+  DeductionTypeResponse,
+  CreateDeductionTypeInput,
+  UpdateDeductionTypeInput,
+} from '@stap/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+function fmtDeductionType(t: any): DeductionTypeResponse {
+  return {
+    id:            t.id,
+    name:          t.name,
+    code:          t.code,
+    defaultAmount: t.defaultAmount ?? null,
+    description:   t.description ?? null,
+    isAutomatic:   t.isAutomatic,
+    displayOrder:  t.displayOrder,
+    isActive:      t.isActive,
+    createdAt:     t.createdAt.toISOString(),
+  };
+}
 
 function fmtSetting(s: any): SystemSettingResponse {
   return {
@@ -208,6 +230,141 @@ class SettingsService {
       entity:   'User',
       entityId: id,
     });
+  }
+
+  // ── Deduction Type Management ────────────────────────────────────────────────
+
+  async listDeductionTypes(activeOnly = false): Promise<DeductionTypeResponse[]> {
+    const types = await prisma.deductionType.findMany({
+      where:   activeOnly ? { isActive: true } : {},
+      orderBy: { displayOrder: 'asc' },
+    });
+    return types.map(fmtDeductionType);
+  }
+
+  async createDeductionType(data: CreateDeductionTypeInput, createdBy: string): Promise<DeductionTypeResponse> {
+    const dupName = await prisma.deductionType.findFirst({
+      where: { name: { equals: data.name, mode: 'insensitive' } },
+    });
+    if (dupName) throw new AppError(`A deduction type named "${data.name}" already exists.`, 409);
+
+    const code = data.code.toUpperCase().replace(/\s+/g, '_');
+    const dupCode = await prisma.deductionType.findUnique({ where: { code } });
+    if (dupCode) throw new AppError(`A deduction type with code "${code}" already exists.`, 409);
+
+    const type = await prisma.deductionType.create({
+      data: { ...data, code, defaultAmount: data.defaultAmount ?? null, isAutomatic: false },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId:   createdBy,
+        action:   'DEDUCTION_TYPE_CREATED',
+        entity:   'deductionType',
+        entityId: type.id,
+        newValue: { name: type.name, code: type.code },
+      },
+    });
+
+    return fmtDeductionType(type);
+  }
+
+  async updateDeductionType(id: string, data: UpdateDeductionTypeInput, updatedBy: string): Promise<DeductionTypeResponse> {
+    const existing = await prisma.deductionType.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError('Deduction type not found');
+
+    if ((data as any).code) throw new AppError('Deduction type code cannot be changed after creation.', 400);
+
+    if (data.name && data.name !== existing.name) {
+      const dup = await prisma.deductionType.findFirst({
+        where: { name: { equals: data.name, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (dup) throw new AppError(`A deduction type named "${data.name}" already exists.`, 409);
+    }
+
+    const updated = await prisma.deductionType.update({
+      where: { id },
+      data: { ...data, defaultAmount: 'defaultAmount' in data ? (data.defaultAmount ?? null) : undefined },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId:   updatedBy,
+        action:   'DEDUCTION_TYPE_UPDATED',
+        entity:   'deductionType',
+        entityId: id,
+        oldValue: { name: existing.name, defaultAmount: existing.defaultAmount },
+        newValue: data,
+      },
+    });
+
+    return fmtDeductionType(updated);
+  }
+
+  async deactivateDeductionType(id: string, deactivatedBy: string): Promise<DeductionTypeResponse> {
+    const type = await prisma.deductionType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundError('Deduction type not found');
+    if (type.isAutomatic) throw new AppError(`"${type.name}" is a system-managed deduction type and cannot be deactivated.`, 400);
+
+    const recentCount = await prisma.guardDeduction.count({
+      where: { type: type.code, status: 'PENDING' },
+    });
+
+    const updated = await prisma.deductionType.update({ where: { id }, data: { isActive: false } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId:   deactivatedBy,
+        action:   'DEDUCTION_TYPE_DEACTIVATED',
+        entity:   'deductionType',
+        entityId: id,
+        newValue: { pendingDeductionsOfThisType: recentCount },
+      },
+    });
+
+    return fmtDeductionType(updated);
+  }
+
+  async activateDeductionType(id: string): Promise<DeductionTypeResponse> {
+    const type = await prisma.deductionType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundError('Deduction type not found');
+    const updated = await prisma.deductionType.update({ where: { id }, data: { isActive: true } });
+    return fmtDeductionType(updated);
+  }
+
+  async deleteDeductionType(id: string, deletedBy: string): Promise<void> {
+    const type = await prisma.deductionType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundError('Deduction type not found');
+    if (type.isAutomatic) throw new AppError(`"${type.name}" is a system-managed type and cannot be deleted.`, 400);
+
+    const usageCount = await prisma.guardDeduction.count({ where: { type: type.code } });
+    if (usageCount > 0) {
+      throw new AppError(
+        `Cannot delete "${type.name}" — it has been used in ${usageCount} deduction record(s). Deactivate it instead to hide it from the form.`,
+        409,
+      );
+    }
+
+    await prisma.deductionType.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId:   deletedBy,
+        action:   'DEDUCTION_TYPE_DELETED',
+        entity:   'deductionType',
+        entityId: id,
+        oldValue: { name: type.name, code: type.code },
+      },
+    });
+  }
+
+  async reorderDeductionTypes(orderedIds: string[]): Promise<DeductionTypeResponse[]> {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        prisma.deductionType.update({ where: { id }, data: { displayOrder: index + 1 } }),
+      ),
+    );
+    return this.listDeductionTypes();
   }
 
   async deactivateUser(id: string, deactivatedBy: string): Promise<void> {

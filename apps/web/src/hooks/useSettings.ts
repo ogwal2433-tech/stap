@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../lib/settings.api';
-import type { UserRole, CreateGuardRankInput, UpdateGuardRankInput } from '@stap/shared';
+import type {
+  UserRole,
+  CreateGuardRankInput,
+  UpdateGuardRankInput,
+  CreateDeductionTypeInput,
+  UpdateDeductionTypeInput,
+} from '@stap/shared';
 
 export function useSystemSettings() {
   return useQuery({
@@ -130,5 +136,68 @@ export function useReorderRanks() {
   return useMutation({
     mutationFn: (orderedIds: string[]) => settingsApi.reorderRanks(orderedIds),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['guard-ranks'] }),
+  });
+}
+
+// ── Deduction Type hooks ───────────────────────────────────────────────────────
+
+export function useDeductionTypes(activeOnly = true) {
+  return useQuery({
+    queryKey:  ['deduction-types', activeOnly],
+    queryFn:   () => settingsApi.getDeductionTypes(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAllDeductionTypes() {
+  return useDeductionTypes(false);
+}
+
+export function useCreateDeductionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateDeductionTypeInput) => settingsApi.createDeductionType(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+export function useUpdateDeductionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateDeductionTypeInput }) =>
+      settingsApi.updateDeductionType(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+export function useDeactivateDeductionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deactivateDeductionType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+export function useActivateDeductionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.activateDeductionType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+export function useDeleteDeductionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deleteDeductionType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+export function useReorderDeductionTypes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => settingsApi.reorderDeductionTypes(orderedIds),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
   });
 }

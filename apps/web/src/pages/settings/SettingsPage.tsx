@@ -7,11 +7,15 @@ import {
   useSystemSettings, useUpdateSettings,
   useUsers, useCreateUser, useUpdateUser, useResetPassword, useDeactivateUser,
   useAllGuardRanks, useDeactivateRank, useActivateRank, useDeleteRank, useReorderRanks,
+  useAllDeductionTypes, useDeactivateDeductionType, useActivateDeductionType,
+  useDeleteDeductionType, useReorderDeductionTypes,
 } from '../../hooks/useSettings';
 import { ROLES, type UserRole } from '@stap/shared';
-import type { SystemSettingResponse, UserResponse, GuardRankResponse } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse } from '@stap/shared';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
+import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeModal';
+import EditDeductionTypeModal from '../../components/settings/EditDeductionTypeModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -249,6 +253,12 @@ export default function SettingsPage() {
   const deleteRank     = useDeleteRank();
   const reorderRanks   = useReorderRanks();
 
+  const { data: allDeductionTypes = [], isLoading: loadingDeductionTypes } = useAllDeductionTypes();
+  const deactivateDeductionType = useDeactivateDeductionType();
+  const activateDeductionType   = useActivateDeductionType();
+  const deleteDeductionType     = useDeleteDeductionType();
+  const reorderDeductionTypes   = useReorderDeductionTypes();
+
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<{ group: string; message: string } | null>(null);
   const [editUser, setEditUser]   = useState<UserResponse | 'new' | null>(null);
@@ -256,6 +266,9 @@ export default function SettingsPage() {
   const [showAddRank, setShowAddRank] = useState(false);
   const [editRank, setEditRank] = useState<GuardRankResponse | null>(null);
   const [deactivateConfirm, setDeactivateConfirm] = useState<GuardRankResponse | null>(null);
+  const [showAddDeductionType, setShowAddDeductionType] = useState(false);
+  const [editDeductionType, setEditDeductionType] = useState<DeductionTypeResponse | null>(null);
+  const [deactivateDeductionConfirm, setDeactivateDeductionConfirm] = useState<DeductionTypeResponse | null>(null);
 
   // Initialize pending changes from loaded settings
   useEffect(() => {
@@ -346,6 +359,42 @@ export default function SettingsPage() {
     [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
     reorderRanks.mutate(
       sorted.map((r) => r.id),
+      { onError: (err: any) => showToast(err?.response?.data?.error ?? 'Reorder failed', 'danger') },
+    );
+  };
+
+  const handleDeactivateDeductionType = (type: DeductionTypeResponse) => {
+    deactivateDeductionType.mutate(type.id, {
+      onSuccess: () => {
+        showToast(`"${type.name}" deactivated`, 'success');
+        setDeactivateDeductionConfirm(null);
+      },
+      onError: (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleActivateDeductionType = (id: string) => {
+    activateDeductionType.mutate(id, {
+      onSuccess: () => showToast('Deduction type activated', 'success'),
+      onError:   (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleDeleteDeductionType = (type: DeductionTypeResponse) => {
+    if (!confirm(`Permanently delete "${type.name}"? This cannot be undone.`)) return;
+    deleteDeductionType.mutate(type.id, {
+      onSuccess: () => showToast(`"${type.name}" deleted`, 'success'),
+      onError:   (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+    });
+  };
+
+  const handleMoveDeductionType = (index: number, direction: 'up' | 'down') => {
+    const sorted = [...allDeductionTypes].sort((a, b) => a.displayOrder - b.displayOrder);
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= sorted.length) return;
+    [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+    reorderDeductionTypes.mutate(
+      sorted.map((t) => t.id),
       { onError: (err: any) => showToast(err?.response?.data?.error ?? 'Reorder failed', 'danger') },
     );
   };
@@ -534,6 +583,128 @@ export default function SettingsPage() {
           )}
         </Tab>
 
+        {/* ── Deduction Types ───────────────────────────────────────────────────── */}
+        <Tab eventKey="deduction-types" title={<><i className="bi bi-dash-circle me-1" />Deduction Types</>}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Deduction Types</h6>
+            <Button size="sm" onClick={() => setShowAddDeductionType(true)}>
+              <i className="bi bi-plus-lg me-1" />Add Type
+            </Button>
+          </div>
+          <Alert variant="info" className="small py-2">
+            Deduction types appear in the deduction form dropdown when adding a charge to a guard's payroll.
+            Types marked as <strong>SYSTEM</strong> are managed automatically and cannot be deleted.
+            Setting a Default Amount pre-fills the form when that type is selected.
+          </Alert>
+          {loadingDeductionTypes ? (
+            <Spinner size="sm" />
+          ) : allDeductionTypes.length === 0 ? (
+            <Alert variant="light" className="small">No deduction types configured.</Alert>
+          ) : (
+            <div className="border rounded">
+              <ul className="list-unstyled mb-0">
+                {[...allDeductionTypes]
+                  .sort((a, b) => a.displayOrder - b.displayOrder)
+                  .map((dt, idx, arr) => (
+                    <li
+                      key={dt.id}
+                      className="d-flex align-items-start gap-2 px-3 py-2 border-bottom"
+                    >
+                      <div className="d-flex flex-column" style={{ gap: 1 }}>
+                        <Button
+                          size="sm" variant="link" className="p-0 text-muted"
+                          style={{ fontSize: 11, lineHeight: 1 }}
+                          disabled={idx === 0}
+                          onClick={() => handleMoveDeductionType(idx, 'up')}
+                          title="Move up"
+                        >▲</Button>
+                        <Button
+                          size="sm" variant="link" className="p-0 text-muted"
+                          style={{ fontSize: 11, lineHeight: 1 }}
+                          disabled={idx === arr.length - 1}
+                          onClick={() => handleMoveDeductionType(idx, 'down')}
+                          title="Move down"
+                        >▼</Button>
+                      </div>
+                      <div className="flex-grow-1 small">
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
+                          <span className={`fw-medium ${!dt.isActive ? 'text-muted text-decoration-line-through' : ''}`}>
+                            {dt.name}
+                          </span>
+                          <Badge bg="light" text="dark" className="font-monospace" style={{ fontSize: '0.6rem' }}>
+                            {dt.code}
+                          </Badge>
+                          {dt.isAutomatic && (
+                            <Badge bg="secondary" style={{ fontSize: '0.6rem' }}>SYSTEM</Badge>
+                          )}
+                          {!dt.isActive && (
+                            <span className="text-danger" style={{ fontSize: '0.7rem' }}>(inactive)</span>
+                          )}
+                        </div>
+                        <div className="text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                          {dt.defaultAmount != null ? (
+                            <span className="text-teal me-2" style={{ color: '#198754' }}>
+                              UGX {dt.defaultAmount.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted me-2">— (enter manually)</span>
+                          )}
+                          {dt.description && (
+                            <span>
+                              {dt.description.length > 60 ? dt.description.slice(0, 60) + '…' : dt.description}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="d-flex gap-1">
+                        {!dt.isAutomatic && (
+                          <Button
+                            size="sm" variant="outline-secondary"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => setEditDeductionType(dt)}
+                            title="Edit type"
+                          >
+                            <i className="bi bi-pencil" />
+                          </Button>
+                        )}
+                        {!dt.isAutomatic && dt.isActive && (
+                          <Button
+                            size="sm" variant="outline-warning"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => setDeactivateDeductionConfirm(dt)}
+                            title="Deactivate type"
+                          >
+                            <i className="bi bi-eye-slash" />
+                          </Button>
+                        )}
+                        {!dt.isAutomatic && !dt.isActive && (
+                          <Button
+                            size="sm" variant="outline-success"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => handleActivateDeductionType(dt.id)}
+                            title="Activate type"
+                          >
+                            <i className="bi bi-eye" />
+                          </Button>
+                        )}
+                        {!dt.isAutomatic && (
+                          <Button
+                            size="sm" variant="outline-danger"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => handleDeleteDeductionType(dt)}
+                            title="Delete type"
+                          >
+                            <i className="bi bi-trash" />
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </Tab>
+
         {/* ── User Management ──────────────────────────────────────────────────── */}
         <Tab eventKey="users" title={<><i className="bi bi-people me-1" />Users</>}>
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -618,6 +789,8 @@ export default function SettingsPage() {
       <ResetPasswordModal userId={resetUserId} onHide={() => setResetUserId(null)} />
       <AddRankModal show={showAddRank} onHide={() => setShowAddRank(false)} />
       <EditRankModal show={!!editRank} onHide={() => setEditRank(null)} rank={editRank} />
+      <AddDeductionTypeModal show={showAddDeductionType} onHide={() => setShowAddDeductionType(false)} />
+      <EditDeductionTypeModal show={!!editDeductionType} onHide={() => setEditDeductionType(null)} type={editDeductionType} />
 
       {/* Deactivate Rank confirmation */}
       <Modal show={!!deactivateConfirm} onHide={() => setDeactivateConfirm(null)} centered size="sm">
@@ -643,6 +816,34 @@ export default function SettingsPage() {
             onClick={() => deactivateConfirm && handleDeactivateRank(deactivateConfirm)}
           >
             {deactivateRank.isPending ? <Spinner size="sm" /> : 'Deactivate'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Deactivate Deduction Type confirmation */}
+      <Modal show={!!deactivateDeductionConfirm} onHide={() => setDeactivateDeductionConfirm(null)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6">Deactivate Deduction Type</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="small">
+          {deactivateDeductionConfirm && (
+            <>
+              This will hide <strong>"{deactivateDeductionConfirm.name}"</strong> from the deduction
+              form. It can be re-activated at any time.
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setDeactivateDeductionConfirm(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="warning"
+            size="sm"
+            disabled={deactivateDeductionType.isPending}
+            onClick={() => deactivateDeductionConfirm && handleDeactivateDeductionType(deactivateDeductionConfirm)}
+          >
+            {deactivateDeductionType.isPending ? <Spinner size="sm" /> : 'Deactivate'}
           </Button>
         </Modal.Footer>
       </Modal>

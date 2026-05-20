@@ -23,7 +23,8 @@ import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
-import { useGuardRanks } from '../../hooks/useSettings';
+import { useGuardRanks, useDeductionTypes } from '../../hooks/useSettings';
+import type { DeductionTypeResponse } from '@stap/shared';
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -184,6 +185,7 @@ export default function GuardDetailPage() {
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const { data: ranks = [] } = useGuardRanks(false);
+  const { data: deductionTypes = [] } = useDeductionTypes(true);
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [deployPage, setDeployPage] = useState(1);
@@ -198,6 +200,7 @@ export default function GuardDetailPage() {
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
+  const [prefilledDeductionType, setPrefilledDeductionType] = useState<DeductionTypeResponse | null>(null);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [idCardError, setIdCardError] = useState('');
@@ -1029,12 +1032,34 @@ export default function GuardDetailPage() {
 
         {/* ── Deductions Tab ────────────────────────────────────────────────── */}
         {canViewDeductions && <Tab eventKey="deductions" title="Deductions">
-            <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex justify-content-between align-items-center mb-2">
               <span className="fw-semibold small">Guard Deductions</span>
-              <Button size="sm" variant="outline-danger" onClick={() => setShowDeductionModal(true)}>
+              <Button
+                size="sm"
+                variant="outline-danger"
+                onClick={() => { setPrefilledDeductionType(null); setShowDeductionModal(true); }}
+              >
                 + Add Deduction
               </Button>
             </div>
+            {deductionTypes.filter((t) => t.defaultAmount !== null && !t.isAutomatic).length > 0 && (
+              <div className="d-flex flex-wrap gap-1 mb-3">
+                {deductionTypes
+                  .filter((t) => t.defaultAmount !== null && !t.isAutomatic)
+                  .map((t) => (
+                    <Button
+                      key={t.id}
+                      variant="outline-secondary"
+                      size="sm"
+                      style={{ fontSize: '0.75rem' }}
+                      onClick={() => { setPrefilledDeductionType(t); setShowDeductionModal(true); }}
+                    >
+                      + {t.name} UGX {t.defaultAmount!.toLocaleString()}
+                    </Button>
+                  ))
+                }
+              </div>
+            )}
 
             {deductions.length === 0 ? (
               <Alert variant="light" className="small py-2">No deductions recorded.</Alert>
@@ -1137,7 +1162,8 @@ export default function GuardDetailPage() {
       {showDeductionModal && (
         <DeductionFormModal
           guardId={id!}
-          onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
+          prefilledType={prefilledDeductionType}
+          onClose={() => { setShowDeductionModal(false); setPrefilledDeductionType(null); refetchDeductions(); }}
         />
       )}
       {showReinstateModal && (

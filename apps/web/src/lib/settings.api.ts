@@ -1,5 +1,16 @@
 import api from './api';
-import type { SystemSettingResponse, UserResponse, PaginatedResponse, UserRole, GuardRankResponse, CreateGuardRankInput, UpdateGuardRankInput } from '@stap/shared';
+import type {
+  SystemSettingResponse,
+  UserResponse,
+  PaginatedResponse,
+  UserRole,
+  GuardRankResponse,
+  CreateGuardRankInput,
+  UpdateGuardRankInput,
+  DeductionTypeResponse,
+  CreateDeductionTypeInput,
+  UpdateDeductionTypeInput,
+} from '@stap/shared';
 
 export const settingsApi = {
   getAll(): Promise<SystemSettingResponse[]> {
@@ -99,6 +110,50 @@ export const settingsApi = {
   reorderRanks(orderedIds: string[]): Promise<GuardRankResponse[]> {
     return api
       .put<{ success: boolean; data: GuardRankResponse[] }>('/settings/ranks/reorder', { orderedIds })
+      .then((r) => r.data.data);
+  },
+
+  // ── Deduction Types ──────────────────────────────────────────────────────────
+
+  getDeductionTypes(activeOnly = true): Promise<DeductionTypeResponse[]> {
+    return api
+      .get<{ success: boolean; data: DeductionTypeResponse[] }>('/settings/deduction-types', {
+        params: { activeOnly: activeOnly ? 'true' : 'false' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  createDeductionType(data: CreateDeductionTypeInput): Promise<DeductionTypeResponse> {
+    return api
+      .post<{ success: boolean; data: DeductionTypeResponse }>('/settings/deduction-types', data)
+      .then((r) => r.data.data);
+  },
+
+  updateDeductionType(id: string, data: UpdateDeductionTypeInput): Promise<DeductionTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: DeductionTypeResponse }>(`/settings/deduction-types/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  deactivateDeductionType(id: string): Promise<DeductionTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: DeductionTypeResponse }>(`/settings/deduction-types/${id}/deactivate`)
+      .then((r) => r.data.data);
+  },
+
+  activateDeductionType(id: string): Promise<DeductionTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: DeductionTypeResponse }>(`/settings/deduction-types/${id}/activate`)
+      .then((r) => r.data.data);
+  },
+
+  deleteDeductionType(id: string): Promise<void> {
+    return api.delete(`/settings/deduction-types/${id}`).then(() => undefined);
+  },
+
+  reorderDeductionTypes(orderedIds: string[]): Promise<DeductionTypeResponse[]> {
+    return api
+      .put<{ success: boolean; data: DeductionTypeResponse[] }>('/settings/deduction-types/reorder', { orderedIds })
       .then((r) => r.data.data);
   },
 };

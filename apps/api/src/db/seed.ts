@@ -570,6 +570,30 @@ async function main() {
     console.log(`✅ Seeded rank: ${rank.name}`);
   }
 
+  // ── Deduction Types ──────────────────────────────────────────────────────────
+
+  const defaultDeductionTypes = [
+    { name: 'Uniform Recovery',         code: 'UNIFORM_RECOVERY',         defaultAmount: null,  description: 'Recovery of uniform costs. Amount varies by item.',                                                                   isAutomatic: false, displayOrder: 1 },
+    { name: 'Damage / Loss',            code: 'DAMAGE_LOSS',              defaultAmount: null,  description: 'Charged when a guard loses or damages company property. Amount equals item replacement cost.',                        isAutomatic: false, displayOrder: 2 },
+    { name: 'Food',                     code: 'FOOD',                     defaultAmount: 2000,  description: 'UGX 2,000 per plate. Enter number of plates in the description.',                                                     isAutomatic: false, displayOrder: 3 },
+    { name: 'Transport',                code: 'TRANSPORT',                defaultAmount: null,  description: 'Actual cost of company transport used by the guard. Enter exact amount.',                                            isAutomatic: false, displayOrder: 4 },
+    { name: 'Indiscipline Charge',      code: 'INDISCIPLINE',             defaultAmount: 10000, description: 'Standard charge per disciplinary charge sheet: UGX 10,000.',                                                         isAutomatic: false, displayOrder: 5 },
+    { name: 'Late Coming',              code: 'LATE_COMING',              defaultAmount: 10000, description: 'Standard charge per late coming occurrence: UGX 10,000.',                                                             isAutomatic: false, displayOrder: 6 },
+    { name: 'Unworked Day',             code: 'UNWORKED_DAY',             defaultAmount: 6666,  description: 'UGX 6,666 per day not worked (salary ÷ 30). Auto-calculated from attendance.',                                       isAutomatic: true,  displayOrder: 7 },
+    { name: 'Disciplinary Penalty',     code: 'DISCIPLINARY_PENALTY',     defaultAmount: null,  description: 'Financial penalty imposed as part of a formal disciplinary outcome.',                                                 isAutomatic: false, displayOrder: 8 },
+    { name: 'Salary Advance Repayment', code: 'SALARY_ADVANCE_REPAYMENT', defaultAmount: null,  description: 'Repayment of a salary advance previously issued to the guard.',                                                      isAutomatic: false, displayOrder: 9 },
+    { name: 'NSSF Contribution',        code: 'NSSF',                     defaultAmount: null,  description: 'National Social Security Fund deduction. Amount is a percentage of gross salary.',                                   isAutomatic: true,  displayOrder: 10 },
+  ];
+
+  for (const dt of defaultDeductionTypes) {
+    await prisma.deductionType.upsert({
+      where:  { code: dt.code },
+      update: {},
+      create: dt,
+    });
+    console.log(`✅ Seeded deduction type: ${dt.name}`);
+  }
+
   console.log('\n🎉 Seed completed successfully!\n');
 }
 

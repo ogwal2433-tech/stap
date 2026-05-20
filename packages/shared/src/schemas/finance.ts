@@ -22,13 +22,7 @@ export const RecordPaymentSchema = z.object({
 
 export const CreateDeductionSchema = z.object({
   guardId:       z.string().min(1),
-  type:          z.enum([
-    'UNIFORM_RECOVERY',
-    'DAMAGE_LOSS',
-    'DISCIPLINARY_PENALTY',
-    'SALARY_ADVANCE_REPAYMENT',
-    'NSSF',
-  ]),
+  type:          z.string().min(1).max(100).describe('Deduction type code from settings'),
   amount:        z.number().int().positive(),
   description:   z.string().min(5),
   effectiveDate: z.string().datetime(),

@@ -164,7 +164,15 @@ import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError, ForbiddenError } from '../errors/AppError';
-import { ROLES, CreateGuardRankSchema, UpdateGuardRankSchema, ReorderGuardRanksSchema } from '@stap/shared';
+import {
+  ROLES,
+  CreateGuardRankSchema,
+  UpdateGuardRankSchema,
+  ReorderGuardRanksSchema,
+  CreateDeductionTypeSchema,
+  UpdateDeductionTypeSchema,
+  ReorderDeductionTypesSchema,
+} from '@stap/shared';
 
 const router: IRouter = Router();
 
@@ -324,6 +332,82 @@ router.delete(
   requireRole(ROLES.DIRECTOR),
   asyncHandler(async (req, res) => {
     await rankService.deleteRank(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  }),
+);
+
+// ── Deduction Type Management ──────────────────────────────────────────────────
+
+// GET /deduction-types — all authenticated users (needed for deduction form dropdown)
+router.get(
+  '/deduction-types',
+  asyncHandler(async (req, res) => {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const data = await settingsService.listDeductionTypes(activeOnly);
+    res.json({ success: true, data });
+  }),
+);
+
+// PUT /deduction-types/reorder — must come before /:id to avoid param conflict
+router.put(
+  '/deduction-types/reorder',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = ReorderDeductionTypesSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await settingsService.reorderDeductionTypes(parsed.data.orderedIds);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/deduction-types',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = CreateDeductionTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await settingsService.createDeductionType(parsed.data, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/deduction-types/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    if (req.body?.code !== undefined) {
+      throw new AppError('Deduction type code cannot be changed after creation.', 400);
+    }
+    const parsed = UpdateDeductionTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await settingsService.updateDeductionType(req.params.id, parsed.data, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/deduction-types/:id/deactivate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await settingsService.deactivateDeductionType(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/deduction-types/:id/activate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await settingsService.activateDeductionType(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+router.delete(
+  '/deduction-types/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    await settingsService.deleteDeductionType(req.params.id, req.user!.userId);
     res.json({ success: true });
   }),
 );
