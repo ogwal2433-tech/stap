@@ -185,24 +185,12 @@ describe('POST /guards/:id/transfer — validation', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when toSiteId is not a valid CUID', async () => {
-    const res = await request(app)
-      .post(`/api/v1/guards/${guardId}/transfer`)
-      .set('Authorization', `Bearer ${tokens.DIRECTOR}`)
-      .send({
-        toSiteId:     'not-a-valid-cuid',
-        reason:       'Operational redeployment for testing',
-        transferDate: new Date().toISOString(),
-      });
-    expect(res.status).toBe(400);
-  });
-
   it('returns 404 when toSiteId does not exist in the database', async () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.DIRECTOR}`)
       .send({
-        toSiteId:     'clzzzzzzzzzzzzzzzzzzzzzzzz',
+        toSiteId:     'nonexistent-site-id',
         reason:       'Operational redeployment for testing',
         transferDate: new Date().toISOString(),
       });

@@ -122,8 +122,8 @@ export const ReinstateGuardSchema = z.object({
 });
 
 export const CreateGuardTransferSchema = z.object({
-  fromSiteId:   z.string().cuid().optional(),
-  toSiteId:     z.string().cuid(),
+  fromSiteId:   z.string().min(1).optional(),
+  toSiteId:     z.string().min(1),
   reason:       z.string().min(10).max(1000),
   transferDate: z.string().datetime(),
 });

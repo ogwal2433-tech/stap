@@ -5,8 +5,8 @@ import { z } from 'zod';
 export const ReportQuerySchema = z.object({
   from:    z.string().datetime().optional(),
   to:      z.string().datetime().optional(),
-  siteId:  z.string().cuid().optional(),
-  guardId: z.string().cuid().optional(),
+  siteId:  z.string().min(1).optional(),
+  guardId: z.string().min(1).optional(),
   format:  z.enum(['json', 'excel', 'pdf']).default('json'),
 });
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;

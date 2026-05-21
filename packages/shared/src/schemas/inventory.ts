@@ -18,16 +18,16 @@ export type UpdateInventoryItemInput = z.infer<typeof UpdateInventoryItemSchema>
 // ── Transaction schemas ────────────────────────────────────────────────────────
 
 export const IssueItemSchema = z.object({
-  itemId:       z.string().cuid(),
-  guardId:      z.string().cuid(),
+  itemId:       z.string().min(1),
+  guardId:      z.string().min(1),
   quantity:     z.number().int().min(1),
   conditionNote: z.string().optional(),
 });
 export type IssueItemInput = z.infer<typeof IssueItemSchema>;
 
 export const ReturnItemSchema = z.object({
-  itemId:        z.string().cuid(),
-  guardId:       z.string().cuid(),
+  itemId:        z.string().min(1),
+  guardId:       z.string().min(1),
   quantity:      z.number().int().min(1),
   action:        z.enum(['RETURNED', 'LOST', 'DAMAGED']),
   conditionNote: z.string().optional(),
@@ -35,7 +35,7 @@ export const ReturnItemSchema = z.object({
 export type ReturnItemInput = z.infer<typeof ReturnItemSchema>;
 
 export const StockAdjustmentSchema = z.object({
-  itemId:    z.string().cuid(),
+  itemId:    z.string().min(1),
   quantity:  z.number().int(),
   reference: z.string().optional(),
   note:      z.string().optional(),

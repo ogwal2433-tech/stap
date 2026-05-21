@@ -39,12 +39,12 @@ export type UpdateApplicantStageInput = z.infer<typeof UpdateApplicantStageSchem
 export const CreateTrainingSessionSchema = z.object({
   title:         z.string().min(3),
   description:   z.string().optional(),
-  trainerId:     z.string().cuid(),
+  trainerId:     z.string().min(1),
   location:      z.string().optional(),
   scheduledAt:   z.string().datetime(),
   durationHours: z.coerce.number().positive().default(1),
   passMark:      z.coerce.number().int().min(0).max(100).default(70),
-  guardIds:      z.array(z.string().cuid()).min(1),
+  guardIds:      z.array(z.string().min(1)).min(1),
 });
 export type CreateTrainingSessionInput = z.infer<typeof CreateTrainingSessionSchema>;
 
@@ -52,7 +52,7 @@ export const RecordTrainingResultsSchema = z.object({
   results: z
     .array(
       z.object({
-        guardId:  z.string().cuid(),
+        guardId:  z.string().min(1),
         attended: z.boolean(),
         score:    z.number().int().min(0).max(100).optional(),
         notes:    z.string().optional(),
@@ -66,7 +66,7 @@ export type RecordTrainingResultsInput = z.infer<typeof RecordTrainingResultsSch
 
 export const CreateLeaveRequestSchema = z
   .object({
-    guardId:   z.string().cuid(),
+    guardId:   z.string().min(1),
     type:      z.enum(['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY']),
     startDate: z.string().datetime(),
     endDate:   z.string().datetime(),

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -133,6 +134,7 @@ export default function GuardFormPage() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
 
   const { data: existing, isLoading: loadingExisting } = useGuard(id ?? '');
@@ -324,8 +326,9 @@ export default function GuardFormPage() {
     reader.readAsDataURL(file);
     setPhotoUploading(true);
     try {
-      const result = await guardsApi.uploadPhoto(id, file);
-      setPhotoPreview(result.photoUrl);
+      await guardsApi.uploadPhoto(id, file);
+      queryClient.invalidateQueries({ queryKey: ['guard', id] });
+      queryClient.invalidateQueries({ queryKey: ['guards'] });
       showToast('Photo updated', 'success');
     } finally {
       setPhotoUploading(false);

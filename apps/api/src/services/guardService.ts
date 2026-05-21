@@ -531,7 +531,7 @@ class GuardService {
     const guard = await prisma.guard.findUnique({ where: { id } });
     if (!guard) throw new NotFoundError('Guard not found');
 
-    const photoUrl = `/uploads/${filePath.replace(/.*\/public\/uploads\//, '')}`;
+    const photoUrl = `/uploads/${filePath.replace(/.*public\/uploads\//, '')}`;
 
     const updated = await prisma.guard.update({
       where: { id },

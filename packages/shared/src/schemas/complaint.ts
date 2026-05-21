@@ -3,8 +3,8 @@ import { z } from 'zod';
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
 export const CreateComplaintSchema = z.object({
-  clientId:    z.string().cuid(),
-  siteId:      z.string().cuid().optional(),
+  clientId:    z.string().min(1),
+  siteId:      z.string().min(1).optional(),
   category:    z.enum(['GUARD_CONDUCT', 'LATE_DEPLOYMENT', 'BILLING_DISPUTE', 'EQUIPMENT', 'OTHER']),
   description: z.string().min(10).max(2000),
   severity:    z.enum(['LOW', 'MEDIUM', 'HIGH']),
@@ -12,7 +12,7 @@ export const CreateComplaintSchema = z.object({
 export type CreateComplaintInput = z.infer<typeof CreateComplaintSchema>;
 
 export const UpdateComplaintSchema = z.object({
-  assignedTo: z.string().cuid().optional(),
+  assignedTo: z.string().min(1).optional(),
   status:     z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
   resolution: z.string().min(10).optional(),
 }).refine(

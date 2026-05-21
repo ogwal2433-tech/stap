@@ -212,7 +212,7 @@ router.post(
 
     let photoUrl: string | undefined;
     if (req.file) {
-      photoUrl = `/uploads/${req.file.path.replace(/.*\/public\/uploads\//, '')}`;
+      photoUrl = `/uploads/${req.file.path.replace(/.*public\/uploads\//, '')}`;
     }
 
     const checkin = await prisma.supervisorCheckin.create({

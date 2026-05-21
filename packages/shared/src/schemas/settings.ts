@@ -21,7 +21,7 @@ export const UpdateDeductionTypeSchema = z.object({
 });
 
 export const ReorderDeductionTypesSchema = z.object({
-  orderedIds: z.array(z.string().cuid()).min(1),
+  orderedIds: z.array(z.string().min(1)).min(1),
 });
 
 // ── Deduction Type response type ───────────────────────────────────────────────
@@ -58,7 +58,7 @@ export const UpdateGuardRankSchema = z.object({
 });
 
 export const ReorderGuardRanksSchema = z.object({
-  orderedIds: z.array(z.string().cuid()).min(1),
+  orderedIds: z.array(z.string().min(1)).min(1),
 });
 
 // ── Guard Rank response type ───────────────────────────────────────────────────
