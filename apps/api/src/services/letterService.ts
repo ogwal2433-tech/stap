@@ -430,7 +430,11 @@ class LetterService {
     const publicPath = `/uploads/guards/${guard.id}/letters/${fileName}`;
 
     // Generate PDF with Puppeteer
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });

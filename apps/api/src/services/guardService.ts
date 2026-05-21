@@ -1269,7 +1269,11 @@ class GuardService {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, `${guardId}.pdf`);
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
     let pdfBuffer: Buffer;
     try {
       const page = await browser.newPage();

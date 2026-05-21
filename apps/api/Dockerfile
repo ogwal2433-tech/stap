@@ -8,6 +8,9 @@ RUN apk add --no-cache openssl openssl-dev libc6-compat
 
 RUN npm install -g pnpm
 
+# Skip Puppeteer's bundled Chrome download — system Chromium is used at runtime
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 # Copy workspace config and lockfile
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 
@@ -37,7 +40,21 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install OpenSSL — required by Prisma at runtime
-RUN apk add --no-cache openssl libc6-compat
+# Install Chromium and font dependencies — required by Puppeteer for PDF generation
+RUN apk add --no-cache \
+    openssl \
+    libc6-compat \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji
+
+# Tell Puppeteer to use the system Chromium instead of downloading its own
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 RUN npm install -g pnpm
 
