@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardsApi } from '../lib/guards.api';
+import { useToast } from '../context/ToastContext';
 import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput, CreateGuardTransferInput } from '@stap/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
@@ -127,11 +128,13 @@ export function useDownloadIdCard() {
 
 export function useTransferGuard(guardId: string) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   return useMutation({
     mutationFn: (data: CreateGuardTransferInput) => guardsApi.transferGuard(guardId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guard', guardId] });
       queryClient.invalidateQueries({ queryKey: ['transfers', guardId] });
+      showToast('Guard transferred successfully', 'success');
     },
   });
 }

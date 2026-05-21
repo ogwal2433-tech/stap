@@ -3,7 +3,6 @@ import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import { clientsApi } from '../../lib/clients.api';
 import { useTransferGuard } from '../../hooks/useGuards';
-import { useToast } from '../../context/ToastContext';
 
 interface TransferModalProps {
   guardId: string;
@@ -25,7 +24,6 @@ export default function TransferModal({
   const [transferDate, setTransferDate] = useState(today);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
-  const { showToast } = useToast();
 
   const { data: sitesPage, isLoading: sitesLoading } = useQuery({
     queryKey: ['sites-all'],
@@ -54,7 +52,6 @@ export default function TransferModal({
       },
       {
         onSuccess: () => {
-          showToast('Guard transferred successfully', 'success');
           onSuccess();
           onClose();
         },
