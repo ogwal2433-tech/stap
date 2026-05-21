@@ -50,7 +50,11 @@ export default function CashbookEntryModal({ onClose }: Props) {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Date <span className="text-danger">*</span></Form.Label>
-                <Form.Control type="date" {...register('date')} isInvalid={!!errors.date} />
+                <Form.Control
+                  type="date"
+                  {...register('date', { setValueAs: (v: string) => (v ? new Date(v).toISOString() : v) })}
+                  isInvalid={!!errors.date}
+                />
                 <Form.Control.Feedback type="invalid">{errors.date?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>

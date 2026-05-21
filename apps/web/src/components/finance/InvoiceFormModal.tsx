@@ -87,14 +87,22 @@ export default function InvoiceFormModal({ onClose }: Props) {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Period Start <span className="text-danger">*</span></Form.Label>
-                <Form.Control type="date" {...register('periodStart')} isInvalid={!!errors.periodStart} />
+                <Form.Control
+                  type="date"
+                  {...register('periodStart', { setValueAs: (v: string) => (v ? new Date(v).toISOString() : v) })}
+                  isInvalid={!!errors.periodStart}
+                />
                 <Form.Control.Feedback type="invalid">{errors.periodStart?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Period End <span className="text-danger">*</span></Form.Label>
-                <Form.Control type="date" {...register('periodEnd')} isInvalid={!!errors.periodEnd} />
+                <Form.Control
+                  type="date"
+                  {...register('periodEnd', { setValueAs: (v: string) => (v ? new Date(v).toISOString() : v) })}
+                  isInvalid={!!errors.periodEnd}
+                />
                 <Form.Control.Feedback type="invalid">{errors.periodEnd?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>
@@ -132,7 +140,11 @@ export default function InvoiceFormModal({ onClose }: Props) {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Due Date <span className="text-danger">*</span></Form.Label>
-                <Form.Control type="date" {...register('dueDate')} isInvalid={!!errors.dueDate} />
+                <Form.Control
+                  type="date"
+                  {...register('dueDate', { setValueAs: (v: string) => (v ? new Date(v).toISOString() : v) })}
+                  isInvalid={!!errors.dueDate}
+                />
                 <Form.Control.Feedback type="invalid">{errors.dueDate?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>

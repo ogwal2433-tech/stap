@@ -37,10 +37,7 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
 
   const onSubmit = async (values: CreateDeductionInput) => {
     try {
-      await createDeduction.mutateAsync({
-        ...values,
-        effectiveDate: new Date(values.effectiveDate).toISOString(),
-      });
+      await createDeduction.mutateAsync(values);
       showToast('Deduction added', 'success');
       onClose();
     } catch {
@@ -125,7 +122,13 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Effective Date <span className="text-danger">*</span></Form.Label>
-                <Form.Control type="date" {...register('effectiveDate')} isInvalid={!!errors.effectiveDate} />
+                <Form.Control
+                  type="date"
+                  {...register('effectiveDate', {
+                    setValueAs: (v: string) => (v ? new Date(v).toISOString() : v),
+                  })}
+                  isInvalid={!!errors.effectiveDate}
+                />
                 <Form.Control.Feedback type="invalid">{errors.effectiveDate?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>
