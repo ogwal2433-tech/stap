@@ -19,6 +19,13 @@ const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   EXPIRED: 'danger',
 };
 
+const SITE_TYPE_BADGE: Record<string, { bg: string; text?: string; label: string }> = {
+  REGULAR:       { bg: 'secondary',              label: 'Regular' },
+  TEMPORARY:     { bg: 'warning',  text: 'dark', label: 'Temporary' },
+  SPECIAL_DUTIES:{ bg: 'info',     text: 'dark', label: 'Special Duties' },
+  PERMANENT:     { bg: 'success',                label: 'Permanent' },
+};
+
 const CONTRACT_STATUS_BADGE: Record<string, { bg: string; text?: string }> = {
   DRAFT:    { bg: 'secondary' },
   ACTIVE:   { bg: 'success' },
@@ -202,40 +209,64 @@ export default function ClientDetailPage() {
               <thead className="table-light">
                 <tr>
                   <th>Site Name</th>
+                  <th>Type</th>
                   <th>Location</th>
-                  <th>Manager</th>
-                  <th>Guards Req.</th>
-                  <th>Deployments</th>
+                  <th>Guards</th>
+                  <th>Armed</th>
+                  <th>Shifts</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {sites.map((s) => (
-                  <tr key={s.id}>
-                    <td className="fw-semibold">{s.siteName}</td>
-                    <td>{s.location}</td>
-                    <td>{s.siteManagerName ?? '—'}</td>
-                    <td>{s.guardsRequired}</td>
-                    <td>{s._count?.deployments ?? 0}</td>
-                    <td>
-                      <div className="d-flex gap-1">
-                        <Button size="sm" variant="outline-secondary" onClick={() => setIncidentModal({ siteId: s.id, siteName: s.siteName })}>
-                          <i className="bi bi-flag me-1" />Incident
-                        </Button>
-                        <RoleGuard allowedRoles={SITE_WRITE_ROLES}>
-                          <Button size="sm" variant="outline-primary" onClick={() => setSiteModal({ site: s })}>
-                            Edit
+                {sites.map((s) => {
+                  const typeDef = SITE_TYPE_BADGE[s.siteType] ?? SITE_TYPE_BADGE.REGULAR;
+                  return (
+                    <tr key={s.id}>
+                      <td className="fw-semibold">{s.siteName}</td>
+                      <td>
+                        <Badge bg={typeDef.bg} text={typeDef.text}>{typeDef.label}</Badge>
+                      </td>
+                      <td className="text-muted">{s.location}</td>
+                      <td>{s.guardsRequired}</td>
+                      <td>
+                        {s.requiresFirearms    && <span title="Firearms required" className="me-1">🔥</span>}
+                        {s.requiresArmedGuards && <span title="Armed guards required" className="me-1">🔫</span>}
+                        {s.requiresWeapons     && <span title="Weapons required" className="me-1">🛡️</span>}
+                        {!s.requiresFirearms && !s.requiresArmedGuards && !s.requiresWeapons && (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {s.allowedShiftTypes.length === 0 ? (
+                          <span className="text-muted small">Any</span>
+                        ) : (
+                          s.allowedShiftTypes.map((code) => (
+                            <Badge key={code} bg="light" text="dark" className="me-1 border" style={{ fontSize: '0.7rem' }}>
+                              {code}
+                            </Badge>
+                          ))
+                        )}
+                      </td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <Button size="sm" variant="outline-secondary" onClick={() => setIncidentModal({ siteId: s.id, siteName: s.siteName })}>
+                            <i className="bi bi-flag me-1" />Incident
                           </Button>
-                        </RoleGuard>
-                        <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
-                          <Button size="sm" variant="outline-danger" onClick={() => handleDeleteSite(s.id, s.siteName)}>
-                            Delete
-                          </Button>
-                        </RoleGuard>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <RoleGuard allowedRoles={SITE_WRITE_ROLES}>
+                            <Button size="sm" variant="outline-primary" onClick={() => setSiteModal({ site: s })}>
+                              Edit
+                            </Button>
+                          </RoleGuard>
+                          <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
+                            <Button size="sm" variant="outline-danger" onClick={() => handleDeleteSite(s.id, s.siteName)}>
+                              Delete
+                            </Button>
+                          </RoleGuard>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </Table>
           )}

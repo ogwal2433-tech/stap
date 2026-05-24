@@ -74,6 +74,12 @@ export default function RosterBuilderTab() {
 
   const selectedSite = sitesData?.data.find((s) => s.id === selectedSiteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
 
+  // Shift types filtered to those allowed at the selected site
+  const availableShiftTypes = useMemo(() => {
+    if (!selectedSite?.allowedShiftTypes?.length) return shiftTypes;
+    return shiftTypes.filter((s) => selectedSite.allowedShiftTypes.includes(s.code));
+  }, [shiftTypes, selectedSite]);
+
   // Build options for SearchableSelect
   const siteOptions = useMemo(
     () => (sitesData?.data ?? []).map((s) => ({
@@ -100,6 +106,28 @@ export default function RosterBuilderTab() {
       `${g.fullName} ${g.phone ?? ''}`.toLowerCase().includes(q),
     );
   }, [guardsData, guardSearch]);
+
+  function handleSiteChange(siteId: string) {
+    setSelectedSiteId(siteId);
+    setSelectedGuardIds([]);
+
+    const site = sitesData?.data.find((s) => s.id === siteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
+    if (!site) return;
+
+    // Auto-select default shift type and fill times
+    if (site.defaultShiftType) {
+      handleShiftSelect(site.defaultShiftType);
+    }
+
+    // Auto-set deployment type based on site security requirements
+    if (site.requiresFirearms) {
+      setDeploymentType('FIREARMS');
+    } else if (site.requiresArmedGuards) {
+      setDeploymentType('ARMED');
+    } else {
+      setDeploymentType('UNARMED');
+    }
+  }
 
   function toggleGuard(guardId: string) {
     setSelectedGuardIds((prev) =>
@@ -208,7 +236,7 @@ export default function RosterBuilderTab() {
             <SearchableSelect
               options={siteOptions}
               value={selectedSiteId}
-              onChange={(id) => { setSelectedSiteId(id); setSelectedGuardIds([]); }}
+              onChange={handleSiteChange}
               placeholder="— Choose a site —"
               searchPlaceholder="Search sites..."
               isLoading={sitesLoading}
@@ -217,6 +245,17 @@ export default function RosterBuilderTab() {
               <div className="mt-2 text-muted small">
                 Guards required: <strong>{selectedSite.guardsRequired}</strong>
               </div>
+            )}
+            {selectedSite && (selectedSite.requiresFirearms || selectedSite.requiresArmedGuards || selectedSite.requiresWeapons) && (
+              <Alert variant="warning" className="py-2 mt-2 mb-0">
+                <strong>⚠️ Security Requirements:</strong>
+                <ul className="mb-0 mt-1 small ps-3">
+                  {selectedSite.requiresFirearms    && <li>🔥 Firearms required at this site</li>}
+                  {selectedSite.requiresArmedGuards && <li>🔫 Armed guards required</li>}
+                  {selectedSite.requiresWeapons     && <li>🛡️ Other weapons/equipment required</li>}
+                  {selectedSite.equipmentDetails    && <li>{selectedSite.equipmentDetails}</li>}
+                </ul>
+              </Alert>
             )}
           </Col>
 
@@ -295,12 +334,19 @@ export default function RosterBuilderTab() {
             <Row className="g-3">
               {/* Shift Type */}
               <Col md={4}>
-                <Form.Label className="small">Shift Type</Form.Label>
-                {shiftTypes.length === 0 ? (
+                <Form.Label className="small">
+                  Shift Type
+                  {selectedSite?.allowedShiftTypes?.length ? (
+                    <span className="text-muted ms-1" style={{ fontSize: '0.7rem' }}>
+                      (filtered by site)
+                    </span>
+                  ) : null}
+                </Form.Label>
+                {availableShiftTypes.length === 0 ? (
                   <p className="text-muted small">Loading shift types...</p>
                 ) : (
                   <div className="d-flex gap-3 flex-wrap">
-                    {shiftTypes.map((s) => (
+                    {availableShiftTypes.map((s) => (
                       <Form.Check
                         key={s.id}
                         type="radio"

@@ -1,0 +1,320 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueueService } from '../../jobs/QueueService';
+
+// ── Mocks ──────────────────────────────────────────────────────────────────────
+
+vi.mock('../../db/prisma', () => ({
+  default: {
+    client:            { findUnique: vi.fn() },
+    shiftType:         { findUnique: vi.fn(), findMany: vi.fn() },
+    site:              { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(), count: vi.fn() },
+    siteEquipmentItem: { createMany: vi.fn(), deleteMany: vi.fn() },
+    deployment:        { count: vi.fn() },
+  },
+}));
+
+vi.mock('../../jobs/QueueService', () => ({
+  QueueService: { logAudit: vi.fn().mockResolvedValue(undefined) },
+}));
+
+import prisma from '../../db/prisma';
+import { siteService } from '../../services/siteService';
+import { AppError, NotFoundError } from '../../errors/AppError';
+
+// ── Typed mock handles ─────────────────────────────────────────────────────────
+
+type MockPrisma = {
+  client:            { findUnique: ReturnType<typeof vi.fn> };
+  shiftType:         { findUnique: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  site:              {
+    findUnique: ReturnType<typeof vi.fn>;
+    findMany:   ReturnType<typeof vi.fn>;
+    create:     ReturnType<typeof vi.fn>;
+    update:     ReturnType<typeof vi.fn>;
+    delete:     ReturnType<typeof vi.fn>;
+    count:      ReturnType<typeof vi.fn>;
+  };
+  siteEquipmentItem: { createMany: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
+  deployment:        { count: ReturnType<typeof vi.fn> };
+};
+
+const mock = prisma as unknown as MockPrisma;
+
+// ── Fixtures ───────────────────────────────────────────────────────────────────
+
+const baseClient = { id: 'c1', clientName: 'KCCA' };
+const baseShift  = { code: 'DAY', isActive: true };
+
+const baseSiteRow = {
+  id:                  's1',
+  clientId:            'c1',
+  siteName:            'City Hall',
+  location:            'Kampala CBD',
+  gpsLat:              null,
+  gpsLon:              null,
+  siteManagerName:     null,
+  siteManagerContact:  null,
+  specialInstructions: null,
+  guardsRequired:      4,
+  siteType:            'REGULAR',
+  requiresFirearms:    false,
+  requiresArmedGuards: false,
+  requiresWeapons:     false,
+  equipmentDetails:    null,
+  allowedShiftTypes:   [],
+  defaultShiftType:    null,
+  equipmentItems:      [],
+  createdAt:           new Date('2026-01-01'),
+  updatedAt:           new Date('2026-01-01'),
+  client:              { clientName: 'KCCA' },
+  _count:              { deployments: 0, attendance: 0, incidents: 0 },
+};
+
+const baseCreateInput = {
+  clientId:            'c1',
+  siteName:            'City Hall',
+  location:            'Kampala CBD',
+  guardsRequired:      4,
+  siteType:            'REGULAR' as const,
+  requiresFirearms:    false,
+  requiresArmedGuards: false,
+  requiresWeapons:     false,
+  allowedShiftTypes:   [],
+  equipmentItems:      [],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mock.client.findUnique.mockResolvedValue(baseClient);
+  mock.shiftType.findUnique.mockResolvedValue(baseShift);
+  mock.shiftType.findMany.mockResolvedValue([baseShift]);
+  mock.site.findUnique.mockResolvedValue(baseSiteRow);
+  mock.site.create.mockResolvedValue(baseSiteRow);
+  mock.site.update.mockResolvedValue(baseSiteRow);
+  mock.site.delete.mockResolvedValue({});
+  mock.siteEquipmentItem.createMany.mockResolvedValue({ count: 0 });
+  mock.siteEquipmentItem.deleteMany.mockResolvedValue({ count: 0 });
+  mock.deployment.count.mockResolvedValue(0);
+});
+
+// ── create() ──────────────────────────────────────────────────────────────────
+
+describe('siteService.create()', () => {
+  it('creates site with siteType = REGULAR by default', async () => {
+    await siteService.create(baseCreateInput, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ siteType: 'REGULAR' }),
+      }),
+    );
+  });
+
+  it('creates site with siteType = TEMPORARY', async () => {
+    await siteService.create({ ...baseCreateInput, siteType: 'TEMPORARY' }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ siteType: 'TEMPORARY' }),
+      }),
+    );
+  });
+
+  it('creates site with siteType = SPECIAL_DUTIES', async () => {
+    await siteService.create({ ...baseCreateInput, siteType: 'SPECIAL_DUTIES' }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ siteType: 'SPECIAL_DUTIES' }),
+      }),
+    );
+  });
+
+  it('creates site with requiresFirearms = true', async () => {
+    await siteService.create({ ...baseCreateInput, requiresFirearms: true }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ requiresFirearms: true }),
+      }),
+    );
+  });
+
+  it('creates site with requiresArmedGuards = true', async () => {
+    await siteService.create({ ...baseCreateInput, requiresArmedGuards: true }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ requiresArmedGuards: true }),
+      }),
+    );
+  });
+
+  it('creates site with requiresWeapons = true', async () => {
+    await siteService.create({ ...baseCreateInput, requiresWeapons: true }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ requiresWeapons: true }),
+      }),
+    );
+  });
+
+  it('creates equipment items when provided', async () => {
+    const items = [
+      { itemName: 'Baton', quantity: 4, notes: undefined },
+      { itemName: 'Radio', quantity: 2, notes: 'Channel 5' },
+    ];
+
+    await siteService.create({ ...baseCreateInput, equipmentItems: items }, 'user1');
+
+    expect(mock.siteEquipmentItem.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ itemName: 'Baton', quantity: 4, siteId: 's1' }),
+          expect.objectContaining({ itemName: 'Radio', quantity: 2, siteId: 's1' }),
+        ]),
+      }),
+    );
+  });
+
+  it('creates site with no equipment items — skips createMany', async () => {
+    await siteService.create({ ...baseCreateInput, equipmentItems: [] }, 'user1');
+
+    expect(mock.siteEquipmentItem.createMany).not.toHaveBeenCalled();
+  });
+
+  it('creates site with allowedShiftTypes = [DAY, NIGHT]', async () => {
+    mock.shiftType.findMany.mockResolvedValue([
+      { code: 'DAY', isActive: true },
+      { code: 'NIGHT', isActive: true },
+    ]);
+
+    await siteService.create({ ...baseCreateInput, allowedShiftTypes: ['DAY', 'NIGHT'] }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ allowedShiftTypes: ['DAY', 'NIGHT'] }),
+      }),
+    );
+  });
+
+  it('creates site with defaultShiftType = DAY', async () => {
+    await siteService.create({ ...baseCreateInput, defaultShiftType: 'DAY' }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ defaultShiftType: 'DAY' }),
+      }),
+    );
+  });
+
+  it('throws 400 when defaultShiftType code does not exist', async () => {
+    mock.shiftType.findUnique.mockResolvedValue(null);
+
+    await expect(
+      siteService.create({ ...baseCreateInput, defaultShiftType: 'UNKNOWN' }, 'user1'),
+    ).rejects.toThrow(AppError);
+
+    await expect(
+      siteService.create({ ...baseCreateInput, defaultShiftType: 'UNKNOWN' }, 'user1'),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('throws 400 when allowedShiftTypes contains invalid code', async () => {
+    mock.shiftType.findMany.mockResolvedValue([]); // no matching valid codes
+
+    await expect(
+      siteService.create({ ...baseCreateInput, allowedShiftTypes: ['BOGUS'] }, 'user1'),
+    ).rejects.toThrow(AppError);
+  });
+
+  it('creates audit log entry on creation', async () => {
+    await siteService.create(baseCreateInput, 'user1');
+
+    expect(QueueService.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'SITE_CREATED', entity: 'site' }),
+    );
+  });
+});
+
+// ── update() ──────────────────────────────────────────────────────────────────
+
+describe('siteService.update()', () => {
+  it('updates siteType from REGULAR to TEMPORARY', async () => {
+    mock.site.update.mockResolvedValue({ ...baseSiteRow, siteType: 'TEMPORARY' });
+
+    await siteService.update('s1', { siteType: 'TEMPORARY' }, 'user1');
+
+    expect(mock.site.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ siteType: 'TEMPORARY' }) }),
+    );
+  });
+
+  it('replaces equipment items with new set', async () => {
+    await siteService.update('s1', { equipmentItems: [{ itemName: 'Radio', quantity: 1 }] }, 'user1');
+
+    expect(mock.siteEquipmentItem.deleteMany).toHaveBeenCalledWith({ where: { siteId: 's1' } });
+    expect(mock.siteEquipmentItem.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears equipment items when empty array passed', async () => {
+    await siteService.update('s1', { equipmentItems: [] }, 'user1');
+
+    expect(mock.siteEquipmentItem.deleteMany).toHaveBeenCalledWith({ where: { siteId: 's1' } });
+    expect(mock.siteEquipmentItem.createMany).not.toHaveBeenCalled();
+  });
+
+  it('does not touch equipmentItems when field is undefined', async () => {
+    await siteService.update('s1', { siteName: 'New Name' }, 'user1');
+
+    expect(mock.siteEquipmentItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('updates allowedShiftTypes', async () => {
+    mock.shiftType.findMany.mockResolvedValue([{ code: 'NIGHT', isActive: true }]);
+
+    await siteService.update('s1', { allowedShiftTypes: ['NIGHT'] }, 'user1');
+
+    expect(mock.site.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ allowedShiftTypes: ['NIGHT'] }) }),
+    );
+  });
+
+  it('creates audit log on update', async () => {
+    await siteService.update('s1', { siteName: 'Updated' }, 'user1');
+
+    expect(QueueService.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'SITE_UPDATED' }),
+    );
+  });
+
+  it('throws NotFoundError when site not found', async () => {
+    mock.site.findUnique.mockResolvedValue(null);
+
+    await expect(siteService.update('bad', { siteName: 'X' }, 'user1')).rejects.toThrow(NotFoundError);
+  });
+});
+
+// ── getById() ─────────────────────────────────────────────────────────────────
+
+describe('siteService.getById()', () => {
+  it('includes equipmentItems in response', async () => {
+    mock.site.findUnique.mockResolvedValue({
+      ...baseSiteRow,
+      equipmentItems: [{ id: 'ei1', itemName: 'Baton', quantity: 2, notes: null }],
+      deployments:    [],
+    });
+
+    const result = await siteService.getById('s1');
+
+    expect(result.equipmentItems).toHaveLength(1);
+    expect(result.equipmentItems[0].itemName).toBe('Baton');
+  });
+
+  it('throws NotFoundError when site not found', async () => {
+    mock.site.findUnique.mockResolvedValue(null);
+
+    await expect(siteService.getById('bad')).rejects.toThrow(NotFoundError);
+  });
+});

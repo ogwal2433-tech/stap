@@ -9,14 +9,17 @@ import {
   useAllGuardRanks, useDeactivateRank, useActivateRank, useDeleteRank, useReorderRanks,
   useAllDeductionTypes, useDeactivateDeductionType, useActivateDeductionType,
   useDeleteDeductionType, useReorderDeductionTypes,
+  useAllShiftTypes, useDeactivateShiftType, useActivateShiftType, useDeleteShiftType, useReorderShiftTypes,
 } from '../../hooks/useSettings';
 import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
-import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse } from '@stap/shared';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
 import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeModal';
 import EditDeductionTypeModal from '../../components/settings/EditDeductionTypeModal';
+import AddShiftTypeModal from '../../components/settings/AddShiftTypeModal';
+import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +265,14 @@ export default function SettingsPage() {
 
   const runSalaryIncrements = useRunSalaryIncrements();
 
+  const { data: allShiftTypes = [], isLoading: loadingShiftTypes } = useAllShiftTypes();
+  const deactivateShiftType = useDeactivateShiftType();
+  const activateShiftType   = useActivateShiftType();
+  const deleteShiftType     = useDeleteShiftType();
+  const reorderShiftTypes   = useReorderShiftTypes();
+  const [showAddShiftType, setShowAddShiftType] = useState(false);
+  const [editShiftType, setEditShiftType] = useState<ShiftTypeResponse | null>(null);
+
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<{ group: string; message: string } | null>(null);
   const [editUser, setEditUser]   = useState<UserResponse | 'new' | null>(null);
@@ -402,6 +413,25 @@ export default function SettingsPage() {
     );
   };
 
+  const handleMoveShiftType = (index: number, direction: 'up' | 'down') => {
+    const sorted = [...allShiftTypes].sort((a, b) => a.displayOrder - b.displayOrder);
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= sorted.length) return;
+    [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+    reorderShiftTypes.mutate(
+      sorted.map((t) => t.id),
+      { onError: (err: any) => showToast(err?.response?.data?.error ?? 'Reorder failed', 'danger') },
+    );
+  };
+
+  const handleDeleteShiftType = (shift: ShiftTypeResponse) => {
+    if (!confirm(`Delete "${shift.name}"? This cannot be undone.`)) return;
+    deleteShiftType.mutate(shift.id, {
+      onSuccess: () => showToast('Shift type deleted', 'success'),
+      onError: (err: any) => showToast(err?.response?.data?.error ?? 'Delete failed', 'danger'),
+    });
+  };
+
   return (
     <div className="container-fluid py-4">
       <div className="mb-4">
@@ -460,6 +490,26 @@ export default function SettingsPage() {
                         </Col>
                       </Row>
                     ))
+                  )}
+                  {/* Site type definitions card — only in GENERAL tab */}
+                  {group === 'GENERAL' && (
+                    <div className="card mb-0 mt-4 border-0 bg-light">
+                      <div className="card-header fw-bold border-0" style={{ color: '#1B3A6B', background: 'transparent' }}>
+                        Site Type Definitions
+                      </div>
+                      <div className="card-body pt-0">
+                        <dl className="mb-0 small">
+                          <dt>Regular</dt>
+                          <dd className="text-muted mb-2">Standard ongoing site assignment with no special classification.</dd>
+                          <dt>Temporary</dt>
+                          <dd className="text-muted mb-2">Short-term assignment. Guards deployed for a defined period only.</dd>
+                          <dt>Special Duties</dt>
+                          <dd className="text-muted mb-2">Events, VIP protection, or non-standard assignments requiring a briefing.</dd>
+                          <dt>Permanent</dt>
+                          <dd className="text-muted mb-0">Long-term contracted site with continuous guard deployment.</dd>
+                        </dl>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -706,6 +756,133 @@ export default function SettingsPage() {
               </ul>
             </div>
           )}
+        </Tab>
+
+        {/* ── Shift Types ───────────────────────────────────────────────────────── */}
+        <Tab eventKey="shift-types" title={<><i className="bi bi-clock me-1" />Shift Types</>}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Shift Types</h6>
+            <Button size="sm" onClick={() => setShowAddShiftType(true)}>
+              <i className="bi bi-plus-lg me-1" />Add Shift Type
+            </Button>
+          </div>
+          <Alert variant="info" className="small py-2">
+            Shift types appear in the roster builder. Setting a start and end time will auto-fill
+            the time fields when that shift is selected. Overtime shifts allow recording extra hours per guard.
+          </Alert>
+          {loadingShiftTypes ? (
+            <Spinner size="sm" />
+          ) : allShiftTypes.length === 0 ? (
+            <Alert variant="light" className="small">No shift types configured.</Alert>
+          ) : (
+            <div className="border rounded">
+              <ul className="list-unstyled mb-0">
+                {[...allShiftTypes]
+                  .sort((a, b) => a.displayOrder - b.displayOrder)
+                  .map((shift, idx, arr) => (
+                    <li
+                      key={shift.id}
+                      className="d-flex align-items-start gap-2 px-3 py-2 border-bottom"
+                    >
+                      <div className="d-flex flex-column" style={{ gap: 1 }}>
+                        <Button
+                          size="sm" variant="link" className="p-0 text-muted"
+                          style={{ fontSize: 11, lineHeight: 1 }}
+                          disabled={idx === 0}
+                          onClick={() => handleMoveShiftType(idx, 'up')}
+                          title="Move up"
+                        >▲</Button>
+                        <Button
+                          size="sm" variant="link" className="p-0 text-muted"
+                          style={{ fontSize: 11, lineHeight: 1 }}
+                          disabled={idx === arr.length - 1}
+                          onClick={() => handleMoveShiftType(idx, 'down')}
+                          title="Move down"
+                        >▼</Button>
+                      </div>
+                      <div className="flex-grow-1 small">
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
+                          <span className={`fw-medium ${!shift.isActive ? 'text-muted text-decoration-line-through' : ''}`}>
+                            {shift.name}
+                          </span>
+                          <Badge bg="light" text="dark" className="font-monospace" style={{ fontSize: '0.6rem' }}>
+                            {shift.code}
+                          </Badge>
+                          {shift.isOvertime && (
+                            <Badge bg="warning" text="dark" style={{ fontSize: '0.6rem' }}>OVERTIME</Badge>
+                          )}
+                          {!shift.isActive && (
+                            <span className="text-danger" style={{ fontSize: '0.7rem' }}>(inactive)</span>
+                          )}
+                        </div>
+                        <div className="text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                          {shift.startTime && shift.endTime
+                            ? <span className="me-2">{shift.startTime} → {shift.endTime}</span>
+                            : <span className="me-2 text-muted">No default times</span>}
+                          {shift.durationHours != null && (
+                            <span className="me-2">{shift.durationHours} hrs</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="d-flex gap-1">
+                        <Button
+                          size="sm" variant="outline-secondary"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => setEditShiftType(shift)}
+                          title="Edit shift type"
+                        >
+                          <i className="bi bi-pencil" />
+                        </Button>
+                        {shift.isActive ? (
+                          <Button
+                            size="sm" variant="outline-warning"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => deactivateShiftType.mutate(shift.id, {
+                              onSuccess: () => showToast('Shift type deactivated', 'success'),
+                              onError: (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+                            })}
+                            title="Deactivate shift type"
+                          >
+                            <i className="bi bi-eye-slash" />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm" variant="outline-success"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => activateShiftType.mutate(shift.id, {
+                              onSuccess: () => showToast('Shift type activated', 'success'),
+                              onError: (err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'),
+                            })}
+                            title="Activate shift type"
+                          >
+                            <i className="bi bi-eye" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm" variant="outline-danger"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => handleDeleteShiftType(shift)}
+                          title="Delete shift type"
+                        >
+                          <i className="bi bi-trash" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Modals */}
+          <AddShiftTypeModal
+            show={showAddShiftType}
+            nextOrder={(allShiftTypes.length || 0) + 1}
+            onClose={() => setShowAddShiftType(false)}
+          />
+          <EditShiftTypeModal
+            shift={editShiftType}
+            onClose={() => setEditShiftType(null)}
+          />
         </Tab>
 
         {/* ── Payroll ───────────────────────────────────────────────────────────── */}

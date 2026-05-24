@@ -45,12 +45,6 @@ enum DocumentType {
   OTHER
 }
 
-enum ShiftType {
-  DAY
-  NIGHT
-  FULL_24
-}
-
 enum DisciplinaryType {
   VERBAL_WARNING
   WRITTEN_WARNING
@@ -303,13 +297,27 @@ model GuardDocument {
   uploader User  @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
 }
 
+model ShiftType {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  code          String   @unique
+  startTime     String?
+  endTime       String?
+  durationHours Float?
+  displayOrder  Int      @default(0)
+  isActive      Boolean  @default(true)
+  isOvertime    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model DeploymentHistory {
   id           String    @id @default(cuid())
   guardId      String
   siteId       String
   startDate    DateTime
   endDate      DateTime?
-  shiftType    ShiftType
+  shiftType    String
   supervisorId String
   createdAt    DateTime  @default(now())
 
@@ -365,10 +373,25 @@ model Site {
   siteManagerContact  String?
   specialInstructions String?
   guardsRequired      Int      @default(1)
+
+  // Classification
+  siteType            String   @default("REGULAR")
+
+  // Security requirements
+  requiresFirearms    Boolean  @default(false)
+  requiresArmedGuards Boolean  @default(false)
+  requiresWeapons     Boolean  @default(false)
+  equipmentDetails    String?
+
+  // Shift configuration
+  allowedShiftTypes   String[]
+  defaultShiftType    String?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  equipmentItems    SiteEquipmentItem[]
   deploymentHistory DeploymentHistory[]
   deployments       Deployment[]
   attendance        AttendanceRecord[]
@@ -377,6 +400,16 @@ model Site {
   incidents         Incident[]
   transfersFrom     GuardTransfer[]     @relation("TransferFromSite")
   transfersTo       GuardTransfer[]     @relation("TransferToSite")
+}
+
+model SiteEquipmentItem {
+  id        String  @id @default(cuid())
+  siteId    String
+  site      Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  itemName  String
+  quantity  Int     @default(1)
+  notes     String?
+  createdAt DateTime @default(now())
 }
 
 model Contract {
@@ -417,13 +450,19 @@ model ClientComplaint {
 }
 
 model Deployment {
-  id           String    @id @default(cuid())
-  guardId      String
-  siteId       String
-  shiftType    ShiftType
-  date         DateTime
-  supervisorId String
-  createdAt    DateTime  @default(now())
+  id                     String    @id @default(cuid())
+  guardId                String
+  siteId                 String
+  shiftType              String
+  date                   DateTime
+  supervisorId           String
+  deploymentType         String    @default("UNARMED")
+  weaponsDetails         String?
+  overtimeHours          Float?
+  overtimeReason         String?
+  copiedFromDate         DateTime?
+  replacementForGuardId  String?
+  createdAt              DateTime  @default(now())
 
   guard      Guard @relation(fields: [guardId], references: [id], onDelete: Restrict)
   site       Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
