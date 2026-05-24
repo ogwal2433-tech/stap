@@ -6,6 +6,7 @@ import type {
   UpdateContractInput,
   ContractResponse,
   PaginatedResponse,
+  ShiftPattern,
 } from '@stap/shared';
 
 class ContractService {
@@ -29,12 +30,14 @@ class ContractService {
 
     const contract = await prisma.contract.create({
       data: {
-        clientId: data.clientId,
-        contractStart: start,
-        contractEnd: end,
-        guardsRequired: data.guardsRequired,
-        billingPerGuard: data.billingPerGuard,
+        clientId:          data.clientId,
+        contractStart:     start,
+        contractEnd:       end,
+        guardsRequired:    data.guardsRequired,
+        billingPerGuard:   data.billingPerGuard,
         status,
+        weaponsAllocation: data.weaponsAllocation ?? null,
+        shiftPattern:      data.shiftPattern ?? null,
       },
       include: { client: { select: { id: true, clientName: true } } },
     });
@@ -71,10 +74,12 @@ class ContractService {
     const updated = await prisma.contract.update({
       where: { id },
       data: {
-        ...(data.contractStart !== undefined && { contractStart: start }),
-        ...(data.contractEnd !== undefined && { contractEnd: end }),
-        ...(data.guardsRequired !== undefined && { guardsRequired: data.guardsRequired }),
-        ...(data.billingPerGuard !== undefined && { billingPerGuard: data.billingPerGuard }),
+        ...(data.contractStart     !== undefined && { contractStart:     start }),
+        ...(data.contractEnd       !== undefined && { contractEnd:       end }),
+        ...(data.guardsRequired    !== undefined && { guardsRequired:    data.guardsRequired }),
+        ...(data.billingPerGuard   !== undefined && { billingPerGuard:   data.billingPerGuard }),
+        ...(data.weaponsAllocation !== undefined && { weaponsAllocation: data.weaponsAllocation ?? null }),
+        ...(data.shiftPattern      !== undefined && { shiftPattern:      data.shiftPattern ?? null }),
         status: newStatus,
       },
       include: { client: { select: { id: true, clientName: true } } },
@@ -253,15 +258,17 @@ class ContractService {
     const monthlyValue = c.guardsRequired * c.billingPerGuard;
 
     return {
-      id: c.id,
-      client: { id: c.client.id, clientName: c.client.clientName },
-      contractStart: c.contractStart instanceof Date ? c.contractStart.toISOString() : c.contractStart,
-      contractEnd: end.toISOString(),
-      guardsRequired: c.guardsRequired,
+      id:              c.id,
+      client:          { id: c.client.id, clientName: c.client.clientName },
+      contractStart:   c.contractStart instanceof Date ? c.contractStart.toISOString() : c.contractStart,
+      contractEnd:     end.toISOString(),
+      guardsRequired:  c.guardsRequired,
       billingPerGuard: c.billingPerGuard,
       monthlyValue,
-      status: c.status,
+      status:          c.status,
       daysRemaining,
+      weaponsAllocation: c.weaponsAllocation ?? null,
+      shiftPattern:      (c.shiftPattern as ShiftPattern | null) ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
       updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
     };

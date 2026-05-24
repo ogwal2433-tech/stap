@@ -62,7 +62,7 @@ export const clientsApi = {
       .then((r) => r.data.data);
   },
 
-  getAllSites(params?: { page?: number; limit?: number; search?: string; clientId?: string }): Promise<PaginatedResponse<SiteResponse>> {
+  getAllSites(params?: { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string }): Promise<PaginatedResponse<SiteResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<SiteResponse>>('/clients/sites/all', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

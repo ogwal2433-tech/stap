@@ -7,7 +7,7 @@ import {
 import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/useClients';
 import RoleGuard from '../../components/RoleGuard';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, LEAD_STATUSES, type UserRole } from '@stap/shared';
 
 const CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -24,12 +24,14 @@ export default function ClientsListPage() {
 
   const [search, setSearch] = useState('');
   const [contractStatus, setContractStatus] = useState<'ACTIVE' | 'INACTIVE' | 'EXPIRED' | ''>('');
+  const [leadStatus, setLeadStatus] = useState<'NEW' | 'CONTACTED' | 'CONVERTED' | 'LOST' | ''>('');
   const [sortBy, setSortBy] = useState<'clientName' | 'createdAt' | 'billingTerms'>('clientName');
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError } = useClientList({
-    search: search || undefined,
+    search:         search || undefined,
     contractStatus: contractStatus || undefined,
+    leadStatus:     leadStatus || undefined,
     sortBy,
     sortOrder: 'asc',
     page,
@@ -93,7 +95,7 @@ export default function ClientsListPage() {
       <Card className="border-0 shadow-sm mb-4">
         <Card.Body>
           <Row className="g-2 align-items-end">
-            <Col md={5}>
+            <Col md={4}>
               <Form.Label className="small text-muted mb-1">Search</Form.Label>
               <InputGroup size="sm">
                 <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
@@ -104,7 +106,7 @@ export default function ClientsListPage() {
                 />
               </InputGroup>
             </Col>
-            <Col md={3}>
+            <Col md={2}>
               <Form.Label className="small text-muted mb-1">Status</Form.Label>
               <Form.Select
                 size="sm"
@@ -117,7 +119,20 @@ export default function ClientsListPage() {
                 <option value="EXPIRED">Expired</option>
               </Form.Select>
             </Col>
-            <Col md={3}>
+            <Col md={2}>
+              <Form.Label className="small text-muted mb-1">Lead Status</Form.Label>
+              <Form.Select
+                size="sm"
+                value={leadStatus}
+                onChange={(e) => { setLeadStatus(e.target.value as typeof leadStatus); setPage(1); }}
+              >
+                <option value="">All leads</option>
+                {Object.entries(LEAD_STATUSES).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={2}>
               <Form.Label className="small text-muted mb-1">Sort by</Form.Label>
               <Form.Select
                 size="sm"

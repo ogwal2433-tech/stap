@@ -11,6 +11,7 @@ import type {
 const SITE_INCLUDE = {
   client:         { select: { clientName: true } },
   equipmentItems: true,
+  zone:           { select: { id: true, name: true } },
   _count:         { select: { deployments: true, attendance: true, incidents: true } },
 } as const;
 
@@ -40,6 +41,7 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
     allowedShiftTypes:   (site.allowedShiftTypes as string[]) ?? [],
     defaultShiftType:    (site.defaultShiftType as string | null) ?? null,
     equipmentItems:      items,
+    zone: (site.zone as { id: string; name: string } | null) ?? null,
 
     createdAt: (site.createdAt as Date).toISOString(),
     updatedAt: (site.updatedAt as Date).toISOString(),
@@ -93,6 +95,7 @@ class SiteService {
     limit?: number;
     search?: string;
     clientId?: string;
+    unzoned?: string;
   }): Promise<PaginatedResponse<SiteResponse>> {
     const page  = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
@@ -100,6 +103,7 @@ class SiteService {
 
     const where: import('@prisma/client').Prisma.SiteWhereInput = {};
     if (query.clientId) where.clientId = query.clientId;
+    if (query.unzoned === 'true') where.zoneId = null;
     if (query.search) {
       where.OR = [
         { siteName: { contains: query.search, mode: 'insensitive' } },

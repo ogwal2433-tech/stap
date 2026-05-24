@@ -1,12 +1,34 @@
 import { z } from 'zod';
 
+// ── Lead / CRM constants ───────────────────────────────────────────────────────
+
+export const LEAD_SOURCES = {
+  SOCIAL_MEDIA:  'Social Media',
+  REFERRAL:      'Referral',
+  COLD_CALL:     'Cold Call',
+  WEBSITE:       'Website',
+  WORD_OF_MOUTH: 'Word of Mouth',
+  EXHIBITION:    'Exhibition / Event',
+  OTHER:         'Other',
+} as const;
+
+export const LEAD_STATUSES = {
+  NEW:       'New',
+  CONTACTED: 'Contacted',
+  CONVERTED: 'Converted',
+  LOST:      'Lost',
+} as const;
+
+export type LeadSource = keyof typeof LEAD_SOURCES;
+export type LeadStatus = keyof typeof LEAD_STATUSES;
+
 // ── Client schemas ─────────────────────────────────────────────────────────────
 
 export const CreateClientSchema = z.object({
-  clientName: z.string().min(1).max(200),
-  contactPerson: z.string().min(1).max(100),
-  contactPhone: z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
-  email: z.string().email().optional(),
+  clientName:     z.string().min(1).max(200),
+  contactPerson:  z.string().min(1).max(100),
+  contactPhone:   z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
+  email:          z.string().email().optional(),
   physicalAddress: z.string().min(1).max(500),
   billingAddress: z.string().max(500).optional(),
   billingTerms: z
@@ -16,19 +38,31 @@ export const CreateClientSchema = z.object({
     .max(90)
     .describe('Payment due in X days'),
   contractStatus: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).default('ACTIVE'),
+
+  // Tax & compliance
+  tin:          z.string().max(50).optional(),
+  vatRegistered: z.boolean().default(false),
+  vatRate:       z.coerce.number().min(0).max(100).optional(),
+
+  // CRM / lead tracking
+  leadSource: z.enum([
+    'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
+    'WORD_OF_MOUTH', 'EXHIBITION', 'OTHER',
+  ]).optional(),
+  referredBy: z.string().max(200).optional(),
+  leadStatus: z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).default('CONVERTED'),
 });
 
 export const UpdateClientSchema = CreateClientSchema.partial();
 
 export const ClientListQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  search: z.string().optional(),
+  page:           z.coerce.number().int().positive().default(1),
+  limit:          z.coerce.number().int().min(1).max(100).default(20),
+  search:         z.string().optional(),
   contractStatus: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
-  sortBy: z
-    .enum(['clientName', 'createdAt', 'billingTerms'])
-    .default('clientName'),
-  sortOrder: z.enum(['asc', 'desc']).default('asc'),
+  leadStatus:     z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).optional(),
+  sortBy:         z.enum(['clientName', 'createdAt', 'billingTerms']).default('clientName'),
+  sortOrder:      z.enum(['asc', 'desc']).default('asc'),
 });
 
 // ── Site type constant ─────────────────────────────────────────────────────────
@@ -100,8 +134,8 @@ export const CreateIncidentSchema = z.object({
 
 // ── Inferred input types ───────────────────────────────────────────────────────
 
-export type CreateClientInput = z.infer<typeof CreateClientSchema>;
-export type UpdateClientInput = z.infer<typeof UpdateClientSchema>;
+export type CreateClientInput = z.input<typeof CreateClientSchema>;
+export type UpdateClientInput = z.input<typeof UpdateClientSchema>;
 export type ClientListQuery = z.infer<typeof ClientListQuerySchema>;
 export type CreateSiteInput = z.infer<typeof CreateSiteSchema>;
 export type UpdateSiteInput = z.infer<typeof UpdateSiteSchema>;
@@ -119,6 +153,17 @@ export interface ClientResponse {
   billingAddress: string | null;
   billingTerms: number;
   contractStatus: 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+
+  // Tax & compliance
+  tin: string | null;
+  vatRegistered: boolean;
+  vatRate: number | null;
+
+  // CRM / lead tracking
+  leadSource: LeadSource | null;
+  referredBy: string | null;
+  leadStatus: LeadStatus;
+
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -162,6 +207,9 @@ export interface SiteResponse {
     quantity: number;
     notes: string | null;
   }[];
+
+  // Zone assignment
+  zone?: { id: string; name: string } | null;
 
   createdAt: string;
   updatedAt: string;

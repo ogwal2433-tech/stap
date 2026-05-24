@@ -12,15 +12,24 @@ import type {
 
 function toClientResponse(client: Record<string, unknown>): ClientResponse {
   return {
-    id: client.id as string,
-    clientName: client.clientName as string,
-    contactPerson: client.contactPerson as string,
-    contactPhone: client.contactPhone as string,
-    email: (client.email as string | null) ?? null,
+    id:              client.id as string,
+    clientName:      client.clientName as string,
+    contactPerson:   client.contactPerson as string,
+    contactPhone:    client.contactPhone as string,
+    email:           (client.email as string | null) ?? null,
     physicalAddress: client.physicalAddress as string,
-    billingAddress: (client.billingAddress as string | null) ?? null,
-    billingTerms: client.billingTerms as number,
-    contractStatus: client.contractStatus as 'ACTIVE' | 'INACTIVE' | 'EXPIRED',
+    billingAddress:  (client.billingAddress as string | null) ?? null,
+    billingTerms:    client.billingTerms as number,
+    contractStatus:  client.contractStatus as 'ACTIVE' | 'INACTIVE' | 'EXPIRED',
+
+    tin:          (client.tin as string | null) ?? null,
+    vatRegistered: (client.vatRegistered as boolean) ?? false,
+    vatRate:       (client.vatRate as number | null) ?? null,
+
+    leadSource:  (client.leadSource as ClientResponse['leadSource']) ?? null,
+    referredBy:  (client.referredBy as string | null) ?? null,
+    leadStatus:  (client.leadStatus as ClientResponse['leadStatus']) ?? 'CONVERTED',
+
     createdAt: (client.createdAt as Date).toISOString(),
     updatedAt: (client.updatedAt as Date).toISOString(),
     ...(client._count ? { _count: client._count as ClientResponse['_count'] } : {}),
@@ -31,20 +40,19 @@ class ClientService {
   // ── List ───────────────────────────────────────────────────────────────────
 
   async list(query: ClientListQuery): Promise<PaginatedResponse<ClientResponse>> {
-    const { page, limit, search, contractStatus, sortBy, sortOrder } = query;
+    const { page, limit, search, contractStatus, leadStatus, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.ClientWhereInput = {};
 
-    if (contractStatus) {
-      where.contractStatus = contractStatus;
-    }
+    if (contractStatus) where.contractStatus = contractStatus;
+    if (leadStatus)     where.leadStatus     = leadStatus;
 
     if (search) {
       where.OR = [
-        { clientName: { contains: search, mode: 'insensitive' } },
+        { clientName:    { contains: search, mode: 'insensitive' } },
         { contactPerson: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { email:         { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -121,14 +129,20 @@ class ClientService {
   async create(data: CreateClientInput, createdBy: string): Promise<ClientResponse> {
     const client = await prisma.client.create({
       data: {
-        clientName: data.clientName,
-        contactPerson: data.contactPerson,
-        contactPhone: data.contactPhone,
-        email: data.email ?? null,
+        clientName:     data.clientName,
+        contactPerson:  data.contactPerson,
+        contactPhone:   data.contactPhone,
+        email:          data.email ?? null,
         physicalAddress: data.physicalAddress,
         billingAddress: data.billingAddress ?? null,
-        billingTerms: data.billingTerms,
+        billingTerms:   data.billingTerms,
         contractStatus: data.contractStatus,
+        tin:            data.tin ?? null,
+        vatRegistered:  data.vatRegistered ?? false,
+        vatRate:        data.vatRate ?? null,
+        leadSource:     data.leadSource ?? null,
+        referredBy:     data.referredBy ?? null,
+        leadStatus:     data.leadStatus ?? 'CONVERTED',
       },
       include: {
         _count: { select: { sites: true, contracts: true, complaints: true } },

@@ -100,7 +100,25 @@ router.post(
   validate(CreateRosterSchema),
   asyncHandler(async (req, res) => {
     const result = await deploymentService.createRoster(req.body, req.user!.userId);
-    res.status(201).json({ success: true, data: result });
+
+    if (result.created === 0 && result.conflicts.length === 0) {
+      return res.status(400).json({ success: false, error: 'No guards were available to deploy.' });
+    }
+
+    if (result.created === 0 && result.conflicts.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'All selected guards are already deployed on this date.',
+        data: { created: 0, conflicts: result.conflicts, skipped: result.skipped },
+      });
+    }
+
+    const message = result.conflicts.length === 0
+      ? `${result.created} guard(s) deployed successfully.`
+      : `${result.created} guard(s) deployed. ${result.conflicts.length} guard(s) skipped due to conflicts — they are already deployed on this date.`;
+
+    const status = result.conflicts.length === 0 ? 201 : 200;
+    return res.status(status).json({ success: true, data: { ...result, message } });
   }),
 );
 

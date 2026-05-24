@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Alert, Breadcrumb, Button, ButtonGroup, Card, Col, Form, Row, Spinner,
+  Alert, Breadcrumb, Button, Card, Col, Form, Row, Spinner,
 } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateClientSchema } from '@stap/shared';
+import { CreateClientSchema, LEAD_SOURCES, LEAD_STATUSES } from '@stap/shared';
 import { useClient, useCreateClient, useUpdateClient } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
 import type { CreateClientInput } from '@stap/shared';
@@ -23,6 +23,7 @@ export default function ClientFormPage() {
   const updateClient = useUpdateClient();
 
   const [sameAddress, setSameAddress] = useState(false);
+  const [vatRegistered, setVatRegistered] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const {
@@ -34,22 +35,30 @@ export default function ClientFormPage() {
     formState: { errors, isSubmitting },
   } = useForm<CreateClientInput>({
     resolver: zodResolver(CreateClientSchema),
-    defaultValues: { contractStatus: 'ACTIVE', billingTerms: 30 },
+    defaultValues: { contractStatus: 'ACTIVE', billingTerms: 30, leadStatus: 'CONVERTED', vatRegistered: false },
   });
 
   const physicalAddress = watch('physicalAddress');
 
   useEffect(() => {
     if (existing) {
+      const vat = existing.vatRegistered ?? false;
+      setVatRegistered(vat);
       reset({
-        clientName: existing.clientName,
-        contactPerson: existing.contactPerson,
-        contactPhone: existing.contactPhone,
-        email: existing.email ?? undefined,
+        clientName:      existing.clientName,
+        contactPerson:   existing.contactPerson,
+        contactPhone:    existing.contactPhone,
+        email:           existing.email ?? undefined,
         physicalAddress: existing.physicalAddress,
-        billingAddress: existing.billingAddress ?? undefined,
-        billingTerms: existing.billingTerms,
-        contractStatus: existing.contractStatus,
+        billingAddress:  existing.billingAddress ?? undefined,
+        billingTerms:    existing.billingTerms,
+        contractStatus:  existing.contractStatus,
+        tin:             existing.tin ?? undefined,
+        vatRegistered:   vat,
+        vatRate:         existing.vatRate ?? undefined,
+        leadSource:      existing.leadSource ?? undefined,
+        referredBy:      existing.referredBy ?? undefined,
+        leadStatus:      existing.leadStatus ?? 'CONVERTED',
       });
     }
   }, [existing, reset]);
@@ -266,6 +275,117 @@ export default function ClientFormPage() {
                       </Button>
                     ))}
                   </div>
+                </Form.Group>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+
+        {/* Section 4 — Tax & Compliance */}
+        <Card className="border-0 shadow-sm mb-4">
+          <Card.Header className="bg-white fw-semibold" style={{ color: '#1B3A6B' }}>
+            Tax &amp; Compliance
+          </Card.Header>
+          <Card.Body>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>TIN (Tax Identification Number) <span className="text-muted small">(optional)</span></Form.Label>
+                  <Form.Control
+                    {...register('tin')}
+                    isInvalid={!!errors.tin}
+                    placeholder="e.g. 1000123456"
+                  />
+                  <Form.Text className="text-muted">Required for VAT invoicing and compliance</Form.Text>
+                  <Form.Control.Feedback type="invalid">{errors.tin?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>VAT Status</Form.Label>
+                  <div className="mt-2">
+                    <Form.Check
+                      type="switch"
+                      id="vat-registered"
+                      label={vatRegistered ? 'VAT Registered' : 'Not VAT Registered'}
+                      checked={vatRegistered}
+                      onChange={(e) => {
+                        setVatRegistered(e.target.checked);
+                        setValue('vatRegistered', e.target.checked);
+                        if (!e.target.checked) setValue('vatRate', undefined);
+                      }}
+                    />
+                  </div>
+                </Form.Group>
+              </Col>
+
+              {vatRegistered && (
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label>VAT Rate (%) <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      {...register('vatRate', { valueAsNumber: true })}
+                      isInvalid={!!errors.vatRate}
+                      placeholder="e.g. 18"
+                    />
+                    <Form.Text className="text-muted">Standard Uganda VAT is 18%</Form.Text>
+                    <Form.Control.Feedback type="invalid">{errors.vatRate?.message}</Form.Control.Feedback>
+                  </Form.Group>
+                </Col>
+              )}
+            </Row>
+          </Card.Body>
+        </Card>
+
+        {/* Section 5 — Lead Information */}
+        <Card className="border-0 shadow-sm mb-4">
+          <Card.Header className="bg-white fw-semibold" style={{ color: '#1B3A6B' }}>
+            Lead Information
+          </Card.Header>
+          <Card.Body>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Lead Status</Form.Label>
+                  <Form.Select {...register('leadStatus')} isInvalid={!!errors.leadStatus}>
+                    {Object.entries(LEAD_STATUSES).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">Track the progress of this client relationship</Form.Text>
+                  <Form.Control.Feedback type="invalid">{errors.leadStatus?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Lead Source <span className="text-muted small">(optional)</span></Form.Label>
+                  <Form.Select {...register('leadSource')} isInvalid={!!errors.leadSource}>
+                    <option value="">— Select source —</option>
+                    {Object.entries(LEAD_SOURCES).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">How did this client find us?</Form.Text>
+                  <Form.Control.Feedback type="invalid">{errors.leadSource?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Referred By <span className="text-muted small">(optional)</span></Form.Label>
+                  <Form.Control
+                    {...register('referredBy')}
+                    isInvalid={!!errors.referredBy}
+                    placeholder="e.g. John Kato or ABC Security Ltd"
+                  />
+                  <Form.Text className="text-muted">Name of the person or company that referred this client</Form.Text>
+                  <Form.Control.Feedback type="invalid">{errors.referredBy?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
             </Row>

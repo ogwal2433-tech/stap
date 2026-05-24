@@ -110,7 +110,7 @@ function fmtLeave(l: any): LeaveRequestResponse {
     daysRequested:   l.daysRequested,
     reason:          l.reason,
     status:          l.status,
-    approvedBy:      l.approvedByUser ? { id: l.approvedByUser.id, name: l.approvedByUser.name } : null,
+    approvedBy:      l.approver ? { id: l.approver.id, name: l.approver.name } : null,
     approvedAt:      l.approvedAt?.toISOString() ?? null,
     rejectionReason: l.rejectionReason ?? null,
     createdAt:       l.createdAt.toISOString(),
@@ -160,8 +160,8 @@ const SESSION_INCLUDE = {
 };
 
 const LEAVE_INCLUDE = {
-  guard:         { select: { id: true, firstName: true, lastName: true, userId: true } },
-  approvedByUser: { select: { id: true, name: true } },
+  guard:    { select: { id: true, firstName: true, lastName: true, userId: true } },
+  approver: { select: { id: true, name: true } },
 };
 
 // ── Stage transition map ───────────────────────────────────────────────────────

@@ -87,10 +87,19 @@ export type AttendanceQuery = z.infer<typeof AttendanceQuerySchema>;
 // ── Response interfaces ────────────────────────────────────────────────────────
 
 export interface ConflictDetail {
-  guardId:      string;
-  guardName:    string;
-  date:         string;
-  existingSite: string;
+  guardId:        string;
+  guardName:      string;
+  date:           string;
+  existingSite:   string;
+  existingClient: string;
+  message:        string;
+}
+
+export interface RosterCreationResult {
+  created:   number;
+  conflicts: ConflictDetail[];
+  skipped:   number;
+  message?:  string;
 }
 
 export interface DeploymentResponse {

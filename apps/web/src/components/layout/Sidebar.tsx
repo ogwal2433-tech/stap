@@ -31,6 +31,7 @@ const NAV_ITEMS = [
   { icon: 'bi-chat-left-text-fill',  label: 'Complaints',    to: '/complaints',    roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) },
   { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
   { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
+  { icon: 'bi-map-fill',            label: 'Zones',         to: '/zones',         roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
   { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',               roles: [ROLES.DIRECTOR] },
 ];
 
@@ -57,7 +58,7 @@ const ACTIVE_PATHS = new Set([
   '/guards/dashboard', '/guards/import',
   '/finance', '/requisitions',
   '/complaints', '/reports', '/notifications',
-  '/settings', '/hr', '/inventory',
+  '/settings', '/hr', '/inventory', '/zones',
 ]);
 
 function NavContent({ onNavigate }: NavContentProps) {

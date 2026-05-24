@@ -13,5 +13,6 @@ export * from './schemas/hr';
 export * from './schemas/inventory';
 export * from './schemas/settings';
 export * from './schemas/shiftType';
+export * from './schemas/zone';
 export * from './types/api';
 export * from './types/roles';

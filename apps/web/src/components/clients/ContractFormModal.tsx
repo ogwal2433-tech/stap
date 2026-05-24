@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Alert, Button, Form, InputGroup, Modal, Spinner } from 'react-bootstrap';
 import { useCreateContract, useUpdateContract } from '../../hooks/useContracts';
-import type { ContractResponse } from '@stap/shared';
+import { SHIFT_PATTERNS } from '@stap/shared';
+import type { ContractResponse, ShiftPattern } from '@stap/shared';
 
 interface ContractFormModalProps {
   clientId: string;
@@ -61,6 +62,12 @@ export default function ContractFormModal({
   const [status, setStatus] = useState<'DRAFT' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED'>(
     contract ? (contract.status as 'DRAFT' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED') : 'ACTIVE',
   );
+  const [weaponsAllocation, setWeaponsAllocation] = useState(
+    contract?.weaponsAllocation != null ? String(contract.weaponsAllocation) : '',
+  );
+  const [shiftPattern, setShiftPattern] = useState<ShiftPattern | ''>(
+    (contract?.shiftPattern as ShiftPattern | null) ?? '',
+  );
   const [error, setError] = useState('');
 
   const billingPerGuard = parseBilling(billingDisplay);
@@ -83,12 +90,15 @@ export default function ContractFormModal({
     if (billingPerGuard <= 0) return setError('Billing per guard must be positive.');
     if (guards < 1) return setError('Guards required must be at least 1.');
 
+    const weapons = parseInt(weaponsAllocation, 10);
     const payload = {
-      contractStart: `${contractStart}T00:00:00.000Z`,
-      contractEnd: `${contractEnd}T23:59:59.999Z`,
-      guardsRequired: guards,
+      contractStart:     `${contractStart}T00:00:00.000Z`,
+      contractEnd:       `${contractEnd}T23:59:59.999Z`,
+      guardsRequired:    guards,
       billingPerGuard,
       status,
+      weaponsAllocation: weaponsAllocation !== '' && !isNaN(weapons) ? weapons : undefined,
+      shiftPattern:      shiftPattern || undefined,
     };
 
     try {
@@ -201,6 +211,37 @@ export default function ContractFormModal({
                 <option value="EXPIRED">Expired</option>
               </Form.Select>
               <Form.Text className="text-muted">Status is auto-computed on save based on dates.</Form.Text>
+            </div>
+
+            {/* Shift Pattern */}
+            <div className="col-md-6">
+              <Form.Label className="small fw-semibold">Shift Pattern</Form.Label>
+              <Form.Select
+                value={shiftPattern}
+                onChange={(e) => setShiftPattern(e.target.value as ShiftPattern | '')}
+              >
+                <option value="">— Not specified —</option>
+                {Object.entries(SHIFT_PATTERNS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </Form.Select>
+              <Form.Text className="text-muted">How guard shifts are arranged at this client's sites.</Form.Text>
+            </div>
+
+            {/* Weapons Allocation */}
+            <div className="col-md-6">
+              <Form.Label className="small fw-semibold">Weapons Allocation</Form.Label>
+              <InputGroup>
+                <Form.Control
+                  type="number"
+                  min={0}
+                  value={weaponsAllocation}
+                  onChange={(e) => setWeaponsAllocation(e.target.value)}
+                  placeholder="0"
+                />
+                <InputGroup.Text>weapons</InputGroup.Text>
+              </InputGroup>
+              <Form.Text className="text-muted">Number of weapons allocated under this contract (leave blank if none).</Form.Text>
             </div>
           </div>
         </Modal.Body>

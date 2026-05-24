@@ -103,7 +103,8 @@
       "Bash(PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma migrate dev --name roster_deployment_enhancements --create-only)",
       "Bash(FORCE_COLOR=0 npx --yes prisma migrate dev --name roster_deployment_enhancements)",
       "Bash(SEED_PASSWORD=12345678 pnpm exec tsx src/db/seed.ts)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(grep -E \"\\(ts|tsx|prisma\\)$\")"
     ],
     "additionalDirectories": [
       "/tmp"

@@ -1,12 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
-  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner, Table,
+  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner,
 } from 'react-bootstrap';
 import { useCreateRoster } from '../../hooks/useAttendance';
 import { useShiftTypes } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
 import { SearchableSelect } from '../ui/SearchableSelect';
-import type { ConflictDetail, SiteResponse } from '@stap/shared';
+import { attendanceApi } from '../../lib/attendance.api';
+import type { ConflictDetail, RosterCreationResult, SiteResponse } from '@stap/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { useQuery } from '@tanstack/react-query';
 import { guardsApi } from '../../lib/guards.api';
@@ -51,7 +52,13 @@ export default function RosterBuilderTab() {
   // Guard list search state
   const [guardSearch, setGuardSearch] = useState('');
 
-  const [result, setResult] = useState<{ created: number; conflicts: ConflictDetail[] } | null>(null);
+  // Pre-submission conflict state — guard IDs already deployed on selected date
+  const [deployedToday, setDeployedToday] = useState<string[]>([]);
+
+  // Post-submission result
+  const [result, setResult] = useState<RosterCreationResult | null>(null);
+  // All-conflicts result (409) stored separately for the failure alert
+  const [failedResult, setFailedResult] = useState<RosterCreationResult | null>(null);
 
   // Fetch all sites
   const { data: sitesData, isLoading: sitesLoading } = useQuery({
@@ -71,6 +78,15 @@ export default function RosterBuilderTab() {
     queryFn: () => usersApi.list({ roles: 'OPERATIONS_SUPERVISOR,FIELD_SUPERVISOR', status: 'ACTIVE' }),
     staleTime: 5 * 60 * 1000,
   });
+
+  // When selected date changes, fetch already-deployed guards for that date
+  useEffect(() => {
+    if (!startDate) { setDeployedToday([]); return; }
+    const isoDate = `${startDate}T00:00:00.000Z`;
+    attendanceApi.getTodaysDeployments({ date: isoDate, limit: 500 }).then((res) => {
+      setDeployedToday(res.data.map((d) => d.guard.id));
+    }).catch(() => setDeployedToday([]));
+  }, [startDate]);
 
   const selectedSite = sitesData?.data.find((s) => s.id === selectedSiteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
 
@@ -114,12 +130,10 @@ export default function RosterBuilderTab() {
     const site = sitesData?.data.find((s) => s.id === siteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
     if (!site) return;
 
-    // Auto-select default shift type and fill times
     if (site.defaultShiftType) {
       handleShiftSelect(site.defaultShiftType);
     }
 
-    // Auto-set deployment type based on site security requirements
     if (site.requiresFirearms) {
       setDeploymentType('FIREARMS');
     } else if (site.requiresArmedGuards) {
@@ -148,11 +162,15 @@ export default function RosterBuilderTab() {
     if (shift?.endTime) setEndTime(shift.endTime);
   }
 
+  const conflictedSelected = selectedGuardIds.filter((id) => deployedToday.includes(id));
+
   async function handleSubmit() {
     if (!selectedSiteId) return showToast('Please select a site', 'warning');
     if (selectedGuardIds.length === 0) return showToast('Please select at least one guard', 'warning');
     if (!shiftTypeCode) return showToast('Please select a shift type', 'warning');
     if (!supervisorId) return showToast('Please select a supervisor', 'warning');
+
+    setFailedResult(null);
 
     try {
       const data = await createRoster.mutateAsync({
@@ -170,47 +188,77 @@ export default function RosterBuilderTab() {
         deploymentType,
         weaponsDetails: weaponsDetails || undefined,
       });
-      setResult(data);
-      showToast(`${data.created} deployment(s) created`, 'success');
+      setResult(data as RosterCreationResult);
+      if ((data as RosterCreationResult).conflicts?.length === 0) {
+        showToast(`${(data as RosterCreationResult).created} guard(s) deployed successfully.`, 'success');
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create roster';
-      showToast(msg, 'danger');
+      // 409 — all guards already deployed
+      const axiosErr = err as { response?: { data?: { data?: RosterCreationResult; error?: string } } };
+      if (axiosErr?.response?.data?.data?.conflicts?.length) {
+        setFailedResult(axiosErr.response.data.data);
+      } else {
+        const msg = (err instanceof Error ? err.message : String(err)) || 'Failed to create roster';
+        showToast(msg, 'danger');
+      }
     }
   }
 
-  if (result) {
+  // ── All-conflict failure screen ────────────────────────────────────────────
+
+  if (failedResult) {
     return (
       <Card className="border-0 shadow-sm">
         <Card.Body>
-          <div className="text-center py-3">
-            <div style={{ fontSize: '3rem' }}>✅</div>
-            <h5 className="fw-bold mt-2">{result.created} deployment(s) created</h5>
-          </div>
+          <Alert variant="danger">
+            <Alert.Heading className="h6">No guards could be deployed</Alert.Heading>
+            <p className="mb-2">All selected guards are already deployed on this date:</p>
+            <ul className="mb-2 small">
+              {failedResult.conflicts.map((c: ConflictDetail) => (
+                <li key={c.guardId}>
+                  <strong>{c.guardName}</strong> → already at <em>{c.existingSite}</em>
+                  {c.existingClient ? ` (${c.existingClient})` : ''}
+                </li>
+              ))}
+            </ul>
+            <p className="mb-0 small">Choose a different date or select different guards.</p>
+          </Alert>
+          <Button variant="outline-secondary" onClick={() => setFailedResult(null)}>
+            Go Back
+          </Button>
+        </Card.Body>
+      </Card>
+    );
+  }
 
-          {result.conflicts.length > 0 && (
-            <Alert variant="warning" className="mt-3">
-              <Alert.Heading className="h6">
-                <i className="bi bi-exclamation-triangle me-2" />
-                {result.conflicts.length} conflict(s) skipped
-              </Alert.Heading>
-              <Table size="sm" className="mt-2 mb-0">
-                <thead>
-                  <tr>
-                    <th>Guard</th>
-                    <th>Date</th>
-                    <th>Already deployed at</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.conflicts.map((c, i) => (
-                    <tr key={i}>
-                      <td>{c.guardName}</td>
-                      <td>{new Date(c.date).toLocaleDateString()}</td>
-                      <td>{c.existingSite}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+  // ── Success / partial result screen ───────────────────────────────────────
+
+  if (result) {
+    const hasConflicts = result.conflicts.length > 0;
+    return (
+      <Card className="border-0 shadow-sm">
+        <Card.Body>
+          {!hasConflicts ? (
+            <div className="text-center py-3">
+              <div style={{ fontSize: '3rem' }}>✅</div>
+              <h5 className="fw-bold mt-2">{result.created} guard(s) deployed successfully.</h5>
+            </div>
+          ) : (
+            <Alert variant="warning">
+              <Alert.Heading className="h6">Roster partially created</Alert.Heading>
+              <p className="mb-2">✅ {result.created} guard(s) deployed successfully.</p>
+              <p className="mb-2">
+                ⚠️ {result.conflicts.length} guard(s) skipped — already deployed on this date:
+              </p>
+              <ul className="mb-0 small">
+                {result.conflicts.map((c: ConflictDetail) => (
+                  <li key={c.guardId}>
+                    <strong>{c.guardName}</strong> → already at{' '}
+                    <em>{c.existingSite}</em>
+                    {c.existingClient ? ` (${c.existingClient})` : ''}
+                  </li>
+                ))}
+              </ul>
             </Alert>
           )}
 
@@ -242,8 +290,16 @@ export default function RosterBuilderTab() {
               isLoading={sitesLoading}
             />
             {selectedSite && (
-              <div className="mt-2 text-muted small">
-                Guards required: <strong>{selectedSite.guardsRequired}</strong>
+              <div className="mt-2 text-muted small d-flex gap-3 flex-wrap">
+                <span>Guards required: <strong>{selectedSite.guardsRequired}</strong></span>
+                {(selectedSite as any).zone ? (
+                  <span>
+                    Zone:{' '}
+                    <strong style={{ color: '#0d9488' }}>{(selectedSite as any).zone.name}</strong>
+                  </span>
+                ) : (
+                  <span className="fst-italic">Unzoned</span>
+                )}
               </div>
             )}
             {selectedSite && (selectedSite.requiresFirearms || selectedSite.requiresArmedGuards || selectedSite.requiresWeapons) && (
@@ -286,42 +342,65 @@ export default function RosterBuilderTab() {
                   {filteredGuards.length === 0 ? (
                     <div className="p-3 text-muted text-center small">No guards found</div>
                   ) : (
-                    filteredGuards.map((g) => (
-                      <div key={g.id} className="d-flex align-items-center gap-2" style={{ padding: '6px 10px', borderBottom: '1px solid #f0f0f0' }}>
-                        <Form.Check
-                          id={`guard-${g.id}`}
-                          label={
-                            <span>
-                              {g.fullName}{' '}
-                              <Badge bg={g.employmentStatus === 'ACTIVE' ? 'success' : 'secondary'} className="ms-1" style={{ fontSize: '0.65rem' }}>
-                                {g.employmentStatus}
-                              </Badge>
-                            </span>
-                          }
-                          checked={selectedGuardIds.includes(g.id)}
-                          onChange={() => toggleGuard(g.id)}
-                          style={{ flex: 1 }}
-                        />
-                        {selectedGuardIds.includes(g.id) && (
-                          <div className="d-flex align-items-center gap-1" style={{ minWidth: 120 }}>
-                            <span className="text-muted" style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>OT hrs:</span>
-                            <Form.Control
-                              type="number"
-                              size="sm"
-                              min={0}
-                              step={0.5}
-                              value={guardOvertimeHours[g.id] ?? ''}
-                              placeholder="0"
-                              onChange={(e) => setGuardOvertimeHours((prev) => ({
-                                ...prev,
-                                [g.id]: parseFloat(e.target.value) || 0,
-                              }))}
-                              style={{ width: 60, fontSize: '0.75rem' }}
+                    filteredGuards.map((g) => {
+                      const alreadyDeployed = deployedToday.includes(g.id);
+                      return (
+                        <div
+                          key={g.id}
+                          style={{
+                            padding:      '6px 10px',
+                            borderBottom: '1px solid #f0f0f0',
+                            opacity:      alreadyDeployed ? 0.7 : 1,
+                            background:   alreadyDeployed ? '#fff3cd' : 'transparent',
+                          }}
+                        >
+                          <div className="d-flex align-items-center gap-2">
+                            <Form.Check
+                              id={`guard-${g.id}`}
+                              label={
+                                <span className="d-flex align-items-center gap-2 flex-wrap">
+                                  {g.fullName}{' '}
+                                  <Badge bg={g.employmentStatus === 'ACTIVE' ? 'success' : 'secondary'} style={{ fontSize: '0.65rem' }}>
+                                    {g.employmentStatus}
+                                  </Badge>
+                                  {alreadyDeployed && (
+                                    <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>
+                                      ⚠️ Already deployed
+                                    </Badge>
+                                  )}
+                                </span>
+                              }
+                              checked={selectedGuardIds.includes(g.id)}
+                              onChange={() => toggleGuard(g.id)}
+                              style={{ flex: 1 }}
                             />
+                            {selectedGuardIds.includes(g.id) && (
+                              <div className="d-flex align-items-center gap-1" style={{ minWidth: 120 }}>
+                                <span className="text-muted" style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>OT hrs:</span>
+                                <Form.Control
+                                  type="number"
+                                  size="sm"
+                                  min={0}
+                                  step={0.5}
+                                  value={guardOvertimeHours[g.id] ?? ''}
+                                  placeholder="0"
+                                  onChange={(e) => setGuardOvertimeHours((prev) => ({
+                                    ...prev,
+                                    [g.id]: parseFloat(e.target.value) || 0,
+                                  }))}
+                                  style={{ width: 60, fontSize: '0.75rem' }}
+                                />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))
+                          {alreadyDeployed && (
+                            <small className="text-warning d-block ms-4">
+                              This guard is already deployed on this date and will be skipped.
+                            </small>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -504,6 +583,17 @@ export default function RosterBuilderTab() {
                 </Row>
               </Card.Body>
             </Card>
+
+            {/* Pre-submission conflict warning */}
+            {conflictedSelected.length > 0 && (
+              <Alert variant="warning" className="mt-3 mb-0 py-2">
+                <small>
+                  <strong>⚠️ Conflict detected:</strong>{' '}
+                  {conflictedSelected.length} selected guard(s) are already deployed on this date
+                  and will be automatically skipped. Only available guards will be deployed.
+                </small>
+              </Alert>
+            )}
 
             <Button
               className="mt-3"

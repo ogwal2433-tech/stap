@@ -11,12 +11,19 @@ import SiteFormModal from '../../components/clients/SiteFormModal';
 import IncidentFormModal from '../../components/clients/IncidentFormModal';
 import ContractFormModal from '../../components/clients/ContractFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, type UserRole, type SiteResponse, type ContractResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse } from '@stap/shared';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
   INACTIVE: 'secondary',
   EXPIRED: 'danger',
+};
+
+const LEAD_STATUS_BADGE: Record<string, { bg: string; text?: string }> = {
+  NEW:       { bg: 'info',     text: 'dark' },
+  CONTACTED: { bg: 'warning',  text: 'dark' },
+  CONVERTED: { bg: 'success' },
+  LOST:      { bg: 'secondary' },
 };
 
 const SITE_TYPE_BADGE: Record<string, { bg: string; text?: string; label: string }> = {
@@ -152,10 +159,25 @@ export default function ClientDetailPage() {
               {client.email && <div className="text-muted small">{client.email}</div>}
             </Col>
             <Col xs="auto" className="text-end">
-              <Badge bg={CLIENT_CONTRACT_BADGE[client.contractStatus]} className="fs-6 px-3 py-2 mb-2 d-block">
+              <Badge bg={CLIENT_CONTRACT_BADGE[client.contractStatus]} className="fs-6 px-3 py-2 mb-1 d-block">
                 {client.contractStatus}
               </Badge>
+              {(client as any).leadStatus && (
+                <Badge
+                  bg={LEAD_STATUS_BADGE[(client as any).leadStatus]?.bg ?? 'secondary'}
+                  text={LEAD_STATUS_BADGE[(client as any).leadStatus]?.text}
+                  className="mb-1 d-block"
+                  style={{ fontSize: '0.75rem' }}
+                >
+                  {LEAD_STATUSES[(client as any).leadStatus as keyof typeof LEAD_STATUSES] ?? (client as any).leadStatus}
+                </Badge>
+              )}
               <div className="text-muted small">Billing: {client.billingTerms} days</div>
+              {(client as any).vatRegistered && (
+                <div className="text-muted small">
+                  VAT: {(client as any).vatRate ?? 18}%
+                </div>
+              )}
             </Col>
           </Row>
         </Card.Body>
@@ -166,22 +188,76 @@ export default function ClientDetailPage() {
 
         {/* Tab 1 — Details */}
         <Tab eventKey="details" title="Details">
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm mb-3">
+            <Card.Header className="bg-white small fw-semibold text-muted">Contact &amp; Billing</Card.Header>
             <Card.Body>
               <Row className="g-3">
                 {[
                   { label: 'Physical Address', value: client.physicalAddress },
-                  { label: 'Billing Address', value: client.billingAddress ?? '—' },
-                  { label: 'Contract Status', value: client.contractStatus },
-                  { label: 'Billing Terms', value: `${client.billingTerms} days` },
-                  { label: 'Date Added', value: new Date(client.createdAt).toLocaleDateString() },
-                  { label: 'Last Updated', value: new Date(client.updatedAt).toLocaleDateString() },
+                  { label: 'Billing Address',  value: client.billingAddress ?? '—' },
+                  { label: 'Contract Status',  value: client.contractStatus },
+                  { label: 'Billing Terms',    value: `${client.billingTerms} days` },
+                  { label: 'Date Added',       value: new Date(client.createdAt).toLocaleDateString() },
+                  { label: 'Last Updated',     value: new Date(client.updatedAt).toLocaleDateString() },
                 ].map(({ label, value }) => (
                   <Col md={6} key={label}>
                     <div className="text-muted small">{label}</div>
                     <div className="fw-medium">{value}</div>
                   </Col>
                 ))}
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Card className="border-0 shadow-sm mb-3">
+            <Card.Header className="bg-white small fw-semibold text-muted">Tax &amp; Compliance</Card.Header>
+            <Card.Body>
+              <Row className="g-3">
+                <Col md={6}>
+                  <div className="text-muted small">TIN</div>
+                  <div className="fw-medium">{(client as any).tin ?? '—'}</div>
+                </Col>
+                <Col md={6}>
+                  <div className="text-muted small">VAT Status</div>
+                  <div className="fw-medium">
+                    {(client as any).vatRegistered
+                      ? <><Badge bg="success" className="me-2">VAT Registered</Badge>{(client as any).vatRate ?? 18}%</>
+                      : <span className="text-muted">Not VAT Registered</span>}
+                  </div>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <Card.Header className="bg-white small fw-semibold text-muted">Lead Information</Card.Header>
+            <Card.Body>
+              <Row className="g-3">
+                <Col md={4}>
+                  <div className="text-muted small">Lead Status</div>
+                  <div className="fw-medium mt-1">
+                    {(client as any).leadStatus ? (
+                      <Badge
+                        bg={LEAD_STATUS_BADGE[(client as any).leadStatus]?.bg ?? 'secondary'}
+                        text={LEAD_STATUS_BADGE[(client as any).leadStatus]?.text}
+                      >
+                        {LEAD_STATUSES[(client as any).leadStatus as keyof typeof LEAD_STATUSES] ?? (client as any).leadStatus}
+                      </Badge>
+                    ) : '—'}
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="text-muted small">Lead Source</div>
+                  <div className="fw-medium">
+                    {(client as any).leadSource
+                      ? LEAD_SOURCES[(client as any).leadSource as keyof typeof LEAD_SOURCES] ?? (client as any).leadSource
+                      : '—'}
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="text-muted small">Referred By</div>
+                  <div className="fw-medium">{(client as any).referredBy ?? '—'}</div>
+                </Col>
               </Row>
             </Card.Body>
           </Card>
@@ -213,6 +289,7 @@ export default function ClientDetailPage() {
                   <th>Location</th>
                   <th>Guards</th>
                   <th>Armed</th>
+                  <th>Zone</th>
                   <th>Shifts</th>
                   <th>Actions</th>
                 </tr>
@@ -234,6 +311,15 @@ export default function ClientDetailPage() {
                         {s.requiresWeapons     && <span title="Weapons required" className="me-1">🛡️</span>}
                         {!s.requiresFirearms && !s.requiresArmedGuards && !s.requiresWeapons && (
                           <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {(s as any).zone ? (
+                          <Badge bg="teal" style={{ backgroundColor: '#0d9488', fontSize: '0.7rem' }}>
+                            {(s as any).zone.name}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted small fst-italic">Unzoned</span>
                         )}
                       </td>
                       <td>
@@ -304,10 +390,12 @@ export default function ClientDetailPage() {
               <thead className="table-light">
                 <tr>
                   <th>Period</th>
-                  <th>Guards Req.</th>
+                  <th>Guards</th>
                   <th>Rate/Guard</th>
                   <th>Monthly Value</th>
-                  <th>Days Remaining</th>
+                  <th>Shift Pattern</th>
+                  <th>Weapons</th>
+                  <th>Days Left</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -330,12 +418,20 @@ export default function ClientDetailPage() {
                       <td>{c.guardsRequired}</td>
                       <td>UGX {c.billingPerGuard.toLocaleString()}</td>
                       <td className="fw-semibold">UGX {c.monthlyValue.toLocaleString()}</td>
+                      <td className="text-muted">
+                        {c.shiftPattern
+                          ? SHIFT_PATTERNS[c.shiftPattern as keyof typeof SHIFT_PATTERNS] ?? c.shiftPattern
+                          : '—'}
+                      </td>
+                      <td className="text-muted">
+                        {c.weaponsAllocation != null ? c.weaponsAllocation : '—'}
+                      </td>
                       <td className={daysColor}>
                         {c.daysRemaining > 0 ? (
                           <>
                             {c.daysRemaining} days
                             {c.daysRemaining <= 30 && c.status !== 'EXPIRED' && (
-                              <span className="ms-1">⚠️ Expiring</span>
+                              <span className="ms-1">⚠️</span>
                             )}
                           </>
                         ) : (

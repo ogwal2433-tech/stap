@@ -125,8 +125,11 @@ model User {
   clientOf            Client?              @relation("ClientUser")
   assignedApplicants  Applicant[]          @relation("ApplicantAssignee")
   trainerSessions     TrainingSession[]    @relation("TrainerSessions")
+  approvedLeaves      LeaveRequest[]       @relation("LeaveApprover")
   recordedInventory   InventoryTransaction[] @relation("InventoryRecorder")
   authorisedTransfers GuardTransfer[]        @relation("TransferAuthoriser")
+  supervisedZones     Zone[]               @relation("ZoneSupervisor")
+  alternateZones      Zone[]               @relation("ZoneAlternate")
 }
 
 model Guard {
@@ -352,6 +355,17 @@ model Client {
   billingTerms    Int
   contractStatus  ClientContractStatus @default(ACTIVE)
   clientUserId    String?              @unique
+
+  // Tax & compliance
+  tin             String?              // Tax Identification Number
+  vatRegistered   Boolean              @default(false)
+  vatRate         Float?               // VAT percentage, e.g. 18.0
+
+  // CRM / lead tracking
+  leadSource      String?              // SOCIAL_MEDIA | REFERRAL | COLD_CALL | WEBSITE | WORD_OF_MOUTH | EXHIBITION | OTHER
+  referredBy      String?              // Name of referring person or company
+  leadStatus      String               @default("CONVERTED") // NEW | CONTACTED | CONVERTED | LOST
+
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
@@ -387,6 +401,10 @@ model Site {
   allowedShiftTypes   String[]
   defaultShiftType    String?
 
+  // Zone assignment
+  zoneId              String?
+  zone                Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -400,6 +418,22 @@ model Site {
   incidents         Incident[]
   transfersFrom     GuardTransfer[]     @relation("TransferFromSite")
   transfersTo       GuardTransfer[]     @relation("TransferToSite")
+}
+
+model Zone {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  supervisorId String?
+  alternateId  String?
+  isActive     Boolean  @default(true)
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  supervisor User?  @relation("ZoneSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  alternate  User?  @relation("ZoneAlternate",  fields: [alternateId],  references: [id], onDelete: SetNull)
+  sites      Site[]
 }
 
 model SiteEquipmentItem {
@@ -422,6 +456,11 @@ model Contract {
   billingDay      Int            @default(1) // Day of month to auto-generate invoice
   contractFile    String?
   status          ContractStatus @default(DRAFT)
+
+  // Security deployment details
+  weaponsAllocation Int?         // Number of weapons allocated under this contract
+  shiftPattern      String?      // SINGLE_SHIFT | TWO_SHIFTS | THREE_SHIFTS | CUSTOM
+
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -462,11 +501,14 @@ model Deployment {
   overtimeReason         String?
   copiedFromDate         DateTime?
   replacementForGuardId  String?
+  isPrimaryDeployment    Boolean   @default(true)
   createdAt              DateTime  @default(now())
 
   guard      Guard @relation(fields: [guardId], references: [id], onDelete: Restrict)
   site       Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
   supervisor User  @relation("DeploymentSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+
+  @@unique([guardId, date])
 }
 
 model AttendanceRecord {
@@ -843,6 +885,7 @@ model LeaveRequest {
   reason          String
   status          String    @default("PENDING")
   approvedBy      String?
+  approver        User?     @relation("LeaveApprover", fields: [approvedBy], references: [id])
   approvedAt      DateTime?
   rejectedBy      String?
   rejectionReason String?

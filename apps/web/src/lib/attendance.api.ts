@@ -1,7 +1,7 @@
 import api from './api';
 import type {
   CreateRosterInput,
-  ConflictDetail,
+  RosterCreationResult,
   DeploymentResponse,
   AttendanceRecord,
   AttendanceSummary,
@@ -16,9 +16,9 @@ import type {
 } from '@stap/shared';
 
 export const attendanceApi = {
-  createRoster(data: CreateRosterInput): Promise<{ created: number; conflicts: ConflictDetail[] }> {
+  createRoster(data: CreateRosterInput): Promise<RosterCreationResult> {
     return api
-      .post<{ success: boolean; data: { created: number; conflicts: ConflictDetail[] } }>(
+      .post<{ success: boolean; data: RosterCreationResult }>(
         '/attendance/roster',
         data,
       )

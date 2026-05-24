@@ -1219,10 +1219,21 @@ class GuardService {
       settingsService.get('director_name'),
     ]);
 
-    const photoHtml = guard.photoUrl
-      ? `<img src="/app/public${guard.photoUrl}"
-               style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid #1B3A6B;">`
-      : `<div style="width:70px;height:70px;border-radius:50%;background:#1B3A6B;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;font-weight:bold;">${guard.firstName[0]}${guard.lastName[0]}</div>`;
+    const initialsHtml = `<div style="width:70px;height:70px;border-radius:50%;background:#1B3A6B;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;font-weight:bold;">${guard.firstName[0]}${guard.lastName[0]}</div>`;
+    let photoHtml: string;
+    if (guard.photoUrl) {
+      const absPath = path.join(process.cwd(), 'public', guard.photoUrl);
+      try {
+        const data = fs.readFileSync(absPath);
+        const ext = path.extname(guard.photoUrl).toLowerCase().slice(1) || 'jpeg';
+        const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        photoHtml = `<img src="data:${mime};base64,${data.toString('base64')}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid #1B3A6B;">`;
+      } catch {
+        photoHtml = initialsHtml;
+      }
+    } else {
+      photoHtml = initialsHtml;
+    }
 
     const maskedNid = guard.nationalId
       ? '****' + guard.nationalId.slice(-4)

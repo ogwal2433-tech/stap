@@ -50,8 +50,8 @@ const mockPrisma = prisma as unknown as {
   attendanceRecord:  { findFirst: ReturnType<typeof vi.fn> };
 };
 
-const baseSite = { id: 's1', siteName: 'Test Site' };
-const baseGuard = { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null, isIncompleteNID: false };
+const baseSite = { id: 's1', siteName: 'Test Site', client: { clientName: 'Test Client' } };
+const baseGuard = { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null, isIncompleteNID: false, employmentStatus: 'ACTIVE' };
 const baseSupervisor = { id: 'u1', name: 'Supervisor One', role: 'OPERATIONS_SUPERVISOR' };
 
 const baseRosterInput = {
@@ -89,10 +89,10 @@ describe('deploymentService.createRoster()', () => {
     );
   });
 
-  it('detects conflicts with existing deployment on same date at different site', async () => {
-    // Simulate existing deployment for guard at different site
+  it('detects conflicts with existing deployment on same date at any site', async () => {
+    // Simulate existing deployment for guard at another site
     mockPrisma.deployment.findMany.mockResolvedValue([
-      { guardId: 'g1', siteId: 'other-site', site: { siteName: 'Other Site' } },
+      { guardId: 'g1', siteId: 'other-site', site: { siteName: 'Other Site', client: { clientName: 'Other Client' } } },
     ]);
 
     const result = await deploymentService.createRoster(baseRosterInput, 'user1');
@@ -101,6 +101,7 @@ describe('deploymentService.createRoster()', () => {
     expect(result.conflicts).toHaveLength(1);
     expect(result.conflicts[0].guardName).toBe('John Doe');
     expect(result.conflicts[0].existingSite).toBe('Other Site');
+    expect(result.conflicts[0].existingClient).toBe('Other Client');
   });
 
   it('throws NotFoundError for invalid siteId', async () => {
@@ -272,7 +273,7 @@ describe('deploymentService.copyPreviousRoster()', () => {
 
   it('copies active-guard deployments to target date', async () => {
     mockPrisma.deployment.findMany.mockResolvedValue([sourceDeployment]);
-    mockPrisma.deployment.findFirst.mockResolvedValue(null); // no existing on target date
+    mockPrisma.deployment.findUnique.mockResolvedValue(null); // no existing on target date
     mockPrisma.deployment.create.mockResolvedValue({});
 
     const result = await deploymentService.copyPreviousRoster(
@@ -312,7 +313,7 @@ describe('deploymentService.copyPreviousRoster()', () => {
 
   it('skips guards already deployed on target date', async () => {
     mockPrisma.deployment.findMany.mockResolvedValue([sourceDeployment]);
-    mockPrisma.deployment.findFirst.mockResolvedValue({ id: 'd-existing' }); // already deployed
+    mockPrisma.deployment.findUnique.mockResolvedValue({ id: 'd-existing' }); // already deployed
 
     const result = await deploymentService.copyPreviousRoster('2026-04-14', '2026-04-15', 'user1');
 

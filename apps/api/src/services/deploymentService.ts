@@ -7,6 +7,7 @@ import type {
   DeploymentListQuery,
   DeploymentResponse,
   ConflictDetail,
+  RosterCreationResult,
   DailySheetResponse,
   PaginatedResponse,
   GuardBasicResponse,
@@ -20,7 +21,7 @@ class DeploymentService {
   async createRoster(
     data: CreateRosterInput,
     createdBy: string,
-  ): Promise<{ created: number; conflicts: ConflictDetail[] }> {
+  ): Promise<RosterCreationResult> {
     // Normalise guardIds — accept both plain string and { guardId, overtimeHours } objects
     type GuardEntry = { guardId: string; overtimeHours?: number };
     const guardEntries: GuardEntry[] = (data.guardIds as (string | GuardEntry)[]).map((entry) =>
@@ -35,25 +36,36 @@ class DeploymentService {
     }
 
     // Verify site exists
-    const site = await prisma.site.findUnique({ where: { id: data.siteId }, select: { id: true, siteName: true } });
+    const site = await prisma.site.findUnique({
+      where: { id: data.siteId },
+      select: { id: true, siteName: true, client: { select: { clientName: true } } },
+    });
     if (!site) throw new NotFoundError('Site not found');
 
-    // Verify all guards exist
+    // Verify all guards exist and are ACTIVE
     const guards = await prisma.guard.findMany({
       where: { id: { in: guardIdList } },
-      select: { id: true, firstName: true, lastName: true, otherNames: true, isIncompleteNID: true },
+      select: {
+        id: true, firstName: true, lastName: true, otherNames: true,
+        employmentStatus: true, isIncompleteNID: true,
+      },
     });
-    if (guards.length !== guardIdList.length) {
-      throw new NotFoundError('One or more guards not found');
+
+    const notFound = guardIdList.filter((id) => !guards.find((g) => g.id === id));
+    if (notFound.length) {
+      throw new NotFoundError(`Guard(s) not found: ${notFound.join(', ')}`);
     }
 
-    // Block deployment of guards with a pending National ID
-    const pendingNid = guards.find((g) => g.isIncompleteNID);
-    if (pendingNid) {
-      throw new AppError(
-        `${pendingNid.firstName} ${pendingNid.lastName} cannot be deployed — National ID is pending. Please update their profile before deploying.`,
-        400,
-      );
+    const inactiveGuards = guards.filter((g) => g.employmentStatus !== 'ACTIVE');
+    if (inactiveGuards.length) {
+      const names = inactiveGuards.map((g) => `${g.firstName} ${g.lastName} (${g.employmentStatus})`).join(', ');
+      throw new AppError(`The following guards are not active and cannot be deployed: ${names}`, 400);
+    }
+
+    const pendingNid = guards.filter((g) => g.isIncompleteNID);
+    if (pendingNid.length) {
+      const names = pendingNid.map((g) => `${g.firstName} ${g.lastName}`).join(', ');
+      throw new AppError(`The following guards have a pending National ID and cannot be deployed: ${names}`, 400);
     }
 
     // Verify supervisor exists and has correct role
@@ -72,17 +84,13 @@ class DeploymentService {
     start.setUTCHours(0, 0, 0, 0);
 
     if (!data.recurring || !data.endDate || !data.daysOfWeek?.length) {
-      // Single date
       dates.push(start);
     } else {
-      // Recurring — generate dates between start and end on specified days of week
       const end = new Date(data.endDate);
       end.setUTCHours(0, 0, 0, 0);
-
       const maxEnd = new Date(start);
-      maxEnd.setDate(maxEnd.getDate() + 90); // cap at 90 days
+      maxEnd.setDate(maxEnd.getDate() + 90);
       const effectiveEnd = end < maxEnd ? end : maxEnd;
-
       const current = new Date(start);
       while (current <= effectiveEnd) {
         if (data.daysOfWeek.includes(current.getDay())) {
@@ -92,88 +100,126 @@ class DeploymentService {
       }
     }
 
-    // Check for conflicts: guards already deployed on same date at different site
     const guardMap = new Map(guards.map((g) => [g.id, g]));
     const overtimeMap = new Map(guardEntries.map((e) => [e.guardId, e.overtimeHours ?? 0]));
     const conflicts: ConflictDetail[] = [];
     const toCreate: { guardId: string; date: Date }[] = [];
 
     for (const date of dates) {
-      const dateStart = new Date(date);
-      dateStart.setUTCHours(0, 0, 0, 0);
-      const dateEnd = new Date(dateStart);
-      dateEnd.setUTCHours(23, 59, 59, 999);
+      const targetDate = new Date(date);
+      targetDate.setUTCHours(0, 0, 0, 0);
 
-      // Find existing deployments for each guard on this date at a different site
-      const existing = await prisma.deployment.findMany({
+      // Batch-check ALL guards for conflicts on this date (any site, including same site)
+      const existingDeployments = await prisma.deployment.findMany({
         where: {
           guardId: { in: guardIdList },
-          date: { gte: dateStart, lte: dateEnd },
-          siteId: { not: data.siteId },
+          date:    targetDate,
         },
-        include: { site: { select: { siteName: true } } },
+        include: {
+          site: {
+            select: {
+              siteName: true,
+              client:   { select: { clientName: true } },
+            },
+          },
+        },
       });
 
-      const conflictingGuardIds = new Set(existing.map((e) => e.guardId));
+      const conflictedGuardIds = new Set(existingDeployments.map((d) => d.guardId));
 
       for (const guardId of guardIdList) {
-        if (conflictingGuardIds.has(guardId)) {
-          const existingDeployment = existing.find((e) => e.guardId === guardId);
+        if (conflictedGuardIds.has(guardId)) {
+          const d = existingDeployments.find((e) => e.guardId === guardId)!;
           const g = guardMap.get(guardId)!;
           const guardName = [g.firstName, g.otherNames, g.lastName].filter(Boolean).join(' ');
           conflicts.push({
             guardId,
             guardName,
-            date: date.toISOString(),
-            existingSite: existingDeployment?.site.siteName ?? 'Unknown',
+            date:           targetDate.toISOString(),
+            existingSite:   d.site.siteName,
+            existingClient: d.site.client.clientName,
+            message:        `${guardName} is already deployed to ${d.site.siteName} (${d.site.client.clientName}) on this date.`,
           });
         } else {
-          toCreate.push({ guardId, date });
+          toCreate.push({ guardId, date: targetDate });
         }
       }
     }
 
-    if (toCreate.length === 0) {
-      return { created: 0, conflicts };
+    let created = 0;
+    if (toCreate.length > 0) {
+      await prisma.deployment.createMany({
+        data: toCreate.map(({ guardId, date }) => ({
+          guardId,
+          siteId:                data.siteId,
+          shiftType:             data.shiftType,
+          date,
+          supervisorId:          data.supervisorId,
+          deploymentType:        data.deploymentType ?? 'UNARMED',
+          weaponsDetails:        data.weaponsDetails ?? null,
+          overtimeHours:         overtimeMap.get(guardId) || null,
+          replacementForGuardId: data.replacementForGuardId ?? null,
+          isPrimaryDeployment:   true,
+        })),
+        skipDuplicates: false,
+      });
+
+      await prisma.deploymentHistory.createMany({
+        data: toCreate.map(({ guardId, date }) => ({
+          guardId,
+          siteId:       data.siteId,
+          shiftType:    data.shiftType,
+          startDate:    date,
+          supervisorId: data.supervisorId,
+        })),
+        skipDuplicates: true,
+      });
+
+      created = toCreate.length;
     }
 
-    // Create deployment records
-    await prisma.deployment.createMany({
-      data: toCreate.map(({ guardId, date }) => ({
-        guardId,
-        siteId:                data.siteId,
-        shiftType:             data.shiftType,
-        date,
-        supervisorId:          data.supervisorId,
-        deploymentType:        data.deploymentType ?? 'UNARMED',
-        weaponsDetails:        data.weaponsDetails ?? null,
-        overtimeHours:         overtimeMap.get(guardId) || null,
-        replacementForGuardId: data.replacementForGuardId ?? null,
-      })),
-      skipDuplicates: true,
-    });
-
-    // Create deployment history records
-    await prisma.deploymentHistory.createMany({
-      data: toCreate.map(({ guardId, date }) => ({
-        guardId,
-        siteId:       data.siteId,
-        shiftType:    data.shiftType,
-        startDate:    date,
-        supervisorId: data.supervisorId,
-      })),
-      skipDuplicates: true,
-    });
-
     await QueueService.logAudit({
-      userId: createdBy,
-      action: 'ROSTER_CREATED',
-      entity: 'deployment',
+      userId:   createdBy,
+      action:   'ROSTER_CREATED',
+      entity:   'deployment',
       entityId: data.siteId,
-      newValue: { siteId: data.siteId, guardCount: toCreate.length, dateCount: dates.length },
+      newValue: { siteId: data.siteId, created, conflicts: conflicts.length },
     });
 
-    return { created: toCreate.length, conflicts };
+    return { created, conflicts, skipped: conflicts.length };
+  }
+
+  // ── Check if a single guard is available on a given date ───────────────────
+
+  async isGuardAvailable(
+    guardId: string,
+    date: string | Date,
+  ): Promise<{ available: boolean; deployment?: { siteName: string; clientName: string; shiftType: string } }> {
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(0, 0, 0, 0);
+
+    const existing = await prisma.deployment.findUnique({
+      where: { guardId_date: { guardId, date: targetDate } },
+      include: {
+        site: {
+          select: {
+            siteName: true,
+            client:   { select: { clientName: true } },
+          },
+        },
+      },
+    });
+
+    if (!existing) return { available: true };
+
+    return {
+      available: false,
+      deployment: {
+        siteName:   existing.site.siteName,
+        clientName: existing.site.client.clientName,
+        shiftType:  existing.shiftType,
+      },
+    };
   }
 
   // ── Get today's deployments ────────────────────────────────────────────────
@@ -461,9 +507,6 @@ class DeploymentService {
 
     const targetDateObj = new Date(targetDate);
     targetDateObj.setUTCHours(0, 0, 0, 0);
-    const targetDateEnd = new Date(targetDateObj);
-    targetDateEnd.setUTCHours(23, 59, 59, 999);
-
     let created = 0;
     let skipped = 0;
 
@@ -473,8 +516,8 @@ class DeploymentService {
         continue;
       }
 
-      const existing = await prisma.deployment.findFirst({
-        where: { guardId: dep.guardId, date: { gte: targetDateObj, lte: targetDateEnd } },
+      const existing = await prisma.deployment.findUnique({
+        where: { guardId_date: { guardId: dep.guardId, date: targetDateObj } },
       });
       if (existing) {
         skipped++;
@@ -516,11 +559,9 @@ class DeploymentService {
   ): Promise<GuardBasicResponse[]> {
     const dateObj = new Date(date);
     dateObj.setUTCHours(0, 0, 0, 0);
-    const dateEnd = new Date(dateObj);
-    dateEnd.setUTCHours(23, 59, 59, 999);
 
     const deployedToday = await prisma.deployment.findMany({
-      where: { date: { gte: dateObj, lte: dateEnd } },
+      where: { date: dateObj },
       select: { guardId: true },
     });
     const deployedIds = deployedToday.map((d) => d.guardId);

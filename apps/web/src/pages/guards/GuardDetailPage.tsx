@@ -5,6 +5,7 @@ import {
   Form, Modal, Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
+import { useTodaysDeployments } from '../../hooks/useAttendance';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
@@ -186,6 +187,8 @@ export default function GuardDetailPage() {
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const { data: ranks = [] } = useGuardRanks(false);
   const { data: deductionTypes = [] } = useDeductionTypes(true);
+  const todayIso = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
+  const { data: todayDeployments } = useTodaysDeployments({ guardId: id, date: todayIso, limit: 1 });
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [deployPage, setDeployPage] = useState(1);
@@ -372,6 +375,17 @@ export default function GuardDetailPage() {
               >
                 {guard.employmentStatus}
               </Badge>
+              {guard.employmentStatus === 'ACTIVE' && (
+                todayDeployments?.data?.[0] ? (
+                  <Badge bg="success" className="px-3 py-2 mb-2 d-block" style={{ fontSize: '0.75rem' }}>
+                    📍 Deployed today — {todayDeployments.data[0].site.siteName}
+                  </Badge>
+                ) : (
+                  <Badge bg="secondary" className="px-3 py-2 mb-2 d-block" style={{ fontSize: '0.75rem' }}>
+                    📭 Not deployed today
+                  </Badge>
+                )
+              )}
               <Badge
                 bg={RANK_BADGE_COLORS[((ranks.find((r) => r.name === guard.rank)?.displayOrder ?? 1) - 1) % RANK_BADGE_COLORS.length]}
                 className="fs-6 px-3 py-2 mb-2 d-block"

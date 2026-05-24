@@ -316,7 +316,16 @@ export default function AttendancePage() {
       <div className="d-none d-print-block mb-3">
         <h5 className="fw-bold">STAP Security Ltd — Daily Deployment Sheet</h5>
         <div className="small">Date: {selectedDate}</div>
+        <div className="small text-muted mt-1">Each guard is shown once — one active deployment per guard per day.</div>
       </div>
+
+      {/* Screen: one-per-day note */}
+      {sheet && sheet.sites.length > 0 && (
+        <div className="text-muted small mb-2">
+          <i className="bi bi-info-circle me-1" />
+          Each guard appears once — one active deployment per guard per day.
+        </div>
+      )}
 
       {isLoading && (
         <div className="text-center py-5">

@@ -157,7 +157,7 @@ router.get(
   requireRole(...SITE_VIEW_ROLES),
   asyncHandler(async (req, res) => {
     const result = await siteService.listAll(
-      req.query as { page?: number; limit?: number; search?: string; clientId?: string },
+      req.query as { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string },
     );
     res.status(200).json({ success: true, ...result });
   }),
