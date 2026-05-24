@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// ── Salary increment rules ─────────────────────────────────────────────────────
+
+export const SALARY_INCREMENT_RULES = {
+  firstYearIncrement:      20000,
+  subsequentYearIncrement: 10000,
+  incrementIntervalMonths: 12,
+} as const;
+
 // ── Input schemas (Zod) ────────────────────────────────────────────────────────
 
 export const CreateGuardSchema = z.object({
@@ -308,6 +316,11 @@ export interface GuardResponse {
   takesAlcohol:      boolean;
   hasAllergies:      boolean;
   allergyDetails:    string | null;
+
+  // ── Salary increment tracking ─────────────────────────────────────────────────
+  incrementCount:    number;
+  lastIncrementDate: string | null;
+  nextIncrementDate: string | null;
 
   latestSuspension?: {
     reason:      string;

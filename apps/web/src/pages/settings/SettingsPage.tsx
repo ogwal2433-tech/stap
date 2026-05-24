@@ -10,7 +10,8 @@ import {
   useAllDeductionTypes, useDeactivateDeductionType, useActivateDeductionType,
   useDeleteDeductionType, useReorderDeductionTypes,
 } from '../../hooks/useSettings';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
+import { useRunSalaryIncrements } from '../../hooks/useGuards';
 import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse } from '@stap/shared';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
@@ -258,6 +259,8 @@ export default function SettingsPage() {
   const activateDeductionType   = useActivateDeductionType();
   const deleteDeductionType     = useDeleteDeductionType();
   const reorderDeductionTypes   = useReorderDeductionTypes();
+
+  const runSalaryIncrements = useRunSalaryIncrements();
 
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<{ group: string; message: string } | null>(null);
@@ -703,6 +706,37 @@ export default function SettingsPage() {
               </ul>
             </div>
           )}
+        </Tab>
+
+        {/* ── Payroll ───────────────────────────────────────────────────────────── */}
+        <Tab eventKey="payroll" title={<><i className="bi bi-cash-coin me-1" />Payroll</>}>
+          <h6 className="fw-semibold mb-3">Salary Increments</h6>
+          <Alert variant="info" className="small py-2 mb-3">
+            Annual increments are applied automatically each morning at 07:00 EAT. Permanent guards
+            receive <strong>UGX {SALARY_INCREMENT_RULES.firstYearIncrement.toLocaleString()}</strong> on their
+            one-year anniversary, then <strong>UGX {SALARY_INCREMENT_RULES.subsequentYearIncrement.toLocaleString()}</strong> each
+            subsequent year. Use the button below to trigger a manual check outside the schedule.
+          </Alert>
+          <div className="border rounded p-3 d-flex align-items-center justify-content-between">
+            <div>
+              <div className="fw-medium">Run Increment Check Now</div>
+              <div className="text-muted small">
+                Applies any pending increments for eligible permanent guards immediately.
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={runSalaryIncrements.isPending}
+              onClick={() => runSalaryIncrements.mutate()}
+            >
+              {runSalaryIncrements.isPending ? (
+                <><Spinner size="sm" className="me-1" />Running…</>
+              ) : (
+                <><i className="bi bi-play-fill me-1" />Run Now</>
+              )}
+            </Button>
+          </div>
         </Tab>
 
         {/* ── User Management ──────────────────────────────────────────────────── */}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
+  Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col, Dropdown,
   Form, Modal, Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
@@ -20,8 +20,8 @@ import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
-  type GuardDocumentResponse, type GuardTransferResponse,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, SALARY_INCREMENT_RULES,
+  type UserRole, type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
 import { useGuardRanks, useDeductionTypes } from '../../hooks/useSettings';
 import type { DeductionTypeResponse } from '@stap/shared';
@@ -416,6 +416,62 @@ export default function GuardDetailPage() {
           </Row>
         </div>
       </div>
+
+      {/* Salary Increment History */}
+      {guard.contractType === 'PERMANENT' && (
+        <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
+          <Card className="mb-3">
+            <Card.Header className="fw-bold">Salary Increment History</Card.Header>
+            <Card.Body>
+              <Row>
+                <Col md={4}>
+                  <div className="text-muted small">Current Salary</div>
+                  <div className="fw-semibold">UGX {guard.salaryRate.toLocaleString()} / month</div>
+                </Col>
+                <Col md={4}>
+                  <div className="text-muted small">Total Increments Applied</div>
+                  <div className="fw-semibold">{guard.incrementCount ?? 0}</div>
+                </Col>
+                <Col md={4}>
+                  <div className="text-muted small">Last Increment Date</div>
+                  <div className="fw-semibold">
+                    {guard.lastIncrementDate ? formatDate(guard.lastIncrementDate) : 'None yet'}
+                  </div>
+                </Col>
+              </Row>
+              <Row className="mt-3">
+                <Col md={6}>
+                  <div className="text-muted small">Next Increment Due</div>
+                  <div className="fw-semibold">
+                    {guard.nextIncrementDate ? formatDate(guard.nextIncrementDate) : '—'}
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <div className="text-muted small">Next Increment Amount</div>
+                  <div className="fw-semibold">
+                    {guard.incrementCount === 0
+                      ? `UGX ${SALARY_INCREMENT_RULES.firstYearIncrement.toLocaleString()}`
+                      : `UGX ${SALARY_INCREMENT_RULES.subsequentYearIncrement.toLocaleString()}`}
+                  </div>
+                </Col>
+              </Row>
+              {guard.incrementCount === 0 && guard.contractStart && (
+                <Alert variant="info" className="mb-0 mt-3 small py-2">
+                  First increment of UGX {SALARY_INCREMENT_RULES.firstYearIncrement.toLocaleString()} applies on{' '}
+                  {formatDate(
+                    new Date(
+                      new Date(guard.contractStart).setFullYear(
+                        new Date(guard.contractStart).getFullYear() + 1,
+                      ),
+                    ).toISOString(),
+                  )}
+                  .
+                </Alert>
+              )}
+            </Card.Body>
+          </Card>
+        </RoleGuard>
+      )}
 
       {/* Suspension banner */}
       {guard.employmentStatus === 'SUSPENDED' && guard.latestSuspension && (

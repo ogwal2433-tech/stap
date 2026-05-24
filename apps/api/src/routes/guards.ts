@@ -660,4 +660,14 @@ router.get(
   }),
 );
 
+// ── POST /salary-increment/run — manual trigger (Director only) ────────────────
+router.post(
+  '/salary-increment/run',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (_req, res) => {
+    await guardService.runSalaryIncrements();
+    res.json({ success: true, message: 'Salary increment check completed.' });
+  }),
+);
+
 export { router as guardsRouter };

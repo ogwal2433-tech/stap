@@ -146,3 +146,12 @@ export function useTransferHistory(guardId: string) {
     enabled:  Boolean(guardId),
   });
 }
+
+export function useRunSalaryIncrements() {
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: () => guardsApi.runSalaryIncrements(),
+    onSuccess: () => showToast('Salary increment check completed successfully', 'success'),
+    onError: () => showToast('Salary increment check failed', 'danger'),
+  });
+}

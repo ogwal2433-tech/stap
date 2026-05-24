@@ -612,6 +612,18 @@ class GuardService {
 
   // ── Private: sanitise ──────────────────────────────────────────────────────
 
+  private computeNextIncrementDate(
+    contractStart: Date | null,
+    lastIncrementDate: Date | null,
+  ): string | null {
+    if (!contractStart) return null;
+    const today = new Date();
+    const base  = lastIncrementDate ? new Date(lastIncrementDate) : new Date(contractStart);
+    const next  = new Date(base);
+    next.setFullYear(next.getFullYear() + 1);
+    return next < today ? today.toISOString() : next.toISOString();
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sanitiseGuard(guard: any, role?: UserRole, listMode = false): GuardResponse {
     const showAccountNumber = !listMode && role && ACCOUNT_VISIBLE_ROLES.includes(role);
@@ -754,6 +766,16 @@ class GuardService {
       takesAlcohol:      guard.takesAlcohol ?? false,
       hasAllergies:      guard.hasAllergies ?? false,
       allergyDetails:    guard.allergyDetails ?? null,
+
+      // Salary increment tracking
+      incrementCount:    guard.incrementCount ?? 0,
+      lastIncrementDate: guard.lastIncrementDate instanceof Date
+        ? guard.lastIncrementDate.toISOString()
+        : (guard.lastIncrementDate ?? null),
+      nextIncrementDate: this.computeNextIncrementDate(
+        guard.contractStart instanceof Date ? guard.contractStart : (guard.contractStart ? new Date(guard.contractStart) : null),
+        guard.lastIncrementDate instanceof Date ? guard.lastIncrementDate : (guard.lastIncrementDate ? new Date(guard.lastIncrementDate) : null),
+      ),
     };
 
     if (showAccountNumber) {

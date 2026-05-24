@@ -118,6 +118,17 @@ cron.schedule('0 6 * * *', async () => {
   await guardService.runProbationCheck();
 }, { timezone: 'Africa/Kampala' });
 
+// Annual salary increment check — runs every day at 07:00 EAT
+// Applies UGX 20,000 (year 1) or UGX 10,000 (subsequent years) on each guard's contract anniversary
+cron.schedule('0 7 * * *', async () => {
+  console.log('⏰ Running annual salary increments...');
+  try {
+    await guardService.runSalaryIncrements();
+  } catch (err) {
+    console.error('❌ Salary increment cron failed:', err);
+  }
+}, { timezone: 'Africa/Kampala' });
+
 // ── Graceful shutdown ──────────────────────────────────────────────────────────
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];
 

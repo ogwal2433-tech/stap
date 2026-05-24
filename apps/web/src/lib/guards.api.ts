@@ -164,4 +164,10 @@ export const guardsApi = {
       .get<{ success: boolean; data: GuardTransferResponse[] }>(`/guards/${guardId}/transfers`)
       .then((r) => r.data.data);
   },
+
+  runSalaryIncrements(): Promise<void> {
+    return api
+      .post<{ success: boolean }>('/guards/salary-increment/run')
+      .then(() => undefined);
+  },
 };
