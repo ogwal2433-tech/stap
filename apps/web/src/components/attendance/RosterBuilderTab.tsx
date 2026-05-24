@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table,
+  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useCreateRoster } from '../../hooks/useAttendance';
+import { useShiftTypes } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import type { ConflictDetail, SiteResponse } from '@stap/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { useQuery } from '@tanstack/react-query';
@@ -20,6 +22,8 @@ const DAYS_OF_WEEK = [
   { label: 'Sat', value: 6 },
 ];
 
+type DeploymentType = 'UNARMED' | 'ARMED' | 'FIREARMS';
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -27,39 +31,75 @@ function todayStr() {
 export default function RosterBuilderTab() {
   const { showToast } = useToast();
   const createRoster = useCreateRoster();
+  const { data: shiftTypes = [] } = useShiftTypes(true);
 
   // Step state
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [selectedGuardIds, setSelectedGuardIds] = useState<string[]>([]);
-  const [shiftType, setShiftType] = useState<'DAY' | 'NIGHT' | 'FULL_24'>('DAY');
+  const [guardOvertimeHours, setGuardOvertimeHours] = useState<Record<string, number>>({});
+  const [shiftTypeCode, setShiftTypeCode] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [supervisorId, setSupervisorId] = useState('');
   const [startDate, setStartDate] = useState(todayStr());
   const [recurring, setRecurring] = useState(false);
   const [endDate, setEndDate] = useState('');
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [deploymentType, setDeploymentType] = useState<DeploymentType>('UNARMED');
+  const [weaponsDetails, setWeaponsDetails] = useState('');
+
+  // Guard list search state
+  const [guardSearch, setGuardSearch] = useState('');
 
   const [result, setResult] = useState<{ created: number; conflicts: ConflictDetail[] } | null>(null);
 
   // Fetch all sites
-  const { data: sitesData } = useQuery({
+  const { data: sitesData, isLoading: sitesLoading } = useQuery({
     queryKey: ['sites-all'],
-    queryFn: () => clientsApi.getAllSites({ limit: 100 }),
+    queryFn: () => clientsApi.getAllSites({ limit: 200 }),
   });
 
   // Fetch all active guards
   const { data: guardsData } = useQuery({
     queryKey: ['guards-roster'],
-    queryFn: () => guardsApi.list({ page: 1, limit: 100, status: 'ACTIVE', sortBy: 'lastName', sortOrder: 'asc' }),
+    queryFn: () => guardsApi.list({ page: 1, limit: 200, status: 'ACTIVE', sortBy: 'lastName', sortOrder: 'asc' }),
   });
 
   // Fetch supervisors
-  const { data: supervisorsData } = useQuery({
+  const { data: supervisorsData, isLoading: supervisorsLoading } = useQuery({
     queryKey: ['supervisors'],
     queryFn: () => usersApi.list({ roles: 'OPERATIONS_SUPERVISOR,FIELD_SUPERVISOR', status: 'ACTIVE' }),
     staleTime: 5 * 60 * 1000,
   });
 
   const selectedSite = sitesData?.data.find((s) => s.id === selectedSiteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
+
+  // Build options for SearchableSelect
+  const siteOptions = useMemo(
+    () => (sitesData?.data ?? []).map((s) => ({
+      value:    s.id,
+      label:    s.siteName,
+      sublabel: (s as SiteResponse & { client?: { clientName: string } }).client?.clientName ?? '',
+    })),
+    [sitesData],
+  );
+
+  const supervisorOptions = useMemo(
+    () => (supervisorsData?.data ?? []).map((u) => ({
+      value:    u.id,
+      label:    u.name,
+      sublabel: u.role.replace(/_/g, ' '),
+    })),
+    [supervisorsData],
+  );
+
+  const filteredGuards = useMemo(() => {
+    if (!guardsData?.data) return [];
+    const q = guardSearch.toLowerCase();
+    return guardsData.data.filter((g) =>
+      `${g.fullName} ${g.phone ?? ''}`.toLowerCase().includes(q),
+    );
+  }, [guardsData, guardSearch]);
 
   function toggleGuard(guardId: string) {
     setSelectedGuardIds((prev) =>
@@ -73,21 +113,34 @@ export default function RosterBuilderTab() {
     );
   }
 
+  function handleShiftSelect(code: string) {
+    setShiftTypeCode(code);
+    const shift = shiftTypes.find((s) => s.code === code);
+    if (shift?.startTime) setStartTime(shift.startTime);
+    if (shift?.endTime) setEndTime(shift.endTime);
+  }
+
   async function handleSubmit() {
     if (!selectedSiteId) return showToast('Please select a site', 'warning');
     if (selectedGuardIds.length === 0) return showToast('Please select at least one guard', 'warning');
+    if (!shiftTypeCode) return showToast('Please select a shift type', 'warning');
     if (!supervisorId) return showToast('Please select a supervisor', 'warning');
 
     try {
       const data = await createRoster.mutateAsync({
-        siteId: selectedSiteId,
-        guardIds: selectedGuardIds,
+        siteId:       selectedSiteId,
+        guardIds:     selectedGuardIds.map((id) => ({
+          guardId:      id,
+          overtimeHours: guardOvertimeHours[id] ?? 0,
+        })),
         supervisorId,
-        shiftType,
+        shiftType: shiftTypeCode,
         startDate: `${startDate}T00:00:00.000Z`,
         endDate: recurring && endDate ? `${endDate}T23:59:59.999Z` : undefined,
         recurring,
         daysOfWeek: recurring ? daysOfWeek : undefined,
+        deploymentType,
+        weaponsDetails: weaponsDetails || undefined,
       });
       setResult(data);
       showToast(`${data.created} deployment(s) created`, 'success');
@@ -143,6 +196,8 @@ export default function RosterBuilderTab() {
     );
   }
 
+  const selectedShift = shiftTypes.find((s) => s.code === shiftTypeCode);
+
   return (
     <Card className="border-0 shadow-sm">
       <Card.Body>
@@ -150,17 +205,14 @@ export default function RosterBuilderTab() {
           {/* Step 1 — Site */}
           <Col md={6}>
             <h6 className="fw-semibold mb-2">Step 1 — Select Site</h6>
-            <Form.Select
+            <SearchableSelect
+              options={siteOptions}
               value={selectedSiteId}
-              onChange={(e) => { setSelectedSiteId(e.target.value); setSelectedGuardIds([]); }}
-            >
-              <option value="">— Choose a site —</option>
-              {sitesData?.data.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.siteName}
-                </option>
-              ))}
-            </Form.Select>
+              onChange={(id) => { setSelectedSiteId(id); setSelectedGuardIds([]); }}
+              placeholder="— Choose a site —"
+              searchPlaceholder="Search sites..."
+              isLoading={sitesLoading}
+            />
             {selectedSite && (
               <div className="mt-2 text-muted small">
                 Guards required: <strong>{selectedSite.guardsRequired}</strong>
@@ -179,39 +231,61 @@ export default function RosterBuilderTab() {
             {!selectedSiteId ? (
               <p className="text-muted small">Select a site first.</p>
             ) : (
-              <>
-                <Form.Check
-                  label="Select All"
-                  checked={selectedGuardIds.length === (guardsData?.data.length ?? 0)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedGuardIds(guardsData?.data.map((g) => g.id) ?? []);
-                    } else {
-                      setSelectedGuardIds([]);
-                    }
-                  }}
-                  className="mb-2 fw-semibold"
-                />
-                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: '0.5rem' }}>
-                  {guardsData?.data.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      id={`guard-${g.id}`}
-                      label={
-                        <span>
-                          {g.fullName}{' '}
-                          <Badge bg={g.employmentStatus === 'ACTIVE' ? 'success' : 'secondary'} className="ms-1" style={{ fontSize: '0.65rem' }}>
-                            {g.employmentStatus}
-                          </Badge>
-                        </span>
-                      }
-                      checked={selectedGuardIds.includes(g.id)}
-                      onChange={() => toggleGuard(g.id)}
-                      className="mb-1"
-                    />
-                  ))}
+              <div style={{ border: '1px solid #ced4da', borderRadius: '0.375rem', overflow: 'hidden' }}>
+                {/* Search inside the guard list box */}
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid #e9ecef', background: '#f8f9fa' }}>
+                  <Form.Control
+                    type="text"
+                    size="sm"
+                    placeholder="Search guards by name or phone..."
+                    value={guardSearch}
+                    onChange={(e) => setGuardSearch(e.target.value)}
+                  />
                 </div>
-              </>
+                {/* Scrollable guard checkboxes */}
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {filteredGuards.length === 0 ? (
+                    <div className="p-3 text-muted text-center small">No guards found</div>
+                  ) : (
+                    filteredGuards.map((g) => (
+                      <div key={g.id} className="d-flex align-items-center gap-2" style={{ padding: '6px 10px', borderBottom: '1px solid #f0f0f0' }}>
+                        <Form.Check
+                          id={`guard-${g.id}`}
+                          label={
+                            <span>
+                              {g.fullName}{' '}
+                              <Badge bg={g.employmentStatus === 'ACTIVE' ? 'success' : 'secondary'} className="ms-1" style={{ fontSize: '0.65rem' }}>
+                                {g.employmentStatus}
+                              </Badge>
+                            </span>
+                          }
+                          checked={selectedGuardIds.includes(g.id)}
+                          onChange={() => toggleGuard(g.id)}
+                          style={{ flex: 1 }}
+                        />
+                        {selectedGuardIds.includes(g.id) && (
+                          <div className="d-flex align-items-center gap-1" style={{ minWidth: 120 }}>
+                            <span className="text-muted" style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>OT hrs:</span>
+                            <Form.Control
+                              type="number"
+                              size="sm"
+                              min={0}
+                              step={0.5}
+                              value={guardOvertimeHours[g.id] ?? ''}
+                              placeholder="0"
+                              onChange={(e) => setGuardOvertimeHours((prev) => ({
+                                ...prev,
+                                [g.id]: parseFloat(e.target.value) || 0,
+                              }))}
+                              style={{ width: 60, fontSize: '0.75rem' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
           </Col>
 
@@ -219,35 +293,100 @@ export default function RosterBuilderTab() {
           <Col md={12}>
             <h6 className="fw-semibold mb-3">Step 3 — Assignment Details</h6>
             <Row className="g-3">
+              {/* Shift Type */}
               <Col md={4}>
                 <Form.Label className="small">Shift Type</Form.Label>
-                <div className="d-flex gap-3">
-                  {(['DAY', 'NIGHT', 'FULL_24'] as const).map((s) => (
-                    <Form.Check
-                      key={s}
-                      type="radio"
-                      id={`shift-${s}`}
-                      label={s === 'FULL_24' ? '24hr' : s.charAt(0) + s.slice(1).toLowerCase()}
-                      checked={shiftType === s}
-                      onChange={() => setShiftType(s)}
-                    />
-                  ))}
+                {shiftTypes.length === 0 ? (
+                  <p className="text-muted small">Loading shift types...</p>
+                ) : (
+                  <div className="d-flex gap-3 flex-wrap">
+                    {shiftTypes.map((s) => (
+                      <Form.Check
+                        key={s.id}
+                        type="radio"
+                        id={`shift-${s.code}`}
+                        name="shiftTypeCode"
+                        value={s.code}
+                        label={
+                          <span>
+                            {s.name}
+                            {s.isOvertime && <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: '0.6rem' }}>OT</Badge>}
+                          </span>
+                        }
+                        checked={shiftTypeCode === s.code}
+                        onChange={() => handleShiftSelect(s.code)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </Col>
+
+              {/* Auto-filled times */}
+              <Col md={4}>
+                <Form.Label className="small">Start Time</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  placeholder="Auto-fills on shift select"
+                />
+                {selectedShift?.startTime && (
+                  <Form.Text className="text-muted">Default: {selectedShift.startTime}</Form.Text>
+                )}
+              </Col>
+
+              <Col md={4}>
+                <Form.Label className="small">End Time</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  placeholder="Auto-fills on shift select"
+                />
+                {selectedShift?.endTime && (
+                  <Form.Text className="text-muted">Default: {selectedShift.endTime}</Form.Text>
+                )}
+              </Col>
+
+              {/* Deployment Type */}
+              <Col md={12}>
+                <Form.Label className="small">Deployment Type</Form.Label>
+                <div>
+                  <ButtonGroup>
+                    {(['UNARMED', 'ARMED', 'FIREARMS'] as DeploymentType[]).map((dt) => (
+                      <Button
+                        key={dt}
+                        size="sm"
+                        variant={deploymentType === dt ? (dt === 'UNARMED' ? 'secondary' : dt === 'ARMED' ? 'warning' : 'danger') : 'outline-secondary'}
+                        onClick={() => setDeploymentType(dt)}
+                      >
+                        {dt === 'UNARMED' ? 'Unarmed' : dt === 'ARMED' ? '🔫 Armed' : '🔥 Firearms'}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
                 </div>
+                {deploymentType !== 'UNARMED' && (
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    className="mt-2"
+                    placeholder="Specify weapons or equipment issued (optional)"
+                    value={weaponsDetails}
+                    onChange={(e) => setWeaponsDetails(e.target.value)}
+                  />
+                )}
               </Col>
 
               <Col md={4}>
                 <Form.Label className="small">Supervisor</Form.Label>
-                <Form.Select
+                <SearchableSelect
+                  options={supervisorOptions}
                   value={supervisorId}
-                  onChange={(e) => setSupervisorId(e.target.value)}
-                >
-                  <option value="">— Select supervisor —</option>
-                  {supervisorsData?.data.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role.replace(/_/g, ' ')})
-                    </option>
-                  ))}
-                </Form.Select>
+                  onChange={setSupervisorId}
+                  placeholder="— Select supervisor —"
+                  searchPlaceholder="Search supervisors..."
+                  isLoading={supervisorsLoading}
+                />
               </Col>
 
               <Col md={4}>
@@ -310,8 +449,9 @@ export default function RosterBuilderTab() {
                 <Row className="g-1">
                   <Col md={3}><span className="text-muted">Site:</span> <strong>{selectedSite?.siteName ?? '—'}</strong></Col>
                   <Col md={3}><span className="text-muted">Guards:</span> <strong>{selectedGuardIds.length}</strong></Col>
-                  <Col md={3}><span className="text-muted">Shift:</span> <strong>{shiftType}</strong></Col>
+                  <Col md={3}><span className="text-muted">Shift:</span> <strong>{selectedShift?.name ?? (shiftTypeCode || '—')}</strong></Col>
                   <Col md={3}><span className="text-muted">Start:</span> <strong>{startDate}</strong></Col>
+                  <Col md={3}><span className="text-muted">Type:</span> <strong>{deploymentType}</strong></Col>
                   {recurring && endDate && (
                     <Col md={3}><span className="text-muted">End:</span> <strong>{endDate}</strong></Col>
                   )}
@@ -323,7 +463,7 @@ export default function RosterBuilderTab() {
               className="mt-3"
               style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
               onClick={handleSubmit}
-              disabled={createRoster.isPending || !selectedSiteId || selectedGuardIds.length === 0 || !supervisorId}
+              disabled={createRoster.isPending || !selectedSiteId || selectedGuardIds.length === 0 || !supervisorId || !shiftTypeCode}
             >
               {createRoster.isPending
                 ? <><Spinner size="sm" animation="border" className="me-2" />Creating...</>
