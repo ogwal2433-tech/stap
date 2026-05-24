@@ -9,6 +9,7 @@ import type {
   ConflictDetail,
   DailySheetResponse,
   PaginatedResponse,
+  GuardBasicResponse,
 } from '@stap/shared';
 
 const SUPERVISOR_ROLES = [ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR];
@@ -20,16 +21,29 @@ class DeploymentService {
     data: CreateRosterInput,
     createdBy: string,
   ): Promise<{ created: number; conflicts: ConflictDetail[] }> {
+    // Normalise guardIds — accept both plain string and { guardId, overtimeHours } objects
+    type GuardEntry = { guardId: string; overtimeHours?: number };
+    const guardEntries: GuardEntry[] = (data.guardIds as (string | GuardEntry)[]).map((entry) =>
+      typeof entry === 'string' ? { guardId: entry } : entry,
+    );
+    const guardIdList = guardEntries.map((e) => e.guardId);
+
+    // Validate shift type exists and is active
+    const shiftTypeRecord = await prisma.shiftType.findUnique({ where: { code: data.shiftType } });
+    if (!shiftTypeRecord || !shiftTypeRecord.isActive) {
+      throw new AppError(`Shift type "${data.shiftType}" not found or is inactive.`, 400);
+    }
+
     // Verify site exists
     const site = await prisma.site.findUnique({ where: { id: data.siteId }, select: { id: true, siteName: true } });
     if (!site) throw new NotFoundError('Site not found');
 
     // Verify all guards exist
     const guards = await prisma.guard.findMany({
-      where: { id: { in: data.guardIds } },
+      where: { id: { in: guardIdList } },
       select: { id: true, firstName: true, lastName: true, otherNames: true, isIncompleteNID: true },
     });
-    if (guards.length !== data.guardIds.length) {
+    if (guards.length !== guardIdList.length) {
       throw new NotFoundError('One or more guards not found');
     }
 
@@ -80,6 +94,7 @@ class DeploymentService {
 
     // Check for conflicts: guards already deployed on same date at different site
     const guardMap = new Map(guards.map((g) => [g.id, g]));
+    const overtimeMap = new Map(guardEntries.map((e) => [e.guardId, e.overtimeHours ?? 0]));
     const conflicts: ConflictDetail[] = [];
     const toCreate: { guardId: string; date: Date }[] = [];
 
@@ -92,7 +107,7 @@ class DeploymentService {
       // Find existing deployments for each guard on this date at a different site
       const existing = await prisma.deployment.findMany({
         where: {
-          guardId: { in: data.guardIds },
+          guardId: { in: guardIdList },
           date: { gte: dateStart, lte: dateEnd },
           siteId: { not: data.siteId },
         },
@@ -101,7 +116,7 @@ class DeploymentService {
 
       const conflictingGuardIds = new Set(existing.map((e) => e.guardId));
 
-      for (const guardId of data.guardIds) {
+      for (const guardId of guardIdList) {
         if (conflictingGuardIds.has(guardId)) {
           const existingDeployment = existing.find((e) => e.guardId === guardId);
           const g = guardMap.get(guardId)!;
@@ -126,10 +141,14 @@ class DeploymentService {
     await prisma.deployment.createMany({
       data: toCreate.map(({ guardId, date }) => ({
         guardId,
-        siteId: data.siteId,
-        shiftType: data.shiftType,
+        siteId:                data.siteId,
+        shiftType:             data.shiftType,
         date,
-        supervisorId: data.supervisorId,
+        supervisorId:          data.supervisorId,
+        deploymentType:        data.deploymentType ?? 'UNARMED',
+        weaponsDetails:        data.weaponsDetails ?? null,
+        overtimeHours:         overtimeMap.get(guardId) || null,
+        replacementForGuardId: data.replacementForGuardId ?? null,
       })),
       skipDuplicates: true,
     });
@@ -138,9 +157,9 @@ class DeploymentService {
     await prisma.deploymentHistory.createMany({
       data: toCreate.map(({ guardId, date }) => ({
         guardId,
-        siteId: data.siteId,
-        shiftType: data.shiftType,
-        startDate: date,
+        siteId:       data.siteId,
+        shiftType:    data.shiftType,
+        startDate:    date,
         supervisorId: data.supervisorId,
       })),
       skipDuplicates: true,
@@ -396,10 +415,16 @@ class DeploymentService {
         location: d.site.location,
         client: { id: d.site.client.id, clientName: d.site.client.clientName },
       },
-      supervisor: { id: d.supervisor.id, name: d.supervisor.name },
-      shiftType: d.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
-      date: d.date instanceof Date ? d.date.toISOString() : d.date,
-      createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
+      supervisor:            { id: d.supervisor.id, name: d.supervisor.name },
+      shiftType:             d.shiftType as string,
+      date:                  d.date instanceof Date ? d.date.toISOString() : d.date,
+      deploymentType:        d.deploymentType ?? 'UNARMED',
+      weaponsDetails:        d.weaponsDetails ?? null,
+      overtimeHours:         d.overtimeHours ?? null,
+      overtimeReason:        d.overtimeReason ?? null,
+      copiedFromDate:        d.copiedFromDate ? (d.copiedFromDate instanceof Date ? d.copiedFromDate.toISOString() : d.copiedFromDate) : null,
+      replacementForGuardId: d.replacementForGuardId ?? null,
+      createdAt:             d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
       ...(att && {
         attendance: {
           status: att.status,
@@ -410,6 +435,118 @@ class DeploymentService {
       }),
     };
   }
+
+  // ── Copy previous roster ───────────────────────────────────────────────────
+
+  async copyPreviousRoster(
+    sourceDate: string,
+    targetDate: string,
+    createdBy: string,
+  ): Promise<{ created: number; skipped: number }> {
+    const sourceDateObj = new Date(sourceDate);
+    sourceDateObj.setUTCHours(0, 0, 0, 0);
+    const sourceDateEnd = new Date(sourceDateObj);
+    sourceDateEnd.setUTCHours(23, 59, 59, 999);
+
+    const sourceDeployments = await prisma.deployment.findMany({
+      where: { date: { gte: sourceDateObj, lte: sourceDateEnd } },
+      include: {
+        guard: { select: { id: true, employmentStatus: true } },
+      },
+    });
+
+    if (sourceDeployments.length === 0) {
+      throw new AppError(`No deployments found for ${sourceDate}. Nothing to copy.`, 404);
+    }
+
+    const targetDateObj = new Date(targetDate);
+    targetDateObj.setUTCHours(0, 0, 0, 0);
+    const targetDateEnd = new Date(targetDateObj);
+    targetDateEnd.setUTCHours(23, 59, 59, 999);
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const dep of sourceDeployments) {
+      if (dep.guard.employmentStatus !== 'ACTIVE') {
+        skipped++;
+        continue;
+      }
+
+      const existing = await prisma.deployment.findFirst({
+        where: { guardId: dep.guardId, date: { gte: targetDateObj, lte: targetDateEnd } },
+      });
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      await prisma.deployment.create({
+        data: {
+          guardId:        dep.guardId,
+          siteId:         dep.siteId,
+          supervisorId:   dep.supervisorId,
+          shiftType:      dep.shiftType,
+          date:           targetDateObj,
+          deploymentType: dep.deploymentType,
+          weaponsDetails: dep.weaponsDetails,
+          copiedFromDate: sourceDateObj,
+        },
+      });
+      created++;
+    }
+
+    await QueueService.logAudit({
+      userId:   createdBy,
+      action:   'ROSTER_COPIED',
+      entity:   'deployment',
+      entityId: 'batch',
+      newValue: { sourceDate, targetDate, created, skipped },
+    });
+
+    return { created, skipped };
+  }
+
+  // ── Get available replacements ─────────────────────────────────────────────
+
+  async getAvailableReplacements(
+    siteId: string,
+    date: string,
+    absentGuardId: string,
+  ): Promise<GuardBasicResponse[]> {
+    const dateObj = new Date(date);
+    dateObj.setUTCHours(0, 0, 0, 0);
+    const dateEnd = new Date(dateObj);
+    dateEnd.setUTCHours(23, 59, 59, 999);
+
+    const deployedToday = await prisma.deployment.findMany({
+      where: { date: { gte: dateObj, lte: dateEnd } },
+      select: { guardId: true },
+    });
+    const deployedIds = deployedToday.map((d) => d.guardId);
+
+    const available = await prisma.guard.findMany({
+      where: {
+        employmentStatus: 'ACTIVE',
+        id: { notIn: [...deployedIds, absentGuardId] },
+      },
+      select: {
+        id: true, firstName: true, lastName: true, otherNames: true,
+        phone: true, photoUrl: true, rank: true,
+      },
+      orderBy: { firstName: 'asc' },
+      take: 10,
+    });
+
+    return available.map((g) => ({
+      id:       g.id,
+      fullName: [g.firstName, g.otherNames, g.lastName].filter(Boolean).join(' '),
+      phone:    g.phone ?? null,
+      photoUrl: g.photoUrl ?? null,
+      rank:     g.rank ?? null,
+    }));
+  }
+
 }
 
 export const deploymentService = new DeploymentService();

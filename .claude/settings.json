@@ -94,7 +94,16 @@
       "Bash(curl -s http://localhost:3001/api/v1/health)",
       "Bash(pnpm --filter api test --run)",
       "Bash(pnpm --filter api dev)",
-      "Bash(echo \"API PID: $!\")"
+      "Bash(echo \"API PID: $!\")",
+      "Bash(pnpm --filter api test -- --testPathPattern=\"guard\" --forceExit)",
+      "Bash(pnpm --filter api test -- --testPathPattern=\"guardTransfer|guard\\\\.\" --forceExit)",
+      "Bash(sed -n '45,60p' /home/omwesolabs/stap-security/apps/api/prisma/schema.prisma)",
+      "Bash(sed -n '419,445p' /home/omwesolabs/stap-security/apps/api/prisma/schema.prisma)",
+      "Bash(sed -n '306,340p' /home/omwesolabs/stap-security/apps/api/prisma/schema.prisma)",
+      "Bash(PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma migrate dev --name roster_deployment_enhancements --create-only)",
+      "Bash(FORCE_COLOR=0 npx --yes prisma migrate dev --name roster_deployment_enhancements)",
+      "Bash(SEED_PASSWORD=12345678 pnpm exec tsx src/db/seed.ts)",
+      "Bash(git stash *)"
     ],
     "additionalDirectories": [
       "/tmp"

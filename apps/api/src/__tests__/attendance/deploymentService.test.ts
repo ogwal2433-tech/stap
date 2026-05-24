@@ -5,18 +5,22 @@ import { QueueService } from '../../jobs/QueueService';
 
 vi.mock('../../db/prisma', () => ({
   default: {
-    site: { findUnique: vi.fn() },
-    guard: { findMany: vi.fn() },
-    user: { findUnique: vi.fn() },
+    site:       { findUnique: vi.fn() },
+    guard:      { findMany: vi.fn() },
+    user:       { findUnique: vi.fn() },
+    shiftType:  { findUnique: vi.fn() },
     deployment: {
       findMany: vi.fn(),
       createMany: vi.fn(),
       count: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
     },
     deploymentHistory: { createMany: vi.fn() },
-    attendanceRecord: { findFirst: vi.fn() },
+    attendanceRecord:  { findFirst: vi.fn() },
+    auditLog:          { create: vi.fn().mockResolvedValue({}) },
   },
 }));
 
@@ -29,22 +33,25 @@ import { deploymentService } from '../../services/deploymentService';
 import { NotFoundError, AppError } from '../../errors/AppError';
 
 const mockPrisma = prisma as unknown as {
-  site: { findUnique: ReturnType<typeof vi.fn> };
-  guard: { findMany: ReturnType<typeof vi.fn> };
-  user: { findUnique: ReturnType<typeof vi.fn> };
+  site:       { findUnique: ReturnType<typeof vi.fn> };
+  guard:      { findMany: ReturnType<typeof vi.fn> };
+  user:       { findUnique: ReturnType<typeof vi.fn> };
+  shiftType:  { findUnique: ReturnType<typeof vi.fn> };
   deployment: {
-    findMany: ReturnType<typeof vi.fn>;
+    findMany:   ReturnType<typeof vi.fn>;
     createMany: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
+    count:      ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
+    findFirst:  ReturnType<typeof vi.fn>;
+    delete:     ReturnType<typeof vi.fn>;
+    create:     ReturnType<typeof vi.fn>;
   };
   deploymentHistory: { createMany: ReturnType<typeof vi.fn> };
-  attendanceRecord: { findFirst: ReturnType<typeof vi.fn> };
+  attendanceRecord:  { findFirst: ReturnType<typeof vi.fn> };
 };
 
 const baseSite = { id: 's1', siteName: 'Test Site' };
-const baseGuard = { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null };
+const baseGuard = { id: 'g1', firstName: 'John', lastName: 'Doe', otherNames: null, isIncompleteNID: false };
 const baseSupervisor = { id: 'u1', name: 'Supervisor One', role: 'OPERATIONS_SUPERVISOR' };
 
 const baseRosterInput = {
@@ -58,6 +65,7 @@ const baseRosterInput = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockPrisma.shiftType.findUnique.mockResolvedValue({ code: 'DAY', isActive: true });
   mockPrisma.site.findUnique.mockResolvedValue(baseSite);
   mockPrisma.guard.findMany.mockResolvedValue([baseGuard]);
   mockPrisma.user.findUnique.mockResolvedValue(baseSupervisor);
@@ -244,5 +252,107 @@ describe('deploymentService.deleteDeployment()', () => {
     expect(QueueService.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'DEPLOYMENT_DELETED' }),
     );
+  });
+});
+
+// ── copyPreviousRoster() ──────────────────────────────────────────────────────
+
+describe('deploymentService.copyPreviousRoster()', () => {
+  const sourceDeployment = {
+    id:             'd1',
+    guardId:        'g1',
+    siteId:         's1',
+    supervisorId:   'u1',
+    shiftType:      'DAY',
+    date:           new Date('2026-04-14T00:00:00.000Z'),
+    deploymentType: 'UNARMED',
+    weaponsDetails: null,
+    guard:          { id: 'g1', employmentStatus: 'ACTIVE' },
+  };
+
+  it('copies active-guard deployments to target date', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([sourceDeployment]);
+    mockPrisma.deployment.findFirst.mockResolvedValue(null); // no existing on target date
+    mockPrisma.deployment.create.mockResolvedValue({});
+
+    const result = await deploymentService.copyPreviousRoster(
+      '2026-04-14',
+      '2026-04-15',
+      'user1',
+    );
+
+    expect(result.created).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(mockPrisma.deployment.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.deployment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          guardId:        'g1',
+          siteId:         's1',
+          copiedFromDate: expect.any(Date),
+        }),
+      }),
+    );
+    expect(QueueService.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'ROSTER_COPIED' }),
+    );
+  });
+
+  it('skips inactive guards', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([
+      { ...sourceDeployment, guard: { id: 'g1', employmentStatus: 'TERMINATED' } },
+    ]);
+
+    const result = await deploymentService.copyPreviousRoster('2026-04-14', '2026-04-15', 'user1');
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(mockPrisma.deployment.create).not.toHaveBeenCalled();
+  });
+
+  it('skips guards already deployed on target date', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([sourceDeployment]);
+    mockPrisma.deployment.findFirst.mockResolvedValue({ id: 'd-existing' }); // already deployed
+
+    const result = await deploymentService.copyPreviousRoster('2026-04-14', '2026-04-15', 'user1');
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  it('throws AppError when source date has no deployments', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([]);
+
+    await expect(
+      deploymentService.copyPreviousRoster('2026-04-14', '2026-04-15', 'user1'),
+    ).rejects.toThrow(AppError);
+  });
+});
+
+// ── getAvailableReplacements() ────────────────────────────────────────────────
+
+describe('deploymentService.getAvailableReplacements()', () => {
+  it('returns active guards not deployed on the date, excluding absent guard', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([{ guardId: 'g1' }, { guardId: 'g2' }]);
+    (prisma as unknown as { guard: { findMany: ReturnType<typeof vi.fn> } }).guard.findMany =
+      vi.fn().mockResolvedValue([
+        { id: 'g3', firstName: 'Jane', lastName: 'Smith', otherNames: null, phone: null, photoUrl: null, rank: null },
+      ]);
+
+    const result = await deploymentService.getAvailableReplacements('s1', '2026-04-14', 'g-absent');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].fullName).toBe('Jane Smith');
+    expect(result[0].id).toBe('g3');
+  });
+
+  it('returns empty array when no guards available', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([]);
+    (prisma as unknown as { guard: { findMany: ReturnType<typeof vi.fn> } }).guard.findMany =
+      vi.fn().mockResolvedValue([]);
+
+    const result = await deploymentService.getAvailableReplacements('s1', '2026-04-14', 'g-absent');
+
+    expect(result).toHaveLength(0);
   });
 });

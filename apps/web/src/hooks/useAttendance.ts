@@ -7,6 +7,7 @@ import type {
   MarkAttendanceInput,
   SupervisorCheckinInput,
 } from '@stap/shared';
+import { useToast } from '../context/ToastContext';
 
 export function useTodaysDeployments(params?: Partial<DeploymentListQuery>) {
   return useQuery({
@@ -90,5 +91,32 @@ export function useUpcomingDeployments(guardId: string, days = 7) {
     queryKey: ['upcoming-deployments', guardId, days],
     queryFn: () => attendanceApi.getUpcomingDeployments(guardId, days),
     enabled: Boolean(guardId),
+  });
+}
+
+export function useCopyRoster() {
+  const qc = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ sourceDate, targetDate }: { sourceDate: string; targetDate: string }) =>
+      attendanceApi.copyRoster(sourceDate, targetDate),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['daily-sheet'] });
+      qc.invalidateQueries({ queryKey: ['deployments-today'] });
+      showToast(`${data.created} deployment(s) copied, ${data.skipped} skipped`, 'success');
+    },
+  });
+}
+
+export function useAvailableReplacements(
+  siteId: string,
+  date: string,
+  absentGuardId: string,
+  enabled = false,
+) {
+  return useQuery({
+    queryKey: ['replacements', siteId, date, absentGuardId],
+    queryFn:  () => attendanceApi.getAvailableReplacements(siteId, date, absentGuardId),
+    enabled:  enabled && Boolean(date) && Boolean(absentGuardId),
   });
 }

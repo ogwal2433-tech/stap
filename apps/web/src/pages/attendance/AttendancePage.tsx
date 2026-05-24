@@ -1,17 +1,18 @@
 import { useState, useMemo } from 'react';
 import {
-  Alert, Badge, Button, Card, Col, Form, Row, Spinner, Tab, Tabs, Table,
+  Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Tab, Tabs, Table,
   Accordion,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDailySheet, useMarkAttendance, useDeleteDeployment } from '../../hooks/useAttendance';
+import { useDailySheet, useMarkAttendance, useDeleteDeployment, useCopyRoster } from '../../hooks/useAttendance';
 import { useClientList } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { ROLES, type UserRole } from '@stap/shared';
-import type { MarkAttendanceInput } from '@stap/shared';
+import type { MarkAttendanceInput, GuardBasicResponse } from '@stap/shared';
+import { attendanceApi } from '../../lib/attendance.api';
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
@@ -39,9 +40,14 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const SHIFT_BADGE: Record<string, { bg: string; label: string }> = {
-  DAY: { bg: 'primary', label: 'Day' },
-  NIGHT: { bg: 'secondary', label: 'Night' },
-  FULL_24: { bg: 'dark', label: '24hr' },
+  DAY:     { bg: 'primary',   label: 'Day' },
+  NIGHT:   { bg: 'secondary', label: 'Night' },
+  FULL_24: { bg: 'dark',      label: '24hr' },
+};
+
+const DEPLOY_TYPE_BADGE: Record<string, { bg: string; label: string } | undefined> = {
+  ARMED:    { bg: 'warning', label: '🔫 Armed' },
+  FIREARMS: { bg: 'danger',  label: '🔥 Firearms' },
 };
 
 const ROSTER_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR];
@@ -63,6 +69,22 @@ export default function AttendancePage() {
 
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
+  const [sheetSearch, setSheetSearch] = useState('');
+
+  // Copy roster modal state
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySourceDate, setCopySourceDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [copyTargetDate, setCopyTargetDate] = useState(todayStr());
+  const copyRoster = useCopyRoster();
+
+  // Replacement prompt state: key = deploymentId
+  const [replacementPrompt, setReplacementPrompt] = useState<Record<string, boolean>>({});
+  const [replacements, setReplacements] = useState<Record<string, GuardBasicResponse[]>>({});
+  const [loadingReplacements, setLoadingReplacements] = useState<Record<string, boolean>>({});
 
   // Per-guard editable attendance state: key = `guardId:siteId:deploymentId`
   const [edits, setEdits] = useState<Record<string, AttendanceEdit>>({});
@@ -146,6 +168,64 @@ export default function AttendancePage() {
     }
   }
 
+  function handleStatusChange(key: string, status: string, deploymentId: string) {
+    setEdit(key, { status: status as AttendanceStatus });
+    if (status === 'ABSENT' || status === 'AWOL') {
+      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: true }));
+    } else {
+      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: false }));
+    }
+  }
+
+  async function loadReplacements(deploymentId: string, siteId: string, absentGuardId: string) {
+    setLoadingReplacements((prev) => ({ ...prev, [deploymentId]: true }));
+    try {
+      const guards = await attendanceApi.getAvailableReplacements(
+        siteId,
+        `${selectedDate}T00:00:00.000Z`,
+        absentGuardId,
+      );
+      setReplacements((prev) => ({ ...prev, [deploymentId]: guards }));
+    } catch {
+      showToast('Failed to load available replacements', 'danger');
+    } finally {
+      setLoadingReplacements((prev) => ({ ...prev, [deploymentId]: false }));
+    }
+  }
+
+  async function assignReplacement(repGuardId: string, siteId: string, supervisorId: string, shiftType: string, originalGuardId: string, deploymentId: string) {
+    try {
+      await attendanceApi.createRoster({
+        siteId,
+        guardIds: [repGuardId],
+        supervisorId,
+        shiftType,
+        startDate: `${selectedDate}T00:00:00.000Z`,
+        replacementForGuardId: originalGuardId,
+      } as Parameters<typeof attendanceApi.createRoster>[0]);
+      showToast('Replacement assigned', 'success');
+      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: false }));
+      queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to assign replacement';
+      showToast(msg, 'danger');
+    }
+  }
+
+  async function handleCopyRoster() {
+    try {
+      await copyRoster.mutateAsync({
+        sourceDate: `${copySourceDate}T00:00:00.000Z`,
+        targetDate: `${copyTargetDate}T00:00:00.000Z`,
+      });
+      setShowCopyModal(false);
+      setSelectedDate(copyTargetDate);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to copy roster';
+      showToast(msg, 'danger');
+    }
+  }
+
   async function handleDeleteDeployment(id: string) {
     if (!confirm('Remove this guard from the roster? This cannot be undone.')) return;
     try {
@@ -187,7 +267,31 @@ export default function AttendancePage() {
                 ))}
               </Form.Select>
             </Col>
-            <Col className="ms-auto d-flex gap-2 justify-content-end">
+            <Col md={3}>
+              <Form.Label className="small fw-semibold">Search</Form.Label>
+              <div className="d-flex">
+                <Form.Control
+                  type="text"
+                  placeholder="Guard name or site..."
+                  value={sheetSearch}
+                  onChange={(e) => setSheetSearch(e.target.value)}
+                  size="sm"
+                />
+                {sheetSearch && (
+                  <Button size="sm" variant="link" className="px-1" onClick={() => setSheetSearch('')}>✕</Button>
+                )}
+              </div>
+            </Col>
+            <Col className="ms-auto d-flex gap-2 justify-content-end align-items-end">
+              <RoleGuard allowedRoles={ROSTER_WRITE}>
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  onClick={() => setShowCopyModal(true)}
+                >
+                  <i className="bi bi-copy me-1" />Copy Roster
+                </Button>
+              </RoleGuard>
               <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
                 <Button
                   variant="success"
@@ -234,30 +338,48 @@ export default function AttendancePage() {
 
       {sheet && sheet.sites.length > 0 && (
         <Accordion defaultActiveKey={sheet.sites.map((_, i) => String(i))} alwaysOpen>
-          {sheet.sites.map((siteGroup, idx) => {
-            const deployedCount = siteGroup.deployments.length;
-            const required = siteGroup.site.guardsRequired;
+          {sheet.sites
+            .map((siteGroup) => {
+              // Apply sheet search filter
+              if (!sheetSearch) return siteGroup;
+              const q = sheetSearch.toLowerCase();
+              if (siteGroup.site.siteName.toLowerCase().includes(q)) return siteGroup;
+              const filtered = siteGroup.deployments.filter((d) =>
+                d.guard.fullName.toLowerCase().includes(q),
+              );
+              if (filtered.length === 0) return null;
+              return { ...siteGroup, deployments: filtered };
+            })
+            .filter(Boolean)
+            .map((siteGroup, idx) => {
+            const deployedCount = siteGroup!.deployments.length;
+            const required = siteGroup!.site.guardsRequired;
             const metRequirement = deployedCount >= required;
 
             return (
-              <Accordion.Item eventKey={String(idx)} key={siteGroup.site.id} className="mb-2 border-0 shadow-sm">
+              <Accordion.Item eventKey={String(idx)} key={siteGroup!.site.id} className="mb-2 border-0 shadow-sm">
                 <Accordion.Header>
                   <div className="d-flex align-items-center gap-3 w-100 me-3">
                     <div>
-                      <span className="fw-bold">{siteGroup.site.siteName}</span>
-                      <span className="text-muted small ms-2">— {siteGroup.site.client.clientName}</span>
+                      <span className="fw-bold">{siteGroup!.site.siteName}</span>
+                      <span className="text-muted small ms-2">— {siteGroup!.site.client.clientName}</span>
                     </div>
                     <Badge bg={metRequirement ? 'success' : 'danger'} className="ms-auto">
                       {deployedCount}/{required} guards
                     </Badge>
-                    {siteGroup.supervisor && (
+                    {siteGroup!.supervisor && (
                       <span className="text-muted small d-none d-md-inline">
-                        Supervisor: {siteGroup.supervisor.name}
+                        Supervisor: {siteGroup!.supervisor.name}
                       </span>
                     )}
                   </div>
                 </Accordion.Header>
                 <Accordion.Body className="p-0">
+                  {siteGroup!.deployments.some((d) => d.copiedFromDate) && (
+                    <div className="px-3 pt-2 text-muted" style={{ fontSize: '0.75rem' }}>
+                      📋 Roster copied from {new Date(siteGroup!.deployments.find((d) => d.copiedFromDate)!.copiedFromDate!).toLocaleDateString()}
+                    </div>
+                  )}
                   <Table responsive hover size="sm" className="mb-0 align-middle small">
                     <thead className="table-light d-print-table-header-group">
                       <tr>
@@ -272,12 +394,15 @@ export default function AttendancePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {siteGroup.deployments.map((d) => {
-                        const key = `${d.guard.id}:${siteGroup.site.id}:${d.id}`;
+                      {siteGroup!.deployments.map((d) => {
+                        const key = `${d.guard.id}:${siteGroup!.site.id}:${d.id}`;
                         const edit = getEdit(key, d);
                         const shift = SHIFT_BADGE[d.shiftType] ?? { bg: 'secondary', label: d.shiftType };
+                        const deployBadge = DEPLOY_TYPE_BADGE[d.deploymentType ?? ''];
+                        const showReplacement = !!replacementPrompt[d.id];
 
                         return (
+                          <>
                           <tr key={d.id}>
                             <td>
                               <div className="d-flex align-items-center gap-2">
@@ -287,6 +412,14 @@ export default function AttendancePage() {
                             </td>
                             <td>
                               <Badge bg={shift.bg}>{shift.label}</Badge>
+                              {deployBadge && (
+                                <Badge bg={deployBadge.bg} text={deployBadge.bg === 'warning' ? 'dark' : undefined} className="ms-1">
+                                  {deployBadge.label}
+                                </Badge>
+                              )}
+                              {d.overtimeHours != null && d.overtimeHours > 0 && (
+                                <Badge bg="warning" text="dark" className="ms-1">OT: {d.overtimeHours}hrs</Badge>
+                              )}
                             </td>
                             <td className="d-print-none">
                               <Form.Control
@@ -312,7 +445,7 @@ export default function AttendancePage() {
                               <Form.Select
                                 size="sm"
                                 value={edit.status}
-                                onChange={(e) => setEdit(key, { status: e.target.value as AttendanceStatus })}
+                                onChange={(e) => handleStatusChange(key, e.target.value, d.id)}
                               >
                                 {STATUS_OPTIONS.map((o) => (
                                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -348,6 +481,68 @@ export default function AttendancePage() {
                             </td>
                             <td className="d-none d-print-table-cell" style={{ minWidth: 120 }}>&nbsp;</td>
                           </tr>
+                          {/* Inline replacement prompt */}
+                          {showReplacement && (
+                            <tr key={`repl-${d.id}`}>
+                              <td colSpan={8} className="p-0">
+                                <div className="alert alert-warning py-2 mb-0 rounded-0">
+                                  <div className="d-flex align-items-center justify-content-between">
+                                    <span className="small fw-bold">
+                                      ⚠️ {d.guard.fullName} marked as {edit.status}. Assign a replacement?
+                                    </span>
+                                    <div className="d-flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        disabled={loadingReplacements[d.id]}
+                                        onClick={() => loadReplacements(d.id, siteGroup!.site.id, d.guard.id)}
+                                      >
+                                        {loadingReplacements[d.id] ? <Spinner size="sm" animation="border" /> : 'Find Replacement'}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline-secondary"
+                                        onClick={() => setReplacementPrompt((prev) => ({ ...prev, [d.id]: false }))}
+                                      >
+                                        Skip
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {replacements[d.id] && (
+                                    <div className="mt-2">
+                                      {replacements[d.id].length === 0 ? (
+                                        <p className="small text-muted mt-1 mb-0">No available guards found for today.</p>
+                                      ) : (
+                                        replacements[d.id].map((rep) => (
+                                          <div key={rep.id} className="d-flex align-items-center gap-2 py-1 border-top">
+                                            <InitialsAvatar name={rep.fullName} size={24} />
+                                            <span className="small">{rep.fullName}</span>
+                                            {rep.rank && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.6rem' }}>{rep.rank}</Badge>}
+                                            <Button
+                                              size="sm"
+                                              variant="success"
+                                              className="ms-auto"
+                                              onClick={() => assignReplacement(
+                                                rep.id,
+                                                siteGroup!.site.id,
+                                                siteGroup!.supervisor?.id ?? '',
+                                                d.shiftType,
+                                                d.guard.id,
+                                                d.id,
+                                              )}
+                                            >
+                                              Assign
+                                            </Button>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </>
                         );
                       })}
                     </tbody>
@@ -358,14 +553,14 @@ export default function AttendancePage() {
                       <Button
                         size="sm"
                         variant="outline-success"
-                        onClick={() => markSiteAll(siteGroup.site.id, 'PRESENT')}
+                        onClick={() => markSiteAll(siteGroup!.site.id, 'PRESENT')}
                       >
                         Mark All Present
                       </Button>
                       <Button
                         size="sm"
                         variant="outline-danger"
-                        onClick={() => markSiteAll(siteGroup.site.id, 'ABSENT')}
+                        onClick={() => markSiteAll(siteGroup!.site.id, 'ABSENT')}
                       >
                         Mark All Absent
                       </Button>
@@ -431,6 +626,45 @@ export default function AttendancePage() {
       <div className="d-none d-print-block">
         {deploymentSheet}
       </div>
+
+      {/* Copy Roster Modal */}
+      <Modal show={showCopyModal} onHide={() => setShowCopyModal(false)} size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6">Copy Previous Roster</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="info" className="small py-2">
+            Guards who are no longer active or already deployed on the target date will be skipped automatically.
+          </Alert>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-semibold">Copy roster from this date</Form.Label>
+            <Form.Control
+              type="date"
+              value={copySourceDate}
+              onChange={(e) => setCopySourceDate(e.target.value)}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="small fw-semibold">Apply to this date</Form.Label>
+            <Form.Control
+              type="date"
+              value={copyTargetDate}
+              onChange={(e) => setCopyTargetDate(e.target.value)}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowCopyModal(false)}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleCopyRoster}
+            disabled={copyRoster.isPending || !copySourceDate || !copyTargetDate}
+          >
+            {copyRoster.isPending ? <><Spinner size="sm" className="me-1" />Copying…</> : 'Copy Roster'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <style>{`
         @media print {

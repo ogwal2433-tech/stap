@@ -6,6 +6,8 @@ import type {
   UpdateGuardRankInput,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
+  CreateShiftTypeInput,
+  UpdateShiftTypeInput,
 } from '@stap/shared';
 
 export function useSystemSettings() {
@@ -199,5 +201,68 @@ export function useReorderDeductionTypes() {
   return useMutation({
     mutationFn: (orderedIds: string[]) => settingsApi.reorderDeductionTypes(orderedIds),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['deduction-types'] }),
+  });
+}
+
+// ── Shift Types ────────────────────────────────────────────────────────────────
+
+export function useShiftTypes(activeOnly = true) {
+  return useQuery({
+    queryKey: ['shift-types', activeOnly],
+    queryFn:  () => settingsApi.getShiftTypes(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAllShiftTypes() {
+  return useShiftTypes(false);
+}
+
+export function useCreateShiftType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateShiftTypeInput) => settingsApi.createShiftType(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
+  });
+}
+
+export function useUpdateShiftType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateShiftTypeInput }) =>
+      settingsApi.updateShiftType(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
+  });
+}
+
+export function useDeactivateShiftType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deactivateShiftType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
+  });
+}
+
+export function useActivateShiftType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.activateShiftType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
+  });
+}
+
+export function useDeleteShiftType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deleteShiftType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
+  });
+}
+
+export function useReorderShiftTypes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => settingsApi.reorderShiftTypes(orderedIds),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['shift-types'] }),
   });
 }

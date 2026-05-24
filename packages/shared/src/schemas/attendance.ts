@@ -2,22 +2,39 @@ import { z } from 'zod';
 
 // ── Roster creation ────────────────────────────────────────────────────────────
 
+const GuardRosterEntry = z.union([
+  z.string().min(1),
+  z.object({ guardId: z.string().min(1), overtimeHours: z.coerce.number().min(0).optional() }),
+]);
+
 export const CreateRosterSchema = z.object({
-  siteId:       z.string().min(1),
-  guardIds:     z.array(z.string().min(1)).min(1),
-  supervisorId: z.string().min(1),
-  shiftType:    z.enum(['DAY', 'NIGHT', 'FULL_24']),
-  startDate:    z.string().datetime(),
-  endDate:      z.string().datetime().optional()
-                  .describe('If set, creates recurring deployments from startDate to endDate'),
-  recurring:    z.boolean().default(false),
-  daysOfWeek:   z.array(z.number().min(0).max(6)).optional()
-                  .describe('0=Sunday...6=Saturday for recurring'),
+  siteId:         z.string().min(1),
+  guardIds:       z.array(GuardRosterEntry).min(1),
+  supervisorId:   z.string().min(1),
+  shiftType:      z.string().min(1),
+  startDate:      z.string().datetime(),
+  endDate:        z.string().datetime().optional()
+                    .describe('If set, creates recurring deployments from startDate to endDate'),
+  recurring:      z.boolean().default(false),
+  daysOfWeek:     z.array(z.number().min(0).max(6)).optional()
+                    .describe('0=Sunday...6=Saturday for recurring'),
+  deploymentType:        z.enum(['UNARMED', 'ARMED', 'FIREARMS']).default('UNARMED'),
+  weaponsDetails:        z.string().max(500).optional(),
+  startTime:             z.string().optional(),
+  endTime:               z.string().optional(),
+  replacementForGuardId: z.string().min(1).optional(),
 });
 
-export type CreateRosterInput = z.infer<typeof CreateRosterSchema>;
+export type CreateRosterInput = z.input<typeof CreateRosterSchema>;
 
 // ── Attendance marking ─────────────────────────────────────────────────────────
+
+export const CopyRosterSchema = z.object({
+  sourceDate: z.string().datetime(),
+  targetDate: z.string().datetime(),
+});
+
+export type CopyRosterInput = z.infer<typeof CopyRosterSchema>;
 
 export const MarkAttendanceSchema = z.object({
   records: z.array(z.object({
@@ -77,13 +94,19 @@ export interface ConflictDetail {
 }
 
 export interface DeploymentResponse {
-  id:         string;
-  guard:      { id: string; fullName: string; phone: string; photoUrl: string | null };
-  site:       { id: string; siteName: string; location: string; client: { id: string; clientName: string } };
-  supervisor: { id: string; name: string };
-  shiftType:  'DAY' | 'NIGHT' | 'FULL_24';
-  date:       string;
-  createdAt:  string;
+  id:                    string;
+  guard:                 { id: string; fullName: string; phone: string; photoUrl: string | null };
+  site:                  { id: string; siteName: string; location: string; client: { id: string; clientName: string } };
+  supervisor:            { id: string; name: string };
+  shiftType:             string;
+  date:                  string;
+  deploymentType:        string;
+  weaponsDetails:        string | null;
+  overtimeHours:         number | null;
+  overtimeReason:        string | null;
+  copiedFromDate:        string | null;
+  replacementForGuardId: string | null;
+  createdAt:             string;
   attendance?: {
     status:  string;
     timeIn:  string | null;
@@ -102,6 +125,14 @@ export interface AttendanceRecord {
   timeOut:   string | null;
   notes:     string | null;
   createdAt: string;
+}
+
+export interface GuardBasicResponse {
+  id:       string;
+  fullName: string;
+  phone:    string | null;
+  photoUrl: string | null;
+  rank:     string | null;
 }
 
 export interface AttendanceSummary {

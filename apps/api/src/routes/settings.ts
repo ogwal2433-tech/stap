@@ -160,6 +160,7 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { settingsService } from '../services/settingsService';
 import { rankService } from '../services/rankService';
+import { shiftTypeService } from '../services/shiftTypeService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -172,6 +173,9 @@ import {
   CreateDeductionTypeSchema,
   UpdateDeductionTypeSchema,
   ReorderDeductionTypesSchema,
+  CreateShiftTypeSchema,
+  UpdateShiftTypeSchema,
+  ReorderShiftTypesSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -408,6 +412,79 @@ router.delete(
   requireRole(ROLES.DIRECTOR),
   asyncHandler(async (req, res) => {
     await settingsService.deleteDeductionType(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  }),
+);
+
+// ── Shift Types ────────────────────────────────────────────────────────────────
+
+// GET /shift-types — all authenticated roles (needed for roster builder)
+router.get(
+  '/shift-types',
+  asyncHandler(async (req, res) => {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const data = await shiftTypeService.listShiftTypes(activeOnly);
+    res.json({ success: true, data });
+  }),
+);
+
+// PUT /shift-types/reorder — must come before /:id to avoid param conflict
+router.put(
+  '/shift-types/reorder',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = ReorderShiftTypesSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('Invalid request body', 400);
+    const data = await shiftTypeService.reorderShiftTypes(parsed.data.orderedIds);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/shift-types',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = CreateShiftTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0]?.message ?? 'Invalid input', 400);
+    const data = await shiftTypeService.createShiftType(parsed.data, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/shift-types/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = UpdateShiftTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0]?.message ?? 'Invalid input', 400);
+    const data = await shiftTypeService.updateShiftType(req.params.id, parsed.data, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/shift-types/:id/deactivate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await shiftTypeService.deactivateShiftType(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/shift-types/:id/activate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await shiftTypeService.activateShiftType(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.delete(
+  '/shift-types/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    await shiftTypeService.deleteShiftType(req.params.id, req.user!.userId);
     res.json({ success: true });
   }),
 );

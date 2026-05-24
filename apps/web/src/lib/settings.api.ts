@@ -10,6 +10,9 @@ import type {
   DeductionTypeResponse,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
+  ShiftTypeResponse,
+  CreateShiftTypeInput,
+  UpdateShiftTypeInput,
 } from '@stap/shared';
 
 export const settingsApi = {
@@ -154,6 +157,46 @@ export const settingsApi = {
   reorderDeductionTypes(orderedIds: string[]): Promise<DeductionTypeResponse[]> {
     return api
       .put<{ success: boolean; data: DeductionTypeResponse[] }>('/settings/deduction-types/reorder', { orderedIds })
+      .then((r) => r.data.data);
+  },
+
+  getShiftTypes(activeOnly = true): Promise<ShiftTypeResponse[]> {
+    return api
+      .get<{ success: boolean; data: ShiftTypeResponse[] }>('/settings/shift-types', { params: { activeOnly } })
+      .then((r) => r.data.data);
+  },
+
+  createShiftType(data: CreateShiftTypeInput): Promise<ShiftTypeResponse> {
+    return api
+      .post<{ success: boolean; data: ShiftTypeResponse }>('/settings/shift-types', data)
+      .then((r) => r.data.data);
+  },
+
+  updateShiftType(id: string, data: UpdateShiftTypeInput): Promise<ShiftTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: ShiftTypeResponse }>(`/settings/shift-types/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  deactivateShiftType(id: string): Promise<ShiftTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: ShiftTypeResponse }>(`/settings/shift-types/${id}/deactivate`)
+      .then((r) => r.data.data);
+  },
+
+  activateShiftType(id: string): Promise<ShiftTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: ShiftTypeResponse }>(`/settings/shift-types/${id}/activate`)
+      .then((r) => r.data.data);
+  },
+
+  deleteShiftType(id: string): Promise<void> {
+    return api.delete(`/settings/shift-types/${id}`).then(() => undefined);
+  },
+
+  reorderShiftTypes(orderedIds: string[]): Promise<ShiftTypeResponse[]> {
+    return api
+      .put<{ success: boolean; data: ShiftTypeResponse[] }>('/settings/shift-types/reorder', { orderedIds })
       .then((r) => r.data.data);
   },
 };

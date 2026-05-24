@@ -82,6 +82,7 @@ import {
   DEPLOYMENT_ROLES,
   INTERNAL_ROLES,
   CreateRosterSchema,
+  CopyRosterSchema,
   MarkAttendanceSchema,
   SupervisorCheckinSchema,
   DeploymentListQuerySchema,
@@ -277,6 +278,40 @@ router.get(
     const days = parseInt(String(req.query.days ?? '7'), 10);
     const deployments = await deploymentService.getUpcomingDeployments(guardId, days);
     res.status(200).json({ success: true, data: deployments });
+  }),
+);
+
+// ── POST /roster/copy — copy a previous day's roster to a target date ─────────
+router.post(
+  '/roster/copy',
+  requireRole(ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR),
+  asyncHandler(async (req, res) => {
+    const parsed = CopyRosterSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0]?.message ?? 'Invalid input', 400);
+    const result = await deploymentService.copyPreviousRoster(
+      parsed.data.sourceDate,
+      parsed.data.targetDate,
+      req.user!.userId,
+    );
+    res.json({ success: true, data: result });
+  }),
+);
+
+// ── GET /replacements — available guards to replace an absent guard ────────────
+router.get(
+  '/replacements',
+  requireRole(ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR),
+  asyncHandler(async (req, res) => {
+    const { siteId, date, absentGuardId } = req.query as {
+      siteId?: string; date?: string; absentGuardId?: string;
+    };
+    if (!date || !absentGuardId) throw new AppError('date and absentGuardId are required', 400);
+    const guards = await deploymentService.getAvailableReplacements(
+      siteId ?? '',
+      date,
+      absentGuardId,
+    );
+    res.json({ success: true, data: guards });
   }),
 );
 

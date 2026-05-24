@@ -12,6 +12,7 @@ import type {
   AttendanceQuery,
   SupervisorCheckinInput,
   MarkAttendanceInput,
+  GuardBasicResponse,
 } from '@stap/shared';
 
 export const attendanceApi = {
@@ -96,6 +97,27 @@ export const attendanceApi = {
         `/attendance/guards/${guardId}/upcoming`,
         { params: { days } },
       )
+      .then((r) => r.data.data);
+  },
+
+  copyRoster(sourceDate: string, targetDate: string): Promise<{ created: number; skipped: number }> {
+    return api
+      .post<{ success: boolean; data: { created: number; skipped: number } }>('/attendance/roster/copy', {
+        sourceDate,
+        targetDate,
+      })
+      .then((r) => r.data.data);
+  },
+
+  getAvailableReplacements(
+    siteId: string,
+    date: string,
+    absentGuardId: string,
+  ): Promise<GuardBasicResponse[]> {
+    return api
+      .get<{ success: boolean; data: GuardBasicResponse[] }>('/attendance/replacements', {
+        params: { siteId, date, absentGuardId },
+      })
       .then((r) => r.data.data);
   },
 };

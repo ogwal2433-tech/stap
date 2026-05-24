@@ -1,4 +1,4 @@
-import { PrismaClient, Role, UserStatus, EmploymentStatus, ContractStatus, ClientContractStatus, ShiftType } from '@prisma/client';
+import { PrismaClient, Role, UserStatus, EmploymentStatus, ContractStatus, ClientContractStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -269,7 +269,7 @@ async function main() {
         guardId:      guard1.id,
         siteId:       kccaSite.id,
         startDate:    new Date('2026-01-01'),
-        shiftType:    ShiftType.DAY,
+        shiftType:    'DAY',
         supervisorId: supervisor.id,
       },
     });
@@ -282,7 +282,7 @@ async function main() {
         guardId:      guard2.id,
         siteId:       uraSite.id,
         startDate:    new Date('2026-01-01'),
-        shiftType:    ShiftType.NIGHT,
+        shiftType:    'NIGHT',
         supervisorId: supervisor.id,
       },
     });
@@ -592,6 +592,24 @@ async function main() {
       create: dt,
     });
     console.log(`✅ Seeded deduction type: ${dt.name}`);
+  }
+
+  // ── Shift Types ─────────────────────────────────────────────────────────────
+
+  const defaultShiftTypes = [
+    { name: 'Day Shift',   code: 'DAY',      startTime: '06:00', endTime: '18:00', durationHours: 12,   displayOrder: 1, isOvertime: false },
+    { name: 'Night Shift', code: 'NIGHT',    startTime: '18:00', endTime: '06:00', durationHours: 12,   displayOrder: 2, isOvertime: false },
+    { name: '24 Hour',     code: 'FULL_24',  startTime: '06:00', endTime: '06:00', durationHours: 24,   displayOrder: 3, isOvertime: false },
+    { name: 'Overtime',    code: 'OVERTIME', startTime: null,    endTime: null,    durationHours: null, displayOrder: 4, isOvertime: true },
+  ];
+
+  for (const shift of defaultShiftTypes) {
+    await prisma.shiftType.upsert({
+      where:  { code: shift.code },
+      update: {},
+      create: shift,
+    });
+    console.log(`✅ Seeded shift type: ${shift.name}`);
   }
 
   console.log('\n🎉 Seed completed successfully!\n');
