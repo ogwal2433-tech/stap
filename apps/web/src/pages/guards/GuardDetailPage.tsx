@@ -1252,6 +1252,9 @@ export default function GuardDetailPage() {
         <TransferModal
           guardId={id!}
           guardName={guard.fullName}
+          currentSiteId={
+            deployHistory?.data.find((d) => !d.endDate)?.site.id ?? null
+          }
           currentSiteName={
             deployHistory?.data.find((d) => !d.endDate)?.site.siteName ?? null
           }

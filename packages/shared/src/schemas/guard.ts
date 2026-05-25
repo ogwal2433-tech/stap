@@ -361,7 +361,7 @@ export interface GuardDocumentResponse {
 
 export interface DeploymentHistoryEntry {
   id:         string;
-  site:       { siteName: string };
+  site:       { id: string; siteName: string };
   client:     { clientName: string };
   shiftType:  string;
   startDate:  string;

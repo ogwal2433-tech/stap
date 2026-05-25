@@ -7,6 +7,7 @@ import { useTransferGuard } from '../../hooks/useGuards';
 interface TransferModalProps {
   guardId: string;
   guardName: string;
+  currentSiteId?: string | null;
   currentSiteName?: string | null;
   onClose: () => void;
   onSuccess: () => void;
@@ -15,6 +16,7 @@ interface TransferModalProps {
 export default function TransferModal({
   guardId,
   guardName,
+  currentSiteId,
   currentSiteName,
   onClose,
   onSuccess,
@@ -47,6 +49,7 @@ export default function TransferModal({
     transfer.mutate(
       {
         toSiteId,
+        fromSiteId: currentSiteId ?? undefined,
         reason: reason.trim(),
         transferDate: new Date(transferDate).toISOString(),
       },

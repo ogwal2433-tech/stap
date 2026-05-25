@@ -576,6 +576,7 @@ class GuardService {
         include: {
           site: {
             select: {
+              id: true,
               siteName: true,
               client: { select: { clientName: true } },
             },
@@ -591,7 +592,7 @@ class GuardService {
     return {
       data: records.map((r) => ({
         id: r.id,
-        site: { siteName: r.site.siteName },
+        site: { id: r.site.id, siteName: r.site.siteName },
         client: { clientName: r.site.client.clientName },
         shiftType: r.shiftType,
         startDate: r.startDate.toISOString(),
