@@ -3,15 +3,17 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+# corepack ships with Node 20 — much faster than `npm install -g pnpm`
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 # Copy workspace files
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/web/package.json ./apps/web/
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies — cache the pnpm content-addressable store across builds
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source
 COPY packages/shared ./packages/shared

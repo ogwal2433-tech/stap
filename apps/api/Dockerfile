@@ -3,10 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install OpenSSL and other required packages
 RUN apk add --no-cache openssl openssl-dev libc6-compat
 
-RUN npm install -g pnpm
+# corepack ships with Node 20 — much faster than `npm install -g pnpm`
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 # Skip Puppeteer's bundled Chrome download — system Chromium is used at runtime
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -18,8 +18,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-# Install ALL dependencies
-RUN pnpm install --frozen-lockfile
+# Install ALL dependencies — cache the pnpm content-addressable store across builds
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source files
 COPY packages/shared ./packages/shared
@@ -34,14 +35,21 @@ RUN cd apps/api && pnpm exec prisma generate
 # Build API
 RUN pnpm --filter api build
 
+# Produce a pruned production-only node_modules (no devDeps, resolves workspace packages)
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm --filter api deploy --prod /app/api-deploy
+
+# Copy the generated Prisma client into the deploy (pnpm deploy doesn't include .prisma)
+RUN cp -r node_modules/.prisma /app/api-deploy/node_modules/.prisma
+
 # ── Stage 2: Production ───────────────────────────────────────────────
 FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install OpenSSL — required by Prisma at runtime
-# Install Chromium and font dependencies — required by Puppeteer for PDF generation
-RUN apk add --no-cache \
+# Cache apk packages across builds
+RUN --mount=type=cache,id=apk-cache,target=/var/cache/apk \
+    apk add --no-cache \
     openssl \
     libc6-compat \
     chromium \
@@ -54,25 +62,15 @@ RUN apk add --no-cache \
 
 # Tell Puppeteer to use the system Chromium instead of downloading its own
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    NODE_ENV=production
 
-RUN npm install -g pnpm
+# Copy the pruned production deployment from builder
+COPY --from=builder /app/api-deploy/node_modules ./node_modules
 
-# Copy workspace config and lockfile
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/api/package.json ./apps/api/
-
-# Install production dependencies
-RUN pnpm install --prod --frozen-lockfile
-
-# Copy built files from builder
+# Copy built application files
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
-
-# Copy node_modules from builder (includes generated Prisma client)
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 
 # Copy prisma schema (needed for migrate deploy at runtime)
 COPY apps/api/prisma ./apps/api/prisma
