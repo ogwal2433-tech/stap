@@ -67,6 +67,10 @@ COPY apps/api/package.json ./apps/api/
 # No install step here; the builder already has everything resolved.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+# pnpm stores each workspace package's deps in its own node_modules as symlinks
+# into the root .pnpm virtual store. shared/node_modules must be present so
+# Node can resolve `zod` (and any other shared deps) from packages/shared/dist/.
+COPY --from=builder /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy built application files
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
