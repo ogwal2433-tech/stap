@@ -40,8 +40,9 @@ RUN pnpm --filter api build
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm --filter api deploy --prod --legacy /app/api-deploy
 
-# Copy the generated Prisma client into the deploy (pnpm deploy doesn't include .prisma)
-RUN cp -r node_modules/.prisma /app/api-deploy/node_modules/.prisma
+# Copy the generated Prisma client into the deploy.
+# pnpm workspaces write the client under the package's own node_modules, not the root.
+RUN cp -r apps/api/node_modules/.prisma /app/api-deploy/node_modules/.prisma
 
 # ── Stage 2: Production ───────────────────────────────────────────────
 FROM node:20-alpine AS production
