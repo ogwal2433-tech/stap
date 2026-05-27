@@ -36,8 +36,9 @@ RUN cd apps/api && pnpm exec prisma generate
 RUN pnpm --filter api build
 
 # Produce a pruned production-only node_modules (no devDeps, resolves workspace packages)
+# --legacy is required in pnpm v10+ for workspaces without inject-workspace-packages=true
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm --filter api deploy --prod /app/api-deploy
+    pnpm --filter api deploy --prod --legacy /app/api-deploy
 
 # Copy the generated Prisma client into the deploy (pnpm deploy doesn't include .prisma)
 RUN cp -r node_modules/.prisma /app/api-deploy/node_modules/.prisma
