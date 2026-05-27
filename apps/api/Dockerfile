@@ -35,15 +35,6 @@ RUN cd apps/api && pnpm exec prisma generate
 # Build API
 RUN pnpm --filter api build
 
-# Produce a pruned production-only node_modules (no devDeps, resolves workspace packages)
-# --legacy is required in pnpm v10+ for workspaces without inject-workspace-packages=true
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm --filter api deploy --prod --legacy /app/api-deploy
-
-# Copy the generated Prisma client into the deploy.
-# pnpm workspaces write the client under the package's own node_modules, not the root.
-RUN cp -r apps/api/node_modules/.prisma /app/api-deploy/node_modules/.prisma
-
 # ── Stage 2: Production ───────────────────────────────────────────────
 FROM node:20-alpine AS production
 
@@ -67,8 +58,15 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     NODE_ENV=production
 
-# Copy the pruned production deployment from builder
-COPY --from=builder /app/api-deploy/node_modules ./node_modules
+# Copy workspace manifests (needed for runtime module resolution)
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY apps/api/package.json ./apps/api/
+
+# Copy node_modules from builder — includes the generated Prisma client.
+# No install step here; the builder already has everything resolved.
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 
 # Copy built application files
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
