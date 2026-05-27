@@ -184,9 +184,12 @@ router.use(authenticate);
 
 // ── System Settings ────────────────────────────────────────────────────────────
 
+// Read access: Director, Assistant Manager, and Administrator all use the
+// Settings page — restricting to Director only caused silent 403s for the
+// other roles, leaving every dynamic tab (including Security) blank.
 router.get(
   '/',
-  requireRole(ROLES.DIRECTOR),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
   asyncHandler(async (_req, res) => {
     const data = await settingsService.getAll();
     res.json({ success: true, data });
@@ -195,7 +198,7 @@ router.get(
 
 router.get(
   '/group/:group',
-  requireRole(ROLES.DIRECTOR),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
   asyncHandler(async (req, res) => {
     const data = await settingsService.getGroup(req.params.group);
     res.json({ success: true, data });

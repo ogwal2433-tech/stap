@@ -1,0 +1,81 @@
+/**
+ * initSettings.ts
+ *
+ * Upserts the default SystemSetting rows that every environment needs.
+ * Safe to run on every deploy — update:{} means existing customised values
+ * are never overwritten; only brand-new keys are inserted.
+ *
+ * Run via:  npx ts-node src/db/initSettings.ts
+ * Or from the compiled output:  node dist/db/initSettings.js
+ */
+
+import prisma from './prisma';
+
+const DEFAULT_SETTINGS: Array<{
+  key: string;
+  value: string;
+  label: string;
+  group: string;
+  dataType?: string;
+}> = [
+  // ── GENERAL ─────────────────────────────────────────────────────────
+  { key: 'company_name',         value: 'STAP Security Ltd',       label: 'Company Name',                   group: 'GENERAL' },
+  { key: 'company_address',      value: 'Kampala, Uganda',         label: 'Company Address',                group: 'GENERAL' },
+  { key: 'company_phone',        value: '+256 414 000 000',        label: 'Company Phone',                  group: 'GENERAL' },
+  { key: 'company_email',        value: 'info@stapsecurity.co.ug', label: 'Company Email',                  group: 'GENERAL' },
+  { key: 'company_website',      value: 'www.stapsecurity.co.ug',  label: 'Company Website',                group: 'GENERAL' },
+  { key: 'director_name',        value: '',                        label: 'Director Name',                  group: 'GENERAL' },
+  { key: 'financial_year_start', value: '01/07',                   label: 'Financial Year Start (DD/MM)',   group: 'GENERAL' },
+
+  // ── PAYROLL ──────────────────────────────────────────────────────────
+  { key: 'payroll_working_days', value: '26',    label: 'Working Days per Month',         group: 'PAYROLL', dataType: 'number' },
+  { key: 'payroll_currency',     value: 'UGX',   label: 'Payroll Currency',               group: 'PAYROLL' },
+  { key: 'nssf_rate',            value: '5',     label: 'NSSF Rate (%)',                  group: 'PAYROLL', dataType: 'number' },
+  { key: 'nssf_enabled',         value: 'false', label: 'NSSF Deductions Enabled',        group: 'PAYROLL', dataType: 'boolean' },
+
+  // ── BILLING ──────────────────────────────────────────────────────────
+  { key: 'default_billing_terms', value: '30',       label: 'Default Billing Terms (days)', group: 'BILLING', dataType: 'number' },
+  { key: 'invoice_prefix',        value: 'STAP/INV', label: 'Invoice Prefix',               group: 'BILLING' },
+  { key: 'tax_rate',              value: '0',        label: 'Tax Rate (%)',                  group: 'BILLING', dataType: 'number' },
+  { key: 'yo_payment_enabled',    value: 'false',    label: 'Yo! Payments Enabled',          group: 'BILLING', dataType: 'boolean' },
+
+  // ── SECURITY ─────────────────────────────────────────────────────────
+  { key: 'max_failed_logins',    value: '5',     label: 'Max Failed Login Attempts',      group: 'SECURITY', dataType: 'number' },
+  { key: 'session_timeout_mins', value: '480',   label: 'Session Timeout (minutes)',      group: 'SECURITY', dataType: 'number' },
+  { key: 'require_2fa_director', value: 'false', label: 'Require 2FA for Director',       group: 'SECURITY', dataType: 'boolean' },
+
+  // ── NOTIFICATIONS ────────────────────────────────────────────────────
+  { key: 'sms_enabled',            value: 'false', label: 'SMS Notifications Enabled',       group: 'NOTIFICATIONS', dataType: 'boolean' },
+  { key: 'email_enabled',          value: 'true',  label: 'Email Notifications Enabled',     group: 'NOTIFICATIONS', dataType: 'boolean' },
+  { key: 'absent_alert_threshold', value: '2',     label: 'Absent Alert Threshold (hours)',  group: 'NOTIFICATIONS', dataType: 'number' },
+];
+
+async function initSettings() {
+  console.log('⚙️  Initialising default system settings…');
+  let inserted = 0;
+
+  // Check which keys already exist so we can report inserts vs skips.
+  const existing = await prisma.systemSetting.findMany({ select: { key: true } });
+  const existingKeys = new Set(existing.map((s) => s.key));
+
+  for (const s of DEFAULT_SETTINGS) {
+    await prisma.systemSetting.upsert({
+      where:  { key: s.key },
+      update: {},   // never overwrite values customised by the admin
+      create: {
+        key:      s.key,
+        value:    s.value,
+        label:    s.label,
+        group:    s.group,
+        dataType: s.dataType ?? 'string',
+      },
+    });
+    if (!existingKeys.has(s.key)) inserted++;
+  }
+
+  console.log(`✅ Settings initialised — ${inserted} new row(s) inserted, ${DEFAULT_SETTINGS.length - inserted} already existed.`);
+}
+
+initSettings()
+  .catch((err) => { console.error('❌ initSettings failed:', err); process.exit(1); })
+  .finally(() => prisma.$disconnect());

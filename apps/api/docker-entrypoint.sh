@@ -8,8 +8,11 @@ cd /app/apps/api
 npx prisma migrate deploy --schema /app/apps/api/prisma/schema.prisma
 
 echo "✅ Migrations complete"
-echo "🚀 Starting API server..."
 
-# Go back to app root and run the server
+echo "⚙️  Initialising default system settings..."
 cd /app
+node apps/api/dist/db/initSettings.js
+echo "✅ Settings initialised"
+
+echo "🚀 Starting API server..."
 exec node apps/api/dist/index.js
