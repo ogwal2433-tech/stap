@@ -84,7 +84,18 @@ export default function RosterBuilderTab() {
     [guardsData, selectedIds, guardSearch],
   );
 
-  const isAtLimit = requiredGuards > 0 && selectedGuards.length >= requiredGuards;
+  const isAtLimit    = requiredGuards > 0 && selectedGuards.length >= requiredGuards;
+  const isOverLimit  = requiredGuards > 0 && selectedGuards.length > requiredGuards;
+
+  const badgeBg =
+    selectedGuards.length === 0     ? 'secondary' :
+    requiredGuards === 0            ? 'success'   :
+    selectedGuards.length < requiredGuards ? 'warning'   :
+    selectedGuards.length === requiredGuards ? 'success'  : 'danger';
+
+  const badgeText = requiredGuards > 0
+    ? `${selectedGuards.length} / ${requiredGuards}`
+    : `${selectedGuards.length} selected`;
 
   function handleSiteChange(siteId: string) {
     setSelectedSiteId(siteId);
@@ -257,14 +268,6 @@ export default function RosterBuilderTab() {
                   <div className="fw-bold mb-2" style={{ color: '#1B3A6B' }}>
                     Available Guards
                   </div>
-                  {isAtLimit && (
-                    <div className="text-center py-1 mb-2" style={{
-                      background: '#d5f5e3', borderRadius: '4px',
-                      fontSize: '0.8rem', color: '#1e8449', fontWeight: 500,
-                    }}>
-                      ✅ Required number of guards reached. Remove a guard to select a different one.
-                    </div>
-                  )}
                   <div style={{ border: '1px solid #ced4da', borderRadius: '0.375rem', overflow: 'hidden' }}>
                     <div style={{ padding: '6px 8px', borderBottom: '1px solid #e9ecef', background: '#f8f9fa' }}>
                       <Form.Control
@@ -275,6 +278,17 @@ export default function RosterBuilderTab() {
                         onChange={(e) => setGuardSearch(e.target.value)}
                       />
                     </div>
+                    {isAtLimit && (
+                      <div style={{
+                        padding: '6px 12px', background: '#d5f5e3',
+                        borderBottom: '1px solid #a9dfbf',
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        fontSize: '0.8rem', color: '#1e8449', fontWeight: 500,
+                      }}>
+                        <span>🔒</span>
+                        <span>Limit reached — {requiredGuards} guard(s) selected. Remove a guard to select a different one.</span>
+                      </div>
+                    )}
                     <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                       {filteredAvailableGuards.length === 0 ? (
                         <div className="p-3 text-muted text-center small">
@@ -284,14 +298,19 @@ export default function RosterBuilderTab() {
                         filteredAvailableGuards.map((guard) => (
                           <div
                             key={guard.id}
-                            onClick={() => selectGuard(guard)}
+                            onClick={() => { if (!isAtLimit) selectGuard(guard); }}
+                            title={isAtLimit
+                              ? `Maximum ${requiredGuards} guard(s) already selected for this site`
+                              : `Click to select ${guard.firstName} ${guard.lastName}`}
                             style={{
                               display: 'flex', alignItems: 'center', gap: '10px',
                               padding: '8px 12px',
                               cursor: isAtLimit ? 'not-allowed' : 'pointer',
                               borderBottom: '1px solid #f0f0f0',
                               userSelect: 'none',
-                              opacity: isAtLimit ? 0.4 : 1,
+                              opacity: isAtLimit ? 0.35 : 1,
+                              pointerEvents: isAtLimit ? 'none' : 'auto',
+                              transition: 'opacity 0.15s ease',
                             }}
                             onMouseEnter={(e) => { if (!isAtLimit) e.currentTarget.style.background = '#f8f9fa'; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -335,9 +354,11 @@ export default function RosterBuilderTab() {
                           Clear all
                         </button>
                       )}
-                      <Badge bg={selectedGuards.length > 0 ? 'success' : 'secondary'}>
-                        {selectedGuards.length} selected
-                        {requiredGuards > 0 && ` / ${requiredGuards} required`}
+                      <Badge
+                        bg={badgeBg}
+                        text={badgeBg === 'warning' ? 'dark' : undefined}
+                      >
+                        {badgeText}
                       </Badge>
                     </div>
                   </div>
@@ -410,22 +431,26 @@ export default function RosterBuilderTab() {
                   </div>
 
                   {requiredGuards > 0 && (
-                    <div className="mt-2">
+                    <div style={{ marginTop: '6px', fontSize: '0.8rem' }}>
                       {selectedGuards.length === 0 && (
-                        <small className="text-muted">This site requires {requiredGuards} guard(s).</small>
+                        <span className="text-muted">
+                          This site requires <strong>{requiredGuards}</strong> guard(s). Select from the list on the left.
+                        </span>
                       )}
                       {selectedGuards.length > 0 && selectedGuards.length < requiredGuards && (
-                        <small className="text-warning">
-                          ⚠️ {requiredGuards - selectedGuards.length} more guard(s) needed for this site.
-                        </small>
+                        <span style={{ color: '#856404' }}>
+                          ⚠️ {requiredGuards - selectedGuards.length} more guard(s) needed.
+                        </span>
                       )}
                       {selectedGuards.length === requiredGuards && (
-                        <small className="text-success">✅ Required number of guards selected.</small>
+                        <span style={{ color: '#1e8449' }}>
+                          ✅ All {requiredGuards} guard(s) selected. Ready to deploy.
+                        </span>
                       )}
                       {selectedGuards.length > requiredGuards && (
-                        <small className="text-danger">
-                          ⚠️ {selectedGuards.length - requiredGuards} guard(s) over the required number.
-                        </small>
+                        <span style={{ color: '#dc3545' }}>
+                          ⚠️ {selectedGuards.length - requiredGuards} guard(s) over the required number for this site.
+                        </span>
                       )}
                     </div>
                   )}
@@ -533,18 +558,28 @@ export default function RosterBuilderTab() {
           {/* Submit */}
           <Col md={12}>
             <Button
-              style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              variant={isOverLimit ? 'warning' : undefined}
+              style={isOverLimit ? undefined : { backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
               onClick={handleSubmit}
               disabled={createRoster.isPending || !selectedSiteId || selectedGuards.length === 0 || !supervisorId}
             >
               {createRoster.isPending ? (
-                <><Spinner size="sm" animation="border" className="me-2" />Creating...</>
+                <><Spinner size="sm" animation="border" className="me-2" />Creating roster...</>
               ) : (
-                `Create Roster${selectedGuards.length > 0
-                  ? ` (${selectedGuards.length} guard${selectedGuards.length !== 1 ? 's' : ''})`
-                  : ''}`
+                <>
+                  {isOverLimit && '⚠️ '}
+                  {`Create Roster${selectedGuards.length > 0
+                    ? ` (${selectedGuards.length} guard${selectedGuards.length !== 1 ? 's' : ''})`
+                    : ''}`}
+                </>
               )}
             </Button>
+            {isOverLimit && (
+              <div className="text-warning small mt-1">
+                ⚠️ You have selected more guards than required for this site ({requiredGuards} required,{' '}
+                {selectedGuards.length} selected). This is allowed but please confirm this is intentional.
+              </div>
+            )}
           </Col>
 
         </Row>
