@@ -120,7 +120,6 @@ class ZoneService {
         supervisor: { select: { id: true, name: true, role: true } },
         alternate:  { select: { id: true, name: true, role: true } },
         sites: {
-          where:   { isActive: true } as import('@prisma/client').Prisma.SiteWhereInput,
           select: {
             id:                  true,
             siteName:            true,

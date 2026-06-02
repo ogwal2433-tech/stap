@@ -1053,6 +1053,7 @@ export default function GuardDetailPage() {
                       <th>Description</th>
                       <th>Effective Date</th>
                       <th>Status</th>
+                      <th>Applied In</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -1070,6 +1071,22 @@ export default function GuardDetailPage() {
                           >
                             {d.status}
                           </Badge>
+                        </td>
+                        <td className="text-muted" style={{ fontSize: '0.75rem' }}>
+                          {d.status === 'PENDING' && (
+                            <span>
+                              Will apply in{' '}
+                              {new Date(d.effectiveDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                            </span>
+                          )}
+                          {d.status === 'APPLIED' && d.appliedInPayroll && (
+                            <span className="text-success">
+                              Applied in {d.appliedInPayroll.month}/{d.appliedInPayroll.year} payroll
+                            </span>
+                          )}
+                          {d.status === 'CANCELLED' && (
+                            <span className="text-danger">Cancelled</span>
+                          )}
                         </td>
                         <td>
                           {d.status === 'PENDING' && (
@@ -1142,6 +1159,7 @@ export default function GuardDetailPage() {
       {showDeductionModal && (
         <DeductionFormModal
           guardId={id!}
+          guardName={guard.fullName}
           onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
         />
       )}

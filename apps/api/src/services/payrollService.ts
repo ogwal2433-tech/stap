@@ -101,9 +101,11 @@ class PayrollService {
       });
 
       const deductionBreakdown = pendingDeductions.map((d) => ({
-        type:        d.type,
-        amount:      d.amount,
-        description: d.description,
+        deductionId:   d.id,
+        type:          d.type,
+        amount:        d.amount,
+        description:   d.description,
+        effectiveDate: d.effectiveDate.toISOString(),
       }));
 
       const totalDed = pendingDeductions.reduce((s, d) => s + d.amount, 0);

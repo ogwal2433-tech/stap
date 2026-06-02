@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Breadcrumb, Button, Card, Col, Row, Spinner,
+  Alert, Badge, Breadcrumb, Button, Card, Col, Modal, Row, Spinner,
   Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
   useRunPayroll, useApprovePayroll, useDisbursePayroll,
-  useCashbook, useCashbookSummary,
+  useCashbook, useCashbookSummary, usePayrollDetail,
 } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -17,7 +17,7 @@ import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { ROLES } from '@stap/shared';
-import type { InvoiceResponse } from '@stap/shared';
+import type { InvoiceResponse, PayslipResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
 
@@ -165,23 +165,121 @@ function InvoicesTab() {
   );
 }
 
+// ── Payslip Detail Modal ──────────────────────────────────────────────────────
+
+function PayslipDetailModal({
+  payslip,
+  month,
+  year,
+  onClose,
+}: {
+  payslip: PayslipResponse;
+  month:   number;
+  year:    number;
+  onClose: () => void;
+}) {
+  const MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+
+  return (
+    <Modal show onHide={onClose} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="small fw-bold">
+          Payslip — {payslip.guardName} — {MONTHS[month - 1]} {year}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {/* Earnings */}
+        <h6 className="fw-semibold small text-uppercase text-muted mb-2">Earnings</h6>
+        <Table size="sm" bordered className="mb-3">
+          <thead className="table-light">
+            <tr>
+              <th>Description</th>
+              <th className="text-center">Days</th>
+              <th className="text-end">Amount (UGX)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Basic Salary</td>
+              <td className="text-center">{payslip.daysWorked}/{payslip.totalDays} days</td>
+              <td className="text-end">{payslip.grossSalary.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </Table>
+
+        {/* Deductions */}
+        <h6 className="fw-semibold small text-uppercase text-muted mb-2">Deductions</h6>
+        {payslip.deductionsBreakdown.length === 0 ? (
+          <Alert variant="light" className="small py-2">No deductions applied in this payroll period.</Alert>
+        ) : (
+          <Table size="sm" bordered className="mb-3">
+            <thead className="table-light">
+              <tr>
+                <th>Type</th>
+                <th>Description</th>
+                <th className="text-end">Amount (UGX)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payslip.deductionsBreakdown.map((d, i) => (
+                <tr key={d.deductionId ?? i}>
+                  <td><Badge bg="secondary" style={{ fontSize: '0.65rem' }}>{d.type.replace(/_/g, ' ')}</Badge></td>
+                  <td className="small">{d.description}</td>
+                  <td className="text-end">{d.amount.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="table-light">
+              <tr>
+                <td colSpan={2} className="fw-semibold">Total Deductions</td>
+                <td className="text-end fw-semibold text-danger">
+                  {payslip.totalDeductions.toLocaleString()}
+                </td>
+              </tr>
+            </tfoot>
+          </Table>
+        )}
+
+        {/* Net Pay */}
+        <div
+          className="text-center py-3 rounded"
+          style={{ background: '#EEF2FA', borderLeft: '4px solid #1B3A6B' }}
+        >
+          <div className="text-muted small">Net Pay</div>
+          <div className="fw-bold fs-4" style={{ color: '#1B3A6B' }}>
+            UGX {payslip.netSalary.toLocaleString()}
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 // ── Payroll Tab ───────────────────────────────────────────────────────────────
 
 function PayrollTab() {
   const now   = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth]         = useState(now.getMonth() + 1);
+  const [year,  setYear]          = useState(now.getFullYear());
   const [confirming, setConfirming] = useState(false);
+  const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
 
-  const { data, isLoading } = usePayrollRuns();
-  const runPayroll          = useRunPayroll();
-  const approvePayroll      = useApprovePayroll();
-  const disbursePayroll     = useDisbursePayroll();
-  const { showToast }       = useToast();
-  const { user }            = useAuth();
+  const { data, isLoading }   = usePayrollRuns();
+  const runPayroll             = useRunPayroll();
+  const approvePayroll         = useApprovePayroll();
+  const disbursePayroll        = useDisbursePayroll();
+  const { showToast }          = useToast();
+  const { user }               = useAuth();
 
   const runs    = data?.data ?? [];
   const thisRun = runs.find((r) => r.month === month && r.year === year);
+
+  const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
+  const payslips = runDetail?.payslips ?? [];
 
   const handleCalculate = async () => {
     try {
@@ -270,11 +368,63 @@ function PayrollTab() {
               </div>
             </Card.Body>
           </Card>
+
+          {/* Per-guard payslip breakdown */}
+          {payslips.length > 0 && (
+            <div className="mt-3">
+              <h6 className="fw-semibold small text-uppercase text-muted mb-2">Payslips</h6>
+              <Table size="sm" hover responsive className="align-middle small">
+                <thead className="table-light">
+                  <tr>
+                    <th>Guard</th>
+                    <th className="text-center">Days</th>
+                    <th className="text-end">Gross (UGX)</th>
+                    <th className="text-end">Deductions (UGX)</th>
+                    <th className="text-end">Net (UGX)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payslips.map((p) => (
+                    <tr key={p.id}>
+                      <td>{p.guardName}</td>
+                      <td className="text-center">{p.daysWorked}/{p.totalDays}</td>
+                      <td className="text-end">{p.grossSalary.toLocaleString()}</td>
+                      <td className="text-end text-danger">
+                        {p.totalDeductions > 0 ? p.totalDeductions.toLocaleString() : '—'}
+                      </td>
+                      <td className="text-end fw-semibold">{p.netSalary.toLocaleString()}</td>
+                      <td>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          style={{ fontSize: '0.7rem' }}
+                          onClick={() => setViewPayslip(p)}
+                        >
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
         </>
       ) : (
         <div className="text-muted small text-center py-4">
           No payroll run for {MONTHS[month - 1]} {year}. Use "Calculate Payroll" to generate one.
         </div>
+      )}
+
+      {/* Payslip detail modal */}
+      {viewPayslip && (
+        <PayslipDetailModal
+          payslip={viewPayslip}
+          month={month}
+          year={year}
+          onClose={() => setViewPayslip(null)}
+        />
       )}
 
       {/* Run history */}
