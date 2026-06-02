@@ -34,6 +34,7 @@ const HRPage                       = lazy(() => import('@/pages/hr/HRPage'));
 const InventoryPage                = lazy(() => import('@/pages/inventory/InventoryPage'));
 const SettingsPage                 = lazy(() => import('@/pages/settings/SettingsPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
+const ZonesPage                    = lazy(() => import('@/pages/zones/ZonesPage'));
 
 const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
@@ -119,6 +120,7 @@ function App() {
               <Route path="/inventory" element={<L><RoleGuard allowedRoles={INV_ROLES} fallback={<UnauthorisedPage />}><InventoryPage /></RoleGuard></L>} />
 
               {/* Settings */}
+              <Route path="/zones" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR]} fallback={<UnauthorisedPage />}><ZonesPage /></RoleGuard></L>} />
               <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
             </Route>

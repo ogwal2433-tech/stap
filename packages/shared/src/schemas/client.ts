@@ -43,6 +43,7 @@ export const CreateSiteSchema = z.object({
   siteManagerContact: z.string().optional(),
   specialInstructions: z.string().max(1000).optional(),
   guardsRequired: z.number().int().min(1).default(1),
+  zoneId: z.string().nullable().optional(),
 });
 
 export const UpdateSiteSchema = CreateSiteSchema.omit({ clientId: true }).partial();

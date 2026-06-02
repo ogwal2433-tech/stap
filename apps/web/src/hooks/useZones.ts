@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesApi } from '../lib/zones.api';
+import { clientsApi } from '../lib/clients.api';
 import type { CreateZoneInput, UpdateZoneInput } from '@stap/shared';
 
 export function useZones(params?: { page?: number; limit?: number; isActive?: boolean; search?: string }) {
@@ -48,5 +49,30 @@ export function useUpdateZone() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateZoneInput }) => zonesApi.update(id, data),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['zones'] }),
+  });
+}
+
+export function useAssignSitesToZone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      zoneId,
+      addSiteIds,
+      removeSiteIds,
+    }: {
+      zoneId:        string;
+      addSiteIds:    string[];
+      removeSiteIds: string[];
+    }) => {
+      await Promise.all([
+        ...addSiteIds.map((id) => clientsApi.updateSite(id, { zoneId })),
+        ...removeSiteIds.map((id) => clientsApi.updateSite(id, { zoneId: null })),
+      ]);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['zones'] });
+      qc.invalidateQueries({ queryKey: ['zone-roster-data'] });
+      qc.invalidateQueries({ queryKey: ['sites-all'] });
+    },
   });
 }
