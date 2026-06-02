@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS "Zone" (
     "supervisorId" TEXT,
     "alternateId" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdBy" TEXT NOT NULL DEFAULT '',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Zone_pkey" PRIMARY KEY ("id")

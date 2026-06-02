@@ -81,13 +81,14 @@ class ZoneService {
     return toZoneResponse(zone as Record<string, unknown>);
   }
 
-  async create(data: CreateZoneInput, _createdBy: string): Promise<ZoneResponse> {
+  async create(data: CreateZoneInput, createdBy: string): Promise<ZoneResponse> {
     const zone = await prisma.zone.create({
       data: {
         name:         data.name,
         description:  data.description,
         supervisorId: data.supervisorId,
         alternateId:  data.alternateId,
+        createdBy,
       },
       include: zoneInclude,
     });

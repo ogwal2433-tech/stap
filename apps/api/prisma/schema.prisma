@@ -395,6 +395,7 @@ model Zone {
   supervisorId String?
   alternateId  String?
   isActive     Boolean  @default(true)
+  createdBy    String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
