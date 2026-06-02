@@ -13,6 +13,7 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { ROLES, type UserRole } from '@stap/shared';
 import type { MarkAttendanceInput, DeploymentResponse } from '@stap/shared';
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
+import { exportAttendanceSheet } from '../../lib/exportToExcel';
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
 
@@ -326,6 +327,14 @@ export default function AttendancePage() {
               </Form.Select>
             </Col>
             <Col className="d-flex gap-2 justify-content-end">
+              <Button
+                variant="outline-success"
+                size="sm"
+                disabled={!sheet || sheet.zones.length === 0}
+                onClick={() => sheet && exportAttendanceSheet(sheet, selectedDate)}
+              >
+                <i className="bi bi-file-earmark-excel me-1" />Export Excel
+              </Button>
               <Button variant="outline-secondary" size="sm" onClick={() => window.print()}>
                 <i className="bi bi-printer me-1" />Print
               </Button>

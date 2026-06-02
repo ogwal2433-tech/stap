@@ -8,6 +8,7 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import type { ConflictDetail, ZoneSite, ZoneRosterGuard } from '@stap/shared';
 import InitialsAvatar from '../ui/InitialsAvatar';
+import { exportRosterDraft } from '../../lib/exportToExcel';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,21 @@ export default function RosterBuilderTab() {
   }
 
   const [result, setResult] = useState<{ created: number; conflicts: ConflictDetail[] } | null>(null);
+
+  function handleExportRoster() {
+    if (!selectedSite || !selectedShift || selectedGuards.length === 0) return;
+    exportRosterDraft({
+      zoneName:       selectedZone?.name ?? 'No Zone',
+      siteName:       selectedSite.siteName,
+      clientName:     selectedSite.client.clientName,
+      location:       selectedSite.location,
+      date:           selectedDate,
+      shiftType:      selectedShift,
+      supervisorName: selectedZone?.supervisor?.name ?? user?.name ?? 'N/A',
+      guardsRequired: selectedSite.guardsRequired,
+      guards:         selectedGuards,
+    });
+  }
 
   async function handleSubmit() {
     if (!selectedZoneId || !selectedSite || !selectedShift || selectedGuards.length === 0) return;
@@ -692,6 +708,14 @@ export default function RosterBuilderTab() {
                   {`Create Roster — ${selectedGuards.length} guard${selectedGuards.length !== 1 ? 's' : ''} at ${selectedSite.siteName}`}
                 </>
               )}
+            </Button>
+
+            <Button
+              variant="outline-success"
+              className="w-100 mt-2"
+              onClick={handleExportRoster}
+            >
+              <i className="bi bi-file-earmark-excel me-2" />Export Roster to Excel
             </Button>
 
             {isOverLimit && (
