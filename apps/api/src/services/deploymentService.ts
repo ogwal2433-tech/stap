@@ -8,6 +8,7 @@ import type {
   DeploymentResponse,
   ConflictDetail,
   DailySheetResponse,
+  DailySheetSite,
   PaginatedResponse,
 } from '@stap/shared';
 
@@ -225,7 +226,7 @@ class DeploymentService {
 
   // ── Get daily sheet ────────────────────────────────────────────────────────
 
-  async getDailySheet(date?: string, siteId?: string): Promise<DailySheetResponse> {
+  async getDailySheet(date?: string, siteId?: string, zoneId?: string): Promise<DailySheetResponse> {
     const dateStr = date ?? this.todayEAT();
     const { start, end } = this.dayRange(dateStr);
 
@@ -233,19 +234,26 @@ class DeploymentService {
       date: { gte: start, lte: end },
     };
     if (siteId) where.siteId = siteId;
+    if (zoneId) where.site = { zoneId };
 
     const deployments = await prisma.deployment.findMany({
       where,
-      orderBy: [{ site: { siteName: 'asc' } }, { guard: { lastName: 'asc' } }],
+      orderBy: [
+        { site: { zone: { name: 'asc' } } },
+        { site: { siteName: 'asc' } },
+        { guard: { firstName: 'asc' } },
+      ],
       include: {
-        guard: { select: { id: true, firstName: true, lastName: true, otherNames: true, phone: true, photoUrl: true } },
-        site: {
+        guard: {
           select: {
-            id: true,
-            siteName: true,
-            location: true,
-            guardsRequired: true,
+            id: true, firstName: true, lastName: true,
+            otherNames: true, phone: true, photoUrl: true, rank: true,
+          },
+        },
+        site: {
+          include: {
             client: { select: { id: true, clientName: true } },
+            zone:   { select: { id: true, name: true } },
           },
         },
         supervisor: { select: { id: true, name: true } },
@@ -264,34 +272,61 @@ class DeploymentService {
       attendanceRecords.map((a) => [`${a.guardId}:${a.siteId}`, a]),
     );
 
-    // Group by site
-    const siteMap = new Map<string, {
-      site: { id: string; siteName: string; location: string; client: { id: string; clientName: string }; guardsRequired: number };
+    // Group by zone → site
+    type SiteEntry = {
+      site: DailySheetSite['site'];
       supervisor: { id: string; name: string } | null;
       deployments: DeploymentResponse[];
+    };
+    const zoneMap = new Map<string | null, {
+      zoneId:   string | null;
+      zoneName: string | null;
+      siteMap:  Map<string, SiteEntry>;
     }>();
 
-    for (const d of deployments) {
-      if (!siteMap.has(d.siteId)) {
-        siteMap.set(d.siteId, {
+    for (const dep of deployments) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const site = dep.site as any;
+      const depZoneId   = site.zone?.id   ?? null;
+      const depZoneName = site.zone?.name ?? null;
+
+      if (!zoneMap.has(depZoneId)) {
+        zoneMap.set(depZoneId, { zoneId: depZoneId, zoneName: depZoneName, siteMap: new Map() });
+      }
+      const zoneEntry = zoneMap.get(depZoneId)!;
+
+      if (!zoneEntry.siteMap.has(dep.siteId)) {
+        zoneEntry.siteMap.set(dep.siteId, {
           site: {
-            id: d.site.id,
-            siteName: d.site.siteName,
-            location: d.site.location,
-            guardsRequired: (d.site as typeof d.site & { guardsRequired: number }).guardsRequired,
-            client: d.site.client,
+            id:             site.id,
+            siteName:       site.siteName,
+            location:       site.location,
+            siteType:       site.siteType ?? 'COMMERCIAL',
+            client:         site.client,
+            guardsRequired: site.guardsRequired,
           },
-          supervisor: d.supervisor,
+          supervisor: dep.supervisor,
           deployments: [],
         });
       }
-      siteMap.get(d.siteId)!.deployments.push(this.formatDeployment(d, attendanceMap));
+
+      zoneEntry.siteMap.get(dep.siteId)!.deployments.push(
+        this.formatDeployment(dep, attendanceMap),
+      );
     }
 
-    return {
-      date: dateStr,
-      sites: Array.from(siteMap.values()),
-    };
+    const zones = Array.from(zoneMap.values()).map((zone) => ({
+      zoneId:   zone.zoneId,
+      zoneName: zone.zoneName,
+      sites: Array.from(zone.siteMap.values()).map((s) => ({
+        ...s,
+        presentCount:  s.deployments.filter((d) => d.attendance?.status === 'PRESENT').length,
+        absentCount:   s.deployments.filter((d) => ['ABSENT', 'AWOL'].includes(d.attendance?.status ?? '')).length,
+        unmarkedCount: s.deployments.filter((d) => !d.attendance).length,
+      })),
+    }));
+
+    return { date: start.toISOString(), zones };
   }
 
   // ── Delete deployment ──────────────────────────────────────────────────────
@@ -385,29 +420,37 @@ class DeploymentService {
       .filter(Boolean)
       .join(' ');
 
-    const att = attendanceMap.get(`${d.guardId}:${d.siteId}`);
+    const att = attendanceMap.get(`${d.guardId}:${d.siteId}`) ?? null;
 
     return {
       id: d.id,
-      guard: { id: d.guard.id, fullName, phone: d.guard.phone, photoUrl: d.guard.photoUrl ?? null },
+      guard: {
+        id: d.guard.id,
+        fullName,
+        phone: d.guard.phone,
+        photoUrl: d.guard.photoUrl ?? null,
+        rank: d.guard.rank ?? null,
+      },
       site: {
         id: d.site.id,
         siteName: d.site.siteName,
         location: d.site.location,
+        siteType: d.site.siteType ?? 'COMMERCIAL',
         client: { id: d.site.client.id, clientName: d.site.client.clientName },
+        zone: d.site.zone ? { id: d.site.zone.id, name: d.site.zone.name } : null,
       },
       supervisor: { id: d.supervisor.id, name: d.supervisor.name },
       shiftType: d.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
       date: d.date instanceof Date ? d.date.toISOString() : d.date,
       createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
-      ...(att && {
-        attendance: {
-          status: att.status,
-          timeIn: att.timeIn ? (att.timeIn instanceof Date ? att.timeIn.toISOString() : att.timeIn) : null,
-          timeOut: att.timeOut ? (att.timeOut instanceof Date ? att.timeOut.toISOString() : att.timeOut) : null,
-          notes: att.notes ?? null,
-        },
-      }),
+      attendance: att
+        ? {
+            status: att.status,
+            timeIn: att.timeIn ? (att.timeIn instanceof Date ? att.timeIn.toISOString() : att.timeIn) : null,
+            timeOut: att.timeOut ? (att.timeOut instanceof Date ? att.timeOut.toISOString() : att.timeOut) : null,
+            notes: att.notes ?? null,
+          }
+        : null,
     };
   }
 }

@@ -78,8 +78,12 @@ export interface ConflictDetail {
 
 export interface DeploymentResponse {
   id:         string;
-  guard:      { id: string; fullName: string; phone: string; photoUrl: string | null };
-  site:       { id: string; siteName: string; location: string; client: { id: string; clientName: string } };
+  guard:      { id: string; fullName: string; phone: string; photoUrl: string | null; rank: string | null };
+  site:       {
+    id: string; siteName: string; location: string; siteType: string;
+    client: { id: string; clientName: string };
+    zone?: { id: string; name: string } | null;
+  };
   supervisor: { id: string; name: string };
   shiftType:  'DAY' | 'NIGHT' | 'FULL_24';
   date:       string;
@@ -89,7 +93,7 @@ export interface DeploymentResponse {
     timeIn:  string | null;
     timeOut: string | null;
     notes:   string | null;
-  };
+  } | null;
 }
 
 export interface AttendanceRecord {
@@ -126,12 +130,25 @@ export interface CheckinResponse {
 }
 
 export interface DailySheetSite {
-  site:        { id: string; siteName: string; location: string; client: { id: string; clientName: string }; guardsRequired: number };
-  supervisor:  { id: string; name: string } | null;
-  deployments: DeploymentResponse[];
+  site: {
+    id: string; siteName: string; location: string; siteType: string;
+    client: { id: string; clientName: string };
+    guardsRequired: number;
+  };
+  supervisor:    { id: string; name: string } | null;
+  deployments:   DeploymentResponse[];
+  presentCount:  number;
+  absentCount:   number;
+  unmarkedCount: number;
+}
+
+export interface DailySheetZone {
+  zoneId:   string | null;
+  zoneName: string | null;
+  sites:    DailySheetSite[];
 }
 
 export interface DailySheetResponse {
   date:  string;
-  sites: DailySheetSite[];
+  zones: DailySheetZone[];
 }

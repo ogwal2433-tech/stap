@@ -16,10 +16,12 @@ export function useTodaysDeployments(params?: Partial<DeploymentListQuery>) {
   });
 }
 
-export function useDailySheet(date?: string, siteId?: string) {
+export function useDailySheet(date?: string, siteId?: string, zoneId?: string) {
   return useQuery({
-    queryKey: ['daily-sheet', date, siteId],
-    queryFn: () => attendanceApi.getDailySheet(date, siteId),
+    queryKey: ['daily-sheet', date, siteId, zoneId],
+    queryFn:  () => attendanceApi.getDailySheet(date, siteId, zoneId),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
   });
 }
 

@@ -30,10 +30,10 @@ export const attendanceApi = {
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
   },
 
-  getDailySheet(date?: string, siteId?: string): Promise<DailySheetResponse> {
+  getDailySheet(date?: string, siteId?: string, zoneId?: string): Promise<DailySheetResponse> {
     return api
       .get<{ success: boolean; data: DailySheetResponse }>('/attendance/sheet', {
-        params: { date, siteId },
+        params: { date, siteId, zoneId },
       })
       .then((r) => r.data.data);
   },
