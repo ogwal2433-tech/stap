@@ -23,6 +23,7 @@ import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
+import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -454,9 +455,28 @@ export default function GuardDetailPage() {
                   UGX {guard.salaryRate.toLocaleString()} / month
                 </div>
               </RoleGuard>
-              <div className="text-muted small mt-1">
-                From: {new Date(guard.contractStart).toLocaleDateString()}
-                {guard.contractEnd && ` → ${new Date(guard.contractEnd).toLocaleDateString()}`}
+              <div className="mt-2" style={{ fontSize: '0.82rem' }}>
+                <div style={{ color: '#6c757d', fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                  Contract Period
+                </div>
+                <div className="fw-semibold" style={{ color: '#1A1A1A' }}>
+                  {new Date(guard.contractStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {guard.contractEnd && (
+                    <> → {new Date(guard.contractEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</>
+                  )}
+                </div>
+                {guard.contractEnd && (
+                  <div style={{ color: '#0F7B6C', fontWeight: 600, fontSize: '0.75rem' }}>
+                    {computeDisplayDuration(guard.contractStart, guard.contractEnd)}
+                  </div>
+                )}
+                {guard.contractEnd && (() => {
+                  const days = daysUntilExpiry(guard.contractEnd);
+                  if (days < 0) return <Badge bg="danger" className="mt-1">❌ Expired {Math.abs(days)}d ago</Badge>;
+                  if (days <= 30) return <Badge bg="warning" text="dark" className="mt-1">⚠️ Expires in {days}d</Badge>;
+                  if (days <= 90) return <Badge bg="info" className="mt-1">ℹ️ {days}d remaining</Badge>;
+                  return <Badge bg="success" className="mt-1">✅ Active</Badge>;
+                })()}
               </div>
             </Col>
           </Row>

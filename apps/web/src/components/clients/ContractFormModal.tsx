@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Alert, Button, Form, InputGroup, Modal, Spinner } from 'react-bootstrap';
+import ContractDurationPicker from '../common/ContractDurationPicker';
 import { useCreateContract, useUpdateContract } from '../../hooks/useContracts';
 import { SHIFT_PATTERNS } from '@stap/shared';
 import type { ContractResponse, ShiftPattern } from '@stap/shared';
@@ -21,21 +22,6 @@ function parseBilling(value: string): number {
   return parseInt(value.replace(/\D/g, ''), 10) || 0;
 }
 
-function diffDays(start: string, end: string): number | null {
-  if (!start || !end) return null;
-  const s = new Date(start);
-  const e = new Date(end);
-  const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : null;
-}
-
-function diffMonths(days: number): string {
-  const months = Math.floor(days / 30);
-  const remainder = days % 30;
-  if (months === 0) return `${remainder} day(s)`;
-  if (remainder === 0) return `${months} month(s)`;
-  return `${months} month(s) ${remainder} day(s)`;
-}
 
 export default function ContractFormModal({
   clientId,
@@ -73,15 +59,6 @@ export default function ContractFormModal({
   const billingPerGuard = parseBilling(billingDisplay);
   const guards = parseInt(guardsRequired, 10) || 0;
   const monthlyValue = guards * billingPerGuard;
-  const duration = diffDays(contractStart, contractEnd);
-
-  useEffect(() => {
-    if (contractEnd && contractStart && contractEnd <= contractStart) {
-      setError('End date must be after start date.');
-    } else {
-      setError('');
-    }
-  }, [contractStart, contractEnd]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,33 +106,22 @@ export default function ContractFormModal({
           {error && <Alert variant="danger" className="small">{error}</Alert>}
 
           <div className="row g-3">
-            {/* Contract Start */}
-            <div className="col-md-6">
-              <Form.Label className="small fw-semibold">Contract Start *</Form.Label>
-              <Form.Control
-                type="date"
-                value={contractStart}
-                onChange={(e) => setContractStart(e.target.value)}
-                required
+            {/* Contract dates with duration picker */}
+            <div className="col-12">
+              <ContractDurationPicker
+                startDateValue={contractStart}
+                endDateValue={contractEnd}
+                onStartDateChange={setContractStart}
+                onEndDateChange={setContractEnd}
+                startDateLabel="Contract Start Date"
+                endDateLabel="Contract End Date"
+                isRequired
+                startDateError={
+                  contractStart && contractEnd && contractEnd <= contractStart
+                    ? 'End date must be after start date'
+                    : undefined
+                }
               />
-            </div>
-
-            {/* Contract End */}
-            <div className="col-md-6">
-              <Form.Label className="small fw-semibold">Contract End *</Form.Label>
-              <Form.Control
-                type="date"
-                value={contractEnd}
-                min={contractStart || undefined}
-                onChange={(e) => setContractEnd(e.target.value)}
-                required
-                isInvalid={Boolean(contractEnd && contractStart && contractEnd <= contractStart)}
-              />
-              {duration !== null && (
-                <Form.Text className="text-muted">
-                  Duration: {diffMonths(duration)}
-                </Form.Text>
-              )}
             </div>
 
             {/* Guards Required */}

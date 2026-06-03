@@ -10,7 +10,8 @@
       "@/*": ["./src/*"],
       "@stap/shared": ["../../packages/shared/dist/index.d.ts"]
     },
-    "noEmit": true
+    "noEmit": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"],
   "exclude": ["node_modules"]

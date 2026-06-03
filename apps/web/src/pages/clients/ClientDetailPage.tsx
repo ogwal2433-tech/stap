@@ -12,6 +12,7 @@ import IncidentFormModal from '../../components/clients/IncidentFormModal';
 import ContractFormModal from '../../components/clients/ContractFormModal';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse } from '@stap/shared';
+import { computeDisplayDuration } from '../../lib/dateUtils';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -437,7 +438,7 @@ export default function ClientDetailPage() {
                   <th>Shift Pattern</th>
                   <th>Weapons</th>
                   <th>Days Left</th>
-                  <th>Status</th>
+                  <th>Expiry</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -453,8 +454,15 @@ export default function ClientDetailPage() {
                   return (
                     <tr key={c.id}>
                       <td>
-                        <div>{new Date(c.contractStart).toLocaleDateString()}</div>
-                        <div className="text-muted">to {new Date(c.contractEnd).toLocaleDateString()}</div>
+                        <div className="fw-semibold">
+                          {new Date(c.contractStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div className="text-muted small">
+                          → {new Date(c.contractEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#0F7B6C', fontWeight: 600, marginTop: '2px' }}>
+                          {computeDisplayDuration(c.contractStart, c.contractEnd)}
+                        </div>
                       </td>
                       <td>{c.guardsRequired}</td>
                       <td>UGX {c.billingPerGuard.toLocaleString()}</td>
@@ -480,9 +488,13 @@ export default function ClientDetailPage() {
                         )}
                       </td>
                       <td>
-                        <Badge bg={statusStyle.bg} text={statusStyle.text}>
-                          {c.status}
-                        </Badge>
+                        {(() => {
+                          const days = c.daysRemaining;
+                          if (days < 0) return <Badge bg="danger">❌ Expired</Badge>;
+                          if (days <= 30) return <Badge bg="warning" text="dark">⚠️ Expiring in {days}d</Badge>;
+                          if (days <= 90) return <Badge bg="info">ℹ️ {days}d left</Badge>;
+                          return <Badge bg="success">✅ Active</Badge>;
+                        })()}
                       </td>
                       <td>
                         <div className="d-flex gap-1">

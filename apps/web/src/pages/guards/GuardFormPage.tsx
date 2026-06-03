@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  Alert, Breadcrumb, Button, ButtonGroup, Card, Col, Form, InputGroup, Row, Spinner, Table,
+  Alert, Breadcrumb, Button, Card, Col, Form, InputGroup, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useGuard, useCreateGuard, useUpdateGuard } from '../../hooks/useGuards';
 import { guardsApi } from '../../lib/guards.api';
@@ -14,6 +14,7 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
 import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
+import ContractDurationPicker from '../../components/common/ContractDurationPicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -51,19 +52,6 @@ function toDateInputVal(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function calcDurationText(start: string, end: string): string | null {
-  const s = new Date(start).getTime();
-  const e = new Date(end).getTime();
-  if (isNaN(s) || isNaN(e) || e <= s) return null;
-  const totalMonths = Math.round((e - s) / (1000 * 60 * 60 * 24 * 30.44));
-  if (totalMonths === 0) return null;
-  const years = Math.floor(totalMonths / 12);
-  const months = totalMonths % 12;
-  const parts: string[] = [];
-  if (years > 0) parts.push(`${years} year${years !== 1 ? 's' : ''}`);
-  if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
-  return `Duration: ${parts.join(' ')}`;
-}
 
 // ── Sticky section nav ─────────────────────────────────────────────────────────
 
@@ -115,17 +103,6 @@ function SectionNav({ active }: { active: SectionId }) {
   );
 }
 
-// ── Duration options ───────────────────────────────────────────────────────────
-
-type DurationKey = '3months' | '6months' | '1year' | '2years' | 'custom';
-
-const DURATION_OPTIONS: Array<{ key: DurationKey; label: string }> = [
-  { key: '3months', label: '3 Months' },
-  { key: '6months', label: '6 Months' },
-  { key: '1year',   label: '1 Year'   },
-  { key: '2years',  label: '2 Years'  },
-  { key: 'custom',  label: 'Custom'   },
-];
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -145,8 +122,6 @@ export default function GuardFormPage() {
   const [apiError, setApiError] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [selectedDuration, setSelectedDuration] = useState<DurationKey | null>(null);
-  const [needStartWarning, setNeedStartWarning] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Relatives table state (max 3)
@@ -354,39 +329,6 @@ export default function GuardFormPage() {
   const updateAssociate = (i: number, field: keyof AssociateRow, value: string) =>
     setAssociates((prev) => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a));
 
-  // ── Contract duration ──────────────────────────────────────────────────────
-
-  const applyDuration = (duration: DurationKey) => {
-    if (duration === 'custom') {
-      setSelectedDuration('custom');
-      setValue('contractEnd', undefined);
-      return;
-    }
-    if (!contractStart) {
-      setNeedStartWarning(true);
-      setTimeout(() => setNeedStartWarning(false), 3000);
-      return;
-    }
-    setSelectedDuration(duration);
-    const start = new Date(contractStart);
-    const end = new Date(start);
-    if (duration === '3months') end.setMonth(end.getMonth() + 3);
-    else if (duration === '6months') end.setMonth(end.getMonth() + 6);
-    else if (duration === '1year') end.setFullYear(end.getFullYear() + 1);
-    else if (duration === '2years') end.setFullYear(end.getFullYear() + 2);
-    setValue('contractEnd', toDateInputVal(end));
-  };
-
-  useEffect(() => {
-    if (!selectedDuration || selectedDuration === 'custom' || !contractStart) return;
-    const start = new Date(contractStart);
-    const end = new Date(start);
-    if (selectedDuration === '3months') end.setMonth(end.getMonth() + 3);
-    else if (selectedDuration === '6months') end.setMonth(end.getMonth() + 6);
-    else if (selectedDuration === '1year') end.setFullYear(end.getFullYear() + 1);
-    else if (selectedDuration === '2years') end.setFullYear(end.getFullYear() + 2);
-    setValue('contractEnd', toDateInputVal(end));
-  }, [contractStart, selectedDuration, setValue]);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -833,54 +775,24 @@ export default function GuardFormPage() {
 
             {/* B(6): Employment Details */}
             <div className="fw-semibold small text-muted text-uppercase mb-2 mt-3" style={{ letterSpacing: '0.05em' }}>B6 — STAP Employment Details</div>
-            <Row className="g-3 mb-2">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Contract Start *</Form.Label>
-                  <Form.Control type="date" {...register('contractStart', { setValueAs: (v) => v ? new Date(v).toISOString() : v })} isInvalid={!!errors.contractStart} />
-                  <Form.Control.Feedback type="invalid">{errors.contractStart?.message}</Form.Control.Feedback>
-                </Form.Group>
-              </Col>
-              <Col md={8}>
-                <Form.Group>
-                  <Form.Label>Duration</Form.Label>
-                  <div>
-                    <ButtonGroup size="sm">
-                      {DURATION_OPTIONS.map(({ key, label }) => (
-                        <Button
-                          key={key}
-                          type="button"
-                          variant={selectedDuration === key ? 'primary' : 'outline-secondary'}
-                          onClick={() => applyDuration(key)}
-                        >
-                          {label}
-                        </Button>
-                      ))}
-                    </ButtonGroup>
-                    {needStartWarning && (
-                      <div className="text-warning small mt-1">
-                        Please select a Contract Start date first.
-                      </div>
-                    )}
-                  </div>
-                </Form.Group>
-              </Col>
-            </Row>
+            <div className="mb-3">
+              <ContractDurationPicker
+                startDateValue={contractStart ? contractStart.slice(0, 10) : ''}
+                endDateValue={contractEnd ? contractEnd.slice(0, 10) : ''}
+                onStartDateChange={(date) =>
+                  setValue('contractStart', date ? new Date(date).toISOString() : '')
+                }
+                onEndDateChange={(date) =>
+                  setValue('contractEnd', date ? new Date(date).toISOString() : undefined)
+                }
+                startDateLabel="Contract Start"
+                endDateLabel="Contract End"
+                isRequired
+                startDateError={errors.contractStart?.message}
+                endDateError={errors.contractEnd?.message}
+              />
+            </div>
             <Row className="g-3 mb-3">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Contract End</Form.Label>
-                  <Form.Control
-                    type="date"
-                    {...register('contractEnd', { setValueAs: (v) => v ? new Date(v).toISOString() : undefined })}
-                  />
-                  {contractStart && contractEnd && calcDurationText(contractStart, contractEnd) && (
-                    <Form.Text className="text-muted">
-                      {calcDurationText(contractStart, contractEnd)}
-                    </Form.Text>
-                  )}
-                </Form.Group>
-              </Col>
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>Contract Type</Form.Label>
