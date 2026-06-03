@@ -7,7 +7,8 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@stap/shared": ["../../packages/shared/dist/index.d.ts"]
     },
     "noEmit": true
   },
