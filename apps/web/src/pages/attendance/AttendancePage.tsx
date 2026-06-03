@@ -18,10 +18,8 @@ import { exportAttendanceSheet } from '../../lib/exportToExcel';
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
 
 interface AttendanceEdit {
-  status:  AttendanceStatus;
-  timeIn:  string;
-  timeOut: string;
-  notes:   string;
+  status: AttendanceStatus;
+  notes:  string;
 }
 
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
@@ -121,18 +119,16 @@ export default function AttendancePage() {
 
   function getEdit(
     key: string,
-    dep?: { attendance?: { status: string; timeIn: string | null; timeOut: string | null; notes: string | null } | null },
+    dep?: { attendance?: { status: string; notes: string | null } | null },
   ): AttendanceEdit {
     if (edits[key]) return edits[key];
     if (dep?.attendance) {
       return {
-        status:  dep.attendance.status as AttendanceStatus,
-        timeIn:  dep.attendance.timeIn  ? dep.attendance.timeIn.substring(11, 16)  : '',
-        timeOut: dep.attendance.timeOut ? dep.attendance.timeOut.substring(11, 16) : '',
-        notes:   dep.attendance.notes ?? '',
+        status: dep.attendance.status as AttendanceStatus,
+        notes:  dep.attendance.notes ?? '',
       };
     }
-    return { status: '', timeIn: '', timeOut: '', notes: '' };
+    return { status: '', notes: '' };
   }
 
   function setEdit(key: string, patch: Partial<AttendanceEdit>) {
@@ -158,11 +154,9 @@ export default function AttendancePage() {
       records.push({
         guardId,
         siteId,
-        date:    `${selectedDate}T00:00:00.000Z`,
-        status:  edit.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL',
-        timeIn:  edit.timeIn  || undefined,
-        timeOut: edit.timeOut || undefined,
-        notes:   edit.notes   || undefined,
+        date:   `${selectedDate}T00:00:00.000Z`,
+        status: edit.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL',
+        notes:  edit.notes || undefined,
       });
     }
 
@@ -200,7 +194,6 @@ export default function AttendancePage() {
     const shift = SHIFT_BADGE[dep.shiftType] ?? { bg: 'secondary', label: dep.shiftType };
     const rowBg = edit.status ? (STATUS_ROW_BG[edit.status] ?? '#fff') : '#fff';
     const selectBg = edit.status ? (STATUS_SELECT_BG[edit.status] ?? '#fff') : '#fff';
-    const isAbsent = edit.status === 'ABSENT' || edit.status === 'AWOL';
 
     return (
       <tr style={{ background: rowBg, fontSize: '0.85rem' }}>
@@ -239,24 +232,6 @@ export default function AttendancePage() {
           {edit.status
             ? <Badge bg={STATUS_BADGE[edit.status] ?? 'secondary'}>{edit.status}</Badge>
             : <span className="text-muted">—</span>}
-        </td>
-        <td className="align-middle d-print-none" style={{ width: 86 }}>
-          <Form.Control
-            size="sm" type="time"
-            value={edit.timeIn}
-            disabled={isAbsent}
-            onChange={(e) => setEdit(key, { timeIn: e.target.value })}
-            style={{ fontSize: '0.8rem' }}
-          />
-        </td>
-        <td className="align-middle d-print-none" style={{ width: 86 }}>
-          <Form.Control
-            size="sm" type="time"
-            value={edit.timeOut}
-            disabled={isAbsent}
-            onChange={(e) => setEdit(key, { timeOut: e.target.value })}
-            style={{ fontSize: '0.8rem' }}
-          />
         </td>
         <td className="align-middle d-print-none">
           <Form.Control
@@ -369,6 +344,9 @@ export default function AttendancePage() {
 
       {sheet && sheet.zones.length > 0 && (
         <div className="attendance-sheet">
+          <small className="text-muted d-block d-print-none mb-3">
+            ℹ️ Time In and Time Out are not required — working hours are defined by the assigned shift type for each deployment.
+          </small>
           {/* Summary bar */}
           <div
             className="d-print-none"
@@ -496,8 +474,6 @@ export default function AttendancePage() {
                           <th style={{ width: 72 }}>Shift</th>
                           <th className="d-print-none" style={{ width: 160 }}>Status</th>
                           <th className="d-none d-print-table-cell" style={{ width: 80 }}>Status</th>
-                          <th className="d-print-none" style={{ width: 86 }}>Time In</th>
-                          <th className="d-print-none" style={{ width: 86 }}>Time Out</th>
                           <th className="d-print-none">Notes</th>
                           <th className="d-none d-print-table-cell" style={{ minWidth: 120 }}>Signature</th>
                           <th className="d-print-none" style={{ width: 36 }}></th>

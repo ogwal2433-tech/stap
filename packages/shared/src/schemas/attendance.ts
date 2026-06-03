@@ -25,7 +25,9 @@ export const MarkAttendanceSchema = z.object({
     siteId:  z.string().min(1),
     date:    z.string().datetime(),
     status:  z.enum(['PRESENT', 'ABSENT', 'LATE', 'AWOL']),
+    /** @deprecated Not collected from UI. Shift type defines working hours. */
     timeIn:  z.string().optional(),
+    /** @deprecated Not collected from UI. Shift type defines working hours. */
     timeOut: z.string().optional(),
     notes:   z.string().max(500).optional(),
   })).min(1),
