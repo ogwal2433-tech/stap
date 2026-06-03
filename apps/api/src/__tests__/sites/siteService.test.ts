@@ -111,8 +111,12 @@ describe('siteService.create()', () => {
     );
   });
 
-  it('creates site with siteType = TEMPORARY', async () => {
-    await siteService.create({ ...baseCreateInput, siteType: 'TEMPORARY' }, 'user1');
+  it('creates site with siteType = TEMPORARY (with period dates)', async () => {
+    await siteService.create({
+      ...baseCreateInput, siteType: 'TEMPORARY',
+      sitePeriodStart: '2026-07-01T00:00:00.000Z',
+      sitePeriodEnd:   '2026-09-30T00:00:00.000Z',
+    }, 'user1');
 
     expect(mock.site.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -125,8 +129,8 @@ describe('siteService.create()', () => {
     await siteService.create({
       ...baseCreateInput,
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: '2026-07-10T00:00:00.000Z',
-      specialDutyEndDate:   '2026-07-12T00:00:00.000Z',
+      sitePeriodStart: '2026-07-10T00:00:00.000Z',
+      sitePeriodEnd:   '2026-07-12T00:00:00.000Z',
     }, 'user1');
 
     expect(mock.site.create).toHaveBeenCalledWith(
@@ -202,26 +206,11 @@ describe('siteService.create()', () => {
     );
   });
 
-  it('creates site with defaultShiftType = DAY', async () => {
-    await siteService.create({ ...baseCreateInput, defaultShiftType: 'DAY' }, 'user1');
-
+  it('always writes null for defaultShiftType (field removed from form)', async () => {
+    await siteService.create(baseCreateInput, 'user1');
     expect(mock.site.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ defaultShiftType: 'DAY' }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ defaultShiftType: null }) }),
     );
-  });
-
-  it('throws 400 when defaultShiftType code does not exist', async () => {
-    mock.shiftTypeConfig.findUnique.mockResolvedValue(null);
-
-    await expect(
-      siteService.create({ ...baseCreateInput, defaultShiftType: 'UNKNOWN' }, 'user1'),
-    ).rejects.toThrow(AppError);
-
-    await expect(
-      siteService.create({ ...baseCreateInput, defaultShiftType: 'UNKNOWN' }, 'user1'),
-    ).rejects.toMatchObject({ statusCode: 400 });
   });
 
   it('throws 400 when allowedShiftTypes contains invalid code', async () => {
@@ -244,10 +233,16 @@ describe('siteService.create()', () => {
 // ── update() ──────────────────────────────────────────────────────────────────
 
 describe('siteService.update()', () => {
-  it('updates siteType from REGULAR to TEMPORARY', async () => {
-    mock.site.update.mockResolvedValue({ ...baseSiteRow, siteType: 'TEMPORARY' });
+  it('updates siteType from REGULAR to TEMPORARY (with period dates)', async () => {
+    const updated = { ...baseSiteRow, siteType: 'TEMPORARY', sitePeriodStart: new Date('2026-07-01'), sitePeriodEnd: new Date('2026-09-30') };
+    mock.site.update.mockResolvedValue(updated);
+    mock.site.findUnique.mockResolvedValueOnce(baseSiteRow).mockResolvedValue({ ...updated, deployments: [] });
 
-    await siteService.update('s1', { siteType: 'TEMPORARY' }, 'user1');
+    await siteService.update('s1', {
+      siteType: 'TEMPORARY',
+      sitePeriodStart: '2026-07-01T00:00:00.000Z',
+      sitePeriodEnd:   '2026-09-30T00:00:00.000Z',
+    }, 'user1');
 
     expect(mock.site.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ siteType: 'TEMPORARY' }) }),

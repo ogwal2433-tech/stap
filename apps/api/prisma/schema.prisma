@@ -397,9 +397,9 @@ model Site {
   specialInstructions String?
   guardsRequired      Int        @default(1)
   siteType              String     @default("COMMERCIAL")
-  specialDutyStartDate  DateTime?
-  specialDutyEndDate    DateTime?
-  specialDutyNotes      String?
+  sitePeriodStart       DateTime?
+  sitePeriodEnd         DateTime?
+  sitePeriodNotes       String?
   defaultShiftType      String?
   armedGuardsRequired Int        @default(0)
   firearmsRequired    Int        @default(0)

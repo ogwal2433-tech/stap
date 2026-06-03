@@ -157,9 +157,9 @@ class ZoneService {
             batonRequired:        true,
             otherWeaponsNotes:    true,
             specialInstructions:  true,
-            specialDutyStartDate: true,
-            specialDutyEndDate:   true,
-            specialDutyNotes:     true,
+            sitePeriodStart: true,
+            sitePeriodEnd:   true,
+            sitePeriodNotes:     true,
             client: { select: { id: true, clientName: true } },
           },
           orderBy: { siteName: 'asc' },
@@ -223,14 +223,15 @@ class ZoneService {
             || ((s as any).firearmsRequired ?? 0) > 0
             || ((s as any).batonRequired ?? 0) > 0,
       specialInstructions:  (s as any).specialInstructions ?? null,
-      specialDutyStartDate: (s as any).specialDutyStartDate
-        ? (s as any).specialDutyStartDate.toISOString() : null,
-      specialDutyEndDate: (s as any).specialDutyEndDate
-        ? (s as any).specialDutyEndDate.toISOString() : null,
-      specialDutyNotes:   (s as any).specialDutyNotes ?? null,
-      dutyDurationDays:   (() => {
-        const sd = (s as any).specialDutyStartDate as Date | null;
-        const ed = (s as any).specialDutyEndDate as Date | null;
+      sitePeriodStart: (s as any).sitePeriodStart
+        ? (s as any).sitePeriodStart.toISOString() : null,
+      sitePeriodEnd: (s as any).sitePeriodEnd
+        ? (s as any).sitePeriodEnd.toISOString() : null,
+      sitePeriodNotes:   (s as any).sitePeriodNotes ?? null,
+      hasPeriod: ['TEMPORARY', 'SPECIAL_DUTIES'].includes((s as any).siteType ?? ''),
+      periodDays:   (() => {
+        const sd = (s as any).sitePeriodStart as Date | null;
+        const ed = (s as any).sitePeriodEnd as Date | null;
         if (!sd || !ed) return null;
         return Math.ceil((ed.getTime() - sd.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       })(),

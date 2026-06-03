@@ -437,25 +437,29 @@ export default function RosterBuilderTab() {
                               : site.specialInstructions}
                           </div>
                         )}
-                        {site.siteType === 'SPECIAL_DUTIES' && (
-                          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #F9E79F', fontSize: '0.75rem' }}>
-                            {site.specialDutyStartDate && site.specialDutyEndDate ? (
+                        {site.hasPeriod && (
+                          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #e9ecef', fontSize: '0.75rem' }}>
+                            {site.sitePeriodStart && site.sitePeriodEnd ? (
                               <>
-                                <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
-                                  🗓️{' '}
-                                  {new Date(site.specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                <Badge
+                                  bg={site.siteType === 'TEMPORARY' ? 'warning' : 'danger'}
+                                  text={site.siteType === 'TEMPORARY' ? 'dark' : undefined}
+                                  style={{ fontSize: '0.7rem' }}
+                                >
+                                  📅{' '}
+                                  {new Date(site.sitePeriodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                                   {' → '}
-                                  {new Date(site.specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                  {site.dutyDurationDays ? ` · ${site.dutyDurationDays}d` : ''}
+                                  {new Date(site.sitePeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                  {site.periodDays ? ` · ${site.periodDays}d` : ''}
                                 </Badge>
-                                {site.specialDutyNotes && (
+                                {site.sitePeriodNotes && (
                                   <div className="text-muted mt-1" style={{ fontSize: '0.72rem' }}>
-                                    {site.specialDutyNotes}
+                                    {site.sitePeriodNotes}
                                   </div>
                                 )}
                               </>
                             ) : (
-                              <span className="text-warning small">⚠️ No duty period set</span>
+                              <span className="text-warning small">⚠️ No period set</span>
                             )}
                           </div>
                         )}
@@ -506,27 +510,32 @@ export default function RosterBuilderTab() {
             )}
 
             {/* Special duty period alert */}
-            {selectedSite.siteType === 'SPECIAL_DUTIES' && selectedSite.specialDutyStartDate && selectedSite.specialDutyEndDate && (
-              <Alert variant="warning" className="mb-3" style={{ borderLeft: '4px solid #E8701A', background: '#FEF9E7' }}>
-                <div className="fw-bold small mb-1">🎯 Special Duty Assignment</div>
+            {selectedSite.hasPeriod && selectedSite.sitePeriodStart && selectedSite.sitePeriodEnd && (
+              <Alert variant="warning" className="mb-3" style={{
+                borderLeft: `4px solid ${selectedSite.siteType === 'TEMPORARY' ? '#ffc107' : '#dc3545'}`,
+                background: selectedSite.siteType === 'TEMPORARY' ? '#fff3cd' : '#f8d7da',
+              }}>
+                <div className="fw-bold small mb-1">
+                  {selectedSite.siteType === 'TEMPORARY' ? '⏳ Temporary Assignment' : '🎯 Special Duty Assignment'}
+                </div>
                 <div className="small">
-                  This is a special duty site active from{' '}
+                  {selectedSite.siteType === 'TEMPORARY' ? 'This temporary assignment runs from' : 'This special duty is active from'}{' '}
                   <strong>
-                    {new Date(selectedSite.specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    {new Date(selectedSite.sitePeriodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
                   </strong>
                   {' to '}
                   <strong>
-                    {new Date(selectedSite.specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    {new Date(selectedSite.sitePeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
                   </strong>
-                  {' '}({selectedSite.dutyDurationDays} day(s)).
-                  {selectedSite.specialDutyNotes && (
-                    <span className="ms-1 fst-italic">{selectedSite.specialDutyNotes}.</span>
+                  {' '}({selectedSite.periodDays} day(s)).
+                  {selectedSite.sitePeriodNotes && (
+                    <span className="ms-1 fst-italic">{selectedSite.sitePeriodNotes}.</span>
                   )}
                 </div>
                 {selectedDate && (() => {
                   const rosterDate = new Date(`${selectedDate}T00:00:00`);
-                  const dutyStart  = new Date(selectedSite.specialDutyStartDate!);
-                  const dutyEnd    = new Date(selectedSite.specialDutyEndDate!);
+                  const dutyStart  = new Date(selectedSite.sitePeriodStart!);
+                  const dutyEnd    = new Date(selectedSite.sitePeriodEnd!);
                   if (rosterDate < dutyStart || rosterDate > dutyEnd) {
                     return (
                       <div className="mt-2 text-danger small fw-bold">

@@ -23,9 +23,9 @@ const SiteFormSchema = z.object({
   siteManagerContact:  z.string().optional().transform((v) => v || undefined),
   guardsRequired:      z.coerce.number().int().min(1).default(1),
   siteType:             z.enum(['REGULAR', 'TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default('REGULAR'),
-  specialDutyStartDate: z.string().optional().nullable(),
-  specialDutyEndDate:   z.string().optional().nullable(),
-  specialDutyNotes:     z.string().max(500).optional().nullable(),
+  sitePeriodStart: z.string().optional().nullable(),
+  sitePeriodEnd:   z.string().optional().nullable(),
+  sitePeriodNotes:     z.string().max(500).optional().nullable(),
   armedGuardsRequired: z.coerce.number().int().min(0).default(0),
   firearmsRequired:    z.coerce.number().int().min(0).default(0),
   batonRequired:       z.coerce.number().int().min(0).default(0),
@@ -69,13 +69,13 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   const [allowedShifts, setAllowedShifts] = useState<string[]>([]);
 
   // Special duty date range state (local ISO date strings: 'YYYY-MM-DD')
-  const [dutyStartDate, setDutyStartDate] = useState<string>(
-    site?.specialDutyStartDate
-      ? new Date(site.specialDutyStartDate).toISOString().split('T')[0] : '',
+  const [periodStart, setPeriodStart] = useState<string>(
+    (site as any)?.sitePeriodStart
+      ? new Date((site as any).sitePeriodStart).toISOString().split('T')[0] : '',
   );
-  const [dutyEndDate, setDutyEndDate] = useState<string>(
-    site?.specialDutyEndDate
-      ? new Date(site.specialDutyEndDate).toISOString().split('T')[0] : '',
+  const [periodEnd, setPeriodEnd] = useState<string>(
+    (site as any)?.sitePeriodEnd
+      ? new Date((site as any).sitePeriodEnd).toISOString().split('T')[0] : '',
   );
 
   const {
@@ -96,9 +96,9 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       siteManagerContact:  site?.siteManagerContact ?? undefined,
       guardsRequired:      site?.guardsRequired ?? 1,
       siteType:             (site?.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
-      specialDutyStartDate: (site as any)?.specialDutyStartDate ?? null,
-      specialDutyEndDate:   (site as any)?.specialDutyEndDate   ?? null,
-      specialDutyNotes:     (site as any)?.specialDutyNotes     ?? null,
+      sitePeriodStart: (site as any)?.sitePeriodStart ?? null,
+      sitePeriodEnd:   (site as any)?.sitePeriodEnd   ?? null,
+      sitePeriodNotes:     (site as any)?.sitePeriodNotes     ?? null,
       armedGuardsRequired: (site as any)?.armedGuardsRequired ?? 0,
       firearmsRequired:    (site as any)?.firearmsRequired    ?? 0,
       batonRequired:       (site as any)?.batonRequired       ?? 0,
@@ -119,9 +119,9 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         siteManagerContact:  site.siteManagerContact ?? undefined,
         guardsRequired:      site.guardsRequired,
         siteType:             (site.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
-        specialDutyStartDate: (site as any).specialDutyStartDate ?? null,
-        specialDutyEndDate:   (site as any).specialDutyEndDate   ?? null,
-        specialDutyNotes:     (site as any).specialDutyNotes     ?? null,
+        sitePeriodStart: (site as any).sitePeriodStart ?? null,
+        sitePeriodEnd:   (site as any).sitePeriodEnd   ?? null,
+        sitePeriodNotes:     (site as any).sitePeriodNotes     ?? null,
         armedGuardsRequired: (site as any).armedGuardsRequired ?? 0,
         firearmsRequired:    (site as any).firearmsRequired    ?? 0,
         batonRequired:       (site as any).batonRequired       ?? 0,
@@ -137,10 +137,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         })) ?? [],
       );
       setAllowedShifts(site.allowedShiftTypes ?? []);
-      setDutyStartDate((site as any).specialDutyStartDate
-        ? new Date((site as any).specialDutyStartDate).toISOString().split('T')[0] : '');
-      setDutyEndDate((site as any).specialDutyEndDate
-        ? new Date((site as any).specialDutyEndDate).toISOString().split('T')[0] : '');
+      setPeriodStart((site as any).sitePeriodStart
+        ? new Date((site as any).sitePeriodStart).toISOString().split('T')[0] : '');
+      setPeriodEnd((site as any).sitePeriodEnd
+        ? new Date((site as any).sitePeriodEnd).toISOString().split('T')[0] : '');
     }
   }, [site, reset]);
 
@@ -172,14 +172,14 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   }
 
   const onSubmit = async (values: SiteFormValues) => {
-    const isSpecialDuty = values.siteType === 'SPECIAL_DUTIES';
+    const needsPeriod = ['TEMPORARY', 'SPECIAL_DUTIES'].includes(values.siteType);
     const payload = {
       ...values,
-      specialDutyStartDate: isSpecialDuty && dutyStartDate
-        ? new Date(dutyStartDate).toISOString() : null,
-      specialDutyEndDate: isSpecialDuty && dutyEndDate
-        ? new Date(dutyEndDate).toISOString() : null,
-      specialDutyNotes: isSpecialDuty ? (values.specialDutyNotes ?? null) : null,
+      sitePeriodStart: needsPeriod && periodStart
+        ? new Date(periodStart).toISOString() : null,
+      sitePeriodEnd: needsPeriod && periodEnd
+        ? new Date(periodEnd).toISOString() : null,
+      sitePeriodNotes: needsPeriod ? (values.sitePeriodNotes ?? null) : null,
       defaultShiftType: null,
       allowedShiftTypes: allowedShifts,
       equipmentItems: equipmentItems
@@ -214,103 +214,145 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
 
           {/* ── SECTION 1: Basic Details ─────────────────────────────── */}
           <Row className="g-3 mb-1">
-            <Col md={8}>
+            <Col md={12}>
               <Form.Group>
                 <Form.Label className="small fw-semibold">Site Name <span className="text-danger">*</span></Form.Label>
                 <Form.Control {...register('siteName')} isInvalid={!!errors.siteName} />
                 <Form.Control.Feedback type="invalid">{errors.siteName?.message}</Form.Control.Feedback>
               </Form.Group>
             </Col>
-            <Col md={4}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">Site Type <span className="text-danger">*</span></Form.Label>
-                <Form.Select
-                  {...register('siteType')}
-                  onChange={(e) => {
-                    const newType = e.target.value;
-                    setValue('siteType', newType as SiteFormValues['siteType']);
-                    if (newType !== 'SPECIAL_DUTIES') {
-                      setDutyStartDate('');
-                      setDutyEndDate('');
-                      setValue('specialDutyStartDate', null);
-                      setValue('specialDutyEndDate', null);
-                      setValue('specialDutyNotes', null);
-                    }
-                  }}
-                >
-                  {SITE_TYPE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
+            <Col md={12}>
+              <Form.Label className="small fw-semibold">Site Type <span className="text-danger">*</span></Form.Label>
+              <div className="d-flex flex-wrap gap-2 mb-1">
+                {([
+                  { value: 'REGULAR',        label: '🏢 Regular',        description: 'Ongoing, no end date',         borderColor: '#6c757d', bg: '#F2F4F7',  textColor: '#1A1A1A', activeBg: '#e2e3e5' },
+                  { value: 'PERMANENT',      label: '🔒 Permanent',      description: 'Long-term contracted site',    borderColor: '#0d6efd', bg: '#cfe2ff',  textColor: '#084298', activeBg: '#b6d4fe' },
+                  { value: 'TEMPORARY',      label: '⏳ Temporary',      description: 'Short-term, has an end date', borderColor: '#ffc107', bg: '#fff3cd',  textColor: '#664d03', activeBg: '#ffe69c' },
+                  { value: 'SPECIAL_DUTIES', label: '🎯 Special Duties', description: 'Event or one-off duty',       borderColor: '#dc3545', bg: '#f8d7da',  textColor: '#842029', activeBg: '#f1aeb5' },
+                ] as const).map((type) => {
+                  const isActive = siteType === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        setValue('siteType', type.value);
+                        if (!['TEMPORARY', 'SPECIAL_DUTIES'].includes(type.value)) {
+                          setPeriodStart(''); setPeriodEnd('');
+                          setValue('sitePeriodStart', null); setValue('sitePeriodEnd', null); setValue('sitePeriodNotes', null);
+                        }
+                      }}
+                      style={{
+                        padding: '8px 16px', minWidth: '150px', textAlign: 'left', cursor: 'pointer',
+                        borderRadius: '0.5rem', transition: 'all 0.15s ease',
+                        border: `2px solid ${isActive ? type.borderColor : '#ced4da'}`,
+                        background: isActive ? type.activeBg : '#fff',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: '0.88rem', color: isActive ? type.textColor : '#1A1A1A' }}>{type.label}</div>
+                      <div style={{ fontSize: '0.72rem', color: isActive ? type.textColor : '#6c757d', marginTop: '2px' }}>{type.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Hidden register field keeps RHF in sync */}
+              <input type="hidden" {...register('siteType')} />
             </Col>
 
-            {siteType === 'TEMPORARY' && (
-              <Col md={12}>
-                <Alert variant="warning" className="py-2 mb-0">
-                  <small>⏳ <strong>Temporary site</strong> — for short-term assignments. Set a clear end date in the contract notes.</small>
-                </Alert>
-              </Col>
-            )}
-            {siteType === 'SPECIAL_DUTIES' && (
+            {/* Period prompt — appears immediately on type selection */}
+            {['TEMPORARY', 'SPECIAL_DUTIES'].includes(siteType) && (
               <Col md={12}>
                 <div style={{
-                  marginTop: '4px', padding: '16px',
-                  background: '#FEF9E7', borderRadius: '0.5rem',
-                  border: '1px solid #F9E79F', borderLeft: '4px solid #E8701A',
+                  padding: '16px', borderRadius: '0.5rem',
+                  background: siteType === 'TEMPORARY' ? '#fff3cd' : '#f8d7da',
+                  border: `1px solid ${siteType === 'TEMPORARY' ? '#ffc107' : '#f5c2c7'}`,
+                  borderLeft: `4px solid ${siteType === 'TEMPORARY' ? '#ffc107' : '#dc3545'}`,
                 }}>
-                  <div style={{ fontWeight: 700, color: '#1B3A6B', marginBottom: '4px', fontSize: '0.9rem' }}>
-                    🎯 Special Duty Period
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#6c757d', marginBottom: '12px' }}>
-                    Select the exact dates this special duty covers. Guards will only be deployable to this site within this date range.
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>{siteType === 'TEMPORARY' ? '⏳' : '🎯'}</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.92rem', color: siteType === 'TEMPORARY' ? '#664d03' : '#842029' }}>
+                        {siteType === 'TEMPORARY' ? 'Temporary Assignment Period' : 'Special Duty Period'}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: siteType === 'TEMPORARY' ? '#856404' : '#b02a37', marginTop: '2px' }}>
+                        {siteType === 'TEMPORARY'
+                          ? 'Select the start and end date for this temporary assignment.'
+                          : 'Select the exact dates this special duty covers. Special duties are typically 1–7 days.'}
+                      </div>
+                    </div>
                   </div>
 
                   <Form.Label className="fw-bold small">
-                    Duty Period <span className="text-danger">*</span>
+                    {siteType === 'TEMPORARY' ? 'Assignment Period' : 'Duty Period'}{' '}
+                    <span className="text-danger">*</span>
                   </Form.Label>
                   <DateRangePicker
-                    startDate={dutyStartDate}
-                    endDate={dutyEndDate}
+                    startDate={periodStart}
+                    endDate={periodEnd}
                     onRangeChange={(start, end) => {
-                      setDutyStartDate(start);
-                      setDutyEndDate(end);
-                      setValue('specialDutyStartDate', start ? new Date(start).toISOString() : null);
-                      setValue('specialDutyEndDate', end ? new Date(end).toISOString() : null);
+                      setPeriodStart(start); setPeriodEnd(end);
+                      setValue('sitePeriodStart', start ? new Date(start).toISOString() : null);
+                      setValue('sitePeriodEnd', end ? new Date(end).toISOString() : null);
                     }}
-                    isInvalid={!!errors.specialDutyStartDate}
-                    errorMessage={errors.specialDutyStartDate?.message as string}
-                    placeholder="Select duty start and end dates..."
+                    isInvalid={!!errors.sitePeriodStart}
+                    errorMessage={errors.sitePeriodStart?.message as string}
+                    placeholder={siteType === 'TEMPORARY' ? 'Select assignment start and end...' : 'Select duty start and end dates...'}
                   />
 
-                  {dutyStartDate && dutyEndDate && (
-                    <div className="mt-2">
-                      <Badge bg="warning" text="dark" style={{ fontSize: '0.8rem' }}>
-                        🗓️{' '}
-                        {new Date(dutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        {' → '}
-                        {new Date(dutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        {' · '}
-                        {Math.ceil((new Date(dutyEndDate).getTime() - new Date(dutyStartDate).getTime()) / (1000 * 60 * 60 * 24)) + 1}
-                        {' day(s)'}
-                      </Badge>
-                    </div>
-                  )}
+                  {periodStart && periodEnd && (() => {
+                    const days = Math.ceil((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    return (
+                      <div className="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                        <Badge bg={siteType === 'TEMPORARY' ? 'warning' : 'danger'} text={siteType === 'TEMPORARY' ? 'dark' : undefined} style={{ fontSize: '0.8rem' }}>
+                          📅 {new Date(periodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {' → '}
+                          {new Date(periodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </Badge>
+                        <Badge bg="secondary" style={{ fontSize: '0.8rem' }}>{days} day{days !== 1 ? 's' : ''}</Badge>
+                        {siteType === 'SPECIAL_DUTIES' && days > 14 && (
+                          <span style={{ fontSize: '0.75rem', color: '#856404', fontWeight: 500 }}>
+                            ⚠️ Special duties are typically short. Consider using Temporary instead.
+                          </span>
+                        )}
+                        {siteType === 'TEMPORARY' && days <= 7 && (
+                          <span style={{ fontSize: '0.75rem', color: '#856404', fontWeight: 500 }}>
+                            💡 For assignments under 7 days, consider using Special Duties.
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <Form.Group className="mt-3">
                     <Form.Label className="small fw-bold">
-                      Nature of Duty <span className="text-muted fw-normal ms-1">(optional)</span>
+                      {siteType === 'TEMPORARY' ? 'Assignment Description' : 'Nature of Duty'}
+                      <span className="text-muted fw-normal ms-1">(optional)</span>
                     </Form.Label>
                     <Form.Control
                       type="text"
-                      placeholder="e.g. URA Annual Gala Dinner, Presidential Visit Security, Product Launch Event"
+                      placeholder={siteType === 'TEMPORARY'
+                        ? 'e.g. Nile Breweries construction site — 3-month project'
+                        : 'e.g. URA Annual Gala Dinner, Presidential Visit Security'}
                       maxLength={500}
-                      {...register('specialDutyNotes')}
+                      {...register('sitePeriodNotes')}
                     />
-                    <Form.Text className="text-muted">
-                      A brief description to help identify this special duty assignment.
-                    </Form.Text>
                   </Form.Group>
+                </div>
+              </Col>
+            )}
+
+            {/* Confirmation notes for non-period types */}
+            {siteType === 'REGULAR' && (
+              <Col md={12}>
+                <div style={{ padding: '10px 14px', background: '#F2F4F7', borderRadius: '0.5rem', border: '1px solid #D0D5DD', borderLeft: '4px solid #6c757d', fontSize: '0.82rem', color: '#4A5568' }}>
+                  ✅ Regular sites are ongoing assignments with no defined end date. No period selection needed.
+                </div>
+              </Col>
+            )}
+            {siteType === 'PERMANENT' && (
+              <Col md={12}>
+                <div style={{ padding: '10px 14px', background: '#cfe2ff', borderRadius: '0.5rem', border: '1px solid #9ec5fe', borderLeft: '4px solid #0d6efd', fontSize: '0.82rem', color: '#084298' }}>
+                  🔒 Permanent sites are long-term contracted assignments. The contract governs the duration — no period selection needed here.
                 </div>
               </Col>
             )}

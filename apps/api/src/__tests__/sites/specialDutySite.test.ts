@@ -48,9 +48,9 @@ function makeSiteRow(overrides: Record<string, unknown> = {}) {
     specialInstructions:  null,
     guardsRequired:       4,
     siteType:             'REGULAR',
-    specialDutyStartDate: null,
-    specialDutyEndDate:   null,
-    specialDutyNotes:     null,
+    sitePeriodStart: null,
+    sitePeriodEnd:   null,
+    sitePeriodNotes:     null,
     armedGuardsRequired:  0,
     firearmsRequired:     0,
     batonRequired:        0,
@@ -83,9 +83,9 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
   it('creates site with duty dates when siteType = SPECIAL_DUTIES', async () => {
     const created = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-07-10'),
-      specialDutyEndDate:   new Date('2026-07-12'),
-      specialDutyNotes:     'URA Gala',
+      sitePeriodStart: new Date('2026-07-10'),
+      sitePeriodEnd:   new Date('2026-07-12'),
+      sitePeriodNotes:     'URA Gala',
     });
     mock.site.create.mockResolvedValue(created);
     mock.site.findUnique.mockResolvedValue({ ...created, deployments: [] });
@@ -97,16 +97,16 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       location:             'Kampala',
       guardsRequired:       4,
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: '2026-07-10T00:00:00.000Z',
-      specialDutyEndDate:   '2026-07-12T00:00:00.000Z',
-      specialDutyNotes:     'URA Gala',
+      sitePeriodStart: '2026-07-10T00:00:00.000Z',
+      sitePeriodEnd:   '2026-07-12T00:00:00.000Z',
+      sitePeriodNotes:     'URA Gala',
     }, 'user1');
 
     expect(result.siteType).toBe('SPECIAL_DUTIES');
-    expect(result.specialDutyStartDate).toBeTruthy();
-    expect(result.specialDutyEndDate).toBeTruthy();
-    expect(result.specialDutyNotes).toBe('URA Gala');
-    expect(result.dutyDurationDays).toBe(3);
+    expect(result.sitePeriodStart).toBeTruthy();
+    expect(result.sitePeriodEnd).toBeTruthy();
+    expect(result.sitePeriodNotes).toBe('URA Gala');
+    expect(result.periodDays).toBe(3);
   });
 
   it('throws 400 when SPECIAL_DUTIES but no start date', async () => {
@@ -117,7 +117,7 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
         location:           'Kampala',
         guardsRequired:     4,
         siteType:           'SPECIAL_DUTIES',
-        specialDutyEndDate: '2026-07-12T00:00:00.000Z',
+        sitePeriodEnd: '2026-07-12T00:00:00.000Z',
       }, 'user1'),
     ).rejects.toThrow(AppError);
   });
@@ -130,7 +130,7 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
         location:             'Kampala',
         guardsRequired:       4,
         siteType:             'SPECIAL_DUTIES',
-        specialDutyStartDate: '2026-07-10T00:00:00.000Z',
+        sitePeriodStart: '2026-07-10T00:00:00.000Z',
       }, 'user1'),
     ).rejects.toThrow(AppError);
   });
@@ -143,8 +143,8 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
         location:             'Kampala',
         guardsRequired:       4,
         siteType:             'SPECIAL_DUTIES',
-        specialDutyStartDate: '2026-07-15T00:00:00.000Z',
-        specialDutyEndDate:   '2026-07-10T00:00:00.000Z',
+        sitePeriodStart: '2026-07-15T00:00:00.000Z',
+        sitePeriodEnd:   '2026-07-10T00:00:00.000Z',
       }, 'user1'),
     ).rejects.toThrow(AppError);
   });
@@ -152,8 +152,8 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
   it('accepts same day as start and end (1-day duty)', async () => {
     const created = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-07-10'),
-      specialDutyEndDate:   new Date('2026-07-10'),
+      sitePeriodStart: new Date('2026-07-10'),
+      sitePeriodEnd:   new Date('2026-07-10'),
     });
     mock.site.create.mockResolvedValue(created);
     mock.site.findUnique.mockResolvedValue({ ...created, deployments: [] });
@@ -164,11 +164,11 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       location:             'Kampala',
       guardsRequired:       4,
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: '2026-07-10T00:00:00.000Z',
-      specialDutyEndDate:   '2026-07-10T00:00:00.000Z',
+      sitePeriodStart: '2026-07-10T00:00:00.000Z',
+      sitePeriodEnd:   '2026-07-10T00:00:00.000Z',
     }, 'user1');
 
-    expect(result.dutyDurationDays).toBe(1);
+    expect(result.periodDays).toBe(1);
   });
 
   it('clears duty dates when siteType = REGULAR', async () => {
@@ -188,20 +188,20 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       location:             'Kampala',
       guardsRequired:       2,
       siteType:             'REGULAR',
-      specialDutyStartDate: '2026-07-10T00:00:00.000Z',
-      specialDutyEndDate:   '2026-07-12T00:00:00.000Z',
+      sitePeriodStart: '2026-07-10T00:00:00.000Z',
+      sitePeriodEnd:   '2026-07-12T00:00:00.000Z',
     }, 'user1');
 
-    expect(captured[0]!['specialDutyStartDate']).toBeNull();
-    expect(captured[0]!['specialDutyEndDate']).toBeNull();
+    expect(captured[0]!['sitePeriodStart']).toBeNull();
+    expect(captured[0]!['sitePeriodEnd']).toBeNull();
   });
 
   it('logs warning when duty period > 30 days', async () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const created = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-07-01'),
-      specialDutyEndDate:   new Date('2026-08-15'),
+      sitePeriodStart: new Date('2026-07-01'),
+      sitePeriodEnd:   new Date('2026-08-15'),
     });
     mock.site.create.mockResolvedValue(created);
     mock.site.findUnique.mockResolvedValue({ ...created, deployments: [] });
@@ -212,19 +212,19 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       location:             'Kampala',
       guardsRequired:       2,
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: '2026-07-01T00:00:00.000Z',
-      specialDutyEndDate:   '2026-08-15T00:00:00.000Z',
+      sitePeriodStart: '2026-07-01T00:00:00.000Z',
+      sitePeriodEnd:   '2026-08-15T00:00:00.000Z',
     }, 'user1');
 
     expect(spy).toHaveBeenCalledWith(expect.stringContaining('unusually long'));
     spy.mockRestore();
   });
 
-  it('dutyDurationDays: Jan 1 → Jan 3 = 3 days', async () => {
+  it('periodDays: Jan 1 → Jan 3 = 3 days', async () => {
     const created = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-01-01'),
-      specialDutyEndDate:   new Date('2026-01-03'),
+      sitePeriodStart: new Date('2026-01-01'),
+      sitePeriodEnd:   new Date('2026-01-03'),
     });
     mock.site.create.mockResolvedValue(created);
     mock.site.findUnique.mockResolvedValue({ ...created, deployments: [] });
@@ -235,11 +235,11 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       location:             'Kampala',
       guardsRequired:       2,
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: '2026-01-01T00:00:00.000Z',
-      specialDutyEndDate:   '2026-01-03T00:00:00.000Z',
+      sitePeriodStart: '2026-01-01T00:00:00.000Z',
+      sitePeriodEnd:   '2026-01-03T00:00:00.000Z',
     }, 'user1');
 
-    expect(result.dutyDurationDays).toBe(3);
+    expect(result.periodDays).toBe(3);
   });
 });
 
@@ -249,8 +249,8 @@ describe('siteService.update() — SPECIAL_DUTIES', () => {
   it('clearing duty dates when switching from SPECIAL_DUTIES to REGULAR', async () => {
     const existing = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-07-10'),
-      specialDutyEndDate:   new Date('2026-07-12'),
+      sitePeriodStart: new Date('2026-07-10'),
+      sitePeriodEnd:   new Date('2026-07-12'),
     });
     mock.site.findUnique
       .mockResolvedValueOnce(existing)
@@ -264,9 +264,9 @@ describe('siteService.update() — SPECIAL_DUTIES', () => {
 
     await siteService.update('s1', { siteType: 'REGULAR' }, 'user1');
 
-    expect(captured[0]!['specialDutyStartDate']).toBeNull();
-    expect(captured[0]!['specialDutyEndDate']).toBeNull();
-    expect(captured[0]!['specialDutyNotes']).toBeNull();
+    expect(captured[0]!['sitePeriodStart']).toBeNull();
+    expect(captured[0]!['sitePeriodEnd']).toBeNull();
+    expect(captured[0]!['sitePeriodNotes']).toBeNull();
   });
 
   it('requires duty dates when changing to SPECIAL_DUTIES without providing them', async () => {
@@ -282,29 +282,29 @@ describe('siteService.update() — SPECIAL_DUTIES', () => {
 // ── GET /clients/sites/all (toSiteResponse) ────────────────────────────────────
 
 describe('toSiteResponse — special duty fields', () => {
-  it('returns specialDutyStartDate and dutyDurationDays for SPECIAL_DUTIES sites', async () => {
+  it('returns sitePeriodStart and periodDays for SPECIAL_DUTIES sites', async () => {
     const row = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
-      specialDutyStartDate: new Date('2026-07-10'),
-      specialDutyEndDate:   new Date('2026-07-12'),
-      specialDutyNotes:     'URA Gala',
+      sitePeriodStart: new Date('2026-07-10'),
+      sitePeriodEnd:   new Date('2026-07-12'),
+      sitePeriodNotes:     'URA Gala',
     });
     mock.site.findUnique.mockResolvedValue({ ...row, deployments: [] });
     mock.site.count.mockResolvedValue(0);
 
     const result = await siteService.getById('s1');
-    expect(result.specialDutyStartDate).toContain('2026-07-10');
-    expect(result.specialDutyEndDate).toContain('2026-07-12');
-    expect(result.dutyDurationDays).toBe(3);
-    expect(result.specialDutyNotes).toBe('URA Gala');
+    expect(result.sitePeriodStart).toContain('2026-07-10');
+    expect(result.sitePeriodEnd).toContain('2026-07-12');
+    expect(result.periodDays).toBe(3);
+    expect(result.sitePeriodNotes).toBe('URA Gala');
   });
 
   it('returns null for all duty fields on non-special-duty sites', async () => {
     mock.site.findUnique.mockResolvedValue({ ...makeSiteRow(), deployments: [] });
 
     const result = await siteService.getById('s1');
-    expect(result.specialDutyStartDate).toBeNull();
-    expect(result.specialDutyEndDate).toBeNull();
-    expect(result.dutyDurationDays).toBeNull();
+    expect(result.sitePeriodStart).toBeNull();
+    expect(result.sitePeriodEnd).toBeNull();
+    expect(result.periodDays).toBeNull();
   });
 });

@@ -307,7 +307,7 @@ export default function ClientDetailPage() {
                         <span
                           role="button"
                           onClick={() => setExpandedSiteId(isExpanded ? null : s.id)}
-                          style={{ cursor: (s.specialInstructions || (s as any).specialDutyStartDate) ? 'pointer' : undefined }}
+                          style={{ cursor: (s.specialInstructions || (s as any).sitePeriodStart) ? 'pointer' : undefined }}
                         >
                           {s.siteName}
                         </span>
@@ -321,18 +321,22 @@ export default function ClientDetailPage() {
                             📋
                           </span>
                         )}
-                        {s.siteType === 'SPECIAL_DUTIES' && (s as any).specialDutyStartDate && (s as any).specialDutyEndDate && (
+                        {(s as any).hasPeriod && (s as any).sitePeriodStart && (s as any).sitePeriodEnd && (
                           <div className="mt-1">
-                            <Badge bg="warning" text="dark" style={{ fontSize: '0.72rem' }}>
-                              🗓️{' '}
-                              {new Date((s as any).specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                            <Badge
+                              bg={s.siteType === 'TEMPORARY' ? 'warning' : 'danger'}
+                              text={s.siteType === 'TEMPORARY' ? 'dark' : undefined}
+                              style={{ fontSize: '0.72rem' }}
+                            >
+                              📅{' '}
+                              {new Date((s as any).sitePeriodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                               {' → '}
-                              {new Date((s as any).specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              {(s as any).dutyDurationDays ? ` (${(s as any).dutyDurationDays} days)` : ''}
+                              {new Date((s as any).sitePeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {(s as any).periodDays ? ` · ${(s as any).periodDays}d` : ''}
                             </Badge>
-                            {(s as any).specialDutyNotes && (
+                            {(s as any).sitePeriodNotes && (
                               <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '2px' }}>
-                                {(s as any).specialDutyNotes}
+                                {(s as any).sitePeriodNotes}
                               </div>
                             )}
                           </div>
@@ -387,7 +391,7 @@ export default function ClientDetailPage() {
                         </div>
                       </td>
                     </tr>
-                    {isExpanded && (s.specialInstructions || s.siteType === 'SPECIAL_DUTIES') && (
+                    {isExpanded && (s.specialInstructions || (s as any).hasPeriod) && (
                       <tr>
                         <td colSpan={8} style={{ background: '#FFFBEB', padding: '10px 16px' }}>
                           {s.specialInstructions && (
@@ -401,40 +405,32 @@ export default function ClientDetailPage() {
                               </div>
                             </div>
                           )}
-                          {s.siteType === 'SPECIAL_DUTIES' && (
-                            <Card className="mb-0 border-0" style={{ background: '#FEF9E7' }}>
+                          {(s as any).hasPeriod && (
+                            <Card className="mb-0 border-0" style={{ background: s.siteType === 'TEMPORARY' ? '#fff3cd' : '#FEF9E7' }}>
                               <Card.Body className="py-2 px-3">
-                                <div className="fw-bold small mb-1" style={{ color: '#1B3A6B' }}>🎯 Special Duty Period</div>
-                                {(s as any).specialDutyStartDate && (s as any).specialDutyEndDate ? (
+                                <div className="fw-bold small mb-1" style={{ color: s.siteType === 'TEMPORARY' ? '#664d03' : '#842029' }}>
+                                  {s.siteType === 'TEMPORARY' ? '⏳ Temporary Assignment Period' : '🎯 Special Duty Period'}
+                                </div>
+                                {(s as any).sitePeriodStart && (s as any).sitePeriodEnd ? (
                                   <>
-                                    <div className="small">
-                                      <strong>From:</strong>{' '}
-                                      {new Date((s as any).specialDutyStartDate).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-                                    </div>
-                                    <div className="small mt-1">
-                                      <strong>To:</strong>{' '}
-                                      {new Date((s as any).specialDutyEndDate).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-                                    </div>
-                                    <div className="small mt-1">
-                                      <strong>Duration:</strong> {(s as any).dutyDurationDays} day(s)
-                                    </div>
-                                    {(s as any).specialDutyNotes && (
-                                      <div className="small mt-1 text-muted fst-italic">
-                                        "{(s as any).specialDutyNotes}"
-                                      </div>
+                                    <div className="small"><strong>From:</strong>{' '}{new Date((s as any).sitePeriodStart).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                                    <div className="small mt-1"><strong>To:</strong>{' '}{new Date((s as any).sitePeriodEnd).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                                    <div className="small mt-1"><strong>Duration:</strong> {(s as any).periodDays} day(s)</div>
+                                    {(s as any).sitePeriodNotes && (
+                                      <div className="small mt-1 text-muted fst-italic">"{(s as any).sitePeriodNotes}"</div>
                                     )}
                                     {(() => {
                                       const now   = new Date();
-                                      const start = new Date((s as any).specialDutyStartDate);
-                                      const end   = new Date((s as any).specialDutyEndDate);
+                                      const start = new Date((s as any).sitePeriodStart);
+                                      const end   = new Date((s as any).sitePeriodEnd);
                                       if (now > end) return <Badge bg="secondary" className="mt-2">✓ Completed</Badge>;
-                                      if (now >= start && now <= end) return <Badge bg="success" className="mt-2">🔴 Live now</Badge>;
+                                      if (now >= start && now <= end) return <Badge bg="success" className="mt-2">🔴 Active now</Badge>;
                                       const daysUntil = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                                       return <Badge bg="info" className="mt-2">Starts in {daysUntil} day(s)</Badge>;
                                     })()}
                                   </>
                                 ) : (
-                                  <p className="mb-0 small text-muted">No duty period dates recorded.</p>
+                                  <p className="mb-0 small text-muted">No period dates recorded.</p>
                                 )}
                               </Card.Body>
                             </Card>

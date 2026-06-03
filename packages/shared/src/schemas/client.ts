@@ -99,9 +99,9 @@ const _BaseSiteSchema = z.object({
     quantity: z.number().int().min(1).default(1),
     notes:    z.string().optional(),
   })).optional(),
-  specialDutyStartDate: z.string().datetime().optional().nullable(),
-  specialDutyEndDate:   z.string().datetime().optional().nullable(),
-  specialDutyNotes:     z.string().max(500).optional().nullable(),
+  sitePeriodStart: z.string().datetime().optional().nullable(),
+  sitePeriodEnd:   z.string().datetime().optional().nullable(),
+  sitePeriodNotes:     z.string().max(500).optional().nullable(),
 });
 
 export const CreateSiteInputSchema = _BaseSiteSchema;
@@ -116,52 +116,52 @@ export const CreateSiteSchema = _BaseSiteSchema
   )
   .refine(
     (data) => {
-      if (data.siteType === 'SPECIAL_DUTIES') {
-        return !!data.specialDutyStartDate && !!data.specialDutyEndDate;
+      if (['TEMPORARY', 'SPECIAL_DUTIES'].includes(data.siteType ?? '')) {
+        return !!data.sitePeriodStart && !!data.sitePeriodEnd;
       }
       return true;
     },
     {
-      message: 'Special Duties sites must have a start and end date for the duty period.',
-      path: ['specialDutyStartDate'],
+      message: 'Temporary and Special Duties sites must have a start and end date.',
+      path: ['sitePeriodStart'],
     },
   )
   .refine(
     (data) => {
-      if (data.specialDutyStartDate && data.specialDutyEndDate) {
-        return new Date(data.specialDutyEndDate) >= new Date(data.specialDutyStartDate);
+      if (data.sitePeriodStart && data.sitePeriodEnd) {
+        return new Date(data.sitePeriodEnd) >= new Date(data.sitePeriodStart);
       }
       return true;
     },
     {
-      message: 'Duty end date must be on or after the start date.',
-      path: ['specialDutyEndDate'],
+      message: 'Period end date must be on or after the start date.',
+      path: ['sitePeriodEnd'],
     },
   );
 
 export const UpdateSiteSchema = _BaseSiteSchema.omit({ clientId: true }).partial()
   .refine(
     (data) => {
-      if (data.siteType === 'SPECIAL_DUTIES') {
-        return !!data.specialDutyStartDate && !!data.specialDutyEndDate;
+      if (['TEMPORARY', 'SPECIAL_DUTIES'].includes(data.siteType ?? '')) {
+        return !!data.sitePeriodStart && !!data.sitePeriodEnd;
       }
       return true;
     },
     {
-      message: 'Special Duties sites must have a start and end date for the duty period.',
-      path: ['specialDutyStartDate'],
+      message: 'Temporary and Special Duties sites must have a start and end date.',
+      path: ['sitePeriodStart'],
     },
   )
   .refine(
     (data) => {
-      if (data.specialDutyStartDate && data.specialDutyEndDate) {
-        return new Date(data.specialDutyEndDate) >= new Date(data.specialDutyStartDate);
+      if (data.sitePeriodStart && data.sitePeriodEnd) {
+        return new Date(data.sitePeriodEnd) >= new Date(data.sitePeriodStart);
       }
       return true;
     },
     {
-      message: 'Duty end date must be on or after the start date.',
-      path: ['specialDutyEndDate'],
+      message: 'Period end date must be on or after the start date.',
+      path: ['sitePeriodEnd'],
     },
   );
 
@@ -245,11 +245,12 @@ export interface SiteResponse {
   // Classification
   siteType: string;
 
-  // Special duty period (only set when siteType === 'SPECIAL_DUTIES')
-  specialDutyStartDate: string | null;
-  specialDutyEndDate:   string | null;
-  specialDutyNotes:     string | null;
-  dutyDurationDays:     number | null;
+  // Site period (set for TEMPORARY and SPECIAL_DUTIES)
+  sitePeriodStart: string | null;
+  sitePeriodEnd:   string | null;
+  sitePeriodNotes: string | null;
+  periodDays:      number | null;
+  hasPeriod:       boolean;
 
   // Security requirements (quantities)
   armedGuardsRequired: number;

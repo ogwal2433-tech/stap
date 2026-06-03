@@ -62,10 +62,11 @@ export interface ZoneSite {
   otherWeaponsNotes:   string | null;
   isArmed:             boolean;
   specialInstructions: string | null;
-  specialDutyStartDate: string | null;
-  specialDutyEndDate:   string | null;
-  specialDutyNotes:     string | null;
-  dutyDurationDays:     number | null;
+  sitePeriodStart: string | null;
+  sitePeriodEnd:   string | null;
+  sitePeriodNotes: string | null;
+  periodDays:      number | null;
+  hasPeriod:       boolean;
   client: {
     id:         string;
     clientName: string;
