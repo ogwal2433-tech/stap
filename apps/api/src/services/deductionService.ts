@@ -7,17 +7,20 @@ import type { CreateDeductionInput, DeductionResponse } from '@stap/shared';
 
 function fmt(d: any): DeductionResponse {
   return {
-    id:            d.id,
-    guardId:       d.guardId,
-    guardName:     d.guard ? `${d.guard.firstName} ${d.guard.lastName}` : '',
-    type:          d.type,
-    amount:        d.amount,
-    description:   d.description,
-    effectiveDate: d.effectiveDate.toISOString(),
-    status:        d.status,
-    payrollRunId:  d.payrollRunId,
-    createdBy:     d.createdBy,
-    createdAt:     d.createdAt.toISOString(),
+    id:               d.id,
+    guardId:          d.guardId,
+    guardName:        d.guard ? `${d.guard.firstName} ${d.guard.lastName}` : '',
+    type:             d.type,
+    amount:           d.amount,
+    description:      d.description,
+    effectiveDate:    d.effectiveDate.toISOString(),
+    status:           d.status,
+    payrollRunId:     d.payrollRunId ?? null,
+    appliedInPayroll: d.payrollRun
+      ? { month: d.payrollRun.month, year: d.payrollRun.year }
+      : null,
+    createdBy:        d.createdBy,
+    createdAt:        d.createdAt.toISOString(),
   };
 }
 
@@ -37,7 +40,7 @@ class DeductionService {
         effectiveDate: new Date(data.effectiveDate),
         createdBy,
       },
-      include: { guard: true },
+      include: { guard: true, payrollRun: { select: { month: true, year: true } } },
     });
 
     await QueueService.logAudit({
@@ -54,7 +57,10 @@ class DeductionService {
   async listByGuard(guardId: string): Promise<DeductionResponse[]> {
     const deductions = await prisma.guardDeduction.findMany({
       where:   { guardId },
-      include: { guard: true },
+      include: {
+        guard:      true,
+        payrollRun: { select: { month: true, year: true } },
+      },
       orderBy: { effectiveDate: 'asc' },
     });
     return deductions.map(fmt);
@@ -67,7 +73,10 @@ class DeductionService {
 
     const deductions = await prisma.guardDeduction.findMany({
       where,
-      include: { guard: true },
+      include: {
+        guard:      true,
+        payrollRun: { select: { month: true, year: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return deductions.map(fmt);
@@ -75,15 +84,15 @@ class DeductionService {
 
   async cancel(id: string, cancelledBy: string): Promise<DeductionResponse> {
     const deduction = await prisma.guardDeduction.findUnique({
-      where: { id },
-      include: { guard: true },
+      where:   { id },
+      include: { guard: true, payrollRun: { select: { month: true, year: true } } },
     });
     if (!deduction) throw new NotFoundError('Deduction not found');
 
     const updated = await prisma.guardDeduction.update({
-      where: { id },
-      data:  { status: 'CANCELLED' },
-      include: { guard: true },
+      where:   { id },
+      data:    { status: 'CANCELLED' },
+      include: { guard: true, payrollRun: { select: { month: true, year: true } } },
     });
 
     await QueueService.logAudit({

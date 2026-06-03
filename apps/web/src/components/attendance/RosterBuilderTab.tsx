@@ -1,269 +1,234 @@
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner,
+  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useCreateRoster } from '../../hooks/useAttendance';
-import { useShiftTypes } from '../../hooks/useSettings';
+import { useMyZones, useZones, useZoneRosterData } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
-import { SearchableSelect } from '../ui/SearchableSelect';
-import { attendanceApi } from '../../lib/attendance.api';
-import type { ConflictDetail, RosterCreationResult, SiteResponse } from '@stap/shared';
-import { clientsApi } from '../../lib/clients.api';
-import { useQuery } from '@tanstack/react-query';
-import { guardsApi } from '../../lib/guards.api';
-import { usersApi } from '../../lib/users.api';
+import { useAuth } from '../../context/AuthContext';
+import type { ConflictDetail, RosterCreationResult, ZoneSite, ZoneRosterGuard } from '@stap/shared';
+import InitialsAvatar from '../ui/InitialsAvatar';
+import { exportRosterDraft } from '../../lib/exportToExcel';
 
-const DAYS_OF_WEEK = [
-  { label: 'Sun', value: 0 },
-  { label: 'Mon', value: 1 },
-  { label: 'Tue', value: 2 },
-  { label: 'Wed', value: 3 },
-  { label: 'Thu', value: 4 },
-  { label: 'Fri', value: 5 },
-  { label: 'Sat', value: 6 },
-];
-
-type DeploymentType = 'UNARMED' | 'ARMED' | 'FIREARMS';
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const SHIFT_LABELS: Record<string, string> = { DAY: 'Day', NIGHT: 'Night', FULL_24: '24hr' };
+
+const numberBadgeStyle: React.CSSProperties = {
+  width: '28px', height: '28px', borderRadius: '50%',
+  background: '#1B3A6B', color: 'white',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontWeight: 'bold', fontSize: '0.85rem', flexShrink: 0,
+};
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface SelectedGuard {
+  id:        string;
+  firstName: string;
+  lastName:  string;
+  rank:      string | null;
+  photoUrl:  string | null;
+}
+
+const ADMIN_ROLES = ['DIRECTOR', 'ASSISTANT_MANAGER'];
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function RosterBuilderTab() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const createRoster = useCreateRoster();
-  const { data: shiftTypes = [] } = useShiftTypes(true);
 
-  // Step state
-  const [selectedSiteId, setSelectedSiteId] = useState('');
-  const [selectedGuardIds, setSelectedGuardIds] = useState<string[]>([]);
-  const [guardOvertimeHours, setGuardOvertimeHours] = useState<Record<string, number>>({});
-  const [shiftTypeCode, setShiftTypeCode] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [supervisorId, setSupervisorId] = useState('');
-  const [startDate, setStartDate] = useState(todayStr());
-  const [recurring, setRecurring] = useState(false);
-  const [endDate, setEndDate] = useState('');
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [deploymentType, setDeploymentType] = useState<DeploymentType>('UNARMED');
-  const [weaponsDetails, setWeaponsDetails] = useState('');
+  const isAdmin = ADMIN_ROLES.includes(user?.role ?? '');
 
-  // Guard list search state
-  const [guardSearch, setGuardSearch] = useState('');
+  // ── Zone data (role-based) ──────────────────────────────────────────────────
+  const { data: adminZonesData, isLoading: adminZonesLoading } = useZones({ isActive: true });
+  const { data: myZonesRaw, isLoading: myZonesLoading } = useMyZones();
 
-  // Pre-submission conflict state — guard IDs already deployed on selected date
-  const [deployedToday, setDeployedToday] = useState<string[]>([]);
+  const zones = isAdmin
+    ? (adminZonesData?.data ?? [])
+    : (myZonesRaw ?? []);
+  const zonesLoading = isAdmin ? adminZonesLoading : myZonesLoading;
 
-  // Post-submission result
-  const [result, setResult] = useState<RosterCreationResult | null>(null);
-  // All-conflicts result (409) stored separately for the failure alert
-  const [failedResult, setFailedResult] = useState<RosterCreationResult | null>(null);
+  // ── Step state ─────────────────────────────────────────────────────────────
+  const [selectedZoneId, setSelectedZoneId] = useState('');
+  const [selectedDate,   setSelectedDate]   = useState(todayStr());
+  const [selectedSite,   setSelectedSite]   = useState<ZoneSite | null>(null);
+  const [selectedShift,  setSelectedShift]  = useState<'DAY' | 'NIGHT' | 'FULL_24' | ''>('');
+  const [selectedGuards, setSelectedGuards] = useState<SelectedGuard[]>([]);
+  const [guardSearch,    setGuardSearch]    = useState('');
 
-  // Fetch all sites
-  const { data: sitesData, isLoading: sitesLoading } = useQuery({
-    queryKey: ['sites-all'],
-    queryFn: () => clientsApi.getAllSites({ limit: 200 }),
-  });
+  // ── Zone roster data ───────────────────────────────────────────────────────
+  const { data: rosterData, isLoading: rosterDataLoading } =
+    useZoneRosterData(selectedZoneId || null, selectedDate);
 
-  // Fetch all active guards
-  const { data: guardsData } = useQuery({
-    queryKey: ['guards-roster'],
-    queryFn: () => guardsApi.list({ page: 1, limit: 200, status: 'ACTIVE', sortBy: 'lastName', sortOrder: 'asc' }),
-  });
+  const selectedZone = zones.find((z) => z.id === selectedZoneId) ?? null;
 
-  // Fetch supervisors
-  const { data: supervisorsData, isLoading: supervisorsLoading } = useQuery({
-    queryKey: ['supervisors'],
-    queryFn: () => usersApi.list({ roles: 'OPERATIONS_SUPERVISOR,FIELD_SUPERVISOR', status: 'ACTIVE' }),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // When selected date changes, fetch already-deployed guards for that date
+  // ── Auto-select single zone ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!startDate) { setDeployedToday([]); return; }
-    const isoDate = `${startDate}T00:00:00.000Z`;
-    attendanceApi.getTodaysDeployments({ date: isoDate, limit: 500 }).then((res) => {
-      setDeployedToday(res.data.map((d) => d.guard.id));
-    }).catch(() => setDeployedToday([]));
-  }, [startDate]);
-
-  const selectedSite = sitesData?.data.find((s) => s.id === selectedSiteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
-
-  // Shift types filtered to those allowed at the selected site
-  const availableShiftTypes = useMemo(() => {
-    if (!selectedSite?.allowedShiftTypes?.length) return shiftTypes;
-    return shiftTypes.filter((s) => selectedSite.allowedShiftTypes.includes(s.code));
-  }, [shiftTypes, selectedSite]);
-
-  // Build options for SearchableSelect
-  const siteOptions = useMemo(
-    () => (sitesData?.data ?? []).map((s) => ({
-      value:    s.id,
-      label:    s.siteName,
-      sublabel: (s as SiteResponse & { client?: { clientName: string } }).client?.clientName ?? '',
-    })),
-    [sitesData],
-  );
-
-  const supervisorOptions = useMemo(
-    () => (supervisorsData?.data ?? []).map((u) => ({
-      value:    u.id,
-      label:    u.name,
-      sublabel: u.role.replace(/_/g, ' '),
-    })),
-    [supervisorsData],
-  );
-
-  const filteredGuards = useMemo(() => {
-    if (!guardsData?.data) return [];
-    const q = guardSearch.toLowerCase();
-    return guardsData.data.filter((g) =>
-      `${g.fullName} ${g.phone ?? ''}`.toLowerCase().includes(q),
-    );
-  }, [guardsData, guardSearch]);
-
-  function handleSiteChange(siteId: string) {
-    setSelectedSiteId(siteId);
-    setSelectedGuardIds([]);
-
-    const site = sitesData?.data.find((s) => s.id === siteId) as (SiteResponse & { client?: { clientName: string } }) | undefined;
-    if (!site) return;
-
-    if (site.defaultShiftType) {
-      handleShiftSelect(site.defaultShiftType);
+    if (zones.length === 1 && !selectedZoneId) {
+      setSelectedZoneId(zones[0].id);
     }
+  }, [zones, selectedZoneId]);
 
-    if (site.requiresFirearms) {
-      setDeploymentType('FIREARMS');
-    } else if (site.requiresArmedGuards) {
-      setDeploymentType('ARMED');
-    } else {
-      setDeploymentType('UNARMED');
+  // ── Guard filtering ────────────────────────────────────────────────────────
+  const selectedIds = useMemo(
+    () => new Set(selectedGuards.map((g) => g.id)),
+    [selectedGuards],
+  );
+
+  const filteredAvailable = useMemo(() => {
+    const all: ZoneRosterGuard[] = rosterData?.guards ?? [];
+    return all
+      .filter((g) => !selectedIds.has(g.id))
+      .filter((g) =>
+        !guardSearch || g.fullName.toLowerCase().includes(guardSearch.toLowerCase()),
+      );
+  }, [rosterData, selectedIds, guardSearch]);
+
+  const requiredGuards = selectedSite?.guardsRequired ?? 0;
+  const isAtLimit      = requiredGuards > 0 && selectedGuards.length >= requiredGuards;
+  const isOverLimit    = requiredGuards > 0 && selectedGuards.length > requiredGuards;
+
+  const badgeBg =
+    selectedGuards.length === 0 ? 'secondary' :
+    requiredGuards === 0        ? 'success'   :
+    selectedGuards.length < requiredGuards  ? 'warning'  :
+    selectedGuards.length === requiredGuards ? 'success' : 'danger';
+
+  const badgeText = requiredGuards > 0
+    ? `${selectedGuards.length} / ${requiredGuards}`
+    : `${selectedGuards.length} selected`;
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+  function handleZoneChange(zoneId: string) {
+    setSelectedZoneId(zoneId);
+    setSelectedSite(null);
+    setSelectedGuards([]);
+    setGuardSearch('');
+    setSelectedShift('');
+  }
+
+  function handleDateChange(date: string) {
+    setSelectedDate(date);
+    setSelectedGuards([]);
+  }
+
+  function handleSiteSelect(site: ZoneSite) {
+    const isSame = selectedSite?.id === site.id;
+    setSelectedSite(isSame ? null : site);
+    setSelectedGuards([]);
+    setGuardSearch('');
+    if (!isSame && site.defaultShiftType) {
+      setSelectedShift(site.defaultShiftType as 'DAY' | 'NIGHT' | 'FULL_24');
     }
   }
 
-  function toggleGuard(guardId: string) {
-    setSelectedGuardIds((prev) =>
-      prev.includes(guardId) ? prev.filter((id) => id !== guardId) : [...prev, guardId],
-    );
+  function selectGuard(guard: ZoneRosterGuard) {
+    if (selectedIds.has(guard.id) || isAtLimit) return;
+    setSelectedGuards((prev) => [
+      ...prev,
+      { id: guard.id, firstName: guard.firstName, lastName: guard.lastName,
+        rank: guard.rank, photoUrl: guard.photoUrl },
+    ]);
   }
 
-  function toggleDayOfWeek(day: number) {
-    setDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-    );
+  function removeGuard(guardId: string) {
+    setSelectedGuards((prev) => prev.filter((g) => g.id !== guardId));
   }
 
-  function handleShiftSelect(code: string) {
-    setShiftTypeCode(code);
-    const shift = shiftTypes.find((s) => s.code === code);
-    if (shift?.startTime) setStartTime(shift.startTime);
-    if (shift?.endTime) setEndTime(shift.endTime);
+  function resetAll() {
+    setSelectedZoneId('');
+    setSelectedSite(null);
+    setSelectedGuards([]);
+    setGuardSearch('');
+    setSelectedShift('');
+    setSelectedDate(todayStr());
   }
 
-  const conflictedSelected = selectedGuardIds.filter((id) => deployedToday.includes(id));
+  const [result, setResult] = useState<{ created: number; conflicts: ConflictDetail[] } | null>(null);
+
+  function handleExportRoster() {
+    if (!selectedSite || !selectedShift || selectedGuards.length === 0) return;
+    exportRosterDraft({
+      zoneName:       selectedZone?.name ?? 'No Zone',
+      siteName:       selectedSite.siteName,
+      clientName:     selectedSite.client.clientName,
+      location:       selectedSite.location,
+      date:           selectedDate,
+      shiftType:      selectedShift,
+      supervisorName: selectedZone?.supervisor?.name ?? user?.name ?? 'N/A',
+      guardsRequired: selectedSite.guardsRequired,
+      guards:         selectedGuards,
+    });
+  }
 
   async function handleSubmit() {
-    if (!selectedSiteId) return showToast('Please select a site', 'warning');
-    if (selectedGuardIds.length === 0) return showToast('Please select at least one guard', 'warning');
-    if (!shiftTypeCode) return showToast('Please select a shift type', 'warning');
-    if (!supervisorId) return showToast('Please select a supervisor', 'warning');
-
-    setFailedResult(null);
+    if (!selectedZoneId || !selectedSite || !selectedShift || selectedGuards.length === 0) return;
 
     try {
       const data = await createRoster.mutateAsync({
-        siteId:       selectedSiteId,
-        guardIds:     selectedGuardIds.map((id) => ({
-          guardId:      id,
-          overtimeHours: guardOvertimeHours[id] ?? 0,
-        })),
-        supervisorId,
-        shiftType: shiftTypeCode,
-        startDate: `${startDate}T00:00:00.000Z`,
-        endDate: recurring && endDate ? `${endDate}T23:59:59.999Z` : undefined,
-        recurring,
-        daysOfWeek: recurring ? daysOfWeek : undefined,
-        deploymentType,
-        weaponsDetails: weaponsDetails || undefined,
+        siteId:      selectedSite.id,
+        guardIds:    selectedGuards.map((g) => g.id),
+        supervisorId: selectedZone?.supervisorId ?? user!.id,
+        shiftType:   selectedShift,
+        startDate:   `${selectedDate}T00:00:00.000Z`,
+        recurring:   false,
       });
-      setResult(data as RosterCreationResult);
-      if ((data as RosterCreationResult).conflicts?.length === 0) {
-        showToast(`${(data as RosterCreationResult).created} guard(s) deployed successfully.`, 'success');
+      const rosterResult = data as RosterCreationResult;
+      setResult(rosterResult);
+      if (rosterResult.conflicts?.length === 0) {
+        showToast(`${rosterResult.created} guard(s) deployed successfully.`, 'success');
       }
     } catch (err: unknown) {
-      // 409 — all guards already deployed
-      const axiosErr = err as { response?: { data?: { data?: RosterCreationResult; error?: string } } };
-      if (axiosErr?.response?.data?.data?.conflicts?.length) {
-        setFailedResult(axiosErr.response.data.data);
-      } else {
-        const msg = (err instanceof Error ? err.message : String(err)) || 'Failed to create roster';
-        showToast(msg, 'danger');
-      }
+      showToast(err instanceof Error ? err.message : 'Failed to create roster', 'danger');
     }
   }
 
-  // ── All-conflict failure screen ────────────────────────────────────────────
+  // ── Progress step ──────────────────────────────────────────────────────────
+  const currentStep = !selectedZoneId ? 1 : !selectedSite ? 2 : 3;
 
-  if (failedResult) {
-    return (
-      <Card className="border-0 shadow-sm">
-        <Card.Body>
-          <Alert variant="danger">
-            <Alert.Heading className="h6">No guards could be deployed</Alert.Heading>
-            <p className="mb-2">All selected guards are already deployed on this date:</p>
-            <ul className="mb-2 small">
-              {failedResult.conflicts.map((c: ConflictDetail) => (
-                <li key={c.guardId}>
-                  <strong>{c.guardName}</strong> → already at <em>{c.existingSite}</em>
-                  {c.existingClient ? ` (${c.existingClient})` : ''}
-                </li>
-              ))}
-            </ul>
-            <p className="mb-0 small">Choose a different date or select different guards.</p>
-          </Alert>
-          <Button variant="outline-secondary" onClick={() => setFailedResult(null)}>
-            Go Back
-          </Button>
-        </Card.Body>
-      </Card>
-    );
-  }
-
-  // ── Success / partial result screen ───────────────────────────────────────
-
+  // ── Success screen ─────────────────────────────────────────────────────────
   if (result) {
     const hasConflicts = result.conflicts.length > 0;
     return (
       <Card className="border-0 shadow-sm">
         <Card.Body>
-          {!hasConflicts ? (
-            <div className="text-center py-3">
-              <div style={{ fontSize: '3rem' }}>✅</div>
-              <h5 className="fw-bold mt-2">{result.created} guard(s) deployed successfully.</h5>
-            </div>
-          ) : (
-            <Alert variant="warning">
-              <Alert.Heading className="h6">Roster partially created</Alert.Heading>
-              <p className="mb-2">✅ {result.created} guard(s) deployed successfully.</p>
-              <p className="mb-2">
-                ⚠️ {result.conflicts.length} guard(s) skipped — already deployed on this date:
-              </p>
-              <ul className="mb-0 small">
-                {result.conflicts.map((c: ConflictDetail) => (
-                  <li key={c.guardId}>
-                    <strong>{c.guardName}</strong> → already at{' '}
-                    <em>{c.existingSite}</em>
-                    {c.existingClient ? ` (${c.existingClient})` : ''}
-                  </li>
-                ))}
-              </ul>
+          <div className="text-center py-3">
+            <div style={{ fontSize: '3rem' }}>✅</div>
+            <h5 className="fw-bold mt-2">{result.created} deployment(s) created</h5>
+          </div>
+
+          {result.conflicts.length > 0 && (
+            <Alert variant="warning" className="mt-3">
+              <Alert.Heading className="h6">
+                <i className="bi bi-exclamation-triangle me-2" />
+                {result.conflicts.length} conflict(s) skipped
+              </Alert.Heading>
+              <Table size="sm" className="mt-2 mb-0">
+                <thead>
+                  <tr><th>Guard</th><th>Date</th><th>Already deployed at</th></tr>
+                </thead>
+                <tbody>
+                  {result.conflicts.map((c, i) => (
+                    <tr key={i}>
+                      <td>{c.guardName}</td>
+                      <td>{new Date(c.date).toLocaleDateString()}</td>
+                      <td>{c.existingSite}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
             </Alert>
           )}
 
           <div className="text-center mt-3">
-            <Button variant="outline-primary" onClick={() => { setResult(null); setSelectedGuardIds([]); }}>
+            <Button variant="outline-primary" onClick={() => { setResult(null); resetAll(); }}>
               Build Another Roster
             </Button>
           </div>
@@ -272,342 +237,501 @@ export default function RosterBuilderTab() {
     );
   }
 
-  const selectedShift = shiftTypes.find((s) => s.code === shiftTypeCode);
-
   return (
-    <Card className="border-0 shadow-sm">
-      <Card.Body>
-        <Row className="g-4">
-          {/* Step 1 — Site */}
-          <Col md={6}>
-            <h6 className="fw-semibold mb-2">Step 1 — Select Site</h6>
-            <SearchableSelect
-              options={siteOptions}
-              value={selectedSiteId}
-              onChange={handleSiteChange}
-              placeholder="— Choose a site —"
-              searchPlaceholder="Search sites..."
-              isLoading={sitesLoading}
-            />
-            {selectedSite && (
-              <div className="mt-2 text-muted small d-flex gap-3 flex-wrap">
-                <span>Guards required: <strong>{selectedSite.guardsRequired}</strong></span>
-                {(selectedSite as any).zone ? (
-                  <span>
-                    Zone:{' '}
-                    <strong style={{ color: '#0d9488' }}>{(selectedSite as any).zone.name}</strong>
-                  </span>
-                ) : (
-                  <span className="fst-italic">Unzoned</span>
-                )}
-              </div>
-            )}
-            {selectedSite && (selectedSite.requiresFirearms || selectedSite.requiresArmedGuards || selectedSite.requiresWeapons) && (
-              <Alert variant="warning" className="py-2 mt-2 mb-0">
-                <strong>⚠️ Security Requirements:</strong>
-                <ul className="mb-0 mt-1 small ps-3">
-                  {selectedSite.requiresFirearms    && <li>🔥 Firearms required at this site</li>}
-                  {selectedSite.requiresArmedGuards && <li>🔫 Armed guards required</li>}
-                  {selectedSite.requiresWeapons     && <li>🛡️ Other weapons/equipment required</li>}
-                  {selectedSite.equipmentDetails    && <li>{selectedSite.equipmentDetails}</li>}
-                </ul>
-              </Alert>
-            )}
-          </Col>
+    <div>
 
-          {/* Step 2 — Guards */}
-          <Col md={6}>
-            <h6 className="fw-semibold mb-2">
-              Step 2 — Select Guards{' '}
-              {selectedGuardIds.length > 0 && (
-                <Badge bg="primary">{selectedGuardIds.length} selected</Badge>
-              )}
-            </h6>
-            {!selectedSiteId ? (
-              <p className="text-muted small">Select a site first.</p>
-            ) : (
-              <div style={{ border: '1px solid #ced4da', borderRadius: '0.375rem', overflow: 'hidden' }}>
-                {/* Search inside the guard list box */}
-                <div style={{ padding: '6px 8px', borderBottom: '1px solid #e9ecef', background: '#f8f9fa' }}>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    placeholder="Search guards by name or phone..."
-                    value={guardSearch}
-                    onChange={(e) => setGuardSearch(e.target.value)}
-                  />
+      {/* ── Progress indicator ────────────────────────────────────────────── */}
+      <div className="d-flex align-items-center gap-0 mb-4">
+        {([
+          { num: 1, label: 'Zone & Date' },
+          { num: 2, label: 'Site' },
+          { num: 3, label: 'Guards' },
+        ] as const).map((step, i) => (
+          <React.Fragment key={step.num}>
+            <div className="d-flex flex-column align-items-center">
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '50%',
+                background: currentStep >= step.num ? '#1B3A6B' : '#e9ecef',
+                color:      currentStep >= step.num ? '#fff'    : '#6c757d',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 'bold', fontSize: '0.85rem',
+                transition: 'all 0.2s ease',
+              }}>
+                {currentStep > step.num ? '✓' : step.num}
+              </div>
+              <div style={{
+                fontSize: '0.7rem', marginTop: '4px', whiteSpace: 'nowrap',
+                color:      currentStep >= step.num ? '#1B3A6B' : '#6c757d',
+                fontWeight: currentStep === step.num ? 600 : 400,
+              }}>
+                {step.label}
+              </div>
+            </div>
+            {i < 2 && (
+              <div style={{
+                flex: 1, height: '2px', margin: '0 4px', marginBottom: '18px',
+                background:  currentStep > step.num ? '#1B3A6B' : '#e9ecef',
+                transition: 'background 0.2s ease',
+              }} />
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* ── SECTION 1: Zone & Date ────────────────────────────────────────── */}
+      <Card className="mb-3">
+        <Card.Header className="d-flex align-items-center gap-2">
+          <span style={numberBadgeStyle}>1</span>
+          <span className="fw-bold">Select Zone and Date</span>
+        </Card.Header>
+        <Card.Body>
+          {!isAdmin && zones.length === 0 && !zonesLoading && (
+            <Alert variant="warning" className="mb-0">
+              You are not assigned to any zones. Contact your manager to be assigned to a zone.
+            </Alert>
+          )}
+          <Row className="g-3">
+            <Col md={7}>
+              <Form.Label className="fw-bold small">
+                Zone <span className="text-danger">*</span>
+              </Form.Label>
+              {zonesLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted small py-2">
+                  <Spinner size="sm" animation="border" /> Loading zones...
                 </div>
-                {/* Scrollable guard checkboxes */}
-                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-                  {filteredGuards.length === 0 ? (
-                    <div className="p-3 text-muted text-center small">No guards found</div>
-                  ) : (
-                    filteredGuards.map((g) => {
-                      const alreadyDeployed = deployedToday.includes(g.id);
-                      return (
-                        <div
-                          key={g.id}
-                          style={{
-                            padding:      '6px 10px',
-                            borderBottom: '1px solid #f0f0f0',
-                            opacity:      alreadyDeployed ? 0.7 : 1,
-                            background:   alreadyDeployed ? '#fff3cd' : 'transparent',
-                          }}
-                        >
-                          <div className="d-flex align-items-center gap-2">
-                            <Form.Check
-                              id={`guard-${g.id}`}
-                              label={
-                                <span className="d-flex align-items-center gap-2 flex-wrap">
-                                  {g.fullName}{' '}
-                                  <Badge bg={g.employmentStatus === 'ACTIVE' ? 'success' : 'secondary'} style={{ fontSize: '0.65rem' }}>
-                                    {g.employmentStatus}
-                                  </Badge>
-                                  {alreadyDeployed && (
-                                    <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>
-                                      ⚠️ Already deployed
-                                    </Badge>
-                                  )}
-                                </span>
-                              }
-                              checked={selectedGuardIds.includes(g.id)}
-                              onChange={() => toggleGuard(g.id)}
-                              style={{ flex: 1 }}
-                            />
-                            {selectedGuardIds.includes(g.id) && (
-                              <div className="d-flex align-items-center gap-1" style={{ minWidth: 120 }}>
-                                <span className="text-muted" style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>OT hrs:</span>
-                                <Form.Control
-                                  type="number"
-                                  size="sm"
-                                  min={0}
-                                  step={0.5}
-                                  value={guardOvertimeHours[g.id] ?? ''}
-                                  placeholder="0"
-                                  onChange={(e) => setGuardOvertimeHours((prev) => ({
-                                    ...prev,
-                                    [g.id]: parseFloat(e.target.value) || 0,
-                                  }))}
-                                  style={{ width: 60, fontSize: '0.75rem' }}
-                                />
-                              </div>
+              ) : (
+                <Form.Select
+                  value={selectedZoneId}
+                  onChange={(e) => handleZoneChange(e.target.value)}
+                >
+                  <option value="">— Select a zone —</option>
+                  {zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}{z.supervisor ? ` — ${z.supervisor.name}` : ''}
+                    </option>
+                  ))}
+                </Form.Select>
+              )}
+              {selectedZone && (
+                <div className="mt-2 small text-muted">
+                  🗺️ {selectedZone.name}
+                  {selectedZone.supervisor && ` · Supervisor: ${selectedZone.supervisor.name}`}
+                  {selectedZone.alternate  && ` · Alternate: ${selectedZone.alternate.name}`}
+                </div>
+              )}
+            </Col>
+            <Col md={5}>
+              <Form.Label className="fw-bold small">
+                Deployment Date <span className="text-danger">*</span>
+              </Form.Label>
+              <Form.Control
+                type="date"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+              />
+              {selectedDate && (
+                <div className="mt-2 small text-muted">
+                  📅 {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB', {
+                    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+                  })}
+                </div>
+              )}
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
+
+      {/* ── SECTION 2: Select Site ────────────────────────────────────────── */}
+      {selectedZoneId && (
+        <Card className="mb-3">
+          <Card.Header className="d-flex align-items-center gap-2">
+            <span style={numberBadgeStyle}>2</span>
+            <span className="fw-bold">Select Site</span>
+            {selectedSite && (
+              <Badge bg="success" className="ms-auto">{selectedSite.siteName}</Badge>
+            )}
+          </Card.Header>
+          <Card.Body>
+            {rosterDataLoading ? (
+              <div className="text-center py-3">
+                <Spinner size="sm" animation="border" className="me-2" />
+                Loading zone sites...
+              </div>
+            ) : (rosterData?.sites.length ?? 0) === 0 ? (
+              <Alert variant="warning" className="mb-0">
+                This zone has no active sites assigned. Go to the Zones page to assign sites
+                before building a roster.
+              </Alert>
+            ) : (
+              <Row className="g-2">
+                {rosterData!.sites.map((site) => {
+                  const isSelected = selectedSite?.id === site.id;
+                  return (
+                    <Col key={site.id} md={6}>
+                      <div
+                        onClick={() => handleSiteSelect(site)}
+                        style={{
+                          padding: '12px',
+                          border: `2px solid ${isSelected ? '#0F7B6C' : '#ced4da'}`,
+                          borderRadius: '0.5rem',
+                          cursor: 'pointer',
+                          background: isSelected ? '#D0EDE9' : '#fff',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#0F7B6C88';
+                            e.currentTarget.style.background  = '#f8f9fa';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#ced4da';
+                            e.currentTarget.style.background  = '#fff';
+                          }
+                        }}
+                      >
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div className="fw-bold" style={{ fontSize: '0.9rem' }}>
+                              {site.siteName}
+                            </div>
+                            <div className="text-muted" style={{ fontSize: '0.78rem' }}>
+                              {site.client.clientName}
+                            </div>
+                            <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '2px' }}>
+                              📍 {site.location}
+                            </div>
+                          </div>
+                          <div className="text-end ms-2" style={{ flexShrink: 0 }}>
+                            <Badge bg="secondary" className="d-block mb-1" style={{ fontSize: '0.65rem' }}>
+                              {site.siteType.replace(/_/g, ' ')}
+                            </Badge>
+                            <small className="text-muted">{site.guardsRequired} req.</small>
+                          </div>
+                        </div>
+                        {(site.requiresFirearms || site.requiresArmedGuards) && (
+                          <div className="mt-2 d-flex gap-1 flex-wrap">
+                            {site.requiresFirearms && (
+                              <Badge bg="danger" style={{ fontSize: '0.65rem' }}>🔥 Firearms</Badge>
+                            )}
+                            {site.requiresArmedGuards && (
+                              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>🔫 Armed</Badge>
                             )}
                           </div>
-                          {alreadyDeployed && (
-                            <small className="text-warning d-block ms-4">
-                              This guard is already deployed on this date and will be skipped.
-                            </small>
+                        )}
+                        {isSelected && (
+                          <div className="mt-2" style={{ fontSize: '0.75rem', color: '#0F7B6C', fontWeight: 500 }}>
+                            ✓ Selected
+                          </div>
+                        )}
+                      </div>
+                    </Col>
+                  );
+                })}
+              </Row>
+            )}
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* ── SECTION 3: Assign Guards ──────────────────────────────────────── */}
+      {selectedSite && (
+        <Card className="mb-3">
+          <Card.Header className="d-flex align-items-center gap-2">
+            <span style={numberBadgeStyle}>3</span>
+            <span className="fw-bold">Assign Guards to {selectedSite.siteName}</span>
+          </Card.Header>
+          <Card.Body>
+
+            {/* Shift selection */}
+            <div className="mb-3">
+              <Form.Label className="fw-bold small">
+                Shift Type <span className="text-danger">*</span>
+              </Form.Label>
+              <div className="d-flex gap-2">
+                {(['DAY', 'NIGHT', 'FULL_24'] as const).map((s) => (
+                  <Button
+                    key={s}
+                    size="sm"
+                    variant={selectedShift === s ? 'primary' : 'outline-secondary'}
+                    onClick={() => setSelectedShift(s)}
+                  >
+                    {SHIFT_LABELS[s]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Two-panel guard selection */}
+            <Row className="g-3">
+
+              {/* LEFT: Available guards */}
+              <Col md={6}>
+                <div className="fw-bold mb-2" style={{ color: '#1B3A6B' }}>Available Guards</div>
+                <div style={{ border: '1px solid #ced4da', borderRadius: '0.375rem', overflow: 'hidden' }}>
+                  <div style={{ padding: '6px 8px', borderBottom: '1px solid #e9ecef', background: '#f8f9fa' }}>
+                    <Form.Control
+                      type="text"
+                      size="sm"
+                      placeholder="Search guards by name..."
+                      value={guardSearch}
+                      onChange={(e) => setGuardSearch(e.target.value)}
+                    />
+                  </div>
+                  {isAtLimit && (
+                    <div style={{
+                      padding: '6px 12px', background: '#d5f5e3', borderBottom: '1px solid #a9dfbf',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      fontSize: '0.8rem', color: '#1e8449', fontWeight: 500,
+                    }}>
+                      <span>🔒</span>
+                      <span>Limit reached — {requiredGuards} guard(s) selected. Remove a guard to select a different one.</span>
+                    </div>
+                  )}
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {filteredAvailable.length === 0 ? (
+                      <div className="p-3 text-muted text-center small">
+                        {guardSearch ? 'No guards match your search' : 'All guards selected'}
+                      </div>
+                    ) : (
+                      filteredAvailable.map((guard) => (
+                        <div
+                          key={guard.id}
+                          onClick={() => { if (!isAtLimit) selectGuard(guard); }}
+                          title={isAtLimit
+                            ? `Maximum ${requiredGuards} guard(s) already selected`
+                            : `Click to select ${guard.firstName} ${guard.lastName}`}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '8px 12px',
+                            cursor: isAtLimit ? 'not-allowed' : 'pointer',
+                            borderBottom: '1px solid #f0f0f0',
+                            userSelect: 'none',
+                            opacity: isAtLimit ? 0.35 : 1,
+                            pointerEvents: isAtLimit ? 'none' : 'auto',
+                            transition: 'opacity 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => { if (!isAtLimit) e.currentTarget.style.background = '#f8f9fa'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <InitialsAvatar name={guard.fullName} size={28} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: '0.9rem', fontWeight: 500, color: '#1A1A1A',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>
+                              {guard.firstName} {guard.lastName}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
+                              {guard.rank?.replace(/_/g, ' ') ?? 'Guard'}
+                            </div>
+                          </div>
+                          {guard.alreadyDeployed && (
+                            <span style={{
+                              fontSize: '0.65rem', background: '#fff3cd', color: '#856404',
+                              padding: '1px 5px', borderRadius: '4px', flexShrink: 0, fontWeight: 500,
+                            }}>
+                              ⚠️ Deployed
+                            </span>
+                          )}
+                          {!guard.alreadyDeployed && (
+                            <span style={{ fontSize: '0.75rem', color: '#0F7B6C', flexShrink: 0 }}>
+                              + Add
+                            </span>
                           )}
                         </div>
-                      );
-                    })
+                      ))
+                    )}
+                  </div>
+                </div>
+              </Col>
+
+              {/* RIGHT: Selected guards */}
+              <Col md={6}>
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="fw-bold" style={{ color: '#1B3A6B' }}>Selected Guards</span>
+                  <div className="d-flex align-items-center gap-2">
+                    {selectedGuards.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGuards([])}
+                        style={{
+                          background: 'none', border: 'none', color: '#dc3545',
+                          fontSize: '0.8rem', cursor: 'pointer', padding: 0,
+                        }}
+                      >
+                        Clear all
+                      </button>
+                    )}
+                    <Badge bg={badgeBg} text={badgeBg === 'warning' ? 'dark' : undefined}>
+                      {badgeText}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div style={{
+                  border: '1px solid #ced4da', borderRadius: '0.375rem',
+                  minHeight: '310px',
+                  background: selectedGuards.length === 0 ? '#f8f9fa' : '#fff',
+                }}>
+                  {selectedGuards.length === 0 ? (
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      justifyContent: 'center', height: '310px',
+                      color: '#6c757d', textAlign: 'center', padding: '20px',
+                    }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>👥</div>
+                      <div style={{ fontSize: '0.875rem' }}>No guards selected yet</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        Click a guard on the left to add them
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '310px', overflowY: 'auto' }}>
+                      {selectedGuards.map((guard, index) => (
+                        <div
+                          key={guard.id}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '8px 12px',
+                            borderBottom: index < selectedGuards.length - 1 ? '1px solid #f0f0f0' : 'none',
+                            background: '#fff',
+                          }}
+                        >
+                          <span style={{
+                            width: '22px', height: '22px', background: '#1B3A6B', color: '#fff',
+                            borderRadius: '50%', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0,
+                          }}>
+                            {index + 1}
+                          </span>
+                          <InitialsAvatar name={`${guard.firstName} ${guard.lastName}`} size={28} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: '0.9rem', fontWeight: 500, color: '#1A1A1A',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>
+                              {guard.firstName} {guard.lastName}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
+                              {guard.rank?.replace(/_/g, ' ') ?? 'Guard'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeGuard(guard.id)}
+                            style={{
+                              background: 'none', border: 'none', color: '#dc3545',
+                              cursor: 'pointer', fontSize: '1.1rem', padding: '0 4px',
+                              flexShrink: 0, lineHeight: 1,
+                            }}
+                            title="Remove guard"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
-          </Col>
 
-          {/* Step 3 — Details */}
-          <Col md={12}>
-            <h6 className="fw-semibold mb-3">Step 3 — Assignment Details</h6>
-            <Row className="g-3">
-              {/* Shift Type */}
-              <Col md={4}>
-                <Form.Label className="small">
-                  Shift Type
-                  {selectedSite?.allowedShiftTypes?.length ? (
-                    <span className="text-muted ms-1" style={{ fontSize: '0.7rem' }}>
-                      (filtered by site)
-                    </span>
-                  ) : null}
-                </Form.Label>
-                {availableShiftTypes.length === 0 ? (
-                  <p className="text-muted small">Loading shift types...</p>
-                ) : (
-                  <div className="d-flex gap-3 flex-wrap">
-                    {availableShiftTypes.map((s) => (
-                      <Form.Check
-                        key={s.id}
-                        type="radio"
-                        id={`shift-${s.code}`}
-                        name="shiftTypeCode"
-                        value={s.code}
-                        label={
-                          <span>
-                            {s.name}
-                            {s.isOvertime && <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: '0.6rem' }}>OT</Badge>}
-                          </span>
-                        }
-                        checked={shiftTypeCode === s.code}
-                        onChange={() => handleShiftSelect(s.code)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </Col>
-
-              {/* Auto-filled times */}
-              <Col md={4}>
-                <Form.Label className="small">Start Time</Form.Label>
-                <Form.Control
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  placeholder="Auto-fills on shift select"
-                />
-                {selectedShift?.startTime && (
-                  <Form.Text className="text-muted">Default: {selectedShift.startTime}</Form.Text>
-                )}
-              </Col>
-
-              <Col md={4}>
-                <Form.Label className="small">End Time</Form.Label>
-                <Form.Control
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  placeholder="Auto-fills on shift select"
-                />
-                {selectedShift?.endTime && (
-                  <Form.Text className="text-muted">Default: {selectedShift.endTime}</Form.Text>
-                )}
-              </Col>
-
-              {/* Deployment Type */}
-              <Col md={12}>
-                <Form.Label className="small">Deployment Type</Form.Label>
-                <div>
-                  <ButtonGroup>
-                    {(['UNARMED', 'ARMED', 'FIREARMS'] as DeploymentType[]).map((dt) => (
-                      <Button
-                        key={dt}
-                        size="sm"
-                        variant={deploymentType === dt ? (dt === 'UNARMED' ? 'secondary' : dt === 'ARMED' ? 'warning' : 'danger') : 'outline-secondary'}
-                        onClick={() => setDeploymentType(dt)}
-                      >
-                        {dt === 'UNARMED' ? 'Unarmed' : dt === 'ARMED' ? '🔫 Armed' : '🔥 Firearms'}
-                      </Button>
-                    ))}
-                  </ButtonGroup>
-                </div>
-                {deploymentType !== 'UNARMED' && (
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
-                    className="mt-2"
-                    placeholder="Specify weapons or equipment issued (optional)"
-                    value={weaponsDetails}
-                    onChange={(e) => setWeaponsDetails(e.target.value)}
-                  />
-                )}
-              </Col>
-
-              <Col md={4}>
-                <Form.Label className="small">Supervisor</Form.Label>
-                <SearchableSelect
-                  options={supervisorOptions}
-                  value={supervisorId}
-                  onChange={setSupervisorId}
-                  placeholder="— Select supervisor —"
-                  searchPlaceholder="Search supervisors..."
-                  isLoading={supervisorsLoading}
-                />
-              </Col>
-
-              <Col md={4}>
-                <Form.Label className="small">Start Date</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </Col>
-
-              <Col md={12}>
-                <Form.Check
-                  type="switch"
-                  id="recurring-toggle"
-                  label="Recurring roster"
-                  checked={recurring}
-                  onChange={(e) => setRecurring(e.target.checked)}
-                />
-                {recurring && (
-                  <div className="mt-3 ps-2 border-start border-3">
-                    <Row className="g-3">
-                      <Col md={4}>
-                        <Form.Label className="small">End Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={endDate}
-                          min={startDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                        />
-                        <Form.Text className="text-muted">Max 90 days from start</Form.Text>
-                      </Col>
-                      <Col md={8}>
-                        <Form.Label className="small">Days of Week</Form.Label>
-                        <div className="d-flex gap-2 flex-wrap">
-                          {DAYS_OF_WEEK.map((d) => (
-                            <Form.Check
-                              key={d.value}
-                              type="checkbox"
-                              id={`dow-${d.value}`}
-                              label={d.label}
-                              checked={daysOfWeek.includes(d.value)}
-                              onChange={() => toggleDayOfWeek(d.value)}
-                            />
-                          ))}
-                        </div>
-                      </Col>
-                    </Row>
+                {requiredGuards > 0 && (
+                  <div style={{ marginTop: '6px', fontSize: '0.8rem' }}>
+                    {selectedGuards.length === 0 && (
+                      <span className="text-muted">
+                        This site requires <strong>{requiredGuards}</strong> guard(s). Select from the list on the left.
+                      </span>
+                    )}
+                    {selectedGuards.length > 0 && selectedGuards.length < requiredGuards && (
+                      <span style={{ color: '#856404' }}>
+                        ⚠️ {requiredGuards - selectedGuards.length} more guard(s) needed.
+                      </span>
+                    )}
+                    {selectedGuards.length === requiredGuards && (
+                      <span style={{ color: '#1e8449' }}>
+                        ✅ All {requiredGuards} guard(s) selected. Ready to deploy.
+                      </span>
+                    )}
+                    {isOverLimit && (
+                      <span style={{ color: '#dc3545' }}>
+                        ⚠️ {selectedGuards.length - requiredGuards} guard(s) over the required number.
+                      </span>
+                    )}
                   </div>
                 )}
               </Col>
             </Row>
-          </Col>
+          </Card.Body>
+        </Card>
+      )}
 
-          {/* Step 4 — Review */}
-          <Col md={12}>
-            <h6 className="fw-semibold mb-2">Step 4 — Review & Confirm</h6>
-            <Card className="bg-light border-0">
-              <Card.Body className="py-2 small">
-                <Row className="g-1">
-                  <Col md={3}><span className="text-muted">Site:</span> <strong>{selectedSite?.siteName ?? '—'}</strong></Col>
-                  <Col md={3}><span className="text-muted">Guards:</span> <strong>{selectedGuardIds.length}</strong></Col>
-                  <Col md={3}><span className="text-muted">Shift:</span> <strong>{selectedShift?.name ?? (shiftTypeCode || '—')}</strong></Col>
-                  <Col md={3}><span className="text-muted">Start:</span> <strong>{startDate}</strong></Col>
-                  <Col md={3}><span className="text-muted">Type:</span> <strong>{deploymentType}</strong></Col>
-                  {recurring && endDate && (
-                    <Col md={3}><span className="text-muted">End:</span> <strong>{endDate}</strong></Col>
-                  )}
-                </Row>
-              </Card.Body>
-            </Card>
-
-            {/* Pre-submission conflict warning */}
-            {conflictedSelected.length > 0 && (
-              <Alert variant="warning" className="mt-3 mb-0 py-2">
-                <small>
-                  <strong>⚠️ Conflict detected:</strong>{' '}
-                  {conflictedSelected.length} selected guard(s) are already deployed on this date
-                  and will be automatically skipped. Only available guards will be deployed.
-                </small>
-              </Alert>
-            )}
+      {/* ── Roster Summary + Submit ───────────────────────────────────────── */}
+      {selectedSite && selectedGuards.length > 0 && selectedShift && (
+        <Card className="border-0" style={{ background: '#D6E0F0' }}>
+          <Card.Body>
+            <div className="fw-bold mb-2" style={{ color: '#1B3A6B' }}>📋 Roster Summary</div>
+            <Row className="g-2 small mb-3">
+              <Col xs={6}>
+                <span className="text-muted d-block">Zone</span>
+                <span className="fw-bold">{selectedZone?.name ?? '—'}</span>
+              </Col>
+              <Col xs={6}>
+                <span className="text-muted d-block">Site</span>
+                <span className="fw-bold">{selectedSite.siteName}</span>
+              </Col>
+              <Col xs={6}>
+                <span className="text-muted d-block">Date</span>
+                <span className="fw-bold">
+                  {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                  })}
+                </span>
+              </Col>
+              <Col xs={6}>
+                <span className="text-muted d-block">Shift</span>
+                <span className="fw-bold">{SHIFT_LABELS[selectedShift]}</span>
+              </Col>
+            </Row>
+            <div className="small text-muted mb-3">
+              Guards: {selectedGuards.map((g) => `${g.firstName} ${g.lastName}`).join(' · ')}
+            </div>
 
             <Button
-              className="mt-3"
-              style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              variant={isOverLimit ? 'warning' : 'primary'}
+              style={isOverLimit ? undefined : { backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              className="w-100"
+              disabled={createRoster.isPending}
               onClick={handleSubmit}
-              disabled={createRoster.isPending || !selectedSiteId || selectedGuardIds.length === 0 || !supervisorId || !shiftTypeCode}
             >
-              {createRoster.isPending
-                ? <><Spinner size="sm" animation="border" className="me-2" />Creating...</>
-                : 'Create Roster'}
+              {createRoster.isPending ? (
+                <><Spinner size="sm" animation="border" className="me-2" />Creating roster...</>
+              ) : (
+                <>
+                  {isOverLimit && '⚠️ '}
+                  {`Create Roster — ${selectedGuards.length} guard${selectedGuards.length !== 1 ? 's' : ''} at ${selectedSite.siteName}`}
+                </>
+              )}
             </Button>
-          </Col>
-        </Row>
-      </Card.Body>
-    </Card>
+
+            <Button
+              variant="outline-success"
+              className="w-100 mt-2"
+              onClick={handleExportRoster}
+            >
+              <i className="bi bi-file-earmark-excel me-2" />Export Roster to Excel
+            </Button>
+
+            {isOverLimit && (
+              <div className="text-warning small mt-1">
+                ⚠️ You have selected more guards than required ({requiredGuards} required,{' '}
+                {selectedGuards.length} selected). This is allowed but please confirm it is intentional.
+              </div>
+            )}
+          </Card.Body>
+        </Card>
+      )}
+
+    </div>
   );
 }

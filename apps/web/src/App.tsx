@@ -20,6 +20,7 @@ const ClientsListPage              = lazy(() => import('@/pages/clients/ClientsL
 const ClientFormPage               = lazy(() => import('@/pages/clients/ClientFormPage'));
 const ClientDetailPage             = lazy(() => import('@/pages/clients/ClientDetailPage'));
 const AttendancePage               = lazy(() => import('@/pages/attendance/AttendancePage'));
+const AttendanceDashboardPage      = lazy(() => import('@/pages/attendance/AttendanceDashboardPage'));
 const CheckinPage                  = lazy(() => import('@/pages/attendance/CheckinPage'));
 const BulkImportPage               = lazy(() => import('@/pages/guards/BulkImportPage'));
 const GuardDashboardPage           = lazy(() => import('@/pages/guards/GuardDashboardPage'));
@@ -90,8 +91,9 @@ function App() {
               <Route path="/guards/:id/edit"     element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
 
               {/* Attendance */}
-              <Route path="/attendance" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
-              <Route path="/checkin"    element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
+              <Route path="/attendance"           element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
+              <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
+              <Route path="/checkin"              element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
 
               {/* Finance */}
               <Route path="/finance" element={<L><RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}><FinancePage /></RoleGuard></L>} />

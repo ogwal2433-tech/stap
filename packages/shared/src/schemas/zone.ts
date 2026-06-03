@@ -1,35 +1,30 @@
 import { z } from 'zod';
 
+// ── Input schemas ──────────────────────────────────────────────────────────────
+
 export const CreateZoneSchema = z.object({
-  name:         z.string().min(1).max(100),
-  description:  z.string().max(500).optional(),
-  supervisorId: z.string().cuid().optional(),
-  alternateId:  z.string().cuid().optional(),
+  name:         z.string().min(2).max(100),
+  description:  z.string().optional(),
+  supervisorId: z.string().optional(),
+  alternateId:  z.string().optional(),
 });
 
-export const UpdateZoneSchema = CreateZoneSchema.partial();
-
-export const AssignSitesToZoneSchema = z.object({
-  siteIds: z.array(z.string().cuid()).min(1),
-});
-
-export const RemoveSitesFromZoneSchema = z.object({
-  siteIds: z.array(z.string().cuid()).min(1),
+export const UpdateZoneSchema = CreateZoneSchema.partial().extend({
+  isActive: z.boolean().optional(),
 });
 
 export type CreateZoneInput = z.infer<typeof CreateZoneSchema>;
 export type UpdateZoneInput = z.infer<typeof UpdateZoneSchema>;
-export type AssignSitesToZoneInput = z.infer<typeof AssignSitesToZoneSchema>;
-export type RemoveSitesFromZoneInput = z.infer<typeof RemoveSitesFromZoneSchema>;
 
-export interface ZonePersonnelResponse {
-  id:    string;
-  name:  string;
-  email: string;
-  role:  string;
+// ── Response interfaces ────────────────────────────────────────────────────────
+
+export interface ZonePersonRef {
+  id:   string;
+  name: string;
+  role: string;
 }
 
-export interface ZoneSiteResponse {
+export interface ZoneDetailSite {
   id:             string;
   siteName:       string;
   location:       string;
@@ -42,22 +37,51 @@ export interface ZoneResponse {
   id:          string;
   name:        string;
   description: string | null;
+  supervisorId: string | null;
+  alternateId:  string | null;
   isActive:    boolean;
-  createdBy:   string;
+  supervisor:  ZonePersonRef | null;
+  alternate:   ZonePersonRef | null;
+  siteCount:   number;
+  sites:       ZoneDetailSite[];
   createdAt:   string;
   updatedAt:   string;
-  supervisor:  ZonePersonnelResponse | null;
-  alternate:   ZonePersonnelResponse | null;
-  sites:       ZoneSiteResponse[];
-  siteCount:   number;
 }
 
-export interface ZoneSummaryResponse {
-  id:          string;
-  name:        string;
-  description: string | null;
-  isActive:    boolean;
-  siteCount:   number;
-  supervisor:  ZonePersonnelResponse | null;
-  alternate:   ZonePersonnelResponse | null;
+export interface ZoneSite {
+  id:                  string;
+  siteName:            string;
+  location:            string;
+  guardsRequired:      number;
+  siteType:            string;
+  defaultShiftType:    string | null;
+  requiresArmedGuards: boolean;
+  requiresFirearms:    boolean;
+  client: {
+    id:         string;
+    clientName: string;
+  };
+}
+
+export interface ZoneRosterGuard {
+  id:              string;
+  firstName:       string;
+  lastName:        string;
+  fullName:        string;
+  rank:            string | null;
+  photoUrl:        string | null;
+  phone:           string;
+  alreadyDeployed: boolean;
+}
+
+export interface ZoneRosterData {
+  zone: {
+    id:         string;
+    name:       string;
+    supervisor: ZonePersonRef | null;
+    alternate:  ZonePersonRef | null;
+  };
+  sites:  ZoneSite[];
+  guards: ZoneRosterGuard[];
+  date:   string;
 }

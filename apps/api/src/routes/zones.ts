@@ -1,42 +1,81 @@
-import { Router, type IRouter } from 'express';
-import { zoneService } from '../services/zoneService';
+import { Router } from 'express';
+import type { IRouter } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import {
-  CreateZoneSchema,
-  UpdateZoneSchema,
-  AssignSitesToZoneSchema,
-  RemoveSitesFromZoneSchema,
-} from '@stap/shared';
+import { ROLES, CreateZoneSchema, UpdateZoneSchema } from '@stap/shared';
+import { zoneService } from '../services/zoneService';
 
 const router: IRouter = Router();
+
 router.use(authenticate);
 
-// GET /zones — list all zones (summary)
+const VIEW_ROLES = [
+  ROLES.DIRECTOR,
+  ROLES.ASSISTANT_MANAGER,
+  ROLES.ADMINISTRATOR,
+  ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.FIELD_SUPERVISOR,
+] as const;
+
+const WRITE_ROLES = [
+  ROLES.DIRECTOR,
+  ROLES.ASSISTANT_MANAGER,
+] as const;
+
+// GET /zones — list all zones (admin sees all, supervisors use /my-zones)
 router.get(
   '/',
+  requireRole(...VIEW_ROLES),
   asyncHandler(async (req, res) => {
-    const activeOnly = req.query.active === 'true';
-    const zones = await zoneService.list(activeOnly);
+    const result = await zoneService.list({
+      page:     req.query.page     ? Number(req.query.page)  : undefined,
+      limit:    req.query.limit    ? Number(req.query.limit) : undefined,
+      isActive: req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined,
+      search:   req.query.search as string | undefined,
+    });
+    res.json({ success: true, ...result });
+  }),
+);
+
+// GET /zones/my-zones — zones where the caller is supervisor or alternate
+router.get(
+  '/my-zones',
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const zones = await zoneService.listForSupervisor(req.user!.userId);
     res.json({ success: true, data: zones });
   }),
 );
 
-// GET /zones/:id — get zone detail
+// GET /zones/:id — single zone detail
 router.get(
   '/:id',
+  requireRole(...VIEW_ROLES),
   asyncHandler(async (req, res) => {
     const zone = await zoneService.getById(req.params.id);
     res.json({ success: true, data: zone });
   }),
 );
 
+// GET /zones/:id/roster-data — zone + sites + available guards for a given date
+router.get(
+  '/:id/roster-data',
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const data = await zoneService.getRosterData(
+      req.params.id,
+      req.query.date as string | undefined,
+    );
+    res.json({ success: true, data });
+  }),
+);
+
 // POST /zones — create zone
 router.post(
   '/',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
+  requireRole(...WRITE_ROLES),
   validate(CreateZoneSchema),
   asyncHandler(async (req, res) => {
     const zone = await zoneService.create(req.body, req.user!.userId);
@@ -47,64 +86,12 @@ router.post(
 // PATCH /zones/:id — update zone
 router.patch(
   '/:id',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
+  requireRole(...WRITE_ROLES),
   validate(UpdateZoneSchema),
   asyncHandler(async (req, res) => {
-    const zone = await zoneService.update(req.params.id, req.body, req.user!.userId);
+    const zone = await zoneService.update(req.params.id, req.body);
     res.json({ success: true, data: zone });
   }),
 );
 
-// POST /zones/:id/sites — assign sites to zone
-router.post(
-  '/:id/sites',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
-  validate(AssignSitesToZoneSchema),
-  asyncHandler(async (req, res) => {
-    const zone = await zoneService.assignSites(req.params.id, req.body.siteIds, req.user!.userId);
-    res.json({ success: true, data: zone });
-  }),
-);
-
-// DELETE /zones/:id/sites — remove sites from zone
-router.delete(
-  '/:id/sites',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
-  validate(RemoveSitesFromZoneSchema),
-  asyncHandler(async (req, res) => {
-    const zone = await zoneService.removeSites(req.params.id, req.body.siteIds, req.user!.userId);
-    res.json({ success: true, data: zone });
-  }),
-);
-
-// PATCH /zones/:id/deactivate
-router.patch(
-  '/:id/deactivate',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
-  asyncHandler(async (req, res) => {
-    const zone = await zoneService.deactivate(req.params.id, req.user!.userId);
-    res.json({ success: true, data: zone });
-  }),
-);
-
-// PATCH /zones/:id/activate
-router.patch(
-  '/:id/activate',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
-  asyncHandler(async (req, res) => {
-    const zone = await zoneService.activate(req.params.id, req.user!.userId);
-    res.json({ success: true, data: zone });
-  }),
-);
-
-// DELETE /zones/:id
-router.delete(
-  '/:id',
-  requireRole('DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'),
-  asyncHandler(async (req, res) => {
-    await zoneService.delete(req.params.id, req.user!.userId);
-    res.json({ success: true, message: 'Zone deleted.' });
-  }),
-);
-
-export { router as zonesRouter };
+export default router;

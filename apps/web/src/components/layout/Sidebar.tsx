@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   { icon: 'bi-clipboard2-fill',     label: 'Requisitions',  to: '/requisitions',  roles: NON_GUARD_INTERNAL },
   { icon: 'bi-people-fill',         label: 'HR',            to: '/hr',            roles: HR_ROLES },
   { icon: 'bi-chat-left-text-fill',  label: 'Complaints',    to: '/complaints',    roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) },
+  { icon: 'bi-map-fill',             label: 'Zones',         to: '/zones',         roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] },
   { icon: 'bi-bar-chart-fill',      label: 'Reports',       to: '/reports',       roles: REPORT_ROLES },
   { icon: 'bi-bell-fill',           label: 'Notifications', to: '/notifications', roles: INTERNAL_ROLES },
   { icon: 'bi-map-fill',            label: 'Zones',         to: '/zones',         roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
@@ -56,9 +57,10 @@ interface NavContentProps {
 const ACTIVE_PATHS = new Set([
   '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
   '/guards/dashboard', '/guards/import',
+  '/attendance/dashboard',
   '/finance', '/requisitions',
   '/complaints', '/reports', '/notifications',
-  '/settings', '/hr', '/inventory', '/zones',
+  '/zones', '/settings', '/hr', '/inventory',
 ]);
 
 function NavContent({ onNavigate }: NavContentProps) {
@@ -119,6 +121,29 @@ function NavContent({ onNavigate }: NavContentProps) {
             </Nav.Item>
           </RoleGuard>
         ))}
+
+        {/* Attendance sub-navigation — shown when on /attendance* routes */}
+        {pathname.startsWith('/attendance') && (
+          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR] as UserRole[]}>
+            <Nav.Item>
+              <NavLink
+                to="/attendance/dashboard"
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `nav-link d-flex align-items-center gap-2 ps-5 pe-3 py-1 rounded mx-2 mb-1 ${isActive ? 'bg-white bg-opacity-10 text-white fw-medium' : ''}`
+                }
+                style={({ isActive }) => ({
+                  color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+                  textDecoration: 'none',
+                  fontSize: '0.8rem',
+                })}
+              >
+                <i className="bi bi-bar-chart-fill" style={{ fontSize: '0.8rem', width: 14 }} />
+                <span>Dashboard</span>
+              </NavLink>
+            </Nav.Item>
+          </RoleGuard>
+        )}
 
         {/* Guards sub-navigation — shown when on /guards* routes */}
         {pathname.startsWith('/guards') && (

@@ -1,24 +1,24 @@
 import api from './api';
 import type {
   CreateRosterInput,
-  RosterCreationResult,
+  ConflictDetail,
   DeploymentResponse,
   AttendanceRecord,
   AttendanceSummary,
   CheckinResponse,
   DailySheetResponse,
+  AttendanceDashboardData,
   PaginatedResponse,
   DeploymentListQuery,
   AttendanceQuery,
   SupervisorCheckinInput,
   MarkAttendanceInput,
-  GuardBasicResponse,
 } from '@stap/shared';
 
 export const attendanceApi = {
-  createRoster(data: CreateRosterInput): Promise<RosterCreationResult> {
+  createRoster(data: CreateRosterInput): Promise<{ created: number; conflicts: ConflictDetail[] }> {
     return api
-      .post<{ success: boolean; data: RosterCreationResult }>(
+      .post<{ success: boolean; data: { created: number; conflicts: ConflictDetail[] } }>(
         '/attendance/roster',
         data,
       )
@@ -31,10 +31,10 @@ export const attendanceApi = {
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
   },
 
-  getDailySheet(date?: string, siteId?: string): Promise<DailySheetResponse> {
+  getDailySheet(date?: string, siteId?: string, zoneId?: string): Promise<DailySheetResponse> {
     return api
       .get<{ success: boolean; data: DailySheetResponse }>('/attendance/sheet', {
-        params: { date, siteId },
+        params: { date, siteId, zoneId },
       })
       .then((r) => r.data.data);
   },
@@ -100,24 +100,9 @@ export const attendanceApi = {
       .then((r) => r.data.data);
   },
 
-  copyRoster(sourceDate: string, targetDate: string): Promise<{ created: number; skipped: number }> {
+  getAttendanceDashboard(): Promise<AttendanceDashboardData> {
     return api
-      .post<{ success: boolean; data: { created: number; skipped: number } }>('/attendance/roster/copy', {
-        sourceDate,
-        targetDate,
-      })
-      .then((r) => r.data.data);
-  },
-
-  getAvailableReplacements(
-    siteId: string,
-    date: string,
-    absentGuardId: string,
-  ): Promise<GuardBasicResponse[]> {
-    return api
-      .get<{ success: boolean; data: GuardBasicResponse[] }>('/attendance/replacements', {
-        params: { siteId, date, absentGuardId },
-      })
+      .get<{ success: boolean; data: AttendanceDashboardData }>('/attendance/dashboard')
       .then((r) => r.data.data);
   },
 };

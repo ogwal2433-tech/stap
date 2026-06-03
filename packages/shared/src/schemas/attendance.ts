@@ -42,7 +42,9 @@ export const MarkAttendanceSchema = z.object({
     siteId:  z.string().min(1),
     date:    z.string().datetime(),
     status:  z.enum(['PRESENT', 'ABSENT', 'LATE', 'AWOL']),
+    /** @deprecated Not collected from UI. Shift type defines working hours. */
     timeIn:  z.string().optional(),
+    /** @deprecated Not collected from UI. Shift type defines working hours. */
     timeOut: z.string().optional(),
     notes:   z.string().max(500).optional(),
   })).min(1),
@@ -103,25 +105,23 @@ export interface RosterCreationResult {
 }
 
 export interface DeploymentResponse {
-  id:                    string;
-  guard:                 { id: string; fullName: string; phone: string; photoUrl: string | null };
-  site:                  { id: string; siteName: string; location: string; client: { id: string; clientName: string } };
-  supervisor:            { id: string; name: string };
-  shiftType:             string;
-  date:                  string;
-  deploymentType:        string;
-  weaponsDetails:        string | null;
-  overtimeHours:         number | null;
-  overtimeReason:        string | null;
-  copiedFromDate:        string | null;
-  replacementForGuardId: string | null;
-  createdAt:             string;
+  id:         string;
+  guard:      { id: string; fullName: string; phone: string; photoUrl: string | null; rank: string | null };
+  site:       {
+    id: string; siteName: string; location: string; siteType: string;
+    client: { id: string; clientName: string };
+    zone?: { id: string; name: string } | null;
+  };
+  supervisor: { id: string; name: string };
+  shiftType:  'DAY' | 'NIGHT' | 'FULL_24';
+  date:       string;
+  createdAt:  string;
   attendance?: {
     status:  string;
     timeIn:  string | null;
     timeOut: string | null;
     notes:   string | null;
-  };
+  } | null;
 }
 
 export interface AttendanceRecord {
@@ -166,12 +166,64 @@ export interface CheckinResponse {
 }
 
 export interface DailySheetSite {
-  site:        { id: string; siteName: string; location: string; client: { id: string; clientName: string }; guardsRequired: number };
-  supervisor:  { id: string; name: string } | null;
-  deployments: DeploymentResponse[];
+  site: {
+    id: string; siteName: string; location: string; siteType: string;
+    client: { id: string; clientName: string };
+    guardsRequired: number;
+  };
+  supervisor:    { id: string; name: string } | null;
+  deployments:   DeploymentResponse[];
+  presentCount:  number;
+  absentCount:   number;
+  unmarkedCount: number;
+}
+
+export interface DailySheetZone {
+  zoneId:   string | null;
+  zoneName: string | null;
+  sites:    DailySheetSite[];
 }
 
 export interface DailySheetResponse {
   date:  string;
-  sites: DailySheetSite[];
+  zones: DailySheetZone[];
+}
+
+export interface AttendanceDashboardData {
+  date:           string;
+  totalDeployed:  number;
+  presentCount:   number;
+  lateCount:      number;
+  absentCount:    number;
+  awolCount:      number;
+  unmarkedCount:  number;
+  markedCount:    number;
+  attendanceRate: number;
+  weeklyAvgRate:  number;
+  weeklyTrend: {
+    date:      string;
+    dayLabel:  string;
+    deployed:  number;
+    present:   number;
+    absent:    number;
+    unmarked:  number;
+    rate:      number;
+    isToday:   boolean;
+  }[];
+  sitesWithMissingAttendance: {
+    siteId:        string;
+    siteName:      string;
+    clientName:    string;
+    zoneName:      string | null;
+    totalGuards:   number;
+    unmarkedCount: number;
+    markedCount:   number;
+  }[];
+  supervisorCheckins: {
+    id:          string;
+    supervisor:  { id: string; name: string; role: string };
+    site:        { id: string; siteName: string; clientName: string };
+    checkinTime: string;
+    notes:       string | null;
+  }[];
 }

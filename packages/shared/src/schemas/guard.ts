@@ -182,6 +182,14 @@ export const GUARD_CONTRACT_TYPES: Record<string, string> = {
   TEMPORARY: 'Temporary',
 };
 
+export const GUARD_RANKS: Record<string, string> = {
+  GUARD:         'Guard',
+  SENIOR_GUARD:  'Senior Guard',
+  CORPORAL:      'Corporal',
+  SERGEANT:      'Sergeant',
+  SUPERVISOR:    'Supervisor',
+};
+
 // ── Inferred input types ───────────────────────────────────────────────────────
 
 export type CreateGuardInput       = z.infer<typeof CreateGuardSchema>;

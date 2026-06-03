@@ -1,62 +1,67 @@
 import { useState, useMemo } from 'react';
 import {
-  Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Tab, Tabs, Table,
-  Accordion,
+  Alert, Badge, Button, Card, Col, Form, Row, Spinner, Tab, Tabs, Table,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDailySheet, useMarkAttendance, useDeleteDeployment, useCopyRoster } from '../../hooks/useAttendance';
-import { useClientList } from '../../hooks/useClients';
+import { useDailySheet, useMarkAttendance, useDeleteDeployment } from '../../hooks/useAttendance';
+import { useZones, useMyZones } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { ROLES, type UserRole } from '@stap/shared';
-import type { MarkAttendanceInput, GuardBasicResponse } from '@stap/shared';
-import { attendanceApi } from '../../lib/attendance.api';
+import type { MarkAttendanceInput, DeploymentResponse } from '@stap/shared';
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
+import { exportAttendanceSheet } from '../../lib/exportToExcel';
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
 
 interface AttendanceEdit {
   status: AttendanceStatus;
-  timeIn: string;
-  timeOut: string;
-  notes: string;
+  notes:  string;
 }
 
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
-  { value: '', label: '— Not Marked —' },
-  { value: 'PRESENT', label: '✅ Present' },
-  { value: 'ABSENT', label: '❌ Absent' },
-  { value: 'LATE', label: '🕐 Late' },
-  { value: 'AWOL', label: '🚨 AWOL' },
+  { value: '',        label: '— Not Marked —' },
+  { value: 'PRESENT', label: '✅ Present'      },
+  { value: 'ABSENT',  label: '❌ Absent'       },
+  { value: 'LATE',    label: '🕐 Late'         },
+  { value: 'AWOL',    label: '🚨 AWOL'         },
 ];
 
 const STATUS_BADGE: Record<string, string> = {
   PRESENT: 'success',
-  ABSENT: 'danger',
-  LATE: 'warning',
-  AWOL: 'dark',
+  ABSENT:  'danger',
+  LATE:    'warning',
+  AWOL:    'dark',
 };
 
 const SHIFT_BADGE: Record<string, { bg: string; label: string }> = {
-  DAY:     { bg: 'primary',   label: 'Day' },
+  DAY:     { bg: 'primary',   label: 'Day'  },
   NIGHT:   { bg: 'secondary', label: 'Night' },
   FULL_24: { bg: 'dark',      label: '24hr' },
 };
 
-const DEPLOY_TYPE_BADGE: Record<string, { bg: string; label: string } | undefined> = {
-  ARMED:    { bg: 'warning', label: '🔫 Armed' },
-  FIREARMS: { bg: 'danger',  label: '🔥 Firearms' },
+const STATUS_ROW_BG: Record<string, string> = {
+  PRESENT: '#f0fff4',
+  ABSENT:  '#fff5f5',
+  AWOL:    '#fff5f5',
+  LATE:    '#fffbea',
 };
 
-const ROSTER_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR];
+const STATUS_SELECT_BG: Record<string, string> = {
+  PRESENT: '#d5f5e3',
+  ABSENT:  '#fadbd8',
+  AWOL:    '#fadbd8',
+  LATE:    '#fef9e7',
+};
+
+const ROSTER_WRITE:     UserRole[] = [ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR];
 const ATTENDANCE_WRITE: UserRole[] = [
-  ROLES.DIRECTOR,
-  ROLES.ADMINISTRATOR,
-  ROLES.OPERATIONS_SUPERVISOR,
-  ROLES.FIELD_SUPERVISOR,
+  ROLES.DIRECTOR, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR,
 ];
+const ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -64,71 +69,77 @@ function todayStr() {
 
 export default function AttendancePage() {
   const { showToast } = useToast();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const navigate      = useNavigate();
+  const queryClient   = useQueryClient();
+  const { user }      = useAuth();
 
-  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const isAdmin = ADMIN_ROLES.includes(user?.role as UserRole);
+
+  const [selectedDate,   setSelectedDate]   = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
-  const [sheetSearch, setSheetSearch] = useState('');
-
-  // Copy roster modal state
-  const [showCopyModal, setShowCopyModal] = useState(false);
-  const [copySourceDate, setCopySourceDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
-  });
-  const [copyTargetDate, setCopyTargetDate] = useState(todayStr());
-  const copyRoster = useCopyRoster();
-
-  // Replacement prompt state: key = deploymentId
-  const [replacementPrompt, setReplacementPrompt] = useState<Record<string, boolean>>({});
-  const [replacements, setReplacements] = useState<Record<string, GuardBasicResponse[]>>({});
-  const [loadingReplacements, setLoadingReplacements] = useState<Record<string, boolean>>({});
-
-  // Per-guard editable attendance state: key = `guardId:siteId:deploymentId`
+  const [selectedZoneId, setSelectedZoneId] = useState('');
   const [edits, setEdits] = useState<Record<string, AttendanceEdit>>({});
+
+  // Zone list for filter dropdown
+  const { data: allZonesData } = useZones({ isActive: true, limit: 100 });
+  const { data: myZonesData }  = useMyZones();
+  const zones = useMemo(
+    () => (isAdmin ? (allZonesData?.data ?? []) : (myZonesData ?? [])),
+    [isAdmin, allZonesData, myZonesData],
+  );
 
   const { data: sheet, isLoading, refetch } = useDailySheet(
     selectedDate,
     selectedSiteId || undefined,
+    selectedZoneId || undefined,
   );
-  const { data: clients } = useClientList({ limit: 100 });
-  const markAttendance = useMarkAttendance();
-  const deleteDeployment = useDeleteDeployment();
+  const markAttendanceMutation = useMarkAttendance();
+  const deleteDeploymentMutation = useDeleteDeployment();
 
-  // Build flat list of all sites for the filter dropdown
+  // Flat list of sites in the current sheet (for site filter dropdown)
   const allSites = useMemo(() => {
     if (!sheet) return [];
-    return sheet.sites.map((s) => s.site);
+    return sheet.zones.flatMap((z) => z.sites).map((s) => s.site);
   }, [sheet]);
 
-  function getEdit(key: string, deployment: { attendance?: { status: string; timeIn: string | null; timeOut: string | null; notes: string | null } | undefined }): AttendanceEdit {
+  // Flat list of all deployments for summary bar
+  const allDeployments = useMemo(() => {
+    if (!sheet) return [];
+    return sheet.zones.flatMap((z) => z.sites).flatMap((s) => s.deployments);
+  }, [sheet]);
+
+  // Summary counts
+  const totalDeployed  = allDeployments.length;
+  const totalPresent   = allDeployments.filter((d) => d.attendance?.status === 'PRESENT').length;
+  const totalAbsent    = allDeployments.filter((d) => ['ABSENT', 'AWOL'].includes(d.attendance?.status ?? '')).length;
+  const totalUnmarked  = allDeployments.filter((d) => !d.attendance).length;
+
+  // Number of edits with a status set
+  const pendingCount = Object.values(edits).filter((e) => e.status).length;
+
+  function getEdit(
+    key: string,
+    dep?: { attendance?: { status: string; notes: string | null } | null },
+  ): AttendanceEdit {
     if (edits[key]) return edits[key];
-    if (deployment.attendance) {
+    if (dep?.attendance) {
       return {
-        status: deployment.attendance.status as AttendanceStatus,
-        timeIn: deployment.attendance.timeIn
-          ? deployment.attendance.timeIn.substring(11, 16)
-          : '',
-        timeOut: deployment.attendance.timeOut
-          ? deployment.attendance.timeOut.substring(11, 16)
-          : '',
-        notes: deployment.attendance.notes ?? '',
+        status: dep.attendance.status as AttendanceStatus,
+        notes:  dep.attendance.notes ?? '',
       };
     }
-    return { status: '', timeIn: '', timeOut: '', notes: '' };
+    return { status: '', notes: '' };
   }
 
   function setEdit(key: string, patch: Partial<AttendanceEdit>) {
-    setEdits((prev) => ({ ...prev, [key]: { ...getEdit(key, {}), ...prev[key], ...patch } }));
+    setEdits((prev) => ({ ...prev, [key]: { ...getEdit(key), ...prev[key], ...patch } }));
   }
 
   function markSiteAll(siteId: string, status: 'PRESENT' | 'ABSENT') {
-    const siteData = sheet?.sites.find((s) => s.site.id === siteId);
-    if (!siteData) return;
+    const siteGroup = sheet?.zones.flatMap((z) => z.sites).find((s) => s.site.id === siteId);
+    if (!siteGroup) return;
     const updates: Record<string, AttendanceEdit> = {};
-    for (const d of siteData.deployments) {
+    for (const d of siteGroup.deployments) {
       const key = `${d.guard.id}:${siteId}:${d.id}`;
       updates[key] = { ...getEdit(key, d), status };
     }
@@ -143,11 +154,9 @@ export default function AttendancePage() {
       records.push({
         guardId,
         siteId,
-        date: `${selectedDate}T00:00:00.000Z`,
+        date:   `${selectedDate}T00:00:00.000Z`,
         status: edit.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL',
-        timeIn: edit.timeIn || undefined,
-        timeOut: edit.timeOut || undefined,
-        notes: edit.notes || undefined,
+        notes:  edit.notes || undefined,
       });
     }
 
@@ -157,79 +166,20 @@ export default function AttendancePage() {
     }
 
     try {
-      const result = await markAttendance.mutateAsync(records);
+      const result = await markAttendanceMutation.mutateAsync(records);
       showToast(`Attendance saved for ${result.marked + result.updated} guard(s)`, 'success');
       setEdits({});
-      queryClient.invalidateQueries({ queryKey: ['deployments-today'] });
-      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
       refetch();
     } catch {
       showToast('Failed to save attendance', 'danger');
     }
   }
 
-  function handleStatusChange(key: string, status: string, deploymentId: string) {
-    setEdit(key, { status: status as AttendanceStatus });
-    if (status === 'ABSENT' || status === 'AWOL') {
-      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: true }));
-    } else {
-      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: false }));
-    }
-  }
-
-  async function loadReplacements(deploymentId: string, siteId: string, absentGuardId: string) {
-    setLoadingReplacements((prev) => ({ ...prev, [deploymentId]: true }));
-    try {
-      const guards = await attendanceApi.getAvailableReplacements(
-        siteId,
-        `${selectedDate}T00:00:00.000Z`,
-        absentGuardId,
-      );
-      setReplacements((prev) => ({ ...prev, [deploymentId]: guards }));
-    } catch {
-      showToast('Failed to load available replacements', 'danger');
-    } finally {
-      setLoadingReplacements((prev) => ({ ...prev, [deploymentId]: false }));
-    }
-  }
-
-  async function assignReplacement(repGuardId: string, siteId: string, supervisorId: string, shiftType: string, originalGuardId: string, deploymentId: string) {
-    try {
-      await attendanceApi.createRoster({
-        siteId,
-        guardIds: [repGuardId],
-        supervisorId,
-        shiftType,
-        startDate: `${selectedDate}T00:00:00.000Z`,
-        replacementForGuardId: originalGuardId,
-      } as Parameters<typeof attendanceApi.createRoster>[0]);
-      showToast('Replacement assigned', 'success');
-      setReplacementPrompt((prev) => ({ ...prev, [deploymentId]: false }));
-      queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to assign replacement';
-      showToast(msg, 'danger');
-    }
-  }
-
-  async function handleCopyRoster() {
-    try {
-      await copyRoster.mutateAsync({
-        sourceDate: `${copySourceDate}T00:00:00.000Z`,
-        targetDate: `${copyTargetDate}T00:00:00.000Z`,
-      });
-      setShowCopyModal(false);
-      setSelectedDate(copyTargetDate);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to copy roster';
-      showToast(msg, 'danger');
-    }
-  }
-
   async function handleDeleteDeployment(id: string) {
     if (!confirm('Remove this guard from the roster? This cannot be undone.')) return;
     try {
-      await deleteDeployment.mutateAsync(id);
+      await deleteDeploymentMutation.mutateAsync(id);
       showToast('Deployment removed', 'success');
       refetch();
     } catch (err: unknown) {
@@ -238,24 +188,108 @@ export default function AttendancePage() {
     }
   }
 
+  function GuardRow({ dep, siteId, index }: { dep: DeploymentResponse; siteId: string; index: number }) {
+    const key  = `${dep.guard.id}:${siteId}:${dep.id}`;
+    const edit = getEdit(key, dep);
+    const shift = SHIFT_BADGE[dep.shiftType] ?? { bg: 'secondary', label: dep.shiftType };
+    const rowBg = edit.status ? (STATUS_ROW_BG[edit.status] ?? '#fff') : '#fff';
+    const selectBg = edit.status ? (STATUS_SELECT_BG[edit.status] ?? '#fff') : '#fff';
+
+    return (
+      <tr style={{ background: rowBg, fontSize: '0.85rem' }}>
+        <td className="text-muted align-middle" style={{ width: 36 }}>{index}</td>
+        <td className="align-middle">
+          <div className="d-flex align-items-center gap-2">
+            <InitialsAvatar name={dep.guard.fullName} size={28} />
+            <div>
+              <div style={{ fontWeight: 500 }}>{dep.guard.fullName}</div>
+              {dep.guard.rank && (
+                <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
+                  {dep.guard.rank.replace(/_/g, ' ')}
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="align-middle" style={{ width: 72 }}>
+          <Badge bg={shift.bg} style={{ fontSize: '0.72rem' }}>{shift.label}</Badge>
+        </td>
+        {/* Status — screen */}
+        <td className="align-middle d-print-none" style={{ width: 160 }}>
+          <Form.Select
+            size="sm"
+            value={edit.status}
+            onChange={(e) => setEdit(key, { status: e.target.value as AttendanceStatus })}
+            style={{ fontSize: '0.8rem', background: selectBg }}
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Form.Select>
+        </td>
+        {/* Status — print */}
+        <td className="align-middle d-none d-print-table-cell" style={{ width: 80 }}>
+          {edit.status
+            ? <Badge bg={STATUS_BADGE[edit.status] ?? 'secondary'}>{edit.status}</Badge>
+            : <span className="text-muted">—</span>}
+        </td>
+        <td className="align-middle d-print-none">
+          <Form.Control
+            size="sm" type="text"
+            placeholder="Note…"
+            value={edit.notes}
+            onChange={(e) => setEdit(key, { notes: e.target.value })}
+            style={{ fontSize: '0.8rem' }}
+          />
+        </td>
+        {/* Signature column for print */}
+        <td className="d-none d-print-table-cell" style={{ minWidth: 120 }}>&nbsp;</td>
+        <td className="align-middle d-print-none" style={{ width: 36 }}>
+          <RoleGuard allowedRoles={ROSTER_WRITE}>
+            {!dep.attendance && (
+              <Button
+                size="sm" variant="outline-danger"
+                title="Remove from roster"
+                onClick={() => handleDeleteDeployment(dep.id)}
+              >
+                <i className="bi bi-x-lg" />
+              </Button>
+            )}
+          </RoleGuard>
+        </td>
+      </tr>
+    );
+  }
+
+  const hasZoneData = (sheet?.zones ?? []).some((z) => z.zoneId !== null);
+
   const deploymentSheet = (
     <div>
       {/* Controls */}
       <Card className="border-0 shadow-sm mb-3 d-print-none">
         <Card.Body>
-          <Row className="align-items-end g-2">
-            <Col md={3}>
+          <Row className="g-2 align-items-end">
+            <Col xs={6} md={3}>
               <Form.Label className="small fw-semibold">Date</Form.Label>
               <Form.Control
                 type="date"
                 value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setEdits({});
-                }}
+                onChange={(e) => { setSelectedDate(e.target.value); setEdits({}); }}
               />
             </Col>
-            <Col md={3}>
+            <Col xs={6} md={3}>
+              <Form.Label className="small fw-semibold">Zone</Form.Label>
+              <Form.Select
+                value={selectedZoneId}
+                onChange={(e) => { setSelectedZoneId(e.target.value); setSelectedSiteId(''); }}
+              >
+                <option value="">All Zones</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>{z.name}</option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col xs={12} md={3}>
               <Form.Label className="small fw-semibold">Site</Form.Label>
               <Form.Select
                 value={selectedSiteId}
@@ -267,45 +301,17 @@ export default function AttendancePage() {
                 ))}
               </Form.Select>
             </Col>
-            <Col md={3}>
-              <Form.Label className="small fw-semibold">Search</Form.Label>
-              <div className="d-flex">
-                <Form.Control
-                  type="text"
-                  placeholder="Guard name or site..."
-                  value={sheetSearch}
-                  onChange={(e) => setSheetSearch(e.target.value)}
-                  size="sm"
-                />
-                {sheetSearch && (
-                  <Button size="sm" variant="link" className="px-1" onClick={() => setSheetSearch('')}>✕</Button>
-                )}
-              </div>
-            </Col>
-            <Col className="ms-auto d-flex gap-2 justify-content-end align-items-end">
-              <RoleGuard allowedRoles={ROSTER_WRITE}>
-                <Button
-                  variant="outline-primary"
-                  size="sm"
-                  onClick={() => setShowCopyModal(true)}
-                >
-                  <i className="bi bi-copy me-1" />Copy Roster
-                </Button>
-              </RoleGuard>
-              <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
-                <Button
-                  variant="success"
-                  size="sm"
-                  onClick={handleSaveAttendance}
-                  disabled={markAttendance.isPending}
-                >
-                  {markAttendance.isPending
-                    ? <Spinner size="sm" animation="border" />
-                    : 'Save Attendance'}
-                </Button>
-              </RoleGuard>
+            <Col className="d-flex gap-2 justify-content-end">
+              <Button
+                variant="outline-success"
+                size="sm"
+                disabled={!sheet || sheet.zones.length === 0}
+                onClick={() => sheet && exportAttendanceSheet(sheet, selectedDate)}
+              >
+                <i className="bi bi-file-earmark-excel me-1" />Export Excel
+              </Button>
               <Button variant="outline-secondary" size="sm" onClick={() => window.print()}>
-                <i className="bi bi-printer me-1" />Print Sheet
+                <i className="bi bi-printer me-1" />Print
               </Button>
             </Col>
           </Row>
@@ -316,16 +322,7 @@ export default function AttendancePage() {
       <div className="d-none d-print-block mb-3">
         <h5 className="fw-bold">STAP Security Ltd — Daily Deployment Sheet</h5>
         <div className="small">Date: {selectedDate}</div>
-        <div className="small text-muted mt-1">Each guard is shown once — one active deployment per guard per day.</div>
       </div>
-
-      {/* Screen: one-per-day note */}
-      {sheet && sheet.sites.length > 0 && (
-        <div className="text-muted small mb-2">
-          <i className="bi bi-info-circle me-1" />
-          Each guard appears once — one active deployment per guard per day.
-        </div>
-      )}
 
       {isLoading && (
         <div className="text-center py-5">
@@ -333,7 +330,7 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {!isLoading && (!sheet || sheet.sites.length === 0) && (
+      {!isLoading && (!sheet || sheet.zones.length === 0) && (
         <Alert variant="light">
           No deployments found for {selectedDate}.{' '}
           <button
@@ -345,265 +342,184 @@ export default function AttendancePage() {
         </Alert>
       )}
 
-      {sheet && sheet.sites.length > 0 && (
-        <Accordion defaultActiveKey={sheet.sites.map((_, i) => String(i))} alwaysOpen>
-          {sheet.sites
-            .map((siteGroup) => {
-              // Apply sheet search filter
-              if (!sheetSearch) return siteGroup;
-              const q = sheetSearch.toLowerCase();
-              if (siteGroup.site.siteName.toLowerCase().includes(q)) return siteGroup;
-              const filtered = siteGroup.deployments.filter((d) =>
-                d.guard.fullName.toLowerCase().includes(q),
-              );
-              if (filtered.length === 0) return null;
-              return { ...siteGroup, deployments: filtered };
-            })
-            .filter(Boolean)
-            .map((siteGroup, idx) => {
-            const deployedCount = siteGroup!.deployments.length;
-            const required = siteGroup!.site.guardsRequired;
-            const metRequirement = deployedCount >= required;
-
-            return (
-              <Accordion.Item eventKey={String(idx)} key={siteGroup!.site.id} className="mb-2 border-0 shadow-sm">
-                <Accordion.Header>
-                  <div className="d-flex align-items-center gap-3 w-100 me-3">
-                    <div>
-                      <span className="fw-bold">{siteGroup!.site.siteName}</span>
-                      <span className="text-muted small ms-2">— {siteGroup!.site.client.clientName}</span>
-                    </div>
-                    <Badge bg={metRequirement ? 'success' : 'danger'} className="ms-auto">
-                      {deployedCount}/{required} guards
-                    </Badge>
-                    {siteGroup!.supervisor && (
-                      <span className="text-muted small d-none d-md-inline">
-                        Supervisor: {siteGroup!.supervisor.name}
-                      </span>
-                    )}
-                  </div>
-                </Accordion.Header>
-                <Accordion.Body className="p-0">
-                  {siteGroup!.deployments.some((d) => d.copiedFromDate) && (
-                    <div className="px-3 pt-2 text-muted" style={{ fontSize: '0.75rem' }}>
-                      📋 Roster copied from {new Date(siteGroup!.deployments.find((d) => d.copiedFromDate)!.copiedFromDate!).toLocaleDateString()}
-                    </div>
-                  )}
-                  <Table responsive hover size="sm" className="mb-0 align-middle small">
-                    <thead className="table-light d-print-table-header-group">
-                      <tr>
-                        <th>Guard</th>
-                        <th>Shift</th>
-                        <th style={{ width: 90 }}>Time In</th>
-                        <th style={{ width: 90 }}>Time Out</th>
-                        <th style={{ width: 160 }}>Status</th>
-                        <th>Notes</th>
-                        <th className="d-print-none">Actions</th>
-                        <th className="d-none d-print-table-cell">Signature</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {siteGroup!.deployments.map((d) => {
-                        const key = `${d.guard.id}:${siteGroup!.site.id}:${d.id}`;
-                        const edit = getEdit(key, d);
-                        const shift = SHIFT_BADGE[d.shiftType] ?? { bg: 'secondary', label: d.shiftType };
-                        const deployBadge = DEPLOY_TYPE_BADGE[d.deploymentType ?? ''];
-                        const showReplacement = !!replacementPrompt[d.id];
-
-                        return (
-                          <>
-                          <tr key={d.id}>
-                            <td>
-                              <div className="d-flex align-items-center gap-2">
-                                <InitialsAvatar name={d.guard.fullName} size={28} />
-                                <span className="fw-medium">{d.guard.fullName}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <Badge bg={shift.bg}>{shift.label}</Badge>
-                              {deployBadge && (
-                                <Badge bg={deployBadge.bg} text={deployBadge.bg === 'warning' ? 'dark' : undefined} className="ms-1">
-                                  {deployBadge.label}
-                                </Badge>
-                              )}
-                              {d.overtimeHours != null && d.overtimeHours > 0 && (
-                                <Badge bg="warning" text="dark" className="ms-1">OT: {d.overtimeHours}hrs</Badge>
-                              )}
-                            </td>
-                            <td className="d-print-none">
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="HH:MM"
-                                value={edit.timeIn}
-                                onChange={(e) => setEdit(key, { timeIn: e.target.value })}
-                                style={{ width: 80 }}
-                              />
-                            </td>
-                            <td className="d-print-none">
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="HH:MM"
-                                value={edit.timeOut}
-                                onChange={(e) => setEdit(key, { timeOut: e.target.value })}
-                                style={{ width: 80 }}
-                              />
-                            </td>
-                            <td className="d-print-none">
-                              <Form.Select
-                                size="sm"
-                                value={edit.status}
-                                onChange={(e) => handleStatusChange(key, e.target.value, d.id)}
-                              >
-                                {STATUS_OPTIONS.map((o) => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </Form.Select>
-                            </td>
-                            <td className="d-none d-print-table-cell">
-                              {edit.status
-                                ? <Badge bg={STATUS_BADGE[edit.status] ?? 'secondary'}>{edit.status}</Badge>
-                                : <span className="text-muted">—</span>}
-                            </td>
-                            <td className="d-print-none">
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Optional notes"
-                                value={edit.notes}
-                                onChange={(e) => setEdit(key, { notes: e.target.value })}
-                              />
-                            </td>
-                            <td className="d-print-none">
-                              <RoleGuard allowedRoles={ROSTER_WRITE}>
-                                {!d.attendance && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline-danger"
-                                    onClick={() => handleDeleteDeployment(d.id)}
-                                  >
-                                    <i className="bi bi-x-lg" />
-                                  </Button>
-                                )}
-                              </RoleGuard>
-                            </td>
-                            <td className="d-none d-print-table-cell" style={{ minWidth: 120 }}>&nbsp;</td>
-                          </tr>
-                          {/* Inline replacement prompt */}
-                          {showReplacement && (
-                            <tr key={`repl-${d.id}`}>
-                              <td colSpan={8} className="p-0">
-                                <div className="alert alert-warning py-2 mb-0 rounded-0">
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <span className="small fw-bold">
-                                      ⚠️ {d.guard.fullName} marked as {edit.status}. Assign a replacement?
-                                    </span>
-                                    <div className="d-flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline-primary"
-                                        disabled={loadingReplacements[d.id]}
-                                        onClick={() => loadReplacements(d.id, siteGroup!.site.id, d.guard.id)}
-                                      >
-                                        {loadingReplacements[d.id] ? <Spinner size="sm" animation="border" /> : 'Find Replacement'}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline-secondary"
-                                        onClick={() => setReplacementPrompt((prev) => ({ ...prev, [d.id]: false }))}
-                                      >
-                                        Skip
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  {replacements[d.id] && (
-                                    <div className="mt-2">
-                                      {replacements[d.id].length === 0 ? (
-                                        <p className="small text-muted mt-1 mb-0">No available guards found for today.</p>
-                                      ) : (
-                                        replacements[d.id].map((rep) => (
-                                          <div key={rep.id} className="d-flex align-items-center gap-2 py-1 border-top">
-                                            <InitialsAvatar name={rep.fullName} size={24} />
-                                            <span className="small">{rep.fullName}</span>
-                                            {rep.rank && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.6rem' }}>{rep.rank}</Badge>}
-                                            <Button
-                                              size="sm"
-                                              variant="success"
-                                              className="ms-auto"
-                                              onClick={() => assignReplacement(
-                                                rep.id,
-                                                siteGroup!.site.id,
-                                                siteGroup!.supervisor?.id ?? '',
-                                                d.shiftType,
-                                                d.guard.id,
-                                                d.id,
-                                              )}
-                                            >
-                                              Assign
-                                            </Button>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                          </>
-                        );
-                      })}
-                    </tbody>
-                  </Table>
-                  {/* Bulk mark row */}
-                  <div className="d-flex gap-2 px-3 py-2 border-top d-print-none">
-                    <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
-                      <Button
-                        size="sm"
-                        variant="outline-success"
-                        onClick={() => markSiteAll(siteGroup!.site.id, 'PRESENT')}
-                      >
-                        Mark All Present
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline-danger"
-                        onClick={() => markSiteAll(siteGroup!.site.id, 'ABSENT')}
-                      >
-                        Mark All Absent
-                      </Button>
-                    </RoleGuard>
-                  </div>
-                </Accordion.Body>
-              </Accordion.Item>
-            );
-          })}
-        </Accordion>
-      )}
-
-      {/* Sticky save button */}
-      <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
-        {Object.keys(edits).length > 0 && (
+      {sheet && sheet.zones.length > 0 && (
+        <div className="attendance-sheet">
+          <small className="text-muted d-block d-print-none mb-3">
+            ℹ️ Time In and Time Out are not required — working hours are defined by the assigned shift type for each deployment.
+          </small>
+          {/* Summary bar */}
           <div
             className="d-print-none"
             style={{
-              position: 'sticky',
-              bottom: 16,
-              display: 'flex',
-              justifyContent: 'flex-end',
-              pointerEvents: 'none',
+              background: '#1B3A6B', color: 'white',
+              padding: '10px 16px', borderRadius: '0.5rem 0.5rem 0 0',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>
+              📅{' '}
+              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', {
+                weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+              })}
+            </div>
+            <div className="d-flex gap-3 flex-wrap">
+              <span style={{ fontSize: '0.85rem' }}>👮 {totalDeployed} deployed</span>
+              <span style={{ fontSize: '0.85rem', color: '#A9DFBF' }}>✅ {totalPresent} present</span>
+              <span style={{ fontSize: '0.85rem', color: totalAbsent  > 0 ? '#F1948A' : '#A9DFBF' }}>
+                ❌ {totalAbsent} absent
+              </span>
+              <span style={{ fontSize: '0.85rem', color: totalUnmarked > 0 ? '#FAD7A0' : '#A9DFBF' }}>
+                ⏳ {totalUnmarked} unmarked
+              </span>
+            </div>
+          </div>
+
+          {sheet.zones.map((zone, zoneIdx) => (
+            <div key={zone.zoneId ?? 'no-zone'} className="mb-3">
+              {/* Zone header — only when multiple zones or zone data present */}
+              {hasZoneData && (
+                <div
+                  className="zone-header"
+                  style={{
+                    background: '#1B3A6B', color: 'white',
+                    padding: '6px 16px', fontSize: '0.8rem',
+                    fontWeight: 600, letterSpacing: '0.5px',
+                    marginTop: zoneIdx > 0 ? 12 : 0,
+                  }}
+                >
+                  🗺️ {zone.zoneName ?? 'No Zone'}
+                </div>
+              )}
+
+              {zone.sites.map((siteGroup) => {
+                const required = siteGroup.site.guardsRequired;
+                const deployed = siteGroup.deployments.length;
+                const underStaffed = required > 0 && deployed < required;
+
+                return (
+                  <div key={siteGroup.site.id} className="mb-2 shadow-sm border rounded overflow-hidden">
+                    {/* Site header */}
+                    <div
+                      className="site-group-header d-flex align-items-center justify-content-between flex-wrap gap-2"
+                      style={{
+                        background: '#F2F4F7',
+                        padding: '10px 16px',
+                        borderLeft: '4px solid #0F7B6C',
+                        borderBottom: '1px solid #D0D5DD',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1B3A6B' }}>
+                          {siteGroup.site.siteName}
+                        </span>
+                        <span style={{ marginLeft: 8, fontSize: '0.8rem', color: '#6c757d' }}>
+                          {siteGroup.site.client.clientName}
+                        </span>
+                        <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#6c757d' }}>
+                          📍 {siteGroup.site.location}
+                        </span>
+                      </div>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <span style={{
+                          fontSize: '0.8rem',
+                          color: underStaffed ? '#dc3545' : '#1e8449',
+                          fontWeight: 500,
+                        }}>
+                          👮 {deployed}
+                          {required > 0 && ` / ${required} required`}
+                        </span>
+                        {siteGroup.presentCount > 0 && (
+                          <Badge bg="success" style={{ fontSize: '0.7rem' }}>
+                            ✅ {siteGroup.presentCount} present
+                          </Badge>
+                        )}
+                        {siteGroup.absentCount > 0 && (
+                          <Badge bg="danger" style={{ fontSize: '0.7rem' }}>
+                            ❌ {siteGroup.absentCount} absent
+                          </Badge>
+                        )}
+                        {siteGroup.unmarkedCount > 0 && (
+                          <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
+                            ⏳ {siteGroup.unmarkedCount} unmarked
+                          </Badge>
+                        )}
+                        <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
+                          <Button
+                            size="sm" variant="outline-success"
+                            className="d-print-none"
+                            style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                            onClick={() => markSiteAll(siteGroup.site.id, 'PRESENT')}
+                          >
+                            Mark All Present
+                          </Button>
+                          <Button
+                            size="sm" variant="outline-danger"
+                            className="d-print-none"
+                            style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                            onClick={() => markSiteAll(siteGroup.site.id, 'ABSENT')}
+                          >
+                            Mark All Absent
+                          </Button>
+                        </RoleGuard>
+                      </div>
+                    </div>
+
+                    {/* Guards table */}
+                    <Table responsive hover size="sm" className="mb-0 align-middle small" style={{ borderTop: 'none' }}>
+                      <thead className="table-light d-print-table-header-group">
+                        <tr style={{ fontSize: '0.78rem', color: '#6c757d', fontWeight: 600 }}>
+                          <th style={{ width: 36 }}>#</th>
+                          <th>Guard</th>
+                          <th style={{ width: 72 }}>Shift</th>
+                          <th className="d-print-none" style={{ width: 160 }}>Status</th>
+                          <th className="d-none d-print-table-cell" style={{ width: 80 }}>Status</th>
+                          <th className="d-print-none">Notes</th>
+                          <th className="d-none d-print-table-cell" style={{ minWidth: 120 }}>Signature</th>
+                          <th className="d-print-none" style={{ width: 36 }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {siteGroup.deployments.map((dep, idx) => (
+                          <GuardRow
+                            key={dep.id}
+                            dep={dep}
+                            siteId={siteGroup.site.id}
+                            index={idx + 1}
+                          />
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Floating save button */}
+      <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
+        {pendingCount > 0 && (
+          <div
+            className="d-print-none floating-save"
+            style={{
+              position: 'fixed', bottom: 24, right: 24, zIndex: 1050,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+              borderRadius: '0.5rem', overflow: 'hidden',
             }}
           >
             <Button
               variant="success"
+              size="lg"
+              disabled={markAttendanceMutation.isPending}
               onClick={handleSaveAttendance}
-              disabled={markAttendance.isPending}
-              style={{ pointerEvents: 'all', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
             >
-              {markAttendance.isPending
-                ? <><Spinner size="sm" animation="border" className="me-2" />Saving...</>
-                : `Save Attendance (${Object.values(edits).filter((e) => e.status).length} records)`}
+              {markAttendanceMutation.isPending ? (
+                <><Spinner size="sm" animation="border" className="me-2" />Saving…</>
+              ) : (
+                <>💾 Save Attendance ({pendingCount} change{pendingCount !== 1 ? 's' : ''})</>
+              )}
             </Button>
           </div>
         )}
@@ -615,6 +531,13 @@ export default function AttendancePage() {
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4 d-print-none">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Attendance</h4>
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => navigate('/attendance/dashboard')}
+        >
+          📊 View Attendance Dashboard
+        </Button>
       </div>
 
       <Tabs defaultActiveKey="sheet" className="mb-3 d-print-none">
@@ -631,49 +554,10 @@ export default function AttendancePage() {
         </Tab>
       </Tabs>
 
-      {/* Print-only deployment sheet (always visible when printing) */}
+      {/* Print-only — always render sheet when printing */}
       <div className="d-none d-print-block">
         {deploymentSheet}
       </div>
-
-      {/* Copy Roster Modal */}
-      <Modal show={showCopyModal} onHide={() => setShowCopyModal(false)} size="sm">
-        <Modal.Header closeButton>
-          <Modal.Title className="fs-6">Copy Previous Roster</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Alert variant="info" className="small py-2">
-            Guards who are no longer active or already deployed on the target date will be skipped automatically.
-          </Alert>
-          <Form.Group className="mb-3">
-            <Form.Label className="small fw-semibold">Copy roster from this date</Form.Label>
-            <Form.Control
-              type="date"
-              value={copySourceDate}
-              onChange={(e) => setCopySourceDate(e.target.value)}
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Label className="small fw-semibold">Apply to this date</Form.Label>
-            <Form.Control
-              type="date"
-              value={copyTargetDate}
-              onChange={(e) => setCopyTargetDate(e.target.value)}
-            />
-          </Form.Group>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" size="sm" onClick={() => setShowCopyModal(false)}>Cancel</Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleCopyRoster}
-            disabled={copyRoster.isPending || !copySourceDate || !copyTargetDate}
-          >
-            {copyRoster.isPending ? <><Spinner size="sm" className="me-1" />Copying…</> : 'Copy Roster'}
-          </Button>
-        </Modal.Footer>
-      </Modal>
 
       <style>{`
         @media print {
@@ -683,6 +567,22 @@ export default function AttendancePage() {
           .d-print-table-cell { display: table-cell !important; }
           .d-print-table-header-group { display: table-header-group !important; }
           nav, .sidebar, header { display: none !important; }
+          .zone-header {
+            background: #1B3A6B !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .site-group-header {
+            background: #f0f0f0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            page-break-inside: avoid;
+          }
+          .guard-row { page-break-inside: avoid; }
+          .floating-save { display: none !important; }
+          table { border-collapse: collapse; }
+          th, td { border: 1px solid #ccc !important; padding: 4px 8px !important; }
         }
       `}</style>
     </div>

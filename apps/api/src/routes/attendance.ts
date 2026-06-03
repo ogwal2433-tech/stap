@@ -139,9 +139,10 @@ router.get(
   '/sheet',
   requireRole(...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
   asyncHandler(async (req, res) => {
-    const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+    const date   = typeof req.query.date   === 'string' ? req.query.date   : undefined;
     const siteId = typeof req.query.siteId === 'string' ? req.query.siteId : undefined;
-    const result = await deploymentService.getDailySheet(date, siteId);
+    const zoneId = typeof req.query.zoneId === 'string' ? req.query.zoneId : undefined;
+    const result = await deploymentService.getDailySheet(date, siteId, zoneId);
     res.status(200).json({ success: true, data: result });
   }),
 );
@@ -278,6 +279,22 @@ router.post(
         createdAt: checkin.createdAt.toISOString(),
       },
     });
+  }),
+);
+
+// ── GET /dashboard — attendance dashboard stats ────────────────────────────────
+router.get(
+  '/dashboard',
+  requireRole(
+    ROLES.DIRECTOR,
+    ROLES.ASSISTANT_MANAGER,
+    ROLES.OPERATIONS_SUPERVISOR,
+    ROLES.FIELD_SUPERVISOR,
+    ROLES.ADMINISTRATOR,
+  ),
+  asyncHandler(async (req, res) => {
+    const data = await deploymentService.getAttendanceDashboard();
+    res.status(200).json({ success: true, data });
   }),
 );
 

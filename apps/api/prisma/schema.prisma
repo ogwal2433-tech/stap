@@ -139,6 +139,7 @@ model Guard {
   otherNames       String?
   nationalId       String?          @unique
   isIncompleteNID  Boolean          @default(false)
+  onLeave          Boolean          @default(false)
   phone            String
   photoUrl         String?
   dateOfBirth      DateTime
@@ -377,8 +378,9 @@ model Client {
 }
 
 model Site {
-  id                  String   @id @default(cuid())
+  id                  String     @id @default(cuid())
   clientId            String
+  zoneId              String?
   siteName            String
   location            String
   gpsLat              Float?
@@ -386,30 +388,16 @@ model Site {
   siteManagerName     String?
   siteManagerContact  String?
   specialInstructions String?
-  guardsRequired      Int      @default(1)
-
-  // Classification
-  siteType            String   @default("REGULAR")
-
-  // Security requirements
-  requiresFirearms    Boolean  @default(false)
-  requiresArmedGuards Boolean  @default(false)
-  requiresWeapons     Boolean  @default(false)
-  equipmentDetails    String?
-
-  // Shift configuration
-  allowedShiftTypes   String[]
-  defaultShiftType    String?
-
-  // Zone assignment
-  zoneId              String?
-  zone                Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  guardsRequired      Int        @default(1)
+  siteType            String     @default("COMMERCIAL")
+  defaultShiftType    ShiftType?
+  requiresArmedGuards Boolean    @default(false)
+  requiresFirearms    Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  equipmentItems    SiteEquipmentItem[]
+  zone              Zone?               @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   deploymentHistory DeploymentHistory[]
   deployments       Deployment[]
   attendance        AttendanceRecord[]
@@ -431,19 +419,9 @@ model Zone {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  supervisor User?  @relation("ZoneSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
-  alternate  User?  @relation("ZoneAlternate",  fields: [alternateId],  references: [id], onDelete: SetNull)
-  sites      Site[]
-}
-
-model SiteEquipmentItem {
-  id        String  @id @default(cuid())
-  siteId    String
-  site      Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  itemName  String
-  quantity  Int     @default(1)
-  notes     String?
-  createdAt DateTime @default(now())
+  supervisor   User?    @relation("ZoneSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  alternate    User?    @relation("ZoneAlternate",  fields: [alternateId],  references: [id], onDelete: SetNull)
+  sites        Site[]
 }
 
 model Contract {

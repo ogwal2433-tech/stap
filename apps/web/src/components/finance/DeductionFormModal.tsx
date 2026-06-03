@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal, Form, Button, Row, Col, Alert, InputGroup } from 'react-bootstrap';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateDeductionSchema } from '@stap/shared';
 import type { CreateDeductionInput, DeductionTypeResponse } from '@stap/shared';
@@ -9,20 +9,48 @@ import { useDeductionTypes } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
 
 interface Props {
-  guardId: string;
-  prefilledType?: DeductionTypeResponse | null;
-  onClose: () => void;
+  guardId:   string;
+  guardName?: string;
+  onClose:   () => void;
 }
 
-export default function DeductionFormModal({ guardId, prefilledType, onClose }: Props) {
+const TYPES = [
+  { value: 'UNIFORM_RECOVERY',         label: 'Uniform Recovery' },
+  { value: 'DAMAGE_LOSS',              label: 'Damage / Loss' },
+  { value: 'DISCIPLINARY_PENALTY',     label: 'Disciplinary Penalty' },
+  { value: 'SALARY_ADVANCE_REPAYMENT', label: 'Salary Advance Repayment' },
+  { value: 'LATE_COMING',              label: 'Late Coming' },
+  { value: 'NSSF',                     label: 'NSSF Contribution' },
+];
+
+function firstOfNextMonth(): string {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1)
+    .toISOString()
+    .split('T')[0];
+}
+
+function formatMonth(dateStr: string): string {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+export default function DeductionFormModal({ guardId, guardName, onClose }: Props) {
   const { showToast } = useToast();
   const createDeduction = useCreateDeduction();
   const { data: deductionTypes = [], isLoading: typesLoading } = useDeductionTypes(true);
 
-  const [selectedType, setSelectedType] = useState<DeductionTypeResponse | null>(prefilledType ?? null);
+  const [selectedType, setSelectedType] = useState<DeductionTypeResponse | null>(null);
+
+  function handleTypeChange(code: string) {
+    const found = deductionTypes.find((t) => t.code === code) ?? null;
+    setSelectedType(found);
+  }
 
   const {
     register,
+    control,
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
@@ -30,10 +58,13 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
     resolver: zodResolver(CreateDeductionSchema),
     defaultValues: {
       guardId,
-      type:   prefilledType?.code ?? '',
-      amount: prefilledType?.defaultAmount ?? undefined,
+      type:          'UNIFORM_RECOVERY',
+      effectiveDate: firstOfNextMonth(),
     },
   });
+
+  const watchedAmount        = useWatch({ control, name: 'amount' });
+  const watchedEffectiveDate = useWatch({ control, name: 'effectiveDate' });
 
   const onSubmit = async (values: CreateDeductionInput) => {
     try {
@@ -45,15 +76,10 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
     }
   };
 
-  const handleTypeChange = (code: string) => {
-    const found = deductionTypes.find((t) => t.code === code) ?? null;
-    setSelectedType(found);
-    if (found?.defaultAmount != null) {
-      setValue('amount', found.defaultAmount);
-    } else {
-      setValue('amount', undefined as any);
-    }
-  };
+  const payrollMonth = formatMonth(watchedEffectiveDate);
+  const amountDisplay = watchedAmount
+    ? Number(watchedAmount).toLocaleString()
+    : '—';
 
   return (
     <Modal show onHide={onClose}>
@@ -121,15 +147,21 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
             </Col>
             <Col md={6}>
               <Form.Group>
-                <Form.Label>Effective Date <span className="text-danger">*</span></Form.Label>
+                <Form.Label>
+                  Effective From <span className="text-danger">*</span>
+                  <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.75rem' }}>
+                    (applied in payroll from this date)
+                  </span>
+                </Form.Label>
                 <Form.Control
                   type="date"
-                  {...register('effectiveDate', {
-                    setValueAs: (v: string) => (v ? new Date(v).toISOString() : v),
-                  })}
+                  {...register('effectiveDate')}
                   isInvalid={!!errors.effectiveDate}
                 />
                 <Form.Control.Feedback type="invalid">{errors.effectiveDate?.message}</Form.Control.Feedback>
+                <Form.Text className="text-muted">
+                  Deductions set to {payrollMonth} will be applied in the {payrollMonth} payroll.
+                </Form.Text>
               </Form.Group>
             </Col>
             <Col md={12}>
@@ -144,14 +176,13 @@ export default function DeductionFormModal({ guardId, prefilledType, onClose }: 
               </Form.Group>
             </Col>
           </Row>
-          <Alert variant="info" className="mt-3 mb-0 small">
-            This deduction of{' '}
-            {selectedType ? (
-              <>
-                UGX {'{amount}'} — <strong>{selectedType.name}</strong>
-              </>
-            ) : 'the selected type'}{' '}
-            will be applied in the next payroll run.
+
+          <Alert variant="info" className="mt-3 mb-0">
+            <small>
+              This deduction of <strong>UGX {amountDisplay}</strong> will be automatically
+              deducted from <strong>{guardName ?? 'this guard'}</strong>'s salary in
+              the <strong>{payrollMonth}</strong> payroll run.
+            </small>
           </Alert>
         </Modal.Body>
         <Modal.Footer>

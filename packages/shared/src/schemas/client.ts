@@ -77,35 +77,16 @@ export const SITE_TYPES = {
 // ── Site schemas ───────────────────────────────────────────────────────────────
 
 export const CreateSiteSchema = z.object({
-  clientId:            z.string().min(1),
-  siteName:            z.string().min(1).max(200),
-  location:            z.string().min(1).max(500),
-  gpsLat:              z.number().min(-90).max(90).optional(),
-  gpsLon:              z.number().min(-180).max(180).optional(),
-  siteManagerName:     z.string().max(100).optional(),
-  siteManagerContact:  z.string().optional(),
-  specialInstructions: z.string().max(2000).optional(),
-  guardsRequired:      z.number().int().min(1).default(1),
-
-  // Classification
-  siteType: z.enum(['REGULAR', 'TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default('REGULAR'),
-
-  // Security requirements
-  requiresFirearms:    z.boolean().default(false),
-  requiresArmedGuards: z.boolean().default(false),
-  requiresWeapons:     z.boolean().default(false),
-  equipmentDetails:    z.string().max(1000).optional(),
-
-  // Shift configuration
-  allowedShiftTypes: z.array(z.string()).default([]),
-  defaultShiftType:  z.string().optional(),
-
-  // Structured equipment list
-  equipmentItems: z.array(z.object({
-    itemName: z.string().min(1).max(200),
-    quantity: z.coerce.number().int().min(1).default(1),
-    notes:    z.string().max(500).optional(),
-  })).default([]),
+  clientId: z.string().min(1),
+  siteName: z.string().min(1).max(200),
+  location: z.string().min(1).max(500),
+  gpsLat: z.number().min(-90).max(90).optional(),
+  gpsLon: z.number().min(-180).max(180).optional(),
+  siteManagerName: z.string().max(100).optional(),
+  siteManagerContact: z.string().optional(),
+  specialInstructions: z.string().max(1000).optional(),
+  guardsRequired: z.number().int().min(1).default(1),
+  zoneId: z.string().nullable().optional(),
 });
 
 export const UpdateSiteSchema = CreateSiteSchema.omit({ clientId: true }).partial();

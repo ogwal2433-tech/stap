@@ -96,7 +96,11 @@ export function useRunPayroll() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: RunPayrollInput) => payrollApi.calculate(data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payroll'] });
+      // Deduction statuses change from PENDING → APPLIED during payroll calculation
+      qc.invalidateQueries({ queryKey: ['deductions'] });
+    },
   });
 }
 

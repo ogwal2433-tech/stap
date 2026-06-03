@@ -7,7 +7,6 @@ import type {
   MarkAttendanceInput,
   SupervisorCheckinInput,
 } from '@stap/shared';
-import { useToast } from '../context/ToastContext';
 
 export function useTodaysDeployments(params?: Partial<DeploymentListQuery>) {
   return useQuery({
@@ -17,10 +16,12 @@ export function useTodaysDeployments(params?: Partial<DeploymentListQuery>) {
   });
 }
 
-export function useDailySheet(date?: string, siteId?: string) {
+export function useDailySheet(date?: string, siteId?: string, zoneId?: string) {
   return useQuery({
-    queryKey: ['daily-sheet', date, siteId],
-    queryFn: () => attendanceApi.getDailySheet(date, siteId),
+    queryKey: ['daily-sheet', date, siteId, zoneId],
+    queryFn:  () => attendanceApi.getDailySheet(date, siteId, zoneId),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -55,6 +56,8 @@ export function useMarkAttendance() {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       queryClient.invalidateQueries({ queryKey: ['deployments-today'] });
       queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
     },
   });
 }
@@ -94,29 +97,11 @@ export function useUpcomingDeployments(guardId: string, days = 7) {
   });
 }
 
-export function useCopyRoster() {
-  const qc = useQueryClient();
-  const { showToast } = useToast();
-  return useMutation({
-    mutationFn: ({ sourceDate, targetDate }: { sourceDate: string; targetDate: string }) =>
-      attendanceApi.copyRoster(sourceDate, targetDate),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['daily-sheet'] });
-      qc.invalidateQueries({ queryKey: ['deployments-today'] });
-      showToast(`${data.created} deployment(s) copied, ${data.skipped} skipped`, 'success');
-    },
-  });
-}
-
-export function useAvailableReplacements(
-  siteId: string,
-  date: string,
-  absentGuardId: string,
-  enabled = false,
-) {
+export function useAttendanceDashboard() {
   return useQuery({
-    queryKey: ['replacements', siteId, date, absentGuardId],
-    queryFn:  () => attendanceApi.getAvailableReplacements(siteId, date, absentGuardId),
-    enabled:  enabled && Boolean(date) && Boolean(absentGuardId),
+    queryKey: ['attendance-dashboard'],
+    queryFn:  () => attendanceApi.getAttendanceDashboard(),
+    staleTime: 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   });
 }

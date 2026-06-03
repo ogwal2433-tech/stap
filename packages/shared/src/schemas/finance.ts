@@ -22,10 +22,18 @@ export const RecordPaymentSchema = z.object({
 
 export const CreateDeductionSchema = z.object({
   guardId:       z.string().min(1),
-  type:          z.string().min(1).max(100).describe('Deduction type code from settings'),
+  type:          z.enum([
+    'UNIFORM_RECOVERY',
+    'DAMAGE_LOSS',
+    'DISCIPLINARY_PENALTY',
+    'SALARY_ADVANCE_REPAYMENT',
+    'LATE_COMING',
+    'NSSF',
+  ]),
   amount:        z.number().int().positive(),
   description:   z.string().min(5),
-  effectiveDate: z.string().datetime(),
+  // Accept both YYYY-MM-DD (from date inputs) and full ISO strings (from API callers)
+  effectiveDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Invalid date' }),
 });
 
 export const RunPayrollSchema = z.object({
@@ -87,17 +95,18 @@ export interface PaymentResponse {
 }
 
 export interface DeductionResponse {
-  id:            string;
-  guardId:       string;
-  guardName:     string;
-  type:          string;
-  amount:        number;
-  description:   string;
-  effectiveDate: string;
-  status:        string;
-  payrollRunId:  string | null;
-  createdBy:     string;
-  createdAt:     string;
+  id:               string;
+  guardId:          string;
+  guardName:        string;
+  type:             string;
+  amount:           number;
+  description:      string;
+  effectiveDate:    string;
+  status:           string;
+  payrollRunId:     string | null;
+  appliedInPayroll: { month: number; year: number } | null;
+  createdBy:        string;
+  createdAt:        string;
 }
 
 export interface PayrollRunResponse {
@@ -122,7 +131,13 @@ export interface PayslipResponse {
   guardName:           string;
   payrollRunId:        string;
   grossSalary:         number;
-  deductionsBreakdown: Array<{ type: string; amount: number; description: string }>;
+  deductionsBreakdown: Array<{
+    deductionId?:  string;
+    type:          string;
+    amount:        number;
+    description:   string;
+    effectiveDate?: string;
+  }>;
   totalDeductions:     number;
   netSalary:           number;
   daysWorked:          number;

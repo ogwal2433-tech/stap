@@ -41,7 +41,7 @@ export default function SiteAssignmentModal({
   function handleAssign() {
     if (selected.size === 0) return;
     assignMutation.mutate(
-      { id: zoneId, siteIds: Array.from(selected) },
+      { zoneId, addSiteIds: Array.from(selected), removeSiteIds: [] },
       {
         onSuccess: () => {
           showToast(`${selected.size} site(s) assigned to ${zoneName}.`, 'success');

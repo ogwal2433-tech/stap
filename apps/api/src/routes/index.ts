@@ -14,7 +14,7 @@ import { portalRouter } from './portal';
 import { hrRouter } from './hr';
 import { inventoryRouter } from './inventory';
 import { settingsRouter } from './settings';
-import { zonesRouter } from './zones';
+import zonesRouter from './zones';
 
 const router: IRouter = Router();
 

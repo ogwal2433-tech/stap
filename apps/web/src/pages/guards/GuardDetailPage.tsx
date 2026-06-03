@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col, Dropdown,
+  Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
   Form, Modal, Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
-import { useTodaysDeployments } from '../../hooks/useAttendance';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
@@ -21,11 +20,9 @@ import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
-  ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, SALARY_INCREMENT_RULES,
-  type UserRole, type GuardDocumentResponse, type GuardTransferResponse,
+  ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  type GuardDocumentResponse, type GuardTransferResponse,
 } from '@stap/shared';
-import { useGuardRanks, useDeductionTypes } from '../../hooks/useSettings';
-import type { DeductionTypeResponse } from '@stap/shared';
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -33,7 +30,13 @@ const STATUS_BADGE: Record<string, string> = {
   TERMINATED: 'danger',
 };
 
-const RANK_BADGE_COLORS = ['secondary', 'info', 'primary', 'warning', 'dark'];
+const RANK_BADGE: Record<string, string> = {
+  GUARD:        'secondary',
+  SENIOR_GUARD: 'info',
+  CORPORAL:     'primary',
+  SERGEANT:     'warning',
+  SUPERVISOR:   'dark',
+};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -185,10 +188,6 @@ export default function GuardDetailPage() {
   const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
-  const { data: ranks = [] } = useGuardRanks(false);
-  const { data: deductionTypes = [] } = useDeductionTypes(true);
-  const todayIso = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
-  const { data: todayDeployments } = useTodaysDeployments({ guardId: id, date: todayIso, limit: 1 });
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [deployPage, setDeployPage] = useState(1);
@@ -203,7 +202,6 @@ export default function GuardDetailPage() {
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
-  const [prefilledDeductionType, setPrefilledDeductionType] = useState<DeductionTypeResponse | null>(null);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [idCardError, setIdCardError] = useState('');
@@ -375,22 +373,12 @@ export default function GuardDetailPage() {
               >
                 {guard.employmentStatus}
               </Badge>
-              {guard.employmentStatus === 'ACTIVE' && (
-                todayDeployments?.data?.[0] ? (
-                  <Badge bg="success" className="px-3 py-2 mb-2 d-block" style={{ fontSize: '0.75rem' }}>
-                    📍 Deployed today — {todayDeployments.data[0].site.siteName}
-                  </Badge>
-                ) : (
-                  <Badge bg="secondary" className="px-3 py-2 mb-2 d-block" style={{ fontSize: '0.75rem' }}>
-                    📭 Not deployed today
-                  </Badge>
-                )
-              )}
               <Badge
-                bg={RANK_BADGE_COLORS[((ranks.find((r) => r.name === guard.rank)?.displayOrder ?? 1) - 1) % RANK_BADGE_COLORS.length]}
+                bg={RANK_BADGE[guard.rank] ?? 'secondary'}
+                text={guard.rank === 'SERGEANT' ? 'dark' : undefined}
                 className="fs-6 px-3 py-2 mb-2 d-block"
               >
-                {guard.rank}
+                {GUARD_RANKS[guard.rank] ?? guard.rank}
               </Badge>
               <Badge
                 bg={guard.contractType === 'PERMANENT' ? 'success' : 'warning'}
@@ -430,62 +418,6 @@ export default function GuardDetailPage() {
           </Row>
         </div>
       </div>
-
-      {/* Salary Increment History */}
-      {guard.contractType === 'PERMANENT' && (
-        <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
-          <Card className="mb-3">
-            <Card.Header className="fw-bold">Salary Increment History</Card.Header>
-            <Card.Body>
-              <Row>
-                <Col md={4}>
-                  <div className="text-muted small">Current Salary</div>
-                  <div className="fw-semibold">UGX {guard.salaryRate.toLocaleString()} / month</div>
-                </Col>
-                <Col md={4}>
-                  <div className="text-muted small">Total Increments Applied</div>
-                  <div className="fw-semibold">{guard.incrementCount ?? 0}</div>
-                </Col>
-                <Col md={4}>
-                  <div className="text-muted small">Last Increment Date</div>
-                  <div className="fw-semibold">
-                    {guard.lastIncrementDate ? formatDate(guard.lastIncrementDate) : 'None yet'}
-                  </div>
-                </Col>
-              </Row>
-              <Row className="mt-3">
-                <Col md={6}>
-                  <div className="text-muted small">Next Increment Due</div>
-                  <div className="fw-semibold">
-                    {guard.nextIncrementDate ? formatDate(guard.nextIncrementDate) : '—'}
-                  </div>
-                </Col>
-                <Col md={6}>
-                  <div className="text-muted small">Next Increment Amount</div>
-                  <div className="fw-semibold">
-                    {guard.incrementCount === 0
-                      ? `UGX ${SALARY_INCREMENT_RULES.firstYearIncrement.toLocaleString()}`
-                      : `UGX ${SALARY_INCREMENT_RULES.subsequentYearIncrement.toLocaleString()}`}
-                  </div>
-                </Col>
-              </Row>
-              {guard.incrementCount === 0 && guard.contractStart && (
-                <Alert variant="info" className="mb-0 mt-3 small py-2">
-                  First increment of UGX {SALARY_INCREMENT_RULES.firstYearIncrement.toLocaleString()} applies on{' '}
-                  {formatDate(
-                    new Date(
-                      new Date(guard.contractStart).setFullYear(
-                        new Date(guard.contractStart).getFullYear() + 1,
-                      ),
-                    ).toISOString(),
-                  )}
-                  .
-                </Alert>
-              )}
-            </Card.Body>
-          </Card>
-        </RoleGuard>
-      )}
 
       {/* Suspension banner */}
       {guard.employmentStatus === 'SUSPENDED' && guard.latestSuspension && (
@@ -1102,34 +1034,12 @@ export default function GuardDetailPage() {
 
         {/* ── Deductions Tab ────────────────────────────────────────────────── */}
         {canViewDeductions && <Tab eventKey="deductions" title="Deductions">
-            <div className="d-flex justify-content-between align-items-center mb-2">
+            <div className="d-flex justify-content-between align-items-center mb-3">
               <span className="fw-semibold small">Guard Deductions</span>
-              <Button
-                size="sm"
-                variant="outline-danger"
-                onClick={() => { setPrefilledDeductionType(null); setShowDeductionModal(true); }}
-              >
+              <Button size="sm" variant="outline-danger" onClick={() => setShowDeductionModal(true)}>
                 + Add Deduction
               </Button>
             </div>
-            {deductionTypes.filter((t) => t.defaultAmount !== null && !t.isAutomatic).length > 0 && (
-              <div className="d-flex flex-wrap gap-1 mb-3">
-                {deductionTypes
-                  .filter((t) => t.defaultAmount !== null && !t.isAutomatic)
-                  .map((t) => (
-                    <Button
-                      key={t.id}
-                      variant="outline-secondary"
-                      size="sm"
-                      style={{ fontSize: '0.75rem' }}
-                      onClick={() => { setPrefilledDeductionType(t); setShowDeductionModal(true); }}
-                    >
-                      + {t.name} UGX {t.defaultAmount!.toLocaleString()}
-                    </Button>
-                  ))
-                }
-              </div>
-            )}
 
             {deductions.length === 0 ? (
               <Alert variant="light" className="small py-2">No deductions recorded.</Alert>
@@ -1143,6 +1053,7 @@ export default function GuardDetailPage() {
                       <th>Description</th>
                       <th>Effective Date</th>
                       <th>Status</th>
+                      <th>Applied In</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -1160,6 +1071,22 @@ export default function GuardDetailPage() {
                           >
                             {d.status}
                           </Badge>
+                        </td>
+                        <td className="text-muted" style={{ fontSize: '0.75rem' }}>
+                          {d.status === 'PENDING' && (
+                            <span>
+                              Will apply in{' '}
+                              {new Date(d.effectiveDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                            </span>
+                          )}
+                          {d.status === 'APPLIED' && d.appliedInPayroll && (
+                            <span className="text-success">
+                              Applied in {d.appliedInPayroll.month}/{d.appliedInPayroll.year} payroll
+                            </span>
+                          )}
+                          {d.status === 'CANCELLED' && (
+                            <span className="text-danger">Cancelled</span>
+                          )}
                         </td>
                         <td>
                           {d.status === 'PENDING' && (
@@ -1232,8 +1159,8 @@ export default function GuardDetailPage() {
       {showDeductionModal && (
         <DeductionFormModal
           guardId={id!}
-          prefilledType={prefilledDeductionType}
-          onClose={() => { setShowDeductionModal(false); setPrefilledDeductionType(null); refetchDeductions(); }}
+          guardName={guard.fullName}
+          onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
         />
       )}
       {showReinstateModal && (
@@ -1252,9 +1179,6 @@ export default function GuardDetailPage() {
         <TransferModal
           guardId={id!}
           guardName={guard.fullName}
-          currentSiteId={
-            deployHistory?.data.find((d) => !d.endDate)?.site.id ?? null
-          }
           currentSiteName={
             deployHistory?.data.find((d) => !d.endDate)?.site.siteName ?? null
           }

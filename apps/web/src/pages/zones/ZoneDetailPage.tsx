@@ -27,7 +27,7 @@ export default function ZoneDetailPage() {
   const [showEdit,   setShowEdit]   = useState(false);
   const [showAssign, setShowAssign] = useState(false);
 
-  const { data: zone, isLoading, isError } = useZone(id);
+  const { data: zone, isLoading, isError } = useZone(id ?? '');
   const updateZone    = useUpdateZone();
   const removeSites   = useRemoveSitesFromZone();
   const deactivate    = useDeactivateZone();
