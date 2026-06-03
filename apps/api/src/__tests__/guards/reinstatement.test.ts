@@ -1,16 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ROLES } from '@stap/shared';
 
-// ── Mocks ──────────────────────────────────────────────────────────────────────
-
 vi.mock('../../db/prisma', () => ({
   default: {
-    guard: {
-      findUnique: vi.fn(),
-      update:     vi.fn(),
-    },
-    disciplinaryRecord: { create: vi.fn() },
-    auditLog:           { create: vi.fn() },
+    guard:               { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    disciplinaryRecord:  { create: vi.fn() },
+    auditLog:            { create: vi.fn() },
   },
 }));
 
@@ -33,7 +28,7 @@ import { notificationService } from '../../services/notificationService';
 import { guardService } from '../../services/guardService';
 import { NotFoundError, AppError } from '../../errors/AppError';
 
-const mp      = prisma as any;
+const mp       = prisma as any;
 const mockNotif = notificationService as any;
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -55,7 +50,7 @@ function makeSuspendedGuard(overrides: Record<string, any> = {}) {
     accountNumber:    null,
     salaryRate:       450000,
     employmentStatus: 'SUSPENDED' as const,
-    contractStart:    new Date('2026-01-01'),
+    contractStart:    new Date('2022-01-15'),
     contractEnd:      null,
     psoCertNumber:    null,
     createdAt:        new Date(),
@@ -64,11 +59,12 @@ function makeSuspendedGuard(overrides: Record<string, any> = {}) {
     contractType:     'PERMANENT',
     probationStatus:  'CONFIRMED',
     probationEndDate: null,
-    reinstatedCount:  0,
-    lastReinstatedAt: null,
-    lastReinstatedBy: null,
-    incrementCount:   0,
-    lastIncrementDate: null,
+    reinstatedCount:   0,
+    lastReinstatedAt:  null,
+    lastReinstatedBy:  null,
+    effectiveServiceStart: null,
+    incrementCount:    3,
+    lastIncrementDate: new Date('2024-01-15'),
     gender: null, tribe: null, placeOfBirth: null, educationLevel: null,
     registeredNames: null, maritalStatus: null, spouseName: null,
     spouseWorkplace: null, spouseTelephone: null, preferredPaymentContact: null,
@@ -85,157 +81,240 @@ function makeSuspendedGuard(overrides: Record<string, any> = {}) {
     numberOfDependents: null,
     hasDisability: false, disabilityDetails: null,
     takesAlcohol: false, hasAllergies: false, allergyDetails: null,
-    relatives:   [],
-    associates:  [],
+    relatives:  [],
+    associates: [],
     _count: { deployments: 0, attendance: 0, disciplinary: 0, documents: 0 },
     ...overrides,
   };
 }
 
-const reinstatedGuard = {
-  ...makeSuspendedGuard(),
-  employmentStatus: 'ACTIVE' as const,
-  reinstatedCount:  1,
-  lastReinstatedAt: new Date(),
-  lastReinstatedBy: 'user1',
-};
+function makeActiveGuard(overrides = {}) {
+  return { ...makeSuspendedGuard({ employmentStatus: 'ACTIVE' }), ...overrides };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mp.guard.update.mockResolvedValue(reinstatedGuard);
+  mp.guard.update.mockResolvedValue(makeActiveGuard({ reinstatedCount: 1, effectiveServiceStart: new Date(), incrementCount: 0, lastIncrementDate: null }));
   mp.disciplinaryRecord.create.mockResolvedValue({});
   mp.auditLog.create.mockResolvedValue({});
   mockNotif.sendToRole.mockResolvedValue(undefined);
 });
 
-// ── Status transition ──────────────────────────────────────────────────────────
+// ── TEST 1: Basic reinstatement ────────────────────────────────────────────────
 
-describe('guardService.reinstateGuard() — status and counters', () => {
+describe('TEST 1 — basic reinstatement', () => {
   it('sets employmentStatus to ACTIVE', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
-
     await guardService.reinstateGuard('g1', 'Disciplinary cleared', 'user1');
-
-    const updateData = mp.guard.update.mock.calls[0][0].data;
-    expect(updateData.employmentStatus).toBe('ACTIVE');
+    expect(mp.guard.update.mock.calls[0][0].data.employmentStatus).toBe('ACTIVE');
   });
 
-  it('increments reinstatedCount by 1 from the current value', async () => {
+  it('increments reinstatedCount from the current value', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ reinstatedCount: 2 }));
-
     await guardService.reinstateGuard('g1', 'Cleared', 'user1');
-
-    const updateData = mp.guard.update.mock.calls[0][0].data;
-    expect(updateData.reinstatedCount).toBe(3);
+    expect(mp.guard.update.mock.calls[0][0].data.reinstatedCount).toBe(3);
   });
 
-  it('sets lastReinstatedAt to a recent date', async () => {
+  it('sets lastReinstatedAt to now', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
-    const before = new Date();
-
+    const before = Date.now();
     await guardService.reinstateGuard('g1', 'Cleared', 'user1');
-
-    const updateData = mp.guard.update.mock.calls[0][0].data;
-    const after = new Date();
-    expect(updateData.lastReinstatedAt).toBeInstanceOf(Date);
-    expect(updateData.lastReinstatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
-    expect(updateData.lastReinstatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+    const ts = mp.guard.update.mock.calls[0][0].data.lastReinstatedAt as Date;
+    expect(ts).toBeInstanceOf(Date);
+    expect(ts.getTime()).toBeGreaterThanOrEqual(before);
+    expect(ts.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  it('sets lastReinstatedBy to the acting user id', async () => {
+  it('sets lastReinstatedBy to the acting user', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
-
-    await guardService.reinstateGuard('g1', 'Cleared', 'user-abc');
-
-    const updateData = mp.guard.update.mock.calls[0][0].data;
-    expect(updateData.lastReinstatedBy).toBe('user-abc');
+    await guardService.reinstateGuard('g1', 'Cleared', 'admin-xyz');
+    expect(mp.guard.update.mock.calls[0][0].data.lastReinstatedBy).toBe('admin-xyz');
   });
 });
 
-// ── Disciplinary record ────────────────────────────────────────────────────────
+// ── TEST 2: effectiveServiceStart reset ───────────────────────────────────────
 
-describe('guardService.reinstateGuard() — disciplinary record', () => {
-  it('creates a REINSTATEMENT disciplinary record', async () => {
+describe('TEST 2 — effectiveServiceStart set to today (not contractStart)', () => {
+  it('sets effectiveServiceStart to a Date instance close to now', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ contractStart: new Date('2022-01-15') }));
+    const before = Date.now();
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    const ess = mp.guard.update.mock.calls[0][0].data.effectiveServiceStart as Date;
+    expect(ess).toBeInstanceOf(Date);
+    expect(Math.abs(ess.getTime() - before)).toBeLessThan(5000);
+  });
+
+  it('effectiveServiceStart is NOT the same as original contractStart', async () => {
+    const contractStart = new Date('2022-01-15');
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ contractStart }));
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    const ess = mp.guard.update.mock.calls[0][0].data.effectiveServiceStart as Date;
+    expect(ess.getTime()).not.toBe(contractStart.getTime());
+  });
+});
+
+// ── TEST 3: incrementCount reset ──────────────────────────────────────────────
+
+describe('TEST 3 — incrementCount reset to 0', () => {
+  it('resets incrementCount regardless of prior value', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ incrementCount: 5 }));
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    expect(mp.guard.update.mock.calls[0][0].data.incrementCount).toBe(0);
+  });
+});
+
+// ── TEST 4: lastIncrementDate reset ───────────────────────────────────────────
+
+describe('TEST 4 — lastIncrementDate reset to null', () => {
+  it('resets lastIncrementDate to null', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ lastIncrementDate: new Date('2024-01-15') }));
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    expect(mp.guard.update.mock.calls[0][0].data.lastIncrementDate).toBeNull();
+  });
+});
+
+// ── TEST 5: Disciplinary record ───────────────────────────────────────────────
+
+describe('TEST 5 — disciplinaryRecord created with REINSTATEMENT type and next increment in outcome', () => {
+  it('creates REINSTATEMENT record with correct fields', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
-
-    await guardService.reinstateGuard('g1', 'Disciplinary cleared', 'user1');
-
+    await guardService.reinstateGuard('g1', 'Case resolved.', 'user1');
     expect(mp.disciplinaryRecord.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          guardId: 'g1',
-          type:    'REINSTATEMENT',
-          reason:  'Disciplinary cleared',
+          type:      'REINSTATEMENT',
+          guardId:   'g1',
+          officerId: 'user1',
+          reason:    'Case resolved.',
+          outcome:   expect.stringContaining('20,000'),
         }),
       }),
     );
   });
 });
 
-// ── Error cases ────────────────────────────────────────────────────────────────
+// ── TEST 6: Audit log ─────────────────────────────────────────────────────────
 
-describe('guardService.reinstateGuard() — error cases', () => {
-  it('throws 400 AppError when guard is already ACTIVE', async () => {
+describe('TEST 6 — auditLog created with old and new values', () => {
+  it('creates audit log with GUARD_REINSTATED action', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ incrementCount: 3 }));
+    await guardService.reinstateGuard('g1', 'Cleared.', 'user1');
+    const call = mp.auditLog.create.mock.calls[0][0].data;
+    expect(call.action).toBe('GUARD_REINSTATED');
+    expect(call.entity).toBe('guard');
+    expect(call.entityId).toBe('g1');
+    expect(call.oldValue.employmentStatus).toBe('SUSPENDED');
+    expect(call.oldValue.incrementCount).toBe(3);
+    expect(call.newValue.incrementCount).toBe(0);
+    expect(call.newValue.employmentStatus).toBe('ACTIVE');
+  });
+});
+
+// ── TEST 7: Notifications ─────────────────────────────────────────────────────
+
+describe('TEST 7 — notifications sent to OPERATIONS_SUPERVISOR and ASSISTANT_MANAGER', () => {
+  it('notifies both roles', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    const roles = mockNotif.sendToRole.mock.calls.map((c: any[]) => c[0].role);
+    expect(roles).toContain(ROLES.OPERATIONS_SUPERVISOR);
+    expect(roles).toContain(ROLES.ASSISTANT_MANAGER);
+  });
+
+  it('notification message mentions the guard name', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
+    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
+    const msg = mockNotif.sendToRole.mock.calls[0][0].message as string;
+    expect(msg).toContain('David');
+    expect(msg).toContain('Ochieng');
+  });
+});
+
+// ── TEST 8: Active guard rejected ────────────────────────────────────────────
+
+describe('TEST 8 — throws 400 for ACTIVE guard', () => {
+  it('throws AppError 400', async () => {
     mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ employmentStatus: 'ACTIVE' }));
-
     await expect(
-      guardService.reinstateGuard('g1', 'Reason', 'user1'),
+      guardService.reinstateGuard('g1', 'No need.', 'user1'),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
+});
 
-  it('throws AppError with descriptive message when guard is ACTIVE', async () => {
-    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ employmentStatus: 'ACTIVE' }));
+// ── TEST 9: Unknown guard ─────────────────────────────────────────────────────
 
-    await expect(
-      guardService.reinstateGuard('g1', 'Reason', 'user1'),
-    ).rejects.toThrow(AppError);
-  });
-
-  it('throws NotFoundError when guard does not exist', async () => {
+describe('TEST 9 — throws 404 for unknown guard', () => {
+  it('throws NotFoundError', async () => {
     mp.guard.findUnique.mockResolvedValue(null);
-
     await expect(
-      guardService.reinstateGuard('no-such-id', 'Reason', 'user1'),
+      guardService.reinstateGuard('no-such', 'Reason.', 'user1'),
     ).rejects.toThrow(NotFoundError);
   });
 });
 
-// ── Notification ──────────────────────────────────────────────────────────────
+// ── TEST 10: TERMINATED guard can be reinstated ───────────────────────────────
 
-describe('guardService.reinstateGuard() — notification', () => {
-  it('sends notification to OPERATIONS_SUPERVISOR', async () => {
-    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
-
-    await guardService.reinstateGuard('g1', 'Cleared', 'user1');
-
-    expect(mockNotif.sendToRole).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role:  ROLES.OPERATIONS_SUPERVISOR,
-        type:  'SYSTEM',
-        title: 'Guard Reinstated',
-      }),
-    );
-    const [call] = mockNotif.sendToRole.mock.calls;
-    expect(call[0].message).toContain('David');
-    expect(call[0].message).toContain('Ochieng');
+describe('TEST 10 — TERMINATED guard can be reinstated', () => {
+  it('reinstates a TERMINATED guard successfully', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ employmentStatus: 'TERMINATED' }));
+    await guardService.reinstateGuard('g1', 'Termination reversed.', 'user1');
+    expect(mp.guard.update.mock.calls[0][0].data.employmentStatus).toBe('ACTIVE');
   });
 });
 
-// ── Audit log ─────────────────────────────────────────────────────────────────
+// ── TEST 11: Multiple reinstatements ─────────────────────────────────────────
 
-describe('guardService.reinstateGuard() — audit log', () => {
-  it('creates an audit log entry with GUARD_REINSTATED action', async () => {
-    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard());
+describe('TEST 11 — multiple reinstatements increment reinstatedCount and reset ESS each time', () => {
+  it('reinstatedCount goes from 2 → 3 and effectiveServiceStart is reset', async () => {
+    mp.guard.findUnique.mockResolvedValue(makeSuspendedGuard({ reinstatedCount: 2 }));
+    await guardService.reinstateGuard('g1', 'Third reinstatement.', 'user1');
+    const data = mp.guard.update.mock.calls[0][0].data;
+    expect(data.reinstatedCount).toBe(3);
+    expect(data.effectiveServiceStart).toBeInstanceOf(Date);
+    expect(data.incrementCount).toBe(0);
+  });
+});
 
-    await guardService.reinstateGuard('g1', 'Cleared reason', 'user-xyz');
+// ── TEST 15: computeNextIncrementDate uses effectiveServiceStart ──────────────
 
-    expect(mp.auditLog.create).toHaveBeenCalledWith({
-      data: {
-        action:   'GUARD_REINSTATED',
-        entity:   'guard',
-        entityId: 'g1',
-        newValue: { reason: 'Cleared reason', reinstatedBy: 'user-xyz' },
-      },
-    });
+describe('TEST 15 — computeNextIncrementDate uses effectiveServiceStart when set', () => {
+  it('returns effectiveServiceStart + 1 year when no lastIncrementDate', () => {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const result: string = (guardService as any).computeNextIncrementDate(
+      new Date('2022-01-15'),   // contractStart (ignored when ESS is set)
+      null,                     // lastIncrementDate
+      sixMonthsAgo,             // effectiveServiceStart
+    );
+
+    const expected = new Date(sixMonthsAgo);
+    expected.setFullYear(expected.getFullYear() + 1);
+    const got = new Date(result);
+    expect(got.getFullYear()).toBe(expected.getFullYear());
+    expect(got.getMonth()).toBe(expected.getMonth());
+    expect(got.getDate()).toBe(expected.getDate());
+  });
+});
+
+// ── TEST 16: computeNextIncrementDate uses lastIncrementDate after first inc ──
+
+describe('TEST 16 — computeNextIncrementDate uses lastIncrementDate after first increment', () => {
+  it('returns lastIncrementDate + 1 year when guard has been incremented', () => {
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const result: string = (guardService as any).computeNextIncrementDate(
+      new Date('2020-01-01'),
+      oneYearAgo,   // lastIncrementDate
+      twoYearsAgo,  // effectiveServiceStart
+    );
+
+    const expected = new Date(oneYearAgo);
+    expected.setFullYear(expected.getFullYear() + 1);
+    expect(new Date(result).getFullYear()).toBe(expected.getFullYear());
+    expect(new Date(result).getMonth()).toBe(expected.getMonth());
   });
 });

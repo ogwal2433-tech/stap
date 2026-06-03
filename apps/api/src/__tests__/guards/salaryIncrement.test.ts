@@ -37,13 +37,19 @@ const mockNotif = notificationService as any;
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function makeGuard(overrides: Record<string, any> = {}) {
+  // contractStart = midnight exactly 1 year ago, so anniversary is today
+  // and it is NOT > oneYearAgo (which is also midnight 1 year ago)
+  const today = new Date();
+  const contractStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate(), 0, 0, 0, 0);
   return {
-    id:               'g1',
-    firstName:        'James',
-    lastName:         'Okello',
-    salaryRate:       450000,
-    incrementCount:   0,
-    lastIncrementDate: null,
+    id:                    'g1',
+    firstName:             'James',
+    lastName:              'Okello',
+    salaryRate:            450000,
+    incrementCount:        0,
+    lastIncrementDate:     null,
+    contractStart,
+    effectiveServiceStart: null,
     ...overrides,
   };
 }
@@ -168,7 +174,7 @@ describe('guardService.runSalaryIncrements() — eligibility skips', () => {
     expect(mp.guard.update).not.toHaveBeenCalled();
   });
 
-  it('where clause includes all required eligibility filters', async () => {
+  it('where clause includes active permanent guards not yet incremented this year', async () => {
     mp.guard.findMany.mockResolvedValue([]);
 
     await guardService.runSalaryIncrements();
@@ -176,7 +182,7 @@ describe('guardService.runSalaryIncrements() — eligibility skips', () => {
     const [callArg] = mp.guard.findMany.mock.calls[0];
     expect(callArg.where.employmentStatus).toBe('ACTIVE');
     expect(callArg.where.contractType).toBe('PERMANENT');
-    expect(callArg.where.contractStart).toHaveProperty('lte');
+    // Anniversary date check now done in JS; OR still filters by lastIncrementDate
     expect(callArg.where.OR).toBeDefined();
     expect(callArg.where.OR).toEqual(
       expect.arrayContaining([

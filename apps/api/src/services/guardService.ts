@@ -637,14 +637,17 @@ class GuardService {
   // ── Private: sanitise ──────────────────────────────────────────────────────
 
   private computeNextIncrementDate(
-    contractStart: Date | null,
-    lastIncrementDate: Date | null,
+    contractStart:         Date | null,
+    lastIncrementDate:     Date | null,
+    effectiveServiceStart: Date | null = null,
   ): string | null {
-    if (!contractStart) return null;
-    const today = new Date();
-    const base  = lastIncrementDate ? new Date(lastIncrementDate) : new Date(contractStart);
-    const next  = new Date(base);
+    // Use effectiveServiceStart when set (reinstated guard), else fall back to contractStart
+    const anchor = effectiveServiceStart ?? contractStart;
+    if (!anchor) return null;
+    const base = lastIncrementDate ? new Date(lastIncrementDate) : new Date(anchor);
+    const next = new Date(base);
     next.setFullYear(next.getFullYear() + 1);
+    const today = new Date();
     return next < today ? today.toISOString() : next.toISOString();
   }
 
@@ -799,7 +802,11 @@ class GuardService {
       nextIncrementDate: this.computeNextIncrementDate(
         guard.contractStart instanceof Date ? guard.contractStart : (guard.contractStart ? new Date(guard.contractStart) : null),
         guard.lastIncrementDate instanceof Date ? guard.lastIncrementDate : (guard.lastIncrementDate ? new Date(guard.lastIncrementDate) : null),
+        guard.effectiveServiceStart instanceof Date ? guard.effectiveServiceStart : (guard.effectiveServiceStart ? new Date(guard.effectiveServiceStart) : null),
       ),
+      effectiveServiceStart: guard.effectiveServiceStart instanceof Date
+        ? guard.effectiveServiceStart.toISOString()
+        : (guard.effectiveServiceStart ?? null),
     };
 
     if (showAccountNumber) {
@@ -847,17 +854,25 @@ class GuardService {
   ): Promise<GuardResponse> {
     const guard = await prisma.guard.findUnique({ where: { id: guardId } });
     if (!guard) throw new NotFoundError('Guard not found');
-    if (guard.employmentStatus !== 'SUSPENDED') {
-      throw new AppError('Only SUSPENDED guards can be reinstated.', 400);
+    if (!['SUSPENDED', 'TERMINATED'].includes(guard.employmentStatus)) {
+      throw new AppError(`Guard is currently ${guard.employmentStatus}. Only Suspended or Terminated guards can be reinstated.`, 400);
     }
+
+    const reinstatedAt = new Date();
+    const nextIncrementDate = new Date(reinstatedAt);
+    nextIncrementDate.setFullYear(nextIncrementDate.getFullYear() + 1);
 
     const updated = await prisma.guard.update({
       where: { id: guardId },
       data: {
-        employmentStatus: 'ACTIVE',
-        reinstatedCount:  guard.reinstatedCount + 1,
-        lastReinstatedAt: new Date(),
-        lastReinstatedBy: reinstatedBy,
+        employmentStatus:     'ACTIVE',
+        reinstatedCount:      guard.reinstatedCount + 1,
+        lastReinstatedAt:     reinstatedAt,
+        lastReinstatedBy:     reinstatedBy,
+        // Reset service counting from reinstatement date
+        effectiveServiceStart: reinstatedAt,
+        incrementCount:        0,
+        lastIncrementDate:     null,
       },
       include: {
         relatives:  { orderBy: { createdAt: 'asc' } },
@@ -871,19 +886,12 @@ class GuardService {
     await prisma.disciplinaryRecord.create({
       data: {
         guardId,
-        type:        'REINSTATEMENT',
-        incidentDate: new Date(),
+        type:         'REINSTATEMENT',
+        incidentDate: reinstatedAt,
         reason,
-        outcome:     `Guard reinstated on ${new Date().toLocaleDateString('en-GB')} by ${reinstatedBy}`,
-        officerId:   reinstatedBy,
+        outcome: `Guard reinstated on ${reinstatedAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}. Service counting restarted from this date. Next salary increment (UGX 20,000) due on ${nextIncrementDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}.`,
+        officerId:    reinstatedBy,
       },
-    });
-
-    await notificationService.sendToRole({
-      role:    ROLES.OPERATIONS_SUPERVISOR,
-      type:    'SYSTEM',
-      title:   'Guard Reinstated',
-      message: `Guard ${guard.firstName} ${guard.lastName} has been reinstated and is now Active.`,
     });
 
     await prisma.auditLog.create({
@@ -891,9 +899,37 @@ class GuardService {
         action:   'GUARD_REINSTATED',
         entity:   'guard',
         entityId: guardId,
-        newValue: { reason, reinstatedBy },
+        oldValue: {
+          employmentStatus:      guard.employmentStatus,
+          incrementCount:        guard.incrementCount,
+          lastIncrementDate:     guard.lastIncrementDate,
+          effectiveServiceStart: guard.effectiveServiceStart ?? guard.contractStart,
+        },
+        newValue: {
+          employmentStatus:      'ACTIVE',
+          reinstatedAt:          reinstatedAt,
+          effectiveServiceStart: reinstatedAt,
+          incrementCount:        0,
+          reason,
+        },
       },
     });
+
+    await notificationService.sendToRole({
+      role:    ROLES.OPERATIONS_SUPERVISOR,
+      type:    'SYSTEM',
+      title:   'Guard Reinstated',
+      message: `Guard ${guard.firstName} ${guard.lastName} has been reinstated and is now Active. Service counting restarted from ${reinstatedAt.toLocaleDateString('en-GB')}. Next salary increment due ${nextIncrementDate.toLocaleDateString('en-GB')}.`,
+    });
+
+    await notificationService.sendToRole({
+      role:    ROLES.ASSISTANT_MANAGER,
+      type:    'SYSTEM',
+      title:   'Guard Reinstated',
+      message: `Guard ${guard.firstName} ${guard.lastName} has been reinstated and is now Active. Service counting restarted from ${reinstatedAt.toLocaleDateString('en-GB')}. Next salary increment due ${nextIncrementDate.toLocaleDateString('en-GB')}.`,
+    });
+
+    console.log(`✅ Guard reinstated: ${guard.firstName} ${guard.lastName}. effectiveServiceStart reset to ${reinstatedAt.toISOString()}. incrementCount reset to 0.`);
 
     return this.sanitiseGuard(updated, ROLES.DIRECTOR, false);
   }
@@ -1165,27 +1201,42 @@ class GuardService {
 
   async runSalaryIncrements(): Promise<void> {
     const today = new Date();
+    const todayMonth = today.getMonth();
+    const todayDay   = today.getDate();
     const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const yearStart  = new Date(today.getFullYear(), 0, 1);
 
-    const eligible = await prisma.guard.findMany({
+    // Fetch all active permanent guards who haven't been incremented this year
+    // and whose effective service start (or contract start) is at least 1 year ago
+    const candidates = await prisma.guard.findMany({
       where: {
         employmentStatus: 'ACTIVE',
-        contractType: 'PERMANENT',
-        contractStart: { lte: oneYearAgo },
+        contractType:     'PERMANENT',
         OR: [
           { lastIncrementDate: null },
           { lastIncrementDate: { lt: yearStart } },
         ],
       },
       select: {
-        id:               true,
-        firstName:        true,
-        lastName:         true,
-        salaryRate:       true,
-        incrementCount:   true,
-        lastIncrementDate:true,
+        id:                    true,
+        firstName:             true,
+        lastName:              true,
+        salaryRate:            true,
+        incrementCount:        true,
+        lastIncrementDate:     true,
+        contractStart:         true,
+        effectiveServiceStart: true,
       },
+    });
+
+    // Filter to those whose anniversary falls today
+    const eligible = candidates.filter((guard) => {
+      const serviceStart = guard.effectiveServiceStart ?? guard.contractStart;
+      if (!serviceStart) return false;
+      if (serviceStart > oneYearAgo) return false; // less than 1 year of service
+      const anniversary = new Date(serviceStart);
+      anniversary.setFullYear(today.getFullYear());
+      return anniversary.getMonth() === todayMonth && anniversary.getDate() === todayDay;
     });
 
     for (const guard of eligible) {

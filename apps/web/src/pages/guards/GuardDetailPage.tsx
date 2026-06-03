@@ -59,16 +59,22 @@ interface StatusModal {
 const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
 
 interface ReinstateModalProps {
-  guardId: string;
-  guardName: string;
-  onClose: () => void;
+  guardId:   string;
+  guard:     import('@stap/shared').GuardResponse;
+  onClose:   () => void;
   onSuccess: () => void;
 }
 
-function ReinstateModal({ guardId, guardName, onClose, onSuccess }: ReinstateModalProps) {
+function ReinstateModal({ guardId, guard, onClose, onSuccess }: ReinstateModalProps) {
   const [reason, setReason] = useState('');
-  const [error, setError] = useState('');
+  const [error,  setError]  = useState('');
   const reinstate = useReinstateGuard();
+
+  const nextIncrementYear = new Date(
+    new Date().getFullYear() + 1,
+    new Date().getMonth(),
+    new Date().getDate(),
+  ).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
   const handleConfirm = () => {
     if (reason.trim().length < 10) {
@@ -91,20 +97,58 @@ function ReinstateModal({ guardId, guardName, onClose, onSuccess }: ReinstateMod
         <Modal.Title>Re-instate Guard</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <p className="mb-3">
-          <strong>{guardName}</strong> will be reinstated and their status returned to{' '}
-          <Badge bg="success">ACTIVE</Badge>.
-        </p>
+        {/* Guard info header */}
+        <div style={{ background: '#F2F4F7', borderRadius: '0.5rem', padding: '12px 16px', marginBottom: '16px' }}>
+          <div className="fw-bold">{guard.fullName}</div>
+          <div className="text-muted small mt-1">
+            Current status:{' '}
+            <Badge bg={guard.employmentStatus === 'SUSPENDED' ? 'warning' : 'danger'}
+              text={guard.employmentStatus === 'SUSPENDED' ? 'dark' : undefined}>
+              {guard.employmentStatus}
+            </Badge>
+          </div>
+          {(guard as any).reinstatedCount > 0 && (
+            <div className="text-muted small mt-1">
+              Previously reinstated {(guard as any).reinstatedCount} time(s).
+              {(guard as any).lastReinstatedAt && (
+                <> Last: {new Date((guard as any).lastReinstatedAt).toLocaleDateString('en-GB')}</>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Service counting reset notice */}
+        <Alert variant="info" className="mb-3">
+          <div className="fw-bold mb-1">ℹ️ Service Counting Will Restart</div>
+          <div className="small">
+            Upon reinstatement, this guard's service counting will restart from today's date.
+            <ul className="mb-0 mt-1">
+              <li>Salary increment history is reset</li>
+              <li>
+                First UGX 20,000 increment will be due in 1 year from today{' '}
+                <strong>({nextIncrementYear})</strong>
+              </li>
+              <li>Subsequent annual increments of UGX 10,000 will follow each year after that</li>
+            </ul>
+          </div>
+        </Alert>
+
         <Form.Group>
-          <Form.Label>Reason for reinstatement <span className="text-danger">*</span></Form.Label>
+          <Form.Label className="fw-bold small">
+            Reason for Reinstatement <span className="text-danger">*</span>
+          </Form.Label>
           <Form.Control
             as="textarea"
-            rows={4}
+            rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="e.g. Disciplinary matter resolved. Guard has completed counselling and acknowledged the code of conduct."
+            placeholder="e.g. Disciplinary matter has been resolved. Guard attended counselling and acknowledged the code of conduct. HR has cleared the case."
+            isInvalid={!!error}
           />
-          {error && <Form.Text className="text-danger">{error}</Form.Text>}
+          <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
+          <Form.Text className="text-muted">
+            This reason will be saved to the guard's disciplinary record.
+          </Form.Text>
         </Form.Group>
       </Modal.Body>
       <Modal.Footer>
@@ -114,9 +158,9 @@ function ReinstateModal({ guardId, guardName, onClose, onSuccess }: ReinstateMod
         <Button
           variant="success"
           onClick={handleConfirm}
-          disabled={reinstate.isPending}
+          disabled={reinstate.isPending || reason.trim().length < 10}
         >
-          {reinstate.isPending ? <Spinner size="sm" /> : 'Confirm Re-instatement'}
+          {reinstate.isPending ? <><Spinner size="sm" className="me-1" />Reinstating…</> : 'Confirm Reinstatement'}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -418,6 +462,69 @@ export default function GuardDetailPage() {
           </Row>
         </div>
       </div>
+
+      {/* Salary increment / service counting card */}
+      <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
+        <div className="card border-0 shadow-sm mb-3">
+          <div className="card-header bg-white fw-bold small d-flex align-items-center justify-content-between" style={{ color: '#1B3A6B' }}>
+            <span>📈 Salary Increment & Service Counting</span>
+          </div>
+          <div className="card-body">
+            <Row className="g-3">
+              <Col md={6}>
+                <div className="text-muted small">Service Counting From</div>
+                <div className="fw-bold">
+                  {guard.effectiveServiceStart
+                    ? formatDate(guard.effectiveServiceStart)
+                    : formatDate(guard.contractStart)}
+                </div>
+                {guard.effectiveServiceStart && (
+                  <Badge bg="warning" text="dark" className="mt-1" style={{ fontSize: '0.7rem' }}>
+                    ↩️ Restarted after reinstatement
+                  </Badge>
+                )}
+              </Col>
+              <Col md={6}>
+                <div className="text-muted small">Next Increment Due</div>
+                <div className={`fw-bold ${guard.nextIncrementDate && new Date(guard.nextIncrementDate) <= new Date() ? 'text-danger' : 'text-success'}`}>
+                  {guard.nextIncrementDate ? formatDate(guard.nextIncrementDate) : 'Not applicable'}
+                </div>
+              </Col>
+              <Col md={6}>
+                <div className="text-muted small">Increments Applied</div>
+                <div className="fw-bold">
+                  {guard.incrementCount === 0 ? 'None yet' : `${guard.incrementCount} increment(s)`}
+                </div>
+              </Col>
+              <Col md={6}>
+                <div className="text-muted small">Next Increment Amount</div>
+                <div className="fw-bold" style={{ color: '#0F7B6C' }}>
+                  {guard.contractType !== 'PERMANENT'
+                    ? 'N/A (Temporary)'
+                    : guard.incrementCount === 0
+                      ? 'UGX 20,000 (first year)'
+                      : 'UGX 10,000 (subsequent year)'}
+                </div>
+              </Col>
+            </Row>
+            {guard.reinstatedCount > 0 && (
+              <>
+                <hr />
+                <div className="fw-bold small text-muted text-uppercase mb-2">Reinstatement History</div>
+                <div className="small">
+                  <div>Times Reinstated: <strong>{guard.reinstatedCount}</strong></div>
+                  {guard.lastReinstatedAt && (
+                    <div>Last Reinstated: <strong>{formatDate(guard.lastReinstatedAt)}</strong></div>
+                  )}
+                  <div className="text-muted mt-1">
+                    Service counting restarted on each reinstatement. Only the most recent reinstatement date is used for increment calculations.
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </RoleGuard>
 
       {/* Suspension banner */}
       {guard.employmentStatus === 'SUSPENDED' && guard.latestSuspension && (
@@ -1166,10 +1273,10 @@ export default function GuardDetailPage() {
       {showReinstateModal && (
         <ReinstateModal
           guardId={id!}
-          guardName={guard.fullName}
+          guard={guard}
           onClose={() => setShowReinstateModal(false)}
           onSuccess={() => {
-            showToast('Guard reinstated successfully', 'success');
+            showToast(`${guard.fullName} reinstated. Service counting restarted from today.`, 'success');
             refetch();
             refetchDisciplinary();
           }}

@@ -326,9 +326,10 @@ export interface GuardResponse {
   allergyDetails:    string | null;
 
   // ── Salary increment tracking ─────────────────────────────────────────────────
-  incrementCount:    number;
-  lastIncrementDate: string | null;
-  nextIncrementDate: string | null;
+  incrementCount:        number;
+  lastIncrementDate:     string | null;
+  nextIncrementDate:     string | null;
+  effectiveServiceStart: string | null;
 
   latestSuspension?: {
     reason:      string;

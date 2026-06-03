@@ -93,6 +93,12 @@ enum AttendanceStatus {
   AWOL
 }
 
+enum ShiftType {
+  DAY
+  NIGHT
+  FULL_24
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -174,6 +180,7 @@ model Guard {
   reinstatedCount         Int       @default(0)
   lastReinstatedAt        DateTime?
   lastReinstatedBy        String?
+  effectiveServiceStart   DateTime? // NULL = use contractStart for increment anniversary
   incrementCount          Int       @default(0)
   lastIncrementDate       DateTime?
   village     String?
@@ -301,7 +308,7 @@ model GuardDocument {
   uploader User  @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
 }
 
-model ShiftType {
+model ShiftTypeConfig {
   id            String   @id @default(cuid())
   name          String   @unique
   code          String   @unique
@@ -321,7 +328,7 @@ model DeploymentHistory {
   siteId       String
   startDate    DateTime
   endDate      DateTime?
-  shiftType    String
+  shiftType    ShiftType
   supervisorId String
   createdAt    DateTime  @default(now())
 
@@ -390,7 +397,7 @@ model Site {
   specialInstructions String?
   guardsRequired      Int        @default(1)
   siteType            String     @default("COMMERCIAL")
-  defaultShiftType    ShiftType?
+  defaultShiftType    String?
   requiresArmedGuards Boolean    @default(false)
   requiresFirearms    Boolean    @default(false)
   createdAt           DateTime   @default(now())
@@ -470,7 +477,7 @@ model Deployment {
   id                     String    @id @default(cuid())
   guardId                String
   siteId                 String
-  shiftType              String
+  shiftType              ShiftType
   date                   DateTime
   supervisorId           String
   deploymentType         String    @default("UNARMED")
