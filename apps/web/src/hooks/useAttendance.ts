@@ -56,6 +56,8 @@ export function useMarkAttendance() {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       queryClient.invalidateQueries({ queryKey: ['deployments-today'] });
       queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
     },
   });
 }
