@@ -37,7 +37,7 @@ class ShiftTypeService {
     now.setHours(0, 0, 0, 0);
     return prisma.deployment.count({
       where: {
-        shiftType: shift.code,
+        shiftType: shift.code as never,
         date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
       },
     });
@@ -87,7 +87,7 @@ class ShiftTypeService {
 
     const now = new Date();
     const futureCount = await prisma.deployment.count({
-      where: { shiftType: shift.code, date: { gte: now } },
+      where: { shiftType: shift.code as never, date: { gte: now } },
     });
 
     const updated = await prisma.shiftTypeConfig.update({
@@ -131,7 +131,7 @@ class ShiftTypeService {
     if (!shift) throw new NotFoundError('Shift type not found');
 
     const usageCount = await prisma.deployment.count({
-      where: { shiftType: shift.code },
+      where: { shiftType: shift.code as never },
     });
 
     if (usageCount > 0) {
