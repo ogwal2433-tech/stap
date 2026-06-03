@@ -410,13 +410,16 @@ export default function RosterBuilderTab() {
                             <small className="text-muted">{site.guardsRequired} req.</small>
                           </div>
                         </div>
-                        {(site.requiresFirearms || site.requiresArmedGuards) && (
+                        {site.isArmed && (
                           <div className="mt-2 d-flex gap-1 flex-wrap">
-                            {site.requiresFirearms && (
-                              <Badge bg="danger" style={{ fontSize: '0.65rem' }}>🔥 Firearms</Badge>
+                            {site.firearmsRequired > 0 && (
+                              <Badge bg="danger" style={{ fontSize: '0.65rem' }}>🔥 {site.firearmsRequired} Firearm(s)</Badge>
                             )}
-                            {site.requiresArmedGuards && (
-                              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>🔫 Armed</Badge>
+                            {site.armedGuardsRequired > 0 && (
+                              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>🔫 {site.armedGuardsRequired} Armed</Badge>
+                            )}
+                            {site.batonRequired > 0 && (
+                              <Badge bg="secondary" style={{ fontSize: '0.65rem' }}>🛡️ {site.batonRequired} Baton(s)</Badge>
                             )}
                           </div>
                         )}

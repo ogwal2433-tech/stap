@@ -401,9 +401,10 @@ model Site {
   specialDutyEndDate    DateTime?
   specialDutyNotes      String?
   defaultShiftType      String?
-  requiresArmedGuards   Boolean    @default(false)
-  requiresFirearms    Boolean    @default(false)
-  requiresWeapons     Boolean    @default(false)
+  armedGuardsRequired Int        @default(0)
+  firearmsRequired    Int        @default(0)
+  batonRequired       Int        @default(0)
+  otherWeaponsNotes   String?
   equipmentDetails    String?
   allowedShiftTypes   String[]
   createdAt           DateTime   @default(now())

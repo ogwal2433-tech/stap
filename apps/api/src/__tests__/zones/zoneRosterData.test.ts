@@ -34,8 +34,8 @@ function makeZone(overrides: Record<string, unknown> = {}) {
         guardsRequired:      3,
         siteType:            'GOVERNMENT',
         defaultShiftType:    'DAY',
-        requiresArmedGuards: false,
-        requiresFirearms:    false,
+        armedGuardsRequired: 0,
+        firearmsRequired:    0,
         isActive:            true,
         client: { id: 'c-1', clientName: 'KCCA' },
       },
@@ -141,8 +141,8 @@ describe('zoneService.getRosterData()', () => {
     const zone = makeZone({
       sites: [
         { id: 's-1', siteName: 'Zone A Site', location: 'Kampala', guardsRequired: 2,
-          siteType: 'COMMERCIAL', defaultShiftType: null, requiresArmedGuards: false,
-          requiresFirearms: false, isActive: true, client: { id: 'c-1', clientName: 'ACME' } },
+          siteType: 'COMMERCIAL', defaultShiftType: null, armedGuardsRequired: 0,
+          firearmsRequired: 0, isActive: true, client: { id: 'c-1', clientName: 'ACME' } },
       ],
     });
     mp.zone.findUnique.mockResolvedValue(zone);

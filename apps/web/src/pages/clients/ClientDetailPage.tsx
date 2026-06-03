@@ -344,12 +344,10 @@ export default function ClientDetailPage() {
                       <td className="text-muted">{s.location}</td>
                       <td>{s.guardsRequired}</td>
                       <td>
-                        {s.requiresFirearms    && <span title="Firearms required" className="me-1">🔥</span>}
-                        {s.requiresArmedGuards && <span title="Armed guards required" className="me-1">🔫</span>}
-                        {s.requiresWeapons     && <span title="Weapons required" className="me-1">🛡️</span>}
-                        {!s.requiresFirearms && !s.requiresArmedGuards && !s.requiresWeapons && (
-                          <span className="text-muted">—</span>
-                        )}
+                        {(s as any).firearmsRequired > 0 && <Badge bg="danger" className="me-1" style={{ fontSize: '0.65rem' }}>🔥 {(s as any).firearmsRequired}</Badge>}
+                        {(s as any).armedGuardsRequired > 0 && <Badge bg="warning" text="dark" className="me-1" style={{ fontSize: '0.65rem' }}>🔫 {(s as any).armedGuardsRequired}</Badge>}
+                        {(s as any).batonRequired > 0 && <Badge bg="secondary" className="me-1" style={{ fontSize: '0.65rem' }}>🛡️ {(s as any).batonRequired}</Badge>}
+                        {!(s as any).isArmed && <span className="text-muted">—</span>}
                       </td>
                       <td>
                         {(s as any).zone ? (

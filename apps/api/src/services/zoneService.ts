@@ -153,8 +153,10 @@ class ZoneService {
             guardsRequired:      true,
             siteType:            true,
             defaultShiftType:    true,
-            requiresArmedGuards:  true,
-            requiresFirearms:     true,
+            armedGuardsRequired:  true,
+            firearmsRequired:     true,
+            batonRequired:        true,
+            otherWeaponsNotes:    true,
             specialInstructions:  true,
             specialDutyStartDate: true,
             specialDutyEndDate:   true,
@@ -214,8 +216,13 @@ class ZoneService {
       guardsRequired:      s.guardsRequired,
       siteType:            s.siteType,
       defaultShiftType:    s.defaultShiftType ?? null,
-      requiresArmedGuards: s.requiresArmedGuards,
-      requiresFirearms:    s.requiresFirearms,
+      armedGuardsRequired: (s as any).armedGuardsRequired ?? 0,
+      firearmsRequired:    (s as any).firearmsRequired ?? 0,
+      batonRequired:       (s as any).batonRequired ?? 0,
+      otherWeaponsNotes:   (s as any).otherWeaponsNotes ?? null,
+      isArmed: ((s as any).armedGuardsRequired ?? 0) > 0
+            || ((s as any).firearmsRequired ?? 0) > 0
+            || ((s as any).batonRequired ?? 0) > 0,
       specialInstructions:  (s as any).specialInstructions ?? null,
       specialDutyStartDate: (s as any).specialDutyStartDate
         ? (s as any).specialDutyStartDate.toISOString() : null,

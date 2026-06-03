@@ -26,9 +26,10 @@ const SiteFormSchema = z.object({
   specialDutyStartDate: z.string().optional().nullable(),
   specialDutyEndDate:   z.string().optional().nullable(),
   specialDutyNotes:     z.string().max(500).optional().nullable(),
-  requiresFirearms:    z.boolean().default(false),
-  requiresArmedGuards: z.boolean().default(false),
-  requiresWeapons:     z.boolean().default(false),
+  armedGuardsRequired: z.coerce.number().int().min(0).default(0),
+  firearmsRequired:    z.coerce.number().int().min(0).default(0),
+  batonRequired:       z.coerce.number().int().min(0).default(0),
+  otherWeaponsNotes:   z.string().max(500).optional().nullable(),
   equipmentDetails:    z.string().max(1000).optional().transform((v) => v || undefined),
   defaultShiftType:    z.string().optional().transform((v) => v || undefined),
   specialInstructions: z.string().max(2000).optional().transform((v) => v || undefined),
@@ -99,9 +100,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       specialDutyStartDate: (site as any)?.specialDutyStartDate ?? null,
       specialDutyEndDate:   (site as any)?.specialDutyEndDate   ?? null,
       specialDutyNotes:     (site as any)?.specialDutyNotes     ?? null,
-      requiresFirearms:    site?.requiresFirearms ?? false,
-      requiresArmedGuards: site?.requiresArmedGuards ?? false,
-      requiresWeapons:     site?.requiresWeapons ?? false,
+      armedGuardsRequired: (site as any)?.armedGuardsRequired ?? 0,
+      firearmsRequired:    (site as any)?.firearmsRequired    ?? 0,
+      batonRequired:       (site as any)?.batonRequired       ?? 0,
+      otherWeaponsNotes:   (site as any)?.otherWeaponsNotes   ?? null,
       equipmentDetails:    site?.equipmentDetails ?? undefined,
       defaultShiftType:    site?.defaultShiftType ?? undefined,
       specialInstructions: site?.specialInstructions ?? undefined,
@@ -122,9 +124,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         specialDutyStartDate: (site as any).specialDutyStartDate ?? null,
         specialDutyEndDate:   (site as any).specialDutyEndDate   ?? null,
         specialDutyNotes:     (site as any).specialDutyNotes     ?? null,
-        requiresFirearms:    site.requiresFirearms,
-        requiresArmedGuards: site.requiresArmedGuards,
-        requiresWeapons:     site.requiresWeapons,
+        armedGuardsRequired: (site as any).armedGuardsRequired ?? 0,
+        firearmsRequired:    (site as any).firearmsRequired    ?? 0,
+        batonRequired:       (site as any).batonRequired       ?? 0,
+        otherWeaponsNotes:   (site as any).otherWeaponsNotes   ?? null,
         equipmentDetails:    site.equipmentDetails ?? undefined,
         defaultShiftType:    site.defaultShiftType ?? undefined,
         specialInstructions: site.specialInstructions ?? undefined,
@@ -147,6 +150,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   const siteType            = watch('siteType');
   const specialInstructions = watch('specialInstructions') ?? '';
   const defaultShiftType    = watch('defaultShiftType');
+  const armedGuardsRequired = watch('armedGuardsRequired') ?? 0;
+  const firearmsRequired    = watch('firearmsRequired') ?? 0;
+  const batonRequired       = watch('batonRequired') ?? 0;
+  const otherWeaponsNotes   = watch('otherWeaponsNotes') ?? '';
 
   // Auto-clear defaultShiftType when it falls outside the allowed list
   useEffect(() => {
@@ -369,24 +376,82 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
           <hr />
           <h6 className="fw-bold mb-3" style={{ color: '#1B3A6B' }}>Security Requirements</h6>
 
-          <Card className="mb-3 border-0 bg-light">
-            <Card.Body className="py-2">
-              <Row>
-                <Col md={4}>
-                  <Form.Check type="switch" id="requiresArmedGuards" label="Armed Guards Required" {...register('requiresArmedGuards')} />
-                  <small className="text-muted">Guards must be certified armed</small>
-                </Col>
-                <Col md={4}>
-                  <Form.Check type="switch" id="requiresFirearms" label="Firearms Required" {...register('requiresFirearms')} />
-                  <small className="text-muted">Site requires firearm deployment</small>
-                </Col>
-                <Col md={4}>
-                  <Form.Check type="switch" id="requiresWeapons" label="Other Weapons Required" {...register('requiresWeapons')} />
-                  <small className="text-muted">Batons, pepper spray, etc.</small>
-                </Col>
-              </Row>
-            </Card.Body>
-          </Card>
+          <div className="mb-1 text-muted" style={{ fontSize: '0.8rem' }}>
+            Enter 0 for any item not required at this site.
+          </div>
+
+          {/* Quantity rows */}
+          <div style={{ border: '1px solid #ced4da', borderRadius: '0.5rem', overflow: 'hidden', marginBottom: '12px' }}>
+
+            {/* Armed Guards */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #e9ecef', background: armedGuardsRequired > 0 ? '#FEF9E7' : '#fff', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: '0.88rem' }}>🔫 Armed Guards Required</div>
+                <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '2px' }}>Number of guards who must carry arms</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button type="button" onClick={() => setValue('armedGuardsRequired', Math.max(0, armedGuardsRequired - 1))} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>−</button>
+                <input type="number" min={0} max={999} style={{ width: '60px', textAlign: 'center', border: '1px solid #ced4da', borderRadius: '4px', padding: '4px', fontSize: '0.95rem', fontWeight: 600, color: armedGuardsRequired > 0 ? '#1B3A6B' : '#6c757d' }} {...register('armedGuardsRequired', { valueAsNumber: true, min: 0 })} />
+                <button type="button" onClick={() => setValue('armedGuardsRequired', armedGuardsRequired + 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>+</button>
+              </div>
+            </div>
+
+            {/* Firearms */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #e9ecef', background: firearmsRequired > 0 ? '#FEF9E7' : '#fff', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: '0.88rem' }}>🔥 Firearms</div>
+                <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '2px' }}>Number of firearms to be deployed</div>
+                {firearmsRequired > 0 && armedGuardsRequired === 0 && (
+                  <div style={{ fontSize: '0.72rem', color: '#dc3545', marginTop: '2px', fontWeight: 500 }}>⚠️ Set armed guards required above</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button type="button" onClick={() => setValue('firearmsRequired', Math.max(0, firearmsRequired - 1))} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>−</button>
+                <input type="number" min={0} max={999} style={{ width: '60px', textAlign: 'center', border: '1px solid #ced4da', borderRadius: '4px', padding: '4px', fontSize: '0.95rem', fontWeight: 600, color: firearmsRequired > 0 ? '#1B3A6B' : '#6c757d' }} {...register('firearmsRequired', { valueAsNumber: true, min: 0 })} />
+                <button type="button" onClick={() => setValue('firearmsRequired', firearmsRequired + 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>+</button>
+              </div>
+            </div>
+
+            {/* Batons */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: batonRequired > 0 ? '#FEF9E7' : '#fff', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: '0.88rem' }}>🛡️ Batons / General Weapons</div>
+                <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '2px' }}>Total non-firearm weapons</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button type="button" onClick={() => setValue('batonRequired', Math.max(0, batonRequired - 1))} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>−</button>
+                <input type="number" min={0} max={999} style={{ width: '60px', textAlign: 'center', border: '1px solid #ced4da', borderRadius: '4px', padding: '4px', fontSize: '0.95rem', fontWeight: 600, color: batonRequired > 0 ? '#1B3A6B' : '#6c757d' }} {...register('batonRequired', { valueAsNumber: true, min: 0 })} />
+                <button type="button" onClick={() => setValue('batonRequired', batonRequired + 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #ced4da', background: '#f8f9fa', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, fontWeight: 'bold', color: '#1B3A6B' }}>+</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Other weapons notes */}
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-bold">
+              Other Security Equipment <span className="text-muted fw-normal">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="e.g. 2 × Dog Units, 1 × Guard Tower, Night Vision Goggles"
+              maxLength={500}
+              {...register('otherWeaponsNotes')}
+            />
+            <Form.Text className="text-muted">Any equipment not covered above</Form.Text>
+          </Form.Group>
+
+          {/* Security summary */}
+          {(armedGuardsRequired > 0 || firearmsRequired > 0 || batonRequired > 0) && (
+            <div style={{ background: '#D0EDE9', borderRadius: '0.5rem', padding: '10px 14px', fontSize: '0.82rem', color: '#1B3A6B', marginBottom: '12px' }}>
+              <div className="fw-bold mb-1">🔒 Security Profile Summary</div>
+              <div className="d-flex flex-wrap gap-2">
+                {armedGuardsRequired > 0 && <Badge bg="warning" text="dark">🔫 {armedGuardsRequired} Armed Guard(s)</Badge>}
+                {firearmsRequired > 0 && <Badge bg="danger">🔥 {firearmsRequired} Firearm(s)</Badge>}
+                {batonRequired > 0 && <Badge bg="secondary">🛡️ {batonRequired} Baton(s)</Badge>}
+                {otherWeaponsNotes && <Badge bg="dark">📋 {otherWeaponsNotes}</Badge>}
+              </div>
+            </div>
+          )}
 
           <Form.Label className="small fw-semibold">Specific Equipment Required</Form.Label>
           {equipmentItems.length > 0 ? (

@@ -47,9 +47,13 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
       return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     })(),
 
-    requiresFirearms:    (site.requiresFirearms as boolean) ?? false,
-    requiresArmedGuards: (site.requiresArmedGuards as boolean) ?? false,
-    requiresWeapons:     (site.requiresWeapons as boolean) ?? false,
+    armedGuardsRequired: (site.armedGuardsRequired as number) ?? 0,
+    firearmsRequired:    (site.firearmsRequired as number) ?? 0,
+    batonRequired:       (site.batonRequired as number) ?? 0,
+    otherWeaponsNotes:   (site.otherWeaponsNotes as string | null) ?? null,
+    isArmed: ((site.armedGuardsRequired as number) ?? 0) > 0
+          || ((site.firearmsRequired as number) ?? 0) > 0
+          || ((site.batonRequired as number) ?? 0) > 0,
     equipmentDetails:    (site.equipmentDetails as string | null) ?? null,
     allowedShiftTypes:   (site.allowedShiftTypes as string[]) ?? [],
     defaultShiftType:    (site.defaultShiftType as string | null) ?? null,
@@ -196,6 +200,11 @@ class SiteService {
       }
     }
 
+    // Validate security quantities
+    if ((data.firearmsRequired ?? 0) > 0 && (data.armedGuardsRequired ?? 0) === 0) {
+      throw new AppError('If firearms are required, at least one armed guard must also be specified.', 400);
+    }
+
     // Validate special duty period
     if (data.siteType === 'SPECIAL_DUTIES') {
       if (!data.specialDutyStartDate || !data.specialDutyEndDate) {
@@ -235,9 +244,10 @@ class SiteService {
         specialDutyEndDate: siteData.specialDutyEndDate
           ? new Date(siteData.specialDutyEndDate) : null,
         specialDutyNotes:    siteData.specialDutyNotes ?? null,
-        requiresFirearms:    siteData.requiresFirearms ?? false,
-        requiresArmedGuards: siteData.requiresArmedGuards ?? false,
-        requiresWeapons:     siteData.requiresWeapons ?? false,
+        armedGuardsRequired: siteData.armedGuardsRequired ?? 0,
+        firearmsRequired:    siteData.firearmsRequired ?? 0,
+        batonRequired:       siteData.batonRequired ?? 0,
+        otherWeaponsNotes:   siteData.otherWeaponsNotes ?? null,
         equipmentDetails:    siteData.equipmentDetails ?? null,
         allowedShiftTypes:   siteData.allowedShiftTypes ?? [],
         defaultShiftType:    siteData.defaultShiftType ?? null,

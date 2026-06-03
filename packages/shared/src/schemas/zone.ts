@@ -55,8 +55,11 @@ export interface ZoneSite {
   guardsRequired:      number;
   siteType:            string;
   defaultShiftType:    string | null;
-  requiresArmedGuards: boolean;
-  requiresFirearms:    boolean;
+  armedGuardsRequired: number;
+  firearmsRequired:    number;
+  batonRequired:       number;
+  otherWeaponsNotes:   string | null;
+  isArmed:             boolean;
   specialInstructions: string | null;
   specialDutyStartDate: string | null;
   specialDutyEndDate:   string | null;

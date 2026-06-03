@@ -57,9 +57,10 @@ const baseSiteRow = {
   specialInstructions: null,
   guardsRequired:      4,
   siteType:            'REGULAR',
-  requiresFirearms:    false,
-  requiresArmedGuards: false,
-  requiresWeapons:     false,
+  armedGuardsRequired: 0,
+  firearmsRequired:    0,
+  batonRequired:       0,
+  otherWeaponsNotes:   null,
   equipmentDetails:    null,
   allowedShiftTypes:   [],
   defaultShiftType:    null,
@@ -76,9 +77,9 @@ const baseCreateInput = {
   location:            'Kampala CBD',
   guardsRequired:      4,
   siteType:            'REGULAR' as const,
-  requiresFirearms:    false,
-  requiresArmedGuards: false,
-  requiresWeapons:     false,
+  armedGuardsRequired: 0,
+  firearmsRequired:    0,
+  batonRequired:       0,
   allowedShiftTypes:   [],
   equipmentItems:      [],
 };
@@ -135,33 +136,30 @@ describe('siteService.create()', () => {
     );
   });
 
-  it('creates site with requiresFirearms = true', async () => {
-    await siteService.create({ ...baseCreateInput, requiresFirearms: true }, 'user1');
-
+  it('creates site with armedGuardsRequired = 3', async () => {
+    await siteService.create({ ...baseCreateInput, armedGuardsRequired: 3 }, 'user1');
     expect(mock.site.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ requiresFirearms: true }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ armedGuardsRequired: 3 }) }),
     );
   });
 
-  it('creates site with requiresArmedGuards = true', async () => {
-    await siteService.create({ ...baseCreateInput, requiresArmedGuards: true }, 'user1');
-
+  it('creates site with firearmsRequired = 2 and armedGuardsRequired = 2', async () => {
+    await siteService.create({ ...baseCreateInput, armedGuardsRequired: 2, firearmsRequired: 2 }, 'user1');
     expect(mock.site.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ requiresArmedGuards: true }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ firearmsRequired: 2 }) }),
     );
   });
 
-  it('creates site with requiresWeapons = true', async () => {
-    await siteService.create({ ...baseCreateInput, requiresWeapons: true }, 'user1');
+  it('throws 400 when firearmsRequired > 0 but armedGuardsRequired = 0', async () => {
+    await expect(
+      siteService.create({ ...baseCreateInput, firearmsRequired: 2, armedGuardsRequired: 0 }, 'user1'),
+    ).rejects.toThrow(AppError);
+  });
 
+  it('creates site with batonRequired = 5', async () => {
+    await siteService.create({ ...baseCreateInput, batonRequired: 5 }, 'user1');
     expect(mock.site.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ requiresWeapons: true }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ batonRequired: 5 }) }),
     );
   });
 

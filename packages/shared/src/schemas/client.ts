@@ -88,9 +88,10 @@ const _BaseSiteSchema = z.object({
   guardsRequired:       z.number().int().min(1).default(1),
   zoneId:               z.string().nullable().optional(),
   siteType:             z.string().optional(),
-  requiresFirearms:     z.boolean().optional(),
-  requiresArmedGuards:  z.boolean().optional(),
-  requiresWeapons:      z.boolean().optional(),
+  armedGuardsRequired:  z.coerce.number().int().min(0).default(0),
+  firearmsRequired:     z.coerce.number().int().min(0).default(0),
+  batonRequired:        z.coerce.number().int().min(0).default(0),
+  otherWeaponsNotes:    z.string().max(500).optional().nullable(),
   equipmentDetails:     z.string().max(1000).optional(),
   allowedShiftTypes:    z.array(z.string()).optional(),
   defaultShiftType:     z.string().optional().nullable(),
@@ -107,6 +108,13 @@ const _BaseSiteSchema = z.object({
 export const CreateSiteInputSchema = _BaseSiteSchema;
 
 export const CreateSiteSchema = _BaseSiteSchema
+  .refine(
+    (data) => !(data.firearmsRequired > 0 && data.armedGuardsRequired === 0),
+    {
+      message: 'If firearms are required, at least one armed guard must also be specified.',
+      path: ['armedGuardsRequired'],
+    },
+  )
   .refine(
     (data) => {
       if (data.siteType === 'SPECIAL_DUTIES') {
@@ -244,11 +252,13 @@ export interface SiteResponse {
   specialDutyNotes:     string | null;
   dutyDurationDays:     number | null;
 
-  // Security requirements
-  requiresFirearms: boolean;
-  requiresArmedGuards: boolean;
-  requiresWeapons: boolean;
-  equipmentDetails: string | null;
+  // Security requirements (quantities)
+  armedGuardsRequired: number;
+  firearmsRequired:    number;
+  batonRequired:       number;
+  otherWeaponsNotes:   string | null;
+  isArmed:             boolean;
+  equipmentDetails:    string | null;
 
   // Shift configuration
   allowedShiftTypes: string[];
