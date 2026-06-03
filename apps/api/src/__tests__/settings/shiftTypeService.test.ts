@@ -5,7 +5,7 @@ import { QueueService } from '../../jobs/QueueService';
 
 vi.mock('../../db/prisma', () => ({
   default: {
-    shiftType: {
+    shiftTypeConfig: {
       findMany:   vi.fn(),
       findUnique: vi.fn(),
       create:     vi.fn(),
@@ -27,7 +27,7 @@ import { shiftTypeService } from '../../services/shiftTypeService';
 import { AppError, NotFoundError } from '../../errors/AppError';
 
 const mockPrisma = prisma as unknown as {
-  shiftType: {
+  shiftTypeConfig: {
     findMany:   ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     create:     ReturnType<typeof vi.fn>;
@@ -53,11 +53,11 @@ const baseShift = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockPrisma.shiftType.findUnique.mockResolvedValue(baseShift);
-  mockPrisma.shiftType.findMany.mockResolvedValue([baseShift]);
-  mockPrisma.shiftType.create.mockResolvedValue({ ...baseShift, id: 'st-new' });
-  mockPrisma.shiftType.update.mockResolvedValue({ ...baseShift, name: 'Updated Shift' });
-  mockPrisma.shiftType.delete.mockResolvedValue({});
+  mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(baseShift);
+  mockPrisma.shiftTypeConfig.findMany.mockResolvedValue([baseShift]);
+  mockPrisma.shiftTypeConfig.create.mockResolvedValue({ ...baseShift, id: 'st-new' });
+  mockPrisma.shiftTypeConfig.update.mockResolvedValue({ ...baseShift, name: 'Updated Shift' });
+  mockPrisma.shiftTypeConfig.delete.mockResolvedValue({});
   mockPrisma.deployment.count.mockResolvedValue(0);
 });
 
@@ -67,7 +67,7 @@ describe('shiftTypeService.listShiftTypes()', () => {
   it('returns formatted shift types ordered by displayOrder', async () => {
     const result = await shiftTypeService.listShiftTypes();
 
-    expect(mockPrisma.shiftType.findMany).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { isActive: true }, orderBy: { displayOrder: 'asc' } }),
     );
     expect(result).toHaveLength(1);
@@ -75,14 +75,14 @@ describe('shiftTypeService.listShiftTypes()', () => {
   });
 
   it('includes inactive when activeOnly=false', async () => {
-    mockPrisma.shiftType.findMany.mockResolvedValue([
+    mockPrisma.shiftTypeConfig.findMany.mockResolvedValue([
       baseShift,
       { ...baseShift, id: 'st2', isActive: false },
     ]);
 
     const result = await shiftTypeService.listShiftTypes(false);
 
-    expect(mockPrisma.shiftType.findMany).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: {} }),
     );
     expect(result).toHaveLength(2);
@@ -93,7 +93,7 @@ describe('shiftTypeService.listShiftTypes()', () => {
 
 describe('shiftTypeService.createShiftType()', () => {
   it('creates a new shift type and logs audit', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(null); // no duplicate
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(null); // no duplicate
 
     const result = await shiftTypeService.createShiftType(
       {
@@ -108,7 +108,7 @@ describe('shiftTypeService.createShiftType()', () => {
       'user1',
     );
 
-    expect(mockPrisma.shiftType.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.shiftTypeConfig.create).toHaveBeenCalledTimes(1);
     expect(QueueService.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'SHIFT_TYPE_CREATED' }),
     );
@@ -116,7 +116,7 @@ describe('shiftTypeService.createShiftType()', () => {
   });
 
   it('throws 409 if code already exists', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(baseShift); // duplicate
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(baseShift); // duplicate
 
     await expect(
       shiftTypeService.createShiftType(
@@ -134,15 +134,15 @@ describe('shiftTypeService.createShiftType()', () => {
   });
 
   it('upcases code before saving', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(null);
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(null);
 
     await shiftTypeService.createShiftType(
       { name: 'Overnight', code: 'overnight', displayOrder: 5, isOvertime: false },
       'user1',
     );
 
-    expect(mockPrisma.shiftType.findUnique).toHaveBeenCalledWith({ where: { code: 'OVERNIGHT' } });
-    expect(mockPrisma.shiftType.create).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.findUnique).toHaveBeenCalledWith({ where: { code: 'OVERNIGHT' } });
+    expect(mockPrisma.shiftTypeConfig.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ code: 'OVERNIGHT' }) }),
     );
   });
@@ -154,7 +154,7 @@ describe('shiftTypeService.updateShiftType()', () => {
   it('updates and logs audit', async () => {
     const result = await shiftTypeService.updateShiftType('st1', { name: 'Updated Shift' }, 'user1');
 
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'st1' } }),
     );
     expect(QueueService.logAudit).toHaveBeenCalledWith(
@@ -164,7 +164,7 @@ describe('shiftTypeService.updateShiftType()', () => {
   });
 
   it('throws NotFoundError if shift does not exist', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(null);
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(null);
 
     await expect(
       shiftTypeService.updateShiftType('bad-id', { name: 'x' }, 'user1'),
@@ -176,11 +176,11 @@ describe('shiftTypeService.updateShiftType()', () => {
 
 describe('shiftTypeService.deactivateShiftType()', () => {
   it('sets isActive=false and logs audit', async () => {
-    mockPrisma.shiftType.update.mockResolvedValue({ ...baseShift, isActive: false });
+    mockPrisma.shiftTypeConfig.update.mockResolvedValue({ ...baseShift, isActive: false });
 
     const result = await shiftTypeService.deactivateShiftType('st1', 'user1');
 
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { isActive: false } }),
     );
     expect(QueueService.logAudit).toHaveBeenCalledWith(
@@ -190,7 +190,7 @@ describe('shiftTypeService.deactivateShiftType()', () => {
   });
 
   it('throws NotFoundError if shift not found', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(null);
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(null);
 
     await expect(shiftTypeService.deactivateShiftType('bad', 'user1')).rejects.toThrow(NotFoundError);
   });
@@ -201,12 +201,12 @@ describe('shiftTypeService.deactivateShiftType()', () => {
 describe('shiftTypeService.activateShiftType()', () => {
   it('sets isActive=true and logs audit', async () => {
     const inactive = { ...baseShift, isActive: false };
-    mockPrisma.shiftType.findUnique.mockResolvedValue(inactive);
-    mockPrisma.shiftType.update.mockResolvedValue({ ...baseShift, isActive: true });
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(inactive);
+    mockPrisma.shiftTypeConfig.update.mockResolvedValue({ ...baseShift, isActive: true });
 
     const result = await shiftTypeService.activateShiftType('st1', 'user1');
 
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { isActive: true } }),
     );
     expect(QueueService.logAudit).toHaveBeenCalledWith(
@@ -224,7 +224,7 @@ describe('shiftTypeService.deleteShiftType()', () => {
 
     await shiftTypeService.deleteShiftType('st1', 'user1');
 
-    expect(mockPrisma.shiftType.delete).toHaveBeenCalledWith({ where: { id: 'st1' } });
+    expect(mockPrisma.shiftTypeConfig.delete).toHaveBeenCalledWith({ where: { id: 'st1' } });
     expect(QueueService.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'SHIFT_TYPE_DELETED' }),
     );
@@ -237,11 +237,11 @@ describe('shiftTypeService.deleteShiftType()', () => {
     await expect(shiftTypeService.deleteShiftType('st1', 'user1')).rejects.toMatchObject({
       statusCode: 409,
     });
-    expect(mockPrisma.shiftType.delete).not.toHaveBeenCalled();
+    expect(mockPrisma.shiftTypeConfig.delete).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundError when shift not found', async () => {
-    mockPrisma.shiftType.findUnique.mockResolvedValue(null);
+    mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue(null);
 
     await expect(shiftTypeService.deleteShiftType('bad', 'user1')).rejects.toThrow(NotFoundError);
   });
@@ -252,15 +252,15 @@ describe('shiftTypeService.deleteShiftType()', () => {
 describe('shiftTypeService.reorderShiftTypes()', () => {
   it('updates displayOrder for each id and returns list', async () => {
     const ids = ['st2', 'st1', 'st3'];
-    mockPrisma.shiftType.update.mockResolvedValue(baseShift);
+    mockPrisma.shiftTypeConfig.update.mockResolvedValue(baseShift);
 
     await shiftTypeService.reorderShiftTypes(ids);
 
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledTimes(ids.length);
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledTimes(ids.length);
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'st2' }, data: { displayOrder: 1 } }),
     );
-    expect(mockPrisma.shiftType.update).toHaveBeenCalledWith(
+    expect(mockPrisma.shiftTypeConfig.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'st1' }, data: { displayOrder: 2 } }),
     );
   });

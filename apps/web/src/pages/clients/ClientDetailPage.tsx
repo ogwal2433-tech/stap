@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col,
@@ -66,6 +66,7 @@ export default function ClientDetailPage() {
 
   const [siteModal, setSiteModal] = useState<{ site?: SiteResponse } | null>(null);
   const [incidentModal, setIncidentModal] = useState<{ siteId: string; siteName: string } | null>(null);
+  const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [contractModal, setContractModal] = useState<{ contract?: ContractResponse } | null>(null);
   const [incidentPage, setIncidentPage] = useState(1);
 
@@ -297,9 +298,29 @@ export default function ClientDetailPage() {
               <tbody>
                 {sites.map((s) => {
                   const typeDef = SITE_TYPE_BADGE[s.siteType] ?? SITE_TYPE_BADGE.REGULAR;
+                  const isExpanded = expandedSiteId === s.id;
                   return (
-                    <tr key={s.id}>
-                      <td className="fw-semibold">{s.siteName}</td>
+                    <React.Fragment key={s.id}>
+                    <tr>
+                      <td className="fw-semibold">
+                        <span
+                          role="button"
+                          onClick={() => setExpandedSiteId(isExpanded ? null : s.id)}
+                          style={{ cursor: s.specialInstructions ? 'pointer' : undefined }}
+                        >
+                          {s.siteName}
+                        </span>
+                        {s.specialInstructions && (
+                          <span
+                            role="button"
+                            title="Special instructions — click to expand"
+                            onClick={() => setExpandedSiteId(isExpanded ? null : s.id)}
+                            style={{ marginLeft: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                          >
+                            📋
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <Badge bg={typeDef.bg} text={typeDef.text}>{typeDef.label}</Badge>
                       </td>
@@ -351,6 +372,26 @@ export default function ClientDetailPage() {
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && s.specialInstructions && (
+                      <tr>
+                        <td colSpan={8} style={{ background: '#FFFBEB', padding: '10px 16px' }}>
+                          <div className="d-flex align-items-start gap-2">
+                            <span style={{ flexShrink: 0 }}>📋</span>
+                            <div>
+                              <div className="fw-bold small mb-1" style={{ color: '#1B3A6B' }}>
+                                Special Instructions
+                              </div>
+                              <p className="mb-0 small" style={{
+                                whiteSpace: 'pre-wrap', color: '#4A5568', lineHeight: 1.6,
+                              }}>
+                                {s.specialInstructions}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

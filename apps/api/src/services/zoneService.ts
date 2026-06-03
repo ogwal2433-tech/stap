@@ -155,6 +155,7 @@ class ZoneService {
             defaultShiftType:    true,
             requiresArmedGuards: true,
             requiresFirearms:    true,
+            specialInstructions: true,
             client: { select: { id: true, clientName: true } },
           },
           orderBy: { siteName: 'asc' },
@@ -212,6 +213,7 @@ class ZoneService {
       defaultShiftType:    s.defaultShiftType ?? null,
       requiresArmedGuards: s.requiresArmedGuards,
       requiresFirearms:    s.requiresFirearms,
+      specialInstructions: (s as any).specialInstructions ?? null,
       client:              s.client,
     }));
 

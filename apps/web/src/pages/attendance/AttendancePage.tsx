@@ -78,6 +78,7 @@ export default function AttendancePage() {
   const [selectedDate,   setSelectedDate]   = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [selectedZoneId, setSelectedZoneId] = useState('');
+  const [isInstructionsExpanded, setIsInstructionsExpanded] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Record<string, AttendanceEdit>>({});
 
   // Zone list for filter dropdown
@@ -463,6 +464,44 @@ export default function AttendancePage() {
                           </Button>
                         </RoleGuard>
                       </div>
+                      {siteGroup.site.specialInstructions && (
+                        <div className="site-instructions" style={{
+                          marginTop: '6px', paddingTop: '6px',
+                          borderTop: '1px solid #D0D5DD',
+                          fontSize: '0.78rem', color: '#4A5568', lineHeight: 1.5,
+                          display: 'flex', alignItems: 'flex-start', gap: '6px',
+                          width: '100%',
+                        }}>
+                          <span style={{ flexShrink: 0 }}>📋</span>
+                          <div>
+                            <span style={{ fontWeight: 600, color: '#1B3A6B', marginRight: '4px' }}>
+                              Site Instructions:
+                            </span>
+                            {isInstructionsExpanded[siteGroup.site.id]
+                              ? siteGroup.site.specialInstructions
+                              : siteGroup.site.specialInstructions.length > 120
+                                ? `${siteGroup.site.specialInstructions.substring(0, 120)}...`
+                                : siteGroup.site.specialInstructions}
+                            {siteGroup.site.specialInstructions.length > 120 && (
+                              <button
+                                type="button"
+                                className="d-print-none"
+                                onClick={() => setIsInstructionsExpanded((prev) => ({
+                                  ...prev,
+                                  [siteGroup.site.id]: !prev[siteGroup.site.id],
+                                }))}
+                                style={{
+                                  background: 'none', border: 'none',
+                                  color: '#1B3A6B', cursor: 'pointer',
+                                  padding: '0 4px', fontSize: '0.75rem', fontWeight: 600,
+                                }}
+                              >
+                                {isInstructionsExpanded[siteGroup.site.id] ? 'Show less' : 'Show more'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Guards table */}
@@ -578,6 +617,14 @@ export default function AttendancePage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             page-break-inside: avoid;
+          }
+          .site-instructions {
+            display: flex !important;
+            font-size: 9px !important;
+            color: #333 !important;
+            border-top: 1px solid #ccc !important;
+            padding-top: 4px !important;
+            margin-top: 4px !important;
           }
           .guard-row { page-break-inside: avoid; }
           .floating-save { display: none !important; }

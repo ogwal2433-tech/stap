@@ -57,6 +57,7 @@ export interface ZoneSite {
   defaultShiftType:    string | null;
   requiresArmedGuards: boolean;
   requiresFirearms:    boolean;
+  specialInstructions: string | null;
   client: {
     id:         string;
     clientName: string;

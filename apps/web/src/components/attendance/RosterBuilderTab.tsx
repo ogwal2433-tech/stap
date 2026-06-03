@@ -420,6 +420,23 @@ export default function RosterBuilderTab() {
                             )}
                           </div>
                         )}
+                        {site.specialInstructions && (
+                          <div style={{
+                            marginTop: '8px', paddingTop: '8px',
+                            borderTop: '1px solid #e0e0e0',
+                            fontSize: '0.75rem', color: '#4A5568', lineHeight: 1.4,
+                          }}>
+                            <span style={{
+                              fontWeight: 600, color: '#1B3A6B', fontSize: '0.72rem',
+                              textTransform: 'uppercase', letterSpacing: '0.3px',
+                            }}>
+                              📋 Instructions:{' '}
+                            </span>
+                            {site.specialInstructions.length > 80
+                              ? `${site.specialInstructions.substring(0, 80)}...`
+                              : site.specialInstructions}
+                          </div>
+                        )}
                         {isSelected && (
                           <div className="mt-2" style={{ fontSize: '0.75rem', color: '#0F7B6C', fontWeight: 500 }}>
                             ✓ Selected
@@ -443,6 +460,28 @@ export default function RosterBuilderTab() {
             <span className="fw-bold">Assign Guards to {selectedSite.siteName}</span>
           </Card.Header>
           <Card.Body>
+
+            {/* Special instructions alert */}
+            {selectedSite.specialInstructions && (
+              <Alert variant="warning" className="mb-4" style={{
+                borderLeft: '4px solid #E8701A', background: '#FEF9E7', borderRadius: '0.5rem',
+              }}>
+                <div className="d-flex align-items-start gap-2">
+                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>📋</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: '#1B3A6B', fontSize: '0.88rem', marginBottom: '4px' }}>
+                      Special Instructions — {selectedSite.siteName}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#4A5568', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                      {selectedSite.specialInstructions}
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '0.72rem', color: '#6c757d' }}>
+                      These instructions apply to all guards deployed at this site. Ensure all guards are briefed before deployment.
+                    </div>
+                  </div>
+                </div>
+              </Alert>
+            )}
 
             {/* Shift selection */}
             <div className="mb-3">

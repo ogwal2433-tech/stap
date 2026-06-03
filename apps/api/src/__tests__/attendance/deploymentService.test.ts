@@ -8,7 +8,7 @@ vi.mock('../../db/prisma', () => ({
     site:       { findUnique: vi.fn() },
     guard:      { findMany: vi.fn() },
     user:       { findUnique: vi.fn() },
-    shiftType:  { findUnique: vi.fn() },
+    shiftTypeConfig:  { findUnique: vi.fn() },
     deployment: {
       findMany: vi.fn(),
       createMany: vi.fn(),
@@ -36,7 +36,7 @@ const mockPrisma = prisma as unknown as {
   site:       { findUnique: ReturnType<typeof vi.fn> };
   guard:      { findMany: ReturnType<typeof vi.fn> };
   user:       { findUnique: ReturnType<typeof vi.fn> };
-  shiftType:  { findUnique: ReturnType<typeof vi.fn> };
+  shiftTypeConfig:  { findUnique: ReturnType<typeof vi.fn> };
   deployment: {
     findMany:   ReturnType<typeof vi.fn>;
     createMany: ReturnType<typeof vi.fn>;
@@ -65,7 +65,7 @@ const baseRosterInput = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockPrisma.shiftType.findUnique.mockResolvedValue({ code: 'DAY', isActive: true });
+  mockPrisma.shiftTypeConfig.findUnique.mockResolvedValue({ code: 'DAY', isActive: true });
   mockPrisma.site.findUnique.mockResolvedValue(baseSite);
   mockPrisma.guard.findMany.mockResolvedValue([baseGuard]);
   mockPrisma.user.findUnique.mockResolvedValue(baseSupervisor);

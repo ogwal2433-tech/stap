@@ -6,7 +6,7 @@ import { QueueService } from '../../jobs/QueueService';
 vi.mock('../../db/prisma', () => ({
   default: {
     client:            { findUnique: vi.fn() },
-    shiftType:         { findUnique: vi.fn(), findMany: vi.fn() },
+    shiftTypeConfig: { findUnique: vi.fn(), findMany: vi.fn() },
     site:              { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(), count: vi.fn() },
     siteEquipmentItem: { createMany: vi.fn(), deleteMany: vi.fn() },
     deployment:        { count: vi.fn() },
@@ -25,7 +25,7 @@ import { AppError, NotFoundError } from '../../errors/AppError';
 
 type MockPrisma = {
   client:            { findUnique: ReturnType<typeof vi.fn> };
-  shiftType:         { findUnique: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  shiftTypeConfig: { findUnique: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   site:              {
     findUnique: ReturnType<typeof vi.fn>;
     findMany:   ReturnType<typeof vi.fn>;
@@ -86,8 +86,8 @@ const baseCreateInput = {
 beforeEach(() => {
   vi.clearAllMocks();
   mock.client.findUnique.mockResolvedValue(baseClient);
-  mock.shiftType.findUnique.mockResolvedValue(baseShift);
-  mock.shiftType.findMany.mockResolvedValue([baseShift]);
+  mock.shiftTypeConfig.findUnique.mockResolvedValue(baseShift);
+  mock.shiftTypeConfig.findMany.mockResolvedValue([baseShift]);
   mock.site.findUnique.mockResolvedValue(baseSiteRow);
   mock.site.create.mockResolvedValue(baseSiteRow);
   mock.site.update.mockResolvedValue(baseSiteRow);
@@ -185,7 +185,7 @@ describe('siteService.create()', () => {
   });
 
   it('creates site with allowedShiftTypes = [DAY, NIGHT]', async () => {
-    mock.shiftType.findMany.mockResolvedValue([
+    mock.shiftTypeConfig.findMany.mockResolvedValue([
       { code: 'DAY', isActive: true },
       { code: 'NIGHT', isActive: true },
     ]);
@@ -210,7 +210,7 @@ describe('siteService.create()', () => {
   });
 
   it('throws 400 when defaultShiftType code does not exist', async () => {
-    mock.shiftType.findUnique.mockResolvedValue(null);
+    mock.shiftTypeConfig.findUnique.mockResolvedValue(null);
 
     await expect(
       siteService.create({ ...baseCreateInput, defaultShiftType: 'UNKNOWN' }, 'user1'),
@@ -222,7 +222,7 @@ describe('siteService.create()', () => {
   });
 
   it('throws 400 when allowedShiftTypes contains invalid code', async () => {
-    mock.shiftType.findMany.mockResolvedValue([]); // no matching valid codes
+    mock.shiftTypeConfig.findMany.mockResolvedValue([]); // no matching valid codes
 
     await expect(
       siteService.create({ ...baseCreateInput, allowedShiftTypes: ['BOGUS'] }, 'user1'),
@@ -272,7 +272,7 @@ describe('siteService.update()', () => {
   });
 
   it('updates allowedShiftTypes', async () => {
-    mock.shiftType.findMany.mockResolvedValue([{ code: 'NIGHT', isActive: true }]);
+    mock.shiftTypeConfig.findMany.mockResolvedValue([{ code: 'NIGHT', isActive: true }]);
 
     await siteService.update('s1', { allowedShiftTypes: ['NIGHT'] }, 'user1');
 

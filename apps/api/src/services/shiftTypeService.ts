@@ -23,7 +23,7 @@ class ShiftTypeService {
   }
 
   async listShiftTypes(activeOnly = true): Promise<ShiftTypeResponse[]> {
-    const rows = await prisma.shiftType.findMany({
+    const rows = await prisma.shiftTypeConfig.findMany({
       where:   activeOnly ? { isActive: true } : {},
       orderBy: { displayOrder: 'asc' },
     });
@@ -31,7 +31,7 @@ class ShiftTypeService {
   }
 
   async getUsageCount(id: string): Promise<number> {
-    const shift = await prisma.shiftType.findUnique({ where: { id } });
+    const shift = await prisma.shiftTypeConfig.findUnique({ where: { id } });
     if (!shift) return 0;
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -45,10 +45,10 @@ class ShiftTypeService {
 
   async createShiftType(data: CreateShiftTypeInput, createdBy: string): Promise<ShiftTypeResponse> {
     const code = data.code.toUpperCase();
-    const dup = await prisma.shiftType.findUnique({ where: { code } });
+    const dup = await prisma.shiftTypeConfig.findUnique({ where: { code } });
     if (dup) throw new AppError(`Shift type code "${code}" already exists`, 409);
 
-    const shift = await prisma.shiftType.create({
+    const shift = await prisma.shiftTypeConfig.create({
       data: { ...data, code },
     });
 
@@ -64,10 +64,10 @@ class ShiftTypeService {
   }
 
   async updateShiftType(id: string, data: UpdateShiftTypeInput, updatedBy: string): Promise<ShiftTypeResponse> {
-    const existing = await prisma.shiftType.findUnique({ where: { id } });
+    const existing = await prisma.shiftTypeConfig.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Shift type not found');
 
-    const updated = await prisma.shiftType.update({ where: { id }, data });
+    const updated = await prisma.shiftTypeConfig.update({ where: { id }, data });
 
     await QueueService.logAudit({
       userId:   updatedBy,
@@ -82,7 +82,7 @@ class ShiftTypeService {
   }
 
   async deactivateShiftType(id: string, deactivatedBy: string): Promise<ShiftTypeResponse> {
-    const shift = await prisma.shiftType.findUnique({ where: { id } });
+    const shift = await prisma.shiftTypeConfig.findUnique({ where: { id } });
     if (!shift) throw new NotFoundError('Shift type not found');
 
     const now = new Date();
@@ -90,7 +90,7 @@ class ShiftTypeService {
       where: { shiftType: shift.code, date: { gte: now } },
     });
 
-    const updated = await prisma.shiftType.update({
+    const updated = await prisma.shiftTypeConfig.update({
       where: { id },
       data:  { isActive: false },
     });
@@ -107,10 +107,10 @@ class ShiftTypeService {
   }
 
   async activateShiftType(id: string, activatedBy: string): Promise<ShiftTypeResponse> {
-    const shift = await prisma.shiftType.findUnique({ where: { id } });
+    const shift = await prisma.shiftTypeConfig.findUnique({ where: { id } });
     if (!shift) throw new NotFoundError('Shift type not found');
 
-    const updated = await prisma.shiftType.update({
+    const updated = await prisma.shiftTypeConfig.update({
       where: { id },
       data:  { isActive: true },
     });
@@ -127,7 +127,7 @@ class ShiftTypeService {
   }
 
   async deleteShiftType(id: string, deletedBy: string): Promise<void> {
-    const shift = await prisma.shiftType.findUnique({ where: { id } });
+    const shift = await prisma.shiftTypeConfig.findUnique({ where: { id } });
     if (!shift) throw new NotFoundError('Shift type not found');
 
     const usageCount = await prisma.deployment.count({
@@ -141,7 +141,7 @@ class ShiftTypeService {
       );
     }
 
-    await prisma.shiftType.delete({ where: { id } });
+    await prisma.shiftTypeConfig.delete({ where: { id } });
 
     await QueueService.logAudit({
       userId:   deletedBy,
@@ -155,7 +155,7 @@ class ShiftTypeService {
   async reorderShiftTypes(orderedIds: string[]): Promise<ShiftTypeResponse[]> {
     await Promise.all(
       orderedIds.map((id, i) =>
-        prisma.shiftType.update({ where: { id }, data: { displayOrder: i + 1 } }),
+        prisma.shiftTypeConfig.update({ where: { id }, data: { displayOrder: i + 1 } }),
       ),
     );
     return this.listShiftTypes(false);

@@ -31,7 +31,7 @@ class DeploymentService {
     const guardIdList = guardEntries.map((e) => e.guardId);
 
     // Validate shift type exists and is active
-    const shiftTypeRecord = await prisma.shiftType.findUnique({ where: { code: data.shiftType } });
+    const shiftTypeRecord = await prisma.shiftTypeConfig.findUnique({ where: { code: data.shiftType } });
     if (!shiftTypeRecord || !shiftTypeRecord.isActive) {
       throw new AppError(`Shift type "${data.shiftType}" not found or is inactive.`, 400);
     }
@@ -153,7 +153,7 @@ class DeploymentService {
         data: toCreate.map(({ guardId, date }) => ({
           guardId,
           siteId:                data.siteId,
-          shiftType:             data.shiftType,
+          shiftType:             data.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
           date,
           supervisorId:          data.supervisorId,
           deploymentType:        data.deploymentType ?? 'UNARMED',
@@ -169,7 +169,7 @@ class DeploymentService {
         data: toCreate.map(({ guardId, date }) => ({
           guardId,
           siteId:       data.siteId,
-          shiftType:    data.shiftType,
+          shiftType:    data.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
           startDate:    date,
           supervisorId: data.supervisorId,
         })),
@@ -363,12 +363,13 @@ class DeploymentService {
       if (!zoneEntry.siteMap.has(dep.siteId)) {
         zoneEntry.siteMap.set(dep.siteId, {
           site: {
-            id:             site.id,
-            siteName:       site.siteName,
-            location:       site.location,
-            siteType:       site.siteType ?? 'COMMERCIAL',
-            client:         site.client,
-            guardsRequired: site.guardsRequired,
+            id:                  site.id,
+            siteName:            site.siteName,
+            location:            site.location,
+            siteType:            site.siteType ?? 'COMMERCIAL',
+            client:              site.client,
+            guardsRequired:      site.guardsRequired,
+            specialInstructions: site.specialInstructions ?? null,
           },
           supervisor: dep.supervisor,
           deployments: [],

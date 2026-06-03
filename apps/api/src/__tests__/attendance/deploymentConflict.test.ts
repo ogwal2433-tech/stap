@@ -8,7 +8,7 @@ vi.mock('../../db/prisma', () => ({
     site:       { findUnique: vi.fn() },
     guard:      { findMany: vi.fn() },
     user:       { findUnique: vi.fn() },
-    shiftType:  { findUnique: vi.fn() },
+    shiftTypeConfig:  { findUnique: vi.fn() },
     deployment: {
       findMany:   vi.fn(),
       createMany: vi.fn(),
@@ -36,7 +36,7 @@ type MockedPrisma = {
   site:       { findUnique: ReturnType<typeof vi.fn> };
   guard:      { findMany: ReturnType<typeof vi.fn> };
   user:       { findUnique: ReturnType<typeof vi.fn> };
-  shiftType:  { findUnique: ReturnType<typeof vi.fn> };
+  shiftTypeConfig:  { findUnique: ReturnType<typeof vi.fn> };
   deployment: {
     findMany:   ReturnType<typeof vi.fn>;
     createMany: ReturnType<typeof vi.fn>;
@@ -77,7 +77,7 @@ const deployed = (guardId: string, siteName = 'Beta Site', clientName = 'Beta Co
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mp.shiftType.findUnique.mockResolvedValue({ code: 'DAY', isActive: true });
+  mp.shiftTypeConfig.findUnique.mockResolvedValue({ code: 'DAY', isActive: true });
   mp.site.findUnique.mockResolvedValue(SITE);
   mp.guard.findMany.mockResolvedValue([GUARD1]);
   mp.user.findUnique.mockResolvedValue(SUPER);

@@ -58,7 +58,7 @@ beforeAll(async () => {
   });
 
   // Shift type — must exist and be active
-  await prisma.shiftType.upsert({
+  await prisma.shiftTypeConfig.upsert({
     where:  { code: IDS.shiftCode },
     create: { code: IDS.shiftCode, name: 'Integration Test Shift', isActive: true, displayOrder: 99 },
     update: { isActive: true },
@@ -145,7 +145,7 @@ afterAll(async () => {
   await prisma.guard.deleteMany({ where: { id: { in: [IDS.guard1, IDS.guard2] } } });
   await prisma.site.deleteMany({ where: { id: IDS.site } });
   await prisma.client.deleteMany({ where: { id: IDS.client } });
-  await prisma.shiftType.deleteMany({ where: { code: IDS.shiftCode } });
+  await prisma.shiftTypeConfig.deleteMany({ where: { code: IDS.shiftCode } });
   await prisma.user.deleteMany({ where: { id: { in: [IDS.director, IDS.supervisor] } } });
 });
 

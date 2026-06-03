@@ -57,7 +57,7 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
 
 /** Validate that a shift type code exists and is active. */
 async function assertShiftTypeActive(code: string): Promise<void> {
-  const shift = await prisma.shiftType.findUnique({ where: { code } });
+  const shift = await prisma.shiftTypeConfig.findUnique({ where: { code } });
   if (!shift || !shift.isActive) {
     throw new AppError(`Shift type "${code}" not found or is inactive.`, 400);
   }
@@ -175,7 +175,7 @@ class SiteService {
     // Validate shift type codes
     if (data.defaultShiftType) await assertShiftTypeActive(data.defaultShiftType);
     if (data.allowedShiftTypes?.length) {
-      const valid = await prisma.shiftType.findMany({
+      const valid = await prisma.shiftTypeConfig.findMany({
         where: { code: { in: data.allowedShiftTypes }, isActive: true },
       });
       if (valid.length !== data.allowedShiftTypes.length) {
@@ -232,7 +232,7 @@ class SiteService {
 
     if (data.defaultShiftType) await assertShiftTypeActive(data.defaultShiftType);
     if (data.allowedShiftTypes?.length) {
-      const valid = await prisma.shiftType.findMany({
+      const valid = await prisma.shiftTypeConfig.findMany({
         where: { code: { in: data.allowedShiftTypes }, isActive: true },
       });
       if (valid.length !== data.allowedShiftTypes.length) {

@@ -604,7 +604,7 @@ async function main() {
   ];
 
   for (const shift of defaultShiftTypes) {
-    await prisma.shiftType.upsert({
+    await prisma.shiftTypeConfig.upsert({
       where:  { code: shift.code },
       update: {},
       create: shift,

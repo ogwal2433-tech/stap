@@ -170,6 +170,7 @@ export interface DailySheetSite {
     id: string; siteName: string; location: string; siteType: string;
     client: { id: string; clientName: string };
     guardsRequired: number;
+    specialInstructions: string | null;
   };
   supervisor:    { id: string; name: string } | null;
   deployments:   DeploymentResponse[];
