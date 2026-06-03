@@ -397,6 +397,144 @@ class DeploymentService {
     return deployments.map((d) => this.formatDeployment(d, emptyMap));
   }
 
+  // ── Attendance dashboard ───────────────────────────────────────────────────
+
+  async getAttendanceDashboard(): Promise<import('@stap/shared').AttendanceDashboardData> {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // ── Today's figures ───────────────────────────────────────────────────────
+    const [totalDeployed, todayAttendance, deploymentsToday] = await Promise.all([
+      prisma.deployment.count({ where: { date: today } }),
+      prisma.attendanceRecord.findMany({
+        where: { date: today },
+        select: { status: true, siteId: true, guardId: true },
+      }),
+      prisma.deployment.findMany({
+        where: { date: today },
+        select: {
+          guardId: true,
+          siteId:  true,
+          site: {
+            select: {
+              id:             true,
+              siteName:       true,
+              guardsRequired: true,
+              client: { select: { clientName: true } },
+              zone:   { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const presentCount = todayAttendance.filter((a) => a.status === 'PRESENT').length;
+    const lateCount    = todayAttendance.filter((a) => a.status === 'LATE').length;
+    const absentCount  = todayAttendance.filter((a) => a.status === 'ABSENT').length;
+    const awolCount    = todayAttendance.filter((a) => a.status === 'AWOL').length;
+    const markedCount  = todayAttendance.length;
+    const unmarkedCount = totalDeployed - markedCount;
+    const attendanceRate = totalDeployed > 0
+      ? Math.round(((presentCount + lateCount) / totalDeployed) * 100)
+      : 0;
+
+    // ── Sites with missing attendance ─────────────────────────────────────────
+    const markedKeys = new Set(todayAttendance.map((a) => `${a.guardId}:${a.siteId}`));
+
+    const siteMap = new Map<string, {
+      site: { id: string; siteName: string; guardsRequired: number; client: { clientName: string }; zone: { name: string } | null };
+      total: number; unmarked: number;
+    }>();
+
+    for (const dep of deploymentsToday) {
+      const entry = siteMap.get(dep.siteId) ?? { site: dep.site, total: 0, unmarked: 0 };
+      entry.total++;
+      if (!markedKeys.has(`${dep.guardId}:${dep.siteId}`)) entry.unmarked++;
+      siteMap.set(dep.siteId, entry);
+    }
+
+    const sitesWithMissingAttendance = Array.from(siteMap.values())
+      .filter((s) => s.unmarked > 0)
+      .sort((a, b) => b.unmarked - a.unmarked)
+      .map((s) => ({
+        siteId:        s.site.id,
+        siteName:      s.site.siteName,
+        clientName:    s.site.client.clientName,
+        zoneName:      s.site.zone?.name ?? null,
+        totalGuards:   s.total,
+        unmarkedCount: s.unmarked,
+        markedCount:   s.total - s.unmarked,
+      }));
+
+    // ── Weekly trend (last 7 days) ────────────────────────────────────────────
+    const weeklyTrend = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(today);
+      day.setDate(day.getDate() - i);
+      const dayEnd = new Date(day);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const [deployed, attendance] = await Promise.all([
+        prisma.deployment.count({ where: { date: day } }),
+        prisma.attendanceRecord.findMany({ where: { date: day }, select: { status: true } }),
+      ]);
+
+      const present = attendance.filter((a) => ['PRESENT', 'LATE'].includes(a.status)).length;
+      const absent  = attendance.filter((a) => ['ABSENT', 'AWOL'].includes(a.status)).length;
+      const rate    = deployed > 0 ? Math.round((present / deployed) * 100) : 0;
+
+      weeklyTrend.push({
+        date:     day.toISOString().split('T')[0],
+        dayLabel: day.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }),
+        deployed,
+        present,
+        absent,
+        unmarked: deployed - attendance.length,
+        rate,
+        isToday:  i === 0,
+      });
+    }
+
+    const weeklyAvgRate = weeklyTrend.length > 0
+      ? Math.round(weeklyTrend.reduce((sum, d) => sum + d.rate, 0) / weeklyTrend.length)
+      : 0;
+
+    // ── Supervisor check-ins today ────────────────────────────────────────────
+    const checkins = await prisma.supervisorCheckin.findMany({
+      where: { dateTime: { gte: today, lt: tomorrow } },
+      include: {
+        supervisor: { select: { id: true, name: true, role: true } },
+        site: { select: { id: true, siteName: true, client: { select: { clientName: true } } } },
+      },
+      orderBy: { dateTime: 'desc' },
+      take: 20,
+    });
+
+    return {
+      date: today.toISOString(),
+      totalDeployed,
+      presentCount,
+      lateCount,
+      absentCount,
+      awolCount,
+      markedCount,
+      unmarkedCount,
+      attendanceRate,
+      weeklyAvgRate,
+      weeklyTrend,
+      sitesWithMissingAttendance,
+      supervisorCheckins: checkins.map((c) => ({
+        id:          c.id,
+        supervisor:  { id: c.supervisor.id, name: c.supervisor.name, role: c.supervisor.role },
+        site:        { id: c.site.id, siteName: c.site.siteName, clientName: c.site.client.clientName },
+        checkinTime: c.dateTime.toISOString(),
+        notes:       c.notes ?? null,
+      })),
+    };
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   /** Returns today's date string in EAT (UTC+3) as YYYY-MM-DD */

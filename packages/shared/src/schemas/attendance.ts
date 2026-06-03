@@ -154,3 +154,42 @@ export interface DailySheetResponse {
   date:  string;
   zones: DailySheetZone[];
 }
+
+export interface AttendanceDashboardData {
+  date:           string;
+  totalDeployed:  number;
+  presentCount:   number;
+  lateCount:      number;
+  absentCount:    number;
+  awolCount:      number;
+  unmarkedCount:  number;
+  markedCount:    number;
+  attendanceRate: number;
+  weeklyAvgRate:  number;
+  weeklyTrend: {
+    date:      string;
+    dayLabel:  string;
+    deployed:  number;
+    present:   number;
+    absent:    number;
+    unmarked:  number;
+    rate:      number;
+    isToday:   boolean;
+  }[];
+  sitesWithMissingAttendance: {
+    siteId:        string;
+    siteName:      string;
+    clientName:    string;
+    zoneName:      string | null;
+    totalGuards:   number;
+    unmarkedCount: number;
+    markedCount:   number;
+  }[];
+  supervisorCheckins: {
+    id:          string;
+    supervisor:  { id: string; name: string; role: string };
+    site:        { id: string; siteName: string; clientName: string };
+    checkinTime: string;
+    notes:       string | null;
+  }[];
+}

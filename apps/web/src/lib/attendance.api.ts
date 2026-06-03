@@ -7,6 +7,7 @@ import type {
   AttendanceSummary,
   CheckinResponse,
   DailySheetResponse,
+  AttendanceDashboardData,
   PaginatedResponse,
   DeploymentListQuery,
   AttendanceQuery,
@@ -96,6 +97,12 @@ export const attendanceApi = {
         `/attendance/guards/${guardId}/upcoming`,
         { params: { days } },
       )
+      .then((r) => r.data.data);
+  },
+
+  getAttendanceDashboard(): Promise<AttendanceDashboardData> {
+    return api
+      .get<{ success: boolean; data: AttendanceDashboardData }>('/attendance/dashboard')
       .then((r) => r.data.data);
   },
 };

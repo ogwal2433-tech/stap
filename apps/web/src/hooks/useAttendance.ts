@@ -94,3 +94,12 @@ export function useUpcomingDeployments(guardId: string, days = 7) {
     enabled: Boolean(guardId),
   });
 }
+
+export function useAttendanceDashboard() {
+  return useQuery({
+    queryKey: ['attendance-dashboard'],
+    queryFn:  () => attendanceApi.getAttendanceDashboard(),
+    staleTime: 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
+  });
+}

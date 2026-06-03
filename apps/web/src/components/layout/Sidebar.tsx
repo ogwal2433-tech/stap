@@ -56,6 +56,7 @@ interface NavContentProps {
 const ACTIVE_PATHS = new Set([
   '/dashboard', '/guards', '/clients', '/attendance', '/checkin',
   '/guards/dashboard', '/guards/import',
+  '/attendance/dashboard',
   '/finance', '/requisitions',
   '/complaints', '/reports', '/notifications',
   '/zones', '/settings', '/hr', '/inventory',
@@ -119,6 +120,29 @@ function NavContent({ onNavigate }: NavContentProps) {
             </Nav.Item>
           </RoleGuard>
         ))}
+
+        {/* Attendance sub-navigation — shown when on /attendance* routes */}
+        {pathname.startsWith('/attendance') && (
+          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR] as UserRole[]}>
+            <Nav.Item>
+              <NavLink
+                to="/attendance/dashboard"
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `nav-link d-flex align-items-center gap-2 ps-5 pe-3 py-1 rounded mx-2 mb-1 ${isActive ? 'bg-white bg-opacity-10 text-white fw-medium' : ''}`
+                }
+                style={({ isActive }) => ({
+                  color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+                  textDecoration: 'none',
+                  fontSize: '0.8rem',
+                })}
+              >
+                <i className="bi bi-bar-chart-fill" style={{ fontSize: '0.8rem', width: 14 }} />
+                <span>Dashboard</span>
+              </NavLink>
+            </Nav.Item>
+          </RoleGuard>
+        )}
 
         {/* Guards sub-navigation — shown when on /guards* routes */}
         {pathname.startsWith('/guards') && (

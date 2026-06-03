@@ -263,6 +263,22 @@ router.post(
   }),
 );
 
+// ── GET /dashboard — attendance dashboard stats ────────────────────────────────
+router.get(
+  '/dashboard',
+  requireRole(
+    ROLES.DIRECTOR,
+    ROLES.ASSISTANT_MANAGER,
+    ROLES.OPERATIONS_SUPERVISOR,
+    ROLES.FIELD_SUPERVISOR,
+    ROLES.ADMINISTRATOR,
+  ),
+  asyncHandler(async (req, res) => {
+    const data = await deploymentService.getAttendanceDashboard();
+    res.status(200).json({ success: true, data });
+  }),
+);
+
 // ── GET /guards/:guardId/upcoming — upcoming deployments for a guard ───────────
 router.get(
   '/guards/:guardId/upcoming',

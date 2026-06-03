@@ -531,6 +531,13 @@ export default function AttendancePage() {
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4 d-print-none">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Attendance</h4>
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => navigate('/attendance/dashboard')}
+        >
+          📊 View Attendance Dashboard
+        </Button>
       </div>
 
       <Tabs defaultActiveKey="sheet" className="mb-3 d-print-none">
