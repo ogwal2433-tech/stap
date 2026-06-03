@@ -10,7 +10,7 @@
     "declarationMap": false,
     "sourceMap": true,
     "paths": {
-      "@stap/shared": ["../../packages/shared/dist/index.d.ts"]
+      "@stap/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["src"],
