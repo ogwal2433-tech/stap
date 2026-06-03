@@ -3,8 +3,15 @@ set -e
 
 echo "🗄️  Running database migrations..."
 
-# Run migrations from the correct working directory
 cd /app/apps/api
+
+# If the enum-fix migration is stuck in "failed" state, mark it as rolled-back
+# so Prisma will re-apply it. The SQL uses IF EXISTS/IF NOT EXISTS guards and
+# is idempotent — re-running is safe.
+npx prisma migrate resolve \
+  --rolled-back 20260602000001_fix_shift_type_enum \
+  --schema /app/apps/api/prisma/schema.prisma 2>/dev/null || true
+
 npx prisma migrate deploy --schema /app/apps/api/prisma/schema.prisma
 
 echo "✅ Migrations complete"
