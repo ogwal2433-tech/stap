@@ -34,6 +34,19 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
     guardsRequired:      site.guardsRequired as number,
 
     siteType:            (site.siteType as string) ?? 'REGULAR',
+
+    specialDutyStartDate: (site.specialDutyStartDate as Date | null)
+      ? (site.specialDutyStartDate as Date).toISOString() : null,
+    specialDutyEndDate: (site.specialDutyEndDate as Date | null)
+      ? (site.specialDutyEndDate as Date).toISOString() : null,
+    specialDutyNotes: (site.specialDutyNotes as string | null) ?? null,
+    dutyDurationDays: (() => {
+      const s = site.specialDutyStartDate as Date | null;
+      const e = site.specialDutyEndDate as Date | null;
+      if (!s || !e) return null;
+      return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    })(),
+
     requiresFirearms:    (site.requiresFirearms as boolean) ?? false,
     requiresArmedGuards: (site.requiresArmedGuards as boolean) ?? false,
     requiresWeapons:     (site.requiresWeapons as boolean) ?? false,
@@ -183,6 +196,26 @@ class SiteService {
       }
     }
 
+    // Validate special duty period
+    if (data.siteType === 'SPECIAL_DUTIES') {
+      if (!data.specialDutyStartDate || !data.specialDutyEndDate) {
+        throw new AppError('Special Duties sites require a duty period start and end date.', 400);
+      }
+      const start = new Date(data.specialDutyStartDate);
+      const end   = new Date(data.specialDutyEndDate);
+      if (end < start) {
+        throw new AppError('Duty end date cannot be before the start date.', 400);
+      }
+      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (days > 30) {
+        console.warn(`[Site] Special Duties period is ${days} days — unusually long. Site: ${data.siteName}`);
+      }
+    } else {
+      data.specialDutyStartDate = null;
+      data.specialDutyEndDate   = null;
+      data.specialDutyNotes     = null;
+    }
+
     const { equipmentItems, ...siteData } = data;
 
     const site = await prisma.site.create({
@@ -197,6 +230,11 @@ class SiteService {
         specialInstructions: siteData.specialInstructions ?? null,
         guardsRequired:      siteData.guardsRequired,
         siteType:            siteData.siteType ?? 'REGULAR',
+        specialDutyStartDate: siteData.specialDutyStartDate
+          ? new Date(siteData.specialDutyStartDate) : null,
+        specialDutyEndDate: siteData.specialDutyEndDate
+          ? new Date(siteData.specialDutyEndDate) : null,
+        specialDutyNotes:    siteData.specialDutyNotes ?? null,
         requiresFirearms:    siteData.requiresFirearms ?? false,
         requiresArmedGuards: siteData.requiresArmedGuards ?? false,
         requiresWeapons:     siteData.requiresWeapons ?? false,
@@ -240,7 +278,40 @@ class SiteService {
       }
     }
 
-    const { equipmentItems, ...siteData } = data;
+    // Determine the effective siteType (use incoming or fall back to existing)
+    const effectiveSiteType = data.siteType ?? existing.siteType;
+    if (effectiveSiteType === 'SPECIAL_DUTIES') {
+      const startStr = data.specialDutyStartDate ?? existing.specialDutyStartDate?.toISOString();
+      const endStr   = data.specialDutyEndDate   ?? existing.specialDutyEndDate?.toISOString();
+      if (!startStr || !endStr) {
+        throw new AppError('Special Duties sites require a duty period start and end date.', 400);
+      }
+      const start = new Date(startStr);
+      const end   = new Date(endStr);
+      if (end < start) {
+        throw new AppError('Duty end date cannot be before the start date.', 400);
+      }
+      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (days > 30) {
+        console.warn(`[Site] Special Duties period is ${days} days — unusually long. Site: ${data.siteName ?? existing.siteName}`);
+      }
+    } else if (data.siteType && data.siteType !== 'SPECIAL_DUTIES') {
+      // Switching away from SPECIAL_DUTIES — clear duty dates
+      data.specialDutyStartDate = null;
+      data.specialDutyEndDate   = null;
+      data.specialDutyNotes     = null;
+    }
+
+    const { equipmentItems, ...rawData } = data;
+    const siteData = {
+      ...rawData,
+      specialDutyStartDate: rawData.specialDutyStartDate !== undefined
+        ? (rawData.specialDutyStartDate ? new Date(rawData.specialDutyStartDate) : null)
+        : undefined,
+      specialDutyEndDate: rawData.specialDutyEndDate !== undefined
+        ? (rawData.specialDutyEndDate ? new Date(rawData.specialDutyEndDate) : null)
+        : undefined,
+    };
 
     await prisma.site.update({ where: { id }, data: siteData });
 

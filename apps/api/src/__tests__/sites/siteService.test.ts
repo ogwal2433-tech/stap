@@ -121,7 +121,12 @@ describe('siteService.create()', () => {
   });
 
   it('creates site with siteType = SPECIAL_DUTIES', async () => {
-    await siteService.create({ ...baseCreateInput, siteType: 'SPECIAL_DUTIES' }, 'user1');
+    await siteService.create({
+      ...baseCreateInput,
+      siteType:             'SPECIAL_DUTIES',
+      specialDutyStartDate: '2026-07-10T00:00:00.000Z',
+      specialDutyEndDate:   '2026-07-12T00:00:00.000Z',
+    }, 'user1');
 
     expect(mock.site.create).toHaveBeenCalledWith(
       expect.objectContaining({

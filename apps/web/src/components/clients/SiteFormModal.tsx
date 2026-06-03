@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCreateSite, useUpdateSite } from '../../hooks/useClients';
@@ -7,6 +7,7 @@ import { useShiftTypes } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
 import type { SiteResponse } from '@stap/shared';
 import { z } from 'zod';
+import DateRangePicker from '../common/DateRangePicker';
 
 // ── Local schema (frontend-only, coerces GPS + guardsRequired) ─────────────────
 
@@ -21,7 +22,10 @@ const SiteFormSchema = z.object({
   siteManagerName:     z.string().max(100).optional().transform((v) => v || undefined),
   siteManagerContact:  z.string().optional().transform((v) => v || undefined),
   guardsRequired:      z.coerce.number().int().min(1).default(1),
-  siteType:            z.enum(['REGULAR', 'TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default('REGULAR'),
+  siteType:             z.enum(['REGULAR', 'TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default('REGULAR'),
+  specialDutyStartDate: z.string().optional().nullable(),
+  specialDutyEndDate:   z.string().optional().nullable(),
+  specialDutyNotes:     z.string().max(500).optional().nullable(),
   requiresFirearms:    z.boolean().default(false),
   requiresArmedGuards: z.boolean().default(false),
   requiresWeapons:     z.boolean().default(false),
@@ -64,6 +68,16 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   // Allowed shift types (checkboxes)
   const [allowedShifts, setAllowedShifts] = useState<string[]>([]);
 
+  // Special duty date range state (local ISO date strings: 'YYYY-MM-DD')
+  const [dutyStartDate, setDutyStartDate] = useState<string>(
+    site?.specialDutyStartDate
+      ? new Date(site.specialDutyStartDate).toISOString().split('T')[0] : '',
+  );
+  const [dutyEndDate, setDutyEndDate] = useState<string>(
+    site?.specialDutyEndDate
+      ? new Date(site.specialDutyEndDate).toISOString().split('T')[0] : '',
+  );
+
   const {
     register,
     handleSubmit,
@@ -81,7 +95,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       siteManagerName:     site?.siteManagerName ?? undefined,
       siteManagerContact:  site?.siteManagerContact ?? undefined,
       guardsRequired:      site?.guardsRequired ?? 1,
-      siteType:            (site?.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+      siteType:             (site?.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+      specialDutyStartDate: (site as any)?.specialDutyStartDate ?? null,
+      specialDutyEndDate:   (site as any)?.specialDutyEndDate   ?? null,
+      specialDutyNotes:     (site as any)?.specialDutyNotes     ?? null,
       requiresFirearms:    site?.requiresFirearms ?? false,
       requiresArmedGuards: site?.requiresArmedGuards ?? false,
       requiresWeapons:     site?.requiresWeapons ?? false,
@@ -101,7 +118,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         siteManagerName:     site.siteManagerName ?? undefined,
         siteManagerContact:  site.siteManagerContact ?? undefined,
         guardsRequired:      site.guardsRequired,
-        siteType:            (site.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+        siteType:             (site.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+        specialDutyStartDate: (site as any).specialDutyStartDate ?? null,
+        specialDutyEndDate:   (site as any).specialDutyEndDate   ?? null,
+        specialDutyNotes:     (site as any).specialDutyNotes     ?? null,
         requiresFirearms:    site.requiresFirearms,
         requiresArmedGuards: site.requiresArmedGuards,
         requiresWeapons:     site.requiresWeapons,
@@ -117,6 +137,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         })) ?? [],
       );
       setAllowedShifts(site.allowedShiftTypes ?? []);
+      setDutyStartDate((site as any).specialDutyStartDate
+        ? new Date((site as any).specialDutyStartDate).toISOString().split('T')[0] : '');
+      setDutyEndDate((site as any).specialDutyEndDate
+        ? new Date((site as any).specialDutyEndDate).toISOString().split('T')[0] : '');
     }
   }, [site, reset]);
 
@@ -152,8 +176,14 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   }
 
   const onSubmit = async (values: SiteFormValues) => {
+    const isSpecialDuty = values.siteType === 'SPECIAL_DUTIES';
     const payload = {
       ...values,
+      specialDutyStartDate: isSpecialDuty && dutyStartDate
+        ? new Date(dutyStartDate).toISOString() : null,
+      specialDutyEndDate: isSpecialDuty && dutyEndDate
+        ? new Date(dutyEndDate).toISOString() : null,
+      specialDutyNotes: isSpecialDuty ? (values.specialDutyNotes ?? null) : null,
       allowedShiftTypes: allowedShifts,
       equipmentItems: equipmentItems
         .filter((e) => e.itemName.trim())
@@ -202,7 +232,20 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
             <Col md={4}>
               <Form.Group>
                 <Form.Label className="small fw-semibold">Site Type <span className="text-danger">*</span></Form.Label>
-                <Form.Select {...register('siteType')}>
+                <Form.Select
+                  {...register('siteType')}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    setValue('siteType', newType as SiteFormValues['siteType']);
+                    if (newType !== 'SPECIAL_DUTIES') {
+                      setDutyStartDate('');
+                      setDutyEndDate('');
+                      setValue('specialDutyStartDate', null);
+                      setValue('specialDutyEndDate', null);
+                      setValue('specialDutyNotes', null);
+                    }
+                  }}
+                >
                   {SITE_TYPE_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
@@ -219,9 +262,64 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
             )}
             {siteType === 'SPECIAL_DUTIES' && (
               <Col md={12}>
-                <Alert variant="info" className="py-2 mb-0">
-                  <small>🎯 <strong>Special Duties</strong> — requires specific briefing. Complete equipment requirements and special instructions below.</small>
-                </Alert>
+                <div style={{
+                  marginTop: '4px', padding: '16px',
+                  background: '#FEF9E7', borderRadius: '0.5rem',
+                  border: '1px solid #F9E79F', borderLeft: '4px solid #E8701A',
+                }}>
+                  <div style={{ fontWeight: 700, color: '#1B3A6B', marginBottom: '4px', fontSize: '0.9rem' }}>
+                    🎯 Special Duty Period
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#6c757d', marginBottom: '12px' }}>
+                    Select the exact dates this special duty covers. Guards will only be deployable to this site within this date range.
+                  </div>
+
+                  <Form.Label className="fw-bold small">
+                    Duty Period <span className="text-danger">*</span>
+                  </Form.Label>
+                  <DateRangePicker
+                    startDate={dutyStartDate}
+                    endDate={dutyEndDate}
+                    onRangeChange={(start, end) => {
+                      setDutyStartDate(start);
+                      setDutyEndDate(end);
+                      setValue('specialDutyStartDate', start ? new Date(start).toISOString() : null);
+                      setValue('specialDutyEndDate', end ? new Date(end).toISOString() : null);
+                    }}
+                    isInvalid={!!errors.specialDutyStartDate}
+                    errorMessage={errors.specialDutyStartDate?.message as string}
+                    placeholder="Select duty start and end dates..."
+                  />
+
+                  {dutyStartDate && dutyEndDate && (
+                    <div className="mt-2">
+                      <Badge bg="warning" text="dark" style={{ fontSize: '0.8rem' }}>
+                        🗓️{' '}
+                        {new Date(dutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {' → '}
+                        {new Date(dutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {' · '}
+                        {Math.ceil((new Date(dutyEndDate).getTime() - new Date(dutyStartDate).getTime()) / (1000 * 60 * 60 * 24)) + 1}
+                        {' day(s)'}
+                      </Badge>
+                    </div>
+                  )}
+
+                  <Form.Group className="mt-3">
+                    <Form.Label className="small fw-bold">
+                      Nature of Duty <span className="text-muted fw-normal ms-1">(optional)</span>
+                    </Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder="e.g. URA Annual Gala Dinner, Presidential Visit Security, Product Launch Event"
+                      maxLength={500}
+                      {...register('specialDutyNotes')}
+                    />
+                    <Form.Text className="text-muted">
+                      A brief description to help identify this special duty assignment.
+                    </Form.Text>
+                  </Form.Group>
+                </div>
               </Col>
             )}
 

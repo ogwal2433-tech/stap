@@ -103,6 +103,7 @@ import {
   CreateClientSchema,
   UpdateClientSchema,
   CreateSiteSchema,
+  CreateSiteInputSchema,
   UpdateSiteSchema,
   CreateIncidentSchema,
 } from '@stap/shared';
@@ -300,7 +301,7 @@ router.get(
 router.post(
   '/:clientId/sites',
   requireRole(...SITE_WRITE_ROLES),
-  validate(CreateSiteSchema.omit({ clientId: true })),
+  validate(CreateSiteInputSchema.omit({ clientId: true })),
   asyncHandler(async (req, res) => {
     const site = await siteService.create(
       { ...req.body, clientId: req.params.clientId },

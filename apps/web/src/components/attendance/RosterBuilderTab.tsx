@@ -437,6 +437,28 @@ export default function RosterBuilderTab() {
                               : site.specialInstructions}
                           </div>
                         )}
+                        {site.siteType === 'SPECIAL_DUTIES' && (
+                          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #F9E79F', fontSize: '0.75rem' }}>
+                            {site.specialDutyStartDate && site.specialDutyEndDate ? (
+                              <>
+                                <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
+                                  🗓️{' '}
+                                  {new Date(site.specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                  {' → '}
+                                  {new Date(site.specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                  {site.dutyDurationDays ? ` · ${site.dutyDurationDays}d` : ''}
+                                </Badge>
+                                {site.specialDutyNotes && (
+                                  <div className="text-muted mt-1" style={{ fontSize: '0.72rem' }}>
+                                    {site.specialDutyNotes}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-warning small">⚠️ No duty period set</span>
+                            )}
+                          </div>
+                        )}
                         {isSelected && (
                           <div className="mt-2" style={{ fontSize: '0.75rem', color: '#0F7B6C', fontWeight: 500 }}>
                             ✓ Selected
@@ -480,6 +502,41 @@ export default function RosterBuilderTab() {
                     </div>
                   </div>
                 </div>
+              </Alert>
+            )}
+
+            {/* Special duty period alert */}
+            {selectedSite.siteType === 'SPECIAL_DUTIES' && selectedSite.specialDutyStartDate && selectedSite.specialDutyEndDate && (
+              <Alert variant="warning" className="mb-3" style={{ borderLeft: '4px solid #E8701A', background: '#FEF9E7' }}>
+                <div className="fw-bold small mb-1">🎯 Special Duty Assignment</div>
+                <div className="small">
+                  This is a special duty site active from{' '}
+                  <strong>
+                    {new Date(selectedSite.specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </strong>
+                  {' to '}
+                  <strong>
+                    {new Date(selectedSite.specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </strong>
+                  {' '}({selectedSite.dutyDurationDays} day(s)).
+                  {selectedSite.specialDutyNotes && (
+                    <span className="ms-1 fst-italic">{selectedSite.specialDutyNotes}.</span>
+                  )}
+                </div>
+                {selectedDate && (() => {
+                  const rosterDate = new Date(`${selectedDate}T00:00:00`);
+                  const dutyStart  = new Date(selectedSite.specialDutyStartDate!);
+                  const dutyEnd    = new Date(selectedSite.specialDutyEndDate!);
+                  if (rosterDate < dutyStart || rosterDate > dutyEnd) {
+                    return (
+                      <div className="mt-2 text-danger small fw-bold">
+                        ⚠️ Warning: The selected roster date (
+                        {rosterDate.toLocaleDateString('en-GB')}) is outside this site's duty period. Are you sure you want to deploy on this date?
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </Alert>
             )}
 

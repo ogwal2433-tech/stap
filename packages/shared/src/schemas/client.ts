@@ -76,20 +76,87 @@ export const SITE_TYPES = {
 
 // ── Site schemas ───────────────────────────────────────────────────────────────
 
-export const CreateSiteSchema = z.object({
-  clientId: z.string().min(1),
-  siteName: z.string().min(1).max(200),
-  location: z.string().min(1).max(500),
-  gpsLat: z.number().min(-90).max(90).optional(),
-  gpsLon: z.number().min(-180).max(180).optional(),
-  siteManagerName: z.string().max(100).optional(),
-  siteManagerContact: z.string().optional(),
-  specialInstructions: z.string().max(1000).optional(),
-  guardsRequired: z.number().int().min(1).default(1),
-  zoneId: z.string().nullable().optional(),
+const _BaseSiteSchema = z.object({
+  clientId:             z.string().min(1),
+  siteName:             z.string().min(1).max(200),
+  location:             z.string().min(1).max(500),
+  gpsLat:               z.number().min(-90).max(90).optional(),
+  gpsLon:               z.number().min(-180).max(180).optional(),
+  siteManagerName:      z.string().max(100).optional(),
+  siteManagerContact:   z.string().optional(),
+  specialInstructions:  z.string().max(1000).optional(),
+  guardsRequired:       z.number().int().min(1).default(1),
+  zoneId:               z.string().nullable().optional(),
+  siteType:             z.string().optional(),
+  requiresFirearms:     z.boolean().optional(),
+  requiresArmedGuards:  z.boolean().optional(),
+  requiresWeapons:      z.boolean().optional(),
+  equipmentDetails:     z.string().max(1000).optional(),
+  allowedShiftTypes:    z.array(z.string()).optional(),
+  defaultShiftType:     z.string().optional().nullable(),
+  equipmentItems: z.array(z.object({
+    itemName: z.string().min(1),
+    quantity: z.number().int().min(1).default(1),
+    notes:    z.string().optional(),
+  })).optional(),
+  specialDutyStartDate: z.string().datetime().optional().nullable(),
+  specialDutyEndDate:   z.string().datetime().optional().nullable(),
+  specialDutyNotes:     z.string().max(500).optional().nullable(),
 });
 
-export const UpdateSiteSchema = CreateSiteSchema.omit({ clientId: true }).partial();
+export const CreateSiteInputSchema = _BaseSiteSchema;
+
+export const CreateSiteSchema = _BaseSiteSchema
+  .refine(
+    (data) => {
+      if (data.siteType === 'SPECIAL_DUTIES') {
+        return !!data.specialDutyStartDate && !!data.specialDutyEndDate;
+      }
+      return true;
+    },
+    {
+      message: 'Special Duties sites must have a start and end date for the duty period.',
+      path: ['specialDutyStartDate'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.specialDutyStartDate && data.specialDutyEndDate) {
+        return new Date(data.specialDutyEndDate) >= new Date(data.specialDutyStartDate);
+      }
+      return true;
+    },
+    {
+      message: 'Duty end date must be on or after the start date.',
+      path: ['specialDutyEndDate'],
+    },
+  );
+
+export const UpdateSiteSchema = _BaseSiteSchema.omit({ clientId: true }).partial()
+  .refine(
+    (data) => {
+      if (data.siteType === 'SPECIAL_DUTIES') {
+        return !!data.specialDutyStartDate && !!data.specialDutyEndDate;
+      }
+      return true;
+    },
+    {
+      message: 'Special Duties sites must have a start and end date for the duty period.',
+      path: ['specialDutyStartDate'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.specialDutyStartDate && data.specialDutyEndDate) {
+        return new Date(data.specialDutyEndDate) >= new Date(data.specialDutyStartDate);
+      }
+      return true;
+    },
+    {
+      message: 'Duty end date must be on or after the start date.',
+      path: ['specialDutyEndDate'],
+    },
+  );
 
 // ── Incident schema ────────────────────────────────────────────────────────────
 
@@ -118,8 +185,8 @@ export const CreateIncidentSchema = z.object({
 export type CreateClientInput = z.input<typeof CreateClientSchema>;
 export type UpdateClientInput = z.input<typeof UpdateClientSchema>;
 export type ClientListQuery = z.infer<typeof ClientListQuerySchema>;
-export type CreateSiteInput = z.infer<typeof CreateSiteSchema>;
-export type UpdateSiteInput = z.infer<typeof UpdateSiteSchema>;
+export type CreateSiteInput = z.input<typeof _BaseSiteSchema>;
+export type UpdateSiteInput = Partial<Omit<CreateSiteInput, 'clientId'>>;
 export type CreateIncidentInput = z.infer<typeof CreateIncidentSchema>;
 
 // ── Response interfaces ────────────────────────────────────────────────────────
@@ -170,6 +237,12 @@ export interface SiteResponse {
 
   // Classification
   siteType: string;
+
+  // Special duty period (only set when siteType === 'SPECIAL_DUTIES')
+  specialDutyStartDate: string | null;
+  specialDutyEndDate:   string | null;
+  specialDutyNotes:     string | null;
+  dutyDurationDays:     number | null;
 
   // Security requirements
   requiresFirearms: boolean;

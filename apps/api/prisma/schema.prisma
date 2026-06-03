@@ -396,9 +396,12 @@ model Site {
   siteManagerContact  String?
   specialInstructions String?
   guardsRequired      Int        @default(1)
-  siteType            String     @default("COMMERCIAL")
-  defaultShiftType    String?
-  requiresArmedGuards Boolean    @default(false)
+  siteType              String     @default("COMMERCIAL")
+  specialDutyStartDate  DateTime?
+  specialDutyEndDate    DateTime?
+  specialDutyNotes      String?
+  defaultShiftType      String?
+  requiresArmedGuards   Boolean    @default(false)
   requiresFirearms    Boolean    @default(false)
   requiresWeapons     Boolean    @default(false)
   equipmentDetails    String?

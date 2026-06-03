@@ -370,7 +370,7 @@ class DeploymentService {
             client:              site.client,
             guardsRequired:      site.guardsRequired,
             specialInstructions: site.specialInstructions ?? null,
-          },
+          } as DailySheetSite['site'],
           supervisor: dep.supervisor,
           deployments: [],
         });

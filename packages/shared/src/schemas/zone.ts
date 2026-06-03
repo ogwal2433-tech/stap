@@ -58,6 +58,10 @@ export interface ZoneSite {
   requiresArmedGuards: boolean;
   requiresFirearms:    boolean;
   specialInstructions: string | null;
+  specialDutyStartDate: string | null;
+  specialDutyEndDate:   string | null;
+  specialDutyNotes:     string | null;
+  dutyDurationDays:     number | null;
   client: {
     id:         string;
     clientName: string;

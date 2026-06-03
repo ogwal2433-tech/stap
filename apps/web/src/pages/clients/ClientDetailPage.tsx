@@ -307,7 +307,7 @@ export default function ClientDetailPage() {
                         <span
                           role="button"
                           onClick={() => setExpandedSiteId(isExpanded ? null : s.id)}
-                          style={{ cursor: s.specialInstructions ? 'pointer' : undefined }}
+                          style={{ cursor: (s.specialInstructions || (s as any).specialDutyStartDate) ? 'pointer' : undefined }}
                         >
                           {s.siteName}
                         </span>
@@ -320,6 +320,22 @@ export default function ClientDetailPage() {
                           >
                             📋
                           </span>
+                        )}
+                        {s.siteType === 'SPECIAL_DUTIES' && (s as any).specialDutyStartDate && (s as any).specialDutyEndDate && (
+                          <div className="mt-1">
+                            <Badge bg="warning" text="dark" style={{ fontSize: '0.72rem' }}>
+                              🗓️{' '}
+                              {new Date((s as any).specialDutyStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                              {' → '}
+                              {new Date((s as any).specialDutyEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {(s as any).dutyDurationDays ? ` (${(s as any).dutyDurationDays} days)` : ''}
+                            </Badge>
+                            {(s as any).specialDutyNotes && (
+                              <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '2px' }}>
+                                {(s as any).specialDutyNotes}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td>
@@ -373,22 +389,58 @@ export default function ClientDetailPage() {
                         </div>
                       </td>
                     </tr>
-                    {isExpanded && s.specialInstructions && (
+                    {isExpanded && (s.specialInstructions || s.siteType === 'SPECIAL_DUTIES') && (
                       <tr>
                         <td colSpan={8} style={{ background: '#FFFBEB', padding: '10px 16px' }}>
-                          <div className="d-flex align-items-start gap-2">
-                            <span style={{ flexShrink: 0 }}>📋</span>
-                            <div>
-                              <div className="fw-bold small mb-1" style={{ color: '#1B3A6B' }}>
-                                Special Instructions
+                          {s.specialInstructions && (
+                            <div className="d-flex align-items-start gap-2 mb-2">
+                              <span style={{ flexShrink: 0 }}>📋</span>
+                              <div>
+                                <div className="fw-bold small mb-1" style={{ color: '#1B3A6B' }}>Special Instructions</div>
+                                <p className="mb-0 small" style={{ whiteSpace: 'pre-wrap', color: '#4A5568', lineHeight: 1.6 }}>
+                                  {s.specialInstructions}
+                                </p>
                               </div>
-                              <p className="mb-0 small" style={{
-                                whiteSpace: 'pre-wrap', color: '#4A5568', lineHeight: 1.6,
-                              }}>
-                                {s.specialInstructions}
-                              </p>
                             </div>
-                          </div>
+                          )}
+                          {s.siteType === 'SPECIAL_DUTIES' && (
+                            <Card className="mb-0 border-0" style={{ background: '#FEF9E7' }}>
+                              <Card.Body className="py-2 px-3">
+                                <div className="fw-bold small mb-1" style={{ color: '#1B3A6B' }}>🎯 Special Duty Period</div>
+                                {(s as any).specialDutyStartDate && (s as any).specialDutyEndDate ? (
+                                  <>
+                                    <div className="small">
+                                      <strong>From:</strong>{' '}
+                                      {new Date((s as any).specialDutyStartDate).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                                    </div>
+                                    <div className="small mt-1">
+                                      <strong>To:</strong>{' '}
+                                      {new Date((s as any).specialDutyEndDate).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                                    </div>
+                                    <div className="small mt-1">
+                                      <strong>Duration:</strong> {(s as any).dutyDurationDays} day(s)
+                                    </div>
+                                    {(s as any).specialDutyNotes && (
+                                      <div className="small mt-1 text-muted fst-italic">
+                                        "{(s as any).specialDutyNotes}"
+                                      </div>
+                                    )}
+                                    {(() => {
+                                      const now   = new Date();
+                                      const start = new Date((s as any).specialDutyStartDate);
+                                      const end   = new Date((s as any).specialDutyEndDate);
+                                      if (now > end) return <Badge bg="secondary" className="mt-2">✓ Completed</Badge>;
+                                      if (now >= start && now <= end) return <Badge bg="success" className="mt-2">🔴 Live now</Badge>;
+                                      const daysUntil = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                      return <Badge bg="info" className="mt-2">Starts in {daysUntil} day(s)</Badge>;
+                                    })()}
+                                  </>
+                                ) : (
+                                  <p className="mb-0 small text-muted">No duty period dates recorded.</p>
+                                )}
+                              </Card.Body>
+                            </Card>
+                          )}
                         </td>
                       </tr>
                     )}

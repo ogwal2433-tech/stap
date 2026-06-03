@@ -153,9 +153,12 @@ class ZoneService {
             guardsRequired:      true,
             siteType:            true,
             defaultShiftType:    true,
-            requiresArmedGuards: true,
-            requiresFirearms:    true,
-            specialInstructions: true,
+            requiresArmedGuards:  true,
+            requiresFirearms:     true,
+            specialInstructions:  true,
+            specialDutyStartDate: true,
+            specialDutyEndDate:   true,
+            specialDutyNotes:     true,
             client: { select: { id: true, clientName: true } },
           },
           orderBy: { siteName: 'asc' },
@@ -213,8 +216,19 @@ class ZoneService {
       defaultShiftType:    s.defaultShiftType ?? null,
       requiresArmedGuards: s.requiresArmedGuards,
       requiresFirearms:    s.requiresFirearms,
-      specialInstructions: (s as any).specialInstructions ?? null,
-      client:              s.client,
+      specialInstructions:  (s as any).specialInstructions ?? null,
+      specialDutyStartDate: (s as any).specialDutyStartDate
+        ? (s as any).specialDutyStartDate.toISOString() : null,
+      specialDutyEndDate: (s as any).specialDutyEndDate
+        ? (s as any).specialDutyEndDate.toISOString() : null,
+      specialDutyNotes:   (s as any).specialDutyNotes ?? null,
+      dutyDurationDays:   (() => {
+        const sd = (s as any).specialDutyStartDate as Date | null;
+        const ed = (s as any).specialDutyEndDate as Date | null;
+        if (!sd || !ed) return null;
+        return Math.ceil((ed.getTime() - sd.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      })(),
+      client:             s.client,
     }));
 
     return {
