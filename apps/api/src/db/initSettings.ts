@@ -50,6 +50,12 @@ const DEFAULT_SETTINGS: Array<{
   { key: 'absent_alert_threshold', value: '2',     label: 'Absent Alert Threshold (hours)',  group: 'NOTIFICATIONS', dataType: 'number' },
 ];
 
+const DEFAULT_SHIFT_TYPES = [
+  { code: 'DAY',     name: 'Day Shift',     startTime: '07:00', endTime: '19:00', durationHours: 12, displayOrder: 1 },
+  { code: 'NIGHT',   name: 'Night Shift',   startTime: '19:00', endTime: '07:00', durationHours: 12, displayOrder: 2 },
+  { code: 'FULL_24', name: '24 Hour Shift', startTime: '07:00', endTime: '07:00', durationHours: 24, displayOrder: 3 },
+];
+
 async function initSettings() {
   console.log('⚙️  Initialising default system settings…');
   let inserted = 0;
@@ -74,6 +80,23 @@ async function initSettings() {
   }
 
   console.log(`✅ Settings initialised — ${inserted} new row(s) inserted, ${DEFAULT_SETTINGS.length - inserted} already existed.`);
+
+  // ── Seed default shift types ──────────────────────────────────────────────
+  console.log('⚙️  Seeding default shift types…');
+  let shiftInserted = 0;
+  const existingShifts = await prisma.shiftTypeConfig.findMany({ select: { code: true } });
+  const existingCodes = new Set(existingShifts.map((s) => s.code));
+
+  for (const shift of DEFAULT_SHIFT_TYPES) {
+    await prisma.shiftTypeConfig.upsert({
+      where:  { code: shift.code },
+      update: {},   // never overwrite admin-configured values
+      create: { ...shift, isActive: true, isOvertime: false },
+    });
+    if (!existingCodes.has(shift.code)) shiftInserted++;
+  }
+
+  console.log(`✅ Shift types seeded — ${shiftInserted} new, ${DEFAULT_SHIFT_TYPES.length - shiftInserted} already existed.`);
 }
 
 initSettings()
