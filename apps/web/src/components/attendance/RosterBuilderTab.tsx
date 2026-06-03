@@ -124,9 +124,6 @@ export default function RosterBuilderTab() {
     setSelectedSite(isSame ? null : site);
     setSelectedGuards([]);
     setGuardSearch('');
-    if (!isSame && site.defaultShiftType) {
-      setSelectedShift(site.defaultShiftType as 'DAY' | 'NIGHT' | 'FULL_24');
-    }
   }
 
   function selectGuard(guard: ZoneRosterGuard) {

@@ -56,7 +56,7 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
           || ((site.batonRequired as number) ?? 0) > 0,
     equipmentDetails:    (site.equipmentDetails as string | null) ?? null,
     allowedShiftTypes:   (site.allowedShiftTypes as string[]) ?? [],
-    defaultShiftType:    (site.defaultShiftType as string | null) ?? null,
+    defaultShiftType:    null,
     equipmentItems:      items,
     zone: (site.zone as { id: string; name: string } | null) ?? null,
 
@@ -190,7 +190,6 @@ class SiteService {
     if (!client) throw new NotFoundError(`Client ${data.clientId} not found`);
 
     // Validate shift type codes
-    if (data.defaultShiftType) await assertShiftTypeActive(data.defaultShiftType);
     if (data.allowedShiftTypes?.length) {
       const valid = await prisma.shiftTypeConfig.findMany({
         where: { code: { in: data.allowedShiftTypes }, isActive: true },
@@ -250,7 +249,7 @@ class SiteService {
         otherWeaponsNotes:   siteData.otherWeaponsNotes ?? null,
         equipmentDetails:    siteData.equipmentDetails ?? null,
         allowedShiftTypes:   siteData.allowedShiftTypes ?? [],
-        defaultShiftType:    siteData.defaultShiftType ?? null,
+        defaultShiftType:    null,
       },
       include: SITE_INCLUDE,
     });
@@ -278,7 +277,6 @@ class SiteService {
     const existing = await prisma.site.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError(`Site ${id} not found`);
 
-    if (data.defaultShiftType) await assertShiftTypeActive(data.defaultShiftType);
     if (data.allowedShiftTypes?.length) {
       const valid = await prisma.shiftTypeConfig.findMany({
         where: { code: { in: data.allowedShiftTypes }, isActive: true },

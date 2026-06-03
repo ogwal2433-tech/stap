@@ -54,7 +54,8 @@ export interface ZoneSite {
   location:            string;
   guardsRequired:      number;
   siteType:            string;
-  defaultShiftType:    string | null;
+  /** @deprecated No longer collected. Will be null for all new sites. */
+  defaultShiftType?:   string | null;
   armedGuardsRequired: number;
   firearmsRequired:    number;
   batonRequired:       number;

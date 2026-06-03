@@ -94,7 +94,6 @@ const _BaseSiteSchema = z.object({
   otherWeaponsNotes:    z.string().max(500).optional().nullable(),
   equipmentDetails:     z.string().max(1000).optional(),
   allowedShiftTypes:    z.array(z.string()).optional(),
-  defaultShiftType:     z.string().optional().nullable(),
   equipmentItems: z.array(z.object({
     itemName: z.string().min(1),
     quantity: z.number().int().min(1).default(1),
@@ -262,7 +261,8 @@ export interface SiteResponse {
 
   // Shift configuration
   allowedShiftTypes: string[];
-  defaultShiftType: string | null;
+  /** @deprecated No longer collected. Will be null for all new sites. */
+  defaultShiftType?: string | null;
 
   // Structured equipment
   equipmentItems: {

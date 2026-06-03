@@ -31,7 +31,6 @@ const SiteFormSchema = z.object({
   batonRequired:       z.coerce.number().int().min(0).default(0),
   otherWeaponsNotes:   z.string().max(500).optional().nullable(),
   equipmentDetails:    z.string().max(1000).optional().transform((v) => v || undefined),
-  defaultShiftType:    z.string().optional().transform((v) => v || undefined),
   specialInstructions: z.string().max(2000).optional().transform((v) => v || undefined),
 });
 
@@ -105,7 +104,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       batonRequired:       (site as any)?.batonRequired       ?? 0,
       otherWeaponsNotes:   (site as any)?.otherWeaponsNotes   ?? null,
       equipmentDetails:    site?.equipmentDetails ?? undefined,
-      defaultShiftType:    site?.defaultShiftType ?? undefined,
       specialInstructions: site?.specialInstructions ?? undefined,
     },
   });
@@ -129,7 +127,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         batonRequired:       (site as any).batonRequired       ?? 0,
         otherWeaponsNotes:   (site as any).otherWeaponsNotes   ?? null,
         equipmentDetails:    site.equipmentDetails ?? undefined,
-        defaultShiftType:    site.defaultShiftType ?? undefined,
         specialInstructions: site.specialInstructions ?? undefined,
       });
       setEquipmentItems(
@@ -149,18 +146,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
 
   const siteType            = watch('siteType');
   const specialInstructions = watch('specialInstructions') ?? '';
-  const defaultShiftType    = watch('defaultShiftType');
   const armedGuardsRequired = watch('armedGuardsRequired') ?? 0;
   const firearmsRequired    = watch('firearmsRequired') ?? 0;
   const batonRequired       = watch('batonRequired') ?? 0;
   const otherWeaponsNotes   = watch('otherWeaponsNotes') ?? '';
-
-  // Auto-clear defaultShiftType when it falls outside the allowed list
-  useEffect(() => {
-    if (allowedShifts.length > 0 && defaultShiftType && !allowedShifts.includes(defaultShiftType)) {
-      setValue('defaultShiftType', undefined);
-    }
-  }, [allowedShifts, defaultShiftType, setValue]);
 
   function toggleAllowedShift(code: string) {
     setAllowedShifts((prev) =>
@@ -191,6 +180,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       specialDutyEndDate: isSpecialDuty && dutyEndDate
         ? new Date(dutyEndDate).toISOString() : null,
       specialDutyNotes: isSpecialDuty ? (values.specialDutyNotes ?? null) : null,
+      defaultShiftType: null,
       allowedShiftTypes: allowedShifts,
       equipmentItems: equipmentItems
         .filter((e) => e.itemName.trim())
@@ -211,11 +201,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       showToast(err instanceof Error ? err.message : 'Failed to save site', 'danger');
     }
   };
-
-  // Which shifts to show in the Default Shift dropdown
-  const availableForDefault = shiftTypes.filter(
-    (s) => allowedShifts.length === 0 || allowedShifts.includes(s.code),
-  );
 
   return (
     <Modal show onHide={onClose} size="lg">
@@ -522,7 +507,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
 
           <Form.Group className="mb-3">
             <Form.Label className="small fw-semibold">Allowed Shift Types at this site</Form.Label>
-            <Form.Text className="text-muted d-block mb-2">Leave all unchecked to allow any shift type.</Form.Text>
+            <Form.Text className="text-muted d-block mb-2">Leave all unchecked to allow any shift type. The shift is selected at deployment time.</Form.Text>
             {shiftTypes.length === 0 ? (
               <p className="text-muted small"><Spinner size="sm" className="me-1" />Loading shift types...</p>
             ) : (
@@ -546,17 +531,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
                 ))}
               </div>
             )}
-          </Form.Group>
-
-          <Form.Group className="mb-0">
-            <Form.Label className="small fw-semibold">Default Shift for this site</Form.Label>
-            <Form.Text className="text-muted d-block mb-1">Auto-selects on the roster when this site is chosen.</Form.Text>
-            <Form.Select {...register('defaultShiftType')}>
-              <option value="">— No default —</option>
-              {availableForDefault.map((s) => (
-                <option key={s.code} value={s.code}>{s.name}</option>
-              ))}
-            </Form.Select>
           </Form.Group>
 
           {/* ── SECTION 4: Special Instructions ──────────────────────── */}
