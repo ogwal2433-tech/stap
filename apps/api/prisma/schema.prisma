@@ -475,6 +475,7 @@ model ClientComplaint {
   id          String            @id @default(cuid())
   clientId    String
   siteId      String?
+  subject     String
   category    ComplaintCategory
   description String
   severity    ComplaintSeverity

@@ -28,6 +28,7 @@ function fmtComplaint(c: any): ComplaintResponse {
     id:          c.id,
     client:      { id: c.client.id, clientName: c.client.clientName },
     site:        c.site ? { id: c.site.id, siteName: c.site.siteName } : null,
+    subject:     c.subject,
     category:    c.category,
     description: c.description,
     severity:    c.severity,
@@ -52,6 +53,7 @@ class ComplaintService {
       data: {
         clientId:    data.clientId,
         siteId:      data.siteId,
+        subject:     data.subject,
         category:    data.category,
         description: data.description,
         severity:    data.severity,

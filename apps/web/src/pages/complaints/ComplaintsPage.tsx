@@ -33,45 +33,82 @@ function ComplaintFormModal({ onClose }: { onClose: () => void }) {
   const { data: clientsRes, isLoading: clientsLoading } = useClients({ limit: 200 });
   const clients = clientsRes?.data ?? [];
 
-  const [form, setForm] = useState({ clientId: '', category: 'GUARD_CONDUCT', description: '', severity: 'MEDIUM' });
+  const [form, setForm] = useState({
+    clientId:    '',
+    subject:     '',
+    category:    'GUARD_CONDUCT' as const,
+    description: '',
+    severity:    'MEDIUM' as const,
+  });
 
   const create = useMutation({
-    mutationFn: () => complaintsApi.create(form as any),
+    mutationFn: () => complaintsApi.create({
+      clientId:    form.clientId,
+      subject:     form.subject,
+      category:    form.category,
+      description: form.description,
+      severity:    form.severity,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['complaints'] });
-      showToast('Complaint logged', 'success');
+      showToast('Complaint logged successfully', 'success');
       onClose();
     },
-    onError: () => showToast('Failed to log complaint', 'danger'),
+    onError: (err: any) => showToast(err?.response?.data?.error ?? 'Failed to log complaint', 'danger'),
   });
+
+  const canSubmit = form.clientId && form.subject.trim().length > 0 && form.description.length >= 10 && !create.isPending;
 
   return (
     <Modal show onHide={onClose} size="lg">
       <Modal.Header closeButton><Modal.Title>Log Complaint</Modal.Title></Modal.Header>
       <Modal.Body>
+        {create.isError && (
+          <Alert variant="danger" className="small py-2">
+            {(create.error as any)?.response?.data?.error ?? 'Failed to submit complaint. Please try again.'}
+          </Alert>
+        )}
+
+        {/* Client */}
         <Form.Group className="mb-3">
           <Form.Label>Client <span className="text-danger">*</span></Form.Label>
           {!clientsLoading && clients.length === 0 ? (
             <Alert variant="warning" className="small py-2 mb-0">
-              No clients found — add a client before logging a complaint.
+              No active clients found. Add a client before logging a complaint.
             </Alert>
           ) : (
             <Form.Select
               value={form.clientId}
               onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))}
               disabled={clientsLoading}
+              isInvalid={!clientsLoading && !form.clientId && create.isError}
             >
-              <option value="">{clientsLoading ? 'Loading clients…' : 'Select client…'}</option>
-              {clients.map((c: any) => <option key={c.id} value={c.id}>{c.clientName}</option>)}
+              <option value="">{clientsLoading ? 'Loading clients…' : '— Select client —'}</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.clientName}</option>)}
             </Form.Select>
           )}
         </Form.Group>
-        <Row className="g-3">
+
+        {/* Subject */}
+        <Form.Group className="mb-3">
+          <Form.Label>Subject <span className="text-danger">*</span></Form.Label>
+          <Form.Control
+            type="text"
+            maxLength={200}
+            value={form.subject}
+            onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+            placeholder="Brief description of the issue (e.g. Guard arrived 2 hours late)"
+          />
+          <Form.Text className="text-muted d-flex justify-content-end">{form.subject.length}/200</Form.Text>
+        </Form.Group>
+
+        {/* Category + Severity */}
+        <Row className="g-3 mb-3">
           <Col md={6}>
             <Form.Group>
               <Form.Label>Category</Form.Label>
-              <Form.Select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                {['GUARD_CONDUCT','LATE_DEPLOYMENT','BILLING_DISPUTE','EQUIPMENT','OTHER'].map(c => (
+              <Form.Select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as typeof form.category }))}>
+                {(['GUARD_CONDUCT','LATE_DEPLOYMENT','BILLING_DISPUTE','EQUIPMENT','OTHER'] as const).map(c => (
                   <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
                 ))}
               </Form.Select>
@@ -80,30 +117,32 @@ function ComplaintFormModal({ onClose }: { onClose: () => void }) {
           <Col md={6}>
             <Form.Group>
               <Form.Label>Severity</Form.Label>
-              <Form.Select value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
-                {['LOW','MEDIUM','HIGH'].map(s => <option key={s} value={s}>{s}</option>)}
+              <Form.Select value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value as typeof form.severity }))}>
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
               </Form.Select>
             </Form.Group>
           </Col>
         </Row>
-        <Form.Group className="mt-3">
+
+        {/* Description */}
+        <Form.Group>
           <Form.Label>Description <span className="text-danger">*</span></Form.Label>
           <Form.Control
             as="textarea" rows={4}
             value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="Describe the complaint in detail (min 10 chars)…"
+            placeholder="Describe the complaint in detail (min 10 characters)…"
+            maxLength={2000}
           />
+          <Form.Text className="text-muted d-flex justify-content-end">{form.description.length}/2000</Form.Text>
         </Form.Group>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button
-          variant="danger"
-          onClick={() => create.mutate()}
-          disabled={!form.clientId || form.description.length < 10 || create.isPending}
-        >
-          {create.isPending ? <Spinner size="sm" animation="border" /> : 'Submit Complaint'}
+        <Button variant="danger" onClick={() => create.mutate()} disabled={!canSubmit}>
+          {create.isPending ? <><Spinner size="sm" animation="border" className="me-1" />Submitting…</> : 'Submit Complaint'}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -130,9 +169,12 @@ function ComplaintDetailModal({ complaint, onClose }: { complaint: ComplaintResp
   return (
     <Modal show onHide={onClose} size="lg">
       <Modal.Header closeButton>
-        <Modal.Title>
-          Complaint — <CatBadge c={complaint.category} />{' '}
-          <Badge bg={SEV_BADGE[complaint.severity]} className="ms-1">{complaint.severity}</Badge>
+        <Modal.Title className="d-flex flex-column gap-1">
+          <span>{complaint.subject}</span>
+          <span className="d-flex gap-2 flex-wrap">
+            <CatBadge c={complaint.category} />
+            <Badge bg={SEV_BADGE[complaint.severity]}>{complaint.severity}</Badge>
+          </span>
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -235,7 +277,7 @@ export default function ComplaintsPage() {
         <Table striped hover responsive className="align-middle small">
           <thead className="table-dark">
             <tr>
-              <th>Date</th><th>Client</th><th>Site</th><th>Category</th>
+              <th>Date</th><th>Client</th><th>Subject</th><th>Category</th>
               <th>Severity</th><th>Status</th><th>Days Open</th><th>Assigned</th><th></th>
             </tr>
           </thead>
@@ -247,7 +289,7 @@ export default function ComplaintsPage() {
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleDateString('en-UG')}</td>
                 <td>{c.client.clientName}</td>
-                <td>{c.site?.siteName ?? '—'}</td>
+                <td style={{ maxWidth: 220 }} className="text-truncate">{c.subject}</td>
                 <td><CatBadge c={c.category} /></td>
                 <td><Badge bg={SEV_BADGE[c.severity]}>{c.severity}</Badge></td>
                 <td><Badge bg={STA_BADGE[c.status]}>{c.status.replace(/_/g,' ')}</Badge></td>

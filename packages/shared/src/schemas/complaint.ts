@@ -3,10 +3,11 @@ import { z } from 'zod';
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
 export const CreateComplaintSchema = z.object({
-  clientId:    z.string().min(1),
+  clientId:    z.string().min(1, 'Please select a client'),
   siteId:      z.string().min(1).optional(),
+  subject:     z.string().min(1, 'Subject is required').max(200),
   category:    z.enum(['GUARD_CONDUCT', 'LATE_DEPLOYMENT', 'BILLING_DISPUTE', 'EQUIPMENT', 'OTHER']),
-  description: z.string().min(10).max(2000),
+  description: z.string().min(10, 'Description must be at least 10 characters').max(2000),
   severity:    z.enum(['LOW', 'MEDIUM', 'HIGH']),
 });
 export type CreateComplaintInput = z.infer<typeof CreateComplaintSchema>;
@@ -27,6 +28,7 @@ export interface ComplaintResponse {
   id:          string;
   client:      { id: string; clientName: string };
   site:        { id: string; siteName: string } | null;
+  subject:     string;
   category:    string;
   description: string;
   severity:    'LOW' | 'MEDIUM' | 'HIGH';

@@ -61,12 +61,13 @@ export default function ClientPortalPage() {
     queryFn:  portalApi.getSites,
   });
 
-  const [compForm, setCompForm] = useState({ category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
+  const [compForm, setCompForm] = useState({ subject: '', category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [compError, setCompError] = useState<string | null>(null);
 
   const submitComplaint = useMutation({
     mutationFn: () => portalApi.submitComplaint({
+      subject:     compForm.subject,
       category:    compForm.category as any,
       severity:    compForm.severity as any,
       description: compForm.description,
@@ -76,7 +77,7 @@ export default function ClientPortalPage() {
       setSubmitted(c.id);
       setCompError(null);
       refetchComplaints();
-      setCompForm({ category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
+      setCompForm({ subject: '', category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
     },
     onError: (err: unknown) => {
       if (is403(err)) {
@@ -249,6 +250,15 @@ export default function ClientPortalPage() {
                     </Alert>
                   )}
                   <Form.Group>
+                    <Form.Label className="small fw-semibold">Subject <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      size="sm" type="text" maxLength={200}
+                      value={compForm.subject}
+                      onChange={e => setCompForm(f => ({ ...f, subject: e.target.value }))}
+                      placeholder="Brief description of the issue…"
+                    />
+                  </Form.Group>
+                  <Form.Group>
                     <Form.Label className="small fw-semibold">Site <span className="text-muted">(optional)</span></Form.Label>
                     <Form.Select size="sm" value={compForm.siteId} onChange={e => setCompForm(f => ({ ...f, siteId: e.target.value }))}>
                       <option value="">— All sites / General —</option>
@@ -276,7 +286,7 @@ export default function ClientPortalPage() {
                   </Form.Group>
                   <Button
                     variant="danger" size="sm"
-                    disabled={compForm.description.length < 10 || submitComplaint.isPending}
+                    disabled={!compForm.subject.trim() || compForm.description.length < 10 || submitComplaint.isPending}
                     onClick={() => submitComplaint.mutate()}
                   >
                     {submitComplaint.isPending ? <Spinner size="sm" animation="border" /> : 'Submit Complaint'}
@@ -292,10 +302,10 @@ export default function ClientPortalPage() {
                     <Card key={c.id} className="border-0 shadow-sm">
                       <Card.Body className="py-2 px-3 small">
                         <div className="d-flex justify-content-between">
-                          <span className="fw-semibold">{c.category.replace(/_/g,' ')}</span>
+                          <span className="fw-semibold">{c.subject}</span>
                           <Badge bg={COMP_BADGE[c.status] ?? 'secondary'}>{c.status.replace(/_/g,' ')}</Badge>
                         </div>
-                        <div className="text-muted">{c.description.slice(0, 80)}{c.description.length > 80 ? '…' : ''}</div>
+                        <div className="text-muted">{c.category.replace(/_/g,' ')} · {c.description.slice(0, 60)}{c.description.length > 60 ? '…' : ''}</div>
                         <div className="text-muted" style={{ fontSize: '0.7rem' }}>{new Date(c.createdAt).toLocaleDateString('en-UG')}</div>
                       </Card.Body>
                     </Card>
