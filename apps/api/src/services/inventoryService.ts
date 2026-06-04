@@ -6,13 +6,26 @@ import type {
   CreateInventoryItemInput,
   UpdateInventoryItemInput,
   IssueItemInput,
+  IssueLineItemInput,
   ReturnItemInput,
   StockAdjustmentInput,
+  AdjustConditionInput,
   InventoryItemResponse,
   InventoryTransactionResponse,
   GuardInventoryItem,
+  BatchIssueResult,
   PaginatedResponse,
+  ItemCondition,
 } from '@stap/shared';
+
+// Map ItemCondition enum → Prisma field name
+const CONDITION_FIELD: Record<ItemCondition, 'quantityNew' | 'quantityGood' | 'quantityFair' | 'quantityDamaged'> = {
+  NEW:     'quantityNew',
+  GOOD:    'quantityGood',
+  FAIR:    'quantityFair',
+  DAMAGED: 'quantityDamaged',
+};
+const WATERFALL: ItemCondition[] = ['GOOD', 'FAIR', 'NEW', 'DAMAGED'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +37,12 @@ function fmtItem(item: any, issuedCount = 0): InventoryItemResponse {
     itemType:         item.itemType,
     unitCost:         item.unitCost,
     stockQuantity:    item.stockQuantity,
+    conditionBreakdown: {
+      NEW:     item.quantityNew     ?? 0,
+      GOOD:    item.quantityGood    ?? 0,
+      FAIR:    item.quantityFair    ?? 0,
+      DAMAGED: item.quantityDamaged ?? 0,
+    },
     reorderThreshold: item.reorderThreshold,
     description:      item.description ?? null,
     isLowStock:       item.stockQuantity <= item.reorderThreshold,
@@ -151,13 +170,32 @@ class InventoryService {
   }
 
   async issueItem(data: IssueItemInput, recordedBy: string): Promise<InventoryTransactionResponse> {
+    if (!data.conditionNote || data.conditionNote.trim().length < 3) {
+      throw new AppError(
+        "Condition note is required when issuing an item. Describe the item's condition before issuing (e.g. 'New', 'Good condition', 'Minor wear').",
+        400,
+      );
+    }
+    data.conditionNote = data.conditionNote.trim();
+
     const item = await prisma.inventoryItem.findUnique({ where: { id: data.itemId } });
     if (!item) throw new NotFoundError('Inventory item not found');
     if (item.stockQuantity < data.quantity) {
       throw new AppError(`Insufficient stock. Available: ${item.stockQuantity}`, 400);
     }
 
-    const conditionNote = data.conditionNote ?? ((item as any).issuedFree ? 'Issued free of charge' : null);
+    const conditionNote = data.conditionNote;
+
+    // Determine which condition bucket to draw from.
+    // Preferred bucket is specified by caller; fall back via waterfall (GOOD → FAIR → NEW → DAMAGED).
+    const preferred = data.issueFromCondition ?? null;
+    const issueCondition: ItemCondition =
+      preferred
+        ? preferred
+        : (WATERFALL.find(c => ((item as any)[CONDITION_FIELD[c]] as number) > 0) ?? 'GOOD');
+    const bucketField = CONDITION_FIELD[issueCondition];
+    const inBucket = (item as any)[bucketField] as number;
+    const deductFromBucket = Math.min(data.quantity, inBucket);
 
     const txn = await prisma.$transaction(async (tx) => {
       const t = await tx.inventoryTransaction.create({
@@ -173,7 +211,10 @@ class InventoryService {
       });
       await tx.inventoryItem.update({
         where: { id: data.itemId },
-        data:  { stockQuantity: { decrement: data.quantity } },
+        data:  {
+          stockQuantity: { decrement: data.quantity },
+          ...(deductFromBucket > 0 ? { [bucketField]: { decrement: deductFromBucket } } : {}),
+        },
       });
       return t;
     });
@@ -187,6 +228,118 @@ class InventoryService {
     });
 
     return fmtTxn(txn);
+  }
+
+  async batchIssue(
+    guardId:  string,
+    items:    IssueLineItemInput[],
+    issuedBy: string,
+  ): Promise<BatchIssueResult> {
+    // 1. Validate guard exists and is active
+    const guard = await prisma.guard.findUnique({
+      where:  { id: guardId },
+      select: { id: true, firstName: true, lastName: true, employmentStatus: true },
+    });
+    if (!guard) throw new NotFoundError('Guard not found');
+    if (guard.employmentStatus !== 'ACTIVE') {
+      throw new AppError(
+        `Guard ${guard.firstName} ${guard.lastName} is not active and cannot receive items.`,
+        400,
+      );
+    }
+
+    // 2. Pre-validate all items before touching any stock (fail fast, fail all)
+    const itemIds       = items.map(i => i.itemId);
+    const inventoryRows = await prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds }, isActive: true },
+    });
+    const itemMap = new Map(inventoryRows.map(i => [i.id, i]));
+
+    for (const line of items) {
+      const inv = itemMap.get(line.itemId);
+      if (!inv) throw new AppError(`Item not found or inactive: ${line.itemId}`, 404);
+      if (inv.stockQuantity < line.quantity) {
+        throw new AppError(
+          `Insufficient stock for "${inv.itemName}". Requested: ${line.quantity}, Available: ${inv.stockQuantity}.`,
+          400,
+        );
+      }
+    }
+
+    // 3. Execute all issues atomically — all succeed or all roll back
+    const issued: BatchIssueResult['issued'] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const line of items) {
+        const inv         = itemMap.get(line.itemId)!;
+        const condition   = line.itemCondition ?? 'GOOD';
+        const bucketField = CONDITION_FIELD[condition as ItemCondition];
+        const inBucket    = (inv as any)[bucketField] as number ?? 0;
+        const deduct      = Math.min(line.quantity, inBucket);
+
+        await tx.inventoryItem.update({
+          where: { id: line.itemId },
+          data: {
+            stockQuantity: { decrement: line.quantity },
+            ...(deduct > 0 ? { [bucketField]: { decrement: deduct } } : {}),
+          },
+        });
+
+        const txRecord = await tx.inventoryTransaction.create({
+          data: {
+            itemId:        line.itemId,
+            guardId,
+            action:        'ISSUED',
+            quantity:      line.quantity,
+            conditionNote: line.conditionNote.trim(),
+            recordedBy:    issuedBy,
+          },
+        });
+
+        issued.push({
+          itemId:        line.itemId,
+          itemName:      inv.itemName,
+          quantity:      line.quantity,
+          itemCondition: condition,
+          conditionNote: line.conditionNote.trim(),
+          transactionId: txRecord.id,
+        });
+      }
+    });
+
+    // 4. Audit log
+    await QueueService.logAudit({
+      userId:   issuedBy,
+      action:   'BATCH_ISSUE',
+      entity:   'InventoryTransaction',
+      entityId: guardId,
+      newValue: {
+        guardId,
+        guardName: `${guard.firstName} ${guard.lastName}`,
+        itemCount: issued.length,
+        items:     issued.map(i => `${i.itemName} ×${i.quantity}`),
+      },
+    });
+
+    // 5. Notify
+    await notificationService.sendToRoles(
+      ['DIRECTOR', 'ASSISTANT_MANAGER'],
+      {
+        type:       'SYSTEM',
+        title:      'Items Issued',
+        message:    `${issued.length} item type(s) issued to ${guard.firstName} ${guard.lastName}.`,
+        entityType: 'inventory',
+        entityId:   guardId,
+      },
+    );
+
+    return {
+      guardId,
+      guardName:   `${guard.firstName} ${guard.lastName}`,
+      issued,
+      failedItems: [],
+      totalIssued: issued.length,
+    };
   }
 
   async returnItem(data: ReturnItemInput, recordedBy: string): Promise<InventoryTransactionResponse> {
@@ -234,9 +387,14 @@ class InventoryService {
       });
 
       if (data.action === 'RETURNED') {
+        const retCondition: ItemCondition = data.returnedCondition ?? 'GOOD';
+        const retField = CONDITION_FIELD[retCondition];
         await tx.inventoryItem.update({
           where: { id: data.itemId },
-          data:  { stockQuantity: { increment: data.quantity } },
+          data:  {
+            stockQuantity: { increment: data.quantity },
+            [retField]:    { increment: data.quantity },
+          },
         });
       } else {
         // LOST or DAMAGED — create deduction
@@ -298,14 +456,66 @@ class InventoryService {
         },
         include: TXN_INCLUDE,
       });
+      // Update stockQuantity and the relevant condition bucket (default GOOD).
+      const adjCondition: ItemCondition = data.condition ?? 'GOOD';
+      const adjField = CONDITION_FIELD[adjCondition];
+      const currentInBucket = (item as any)[adjField] as number;
+      const newBucketQty = Math.max(0, currentInBucket + data.quantity);
       await tx.inventoryItem.update({
         where: { id: data.itemId },
-        data:  { stockQuantity: newQty },
+        data:  { stockQuantity: newQty, [adjField]: newBucketQty },
       });
       return t;
     });
 
     return fmtTxn(txn);
+  }
+
+  async adjustCondition(
+    itemId: string,
+    data: AdjustConditionInput,
+    adjustedBy: string,
+  ): Promise<InventoryItemResponse> {
+    const item = await prisma.inventoryItem.findUnique({ where: { id: itemId } });
+    if (!item) throw new NotFoundError('Inventory item not found');
+
+    const newTotal =
+      data.quantityNew + data.quantityGood + data.quantityFair + data.quantityDamaged;
+
+    const updated = await prisma.inventoryItem.update({
+      where: { id: itemId },
+      data: {
+        quantityNew:     data.quantityNew,
+        quantityGood:    data.quantityGood,
+        quantityFair:    data.quantityFair,
+        quantityDamaged: data.quantityDamaged,
+        stockQuantity:   newTotal,
+      },
+    });
+
+    await QueueService.logAudit({
+      userId:   adjustedBy,
+      action:   'INVENTORY_CONDITION_ADJUSTED',
+      entity:   'InventoryItem',
+      entityId: itemId,
+      oldValue: {
+        stockQuantity:   item.stockQuantity,
+        quantityNew:     item.quantityNew,
+        quantityGood:    item.quantityGood,
+        quantityFair:    item.quantityFair,
+        quantityDamaged: item.quantityDamaged,
+      },
+      newValue: {
+        stockQuantity:   newTotal,
+        quantityNew:     data.quantityNew,
+        quantityGood:    data.quantityGood,
+        quantityFair:    data.quantityFair,
+        quantityDamaged: data.quantityDamaged,
+        notes:           data.notes,
+      },
+    });
+
+    return fmtItem(updated);
   }
 
   async getTransactions(query: {

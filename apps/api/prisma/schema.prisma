@@ -136,6 +136,8 @@ model User {
   authorisedTransfers GuardTransfer[]        @relation("TransferAuthoriser")
   supervisedZones     Zone[]               @relation("ZoneSupervisor")
   alternateZones      Zone[]               @relation("ZoneAlternate")
+  generatedLetters    GeneratedLetter[]    @relation("LetterGenerator")
+  approvedLetters     GeneratedLetter[]    @relation("LetterApprover")
 }
 
 model Guard {
@@ -910,6 +912,27 @@ model LetterTemplate {
   updatedAt  DateTime @updatedAt
 }
 
+model GeneratedLetter {
+  id             String    @id @default(cuid())
+  subjectType    String
+  subjectId      String
+  subjectName    String
+  title          String
+  body           String    @db.Text
+  letterType     String    @default("GENERAL")
+  generatedBy    String
+  generatedByUser User     @relation("LetterGenerator", fields: [generatedBy], references: [id])
+  generatedAt    DateTime  @default(now())
+  approvalStatus String    @default("PENDING")
+  approvedBy     String?
+  approvedByUser User?     @relation("LetterApprover", fields: [approvedBy], references: [id])
+  approvedAt     DateTime?
+  approvalNotes  String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
 // ─── Inventory Models ──────────────────────────────────────────────────────────
 
 model InventoryItem {
@@ -919,6 +942,10 @@ model InventoryItem {
   itemType         String
   unitCost         Int
   stockQuantity    Int       @default(0)
+  quantityNew      Int       @default(0)
+  quantityGood     Int       @default(0)
+  quantityFair     Int       @default(0)
+  quantityDamaged  Int       @default(0)
   reorderThreshold Int       @default(5)
   description      String?
   isActive         Boolean   @default(true)
@@ -937,7 +964,7 @@ model InventoryTransaction {
   guard         Guard?        @relation(fields: [guardId], references: [id])
   action        String
   quantity      Int
-  conditionNote String?
+  conditionNote String  @default("")
   chargedAmount Int?
   reference     String?
   recordedBy    String

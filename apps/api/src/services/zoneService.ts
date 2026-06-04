@@ -118,6 +118,20 @@ class ZoneService {
       },
       include: zoneInclude,
     });
+
+    if (data.siteIds && data.siteIds.length > 0) {
+      await prisma.site.updateMany({
+        where: { id: { in: data.siteIds } },
+        data:  { zoneId: zone.id },
+      });
+      // Re-fetch with updated sites included
+      const updated = await prisma.zone.findUnique({
+        where:   { id: zone.id },
+        include: zoneInclude,
+      });
+      return toZoneResponse(updated as Record<string, unknown>);
+    }
+
     return toZoneResponse(zone as Record<string, unknown>);
   }
 

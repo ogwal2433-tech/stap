@@ -7,6 +7,7 @@ export const CreateZoneSchema = z.object({
   description:  z.string().optional(),
   supervisorId: z.string().optional(),
   alternateId:  z.string().optional(),
+  siteIds:      z.array(z.string().min(1)).optional().default([]),
 });
 
 export const UpdateZoneSchema = CreateZoneSchema.partial().extend({

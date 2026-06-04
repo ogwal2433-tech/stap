@@ -3,8 +3,15 @@ import path from 'path';
 import puppeteer from 'puppeteer';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
-import { NotFoundError } from '../errors/AppError';
-import type { LetterGenerationInput } from '@stap/shared';
+import { NotFoundError, AppError } from '../errors/AppError';
+import { notificationService } from './notificationService';
+import type {
+  LetterGenerationInput,
+  GenerateLetterInput,
+  ApproveLetterInput,
+  GeneratedLetterResponse,
+  PaginatedResponse,
+} from '@stap/shared';
 
 // ── Letter data shape ──────────────────────────────────────────────────────────
 
@@ -488,6 +495,159 @@ class LetterService {
     });
 
     return { filePath: publicPath, fileName, documentId: guardDoc.id };
+  }
+
+  // ── Text-based letter record with approval workflow ────────────────────────
+
+  private sanitiseLetter(l: any): GeneratedLetterResponse {
+    return {
+      id:             l.id,
+      subjectType:    l.subjectType,
+      subjectId:      l.subjectId,
+      subjectName:    l.subjectName,
+      title:          l.title,
+      body:           l.body,
+      letterType:     l.letterType,
+      generatedBy:    l.generatedByUser,
+      generatedAt:    l.generatedAt.toISOString(),
+      approvalStatus: l.approvalStatus,
+      approvedBy:     l.approvedByUser ?? null,
+      approvedAt:     l.approvedAt?.toISOString() ?? null,
+      approvalNotes:  l.approvalNotes ?? null,
+      isActive:       l.isActive,
+      createdAt:      l.createdAt.toISOString(),
+    };
+  }
+
+  private readonly LETTER_INCLUDE = {
+    generatedByUser: { select: { id: true, name: true, role: true } },
+    approvedByUser:  { select: { id: true, name: true } },
+  } as const;
+
+  async generateRecord(
+    data: GenerateLetterInput,
+    generatedBy: string,
+  ): Promise<GeneratedLetterResponse> {
+    const letter = await prisma.generatedLetter.create({
+      data: {
+        subjectType:    data.subjectType,
+        subjectId:      data.subjectId,
+        subjectName:    data.subjectName,
+        title:          data.title,
+        body:           data.body,
+        letterType:     data.letterType ?? 'GENERAL',
+        generatedBy,
+        approvalStatus: 'PENDING',
+      },
+      include: this.LETTER_INCLUDE,
+    });
+
+    await notificationService.sendToRoles(
+      ['DIRECTOR', 'ASSISTANT_MANAGER'],
+      {
+        type:       'SYSTEM',
+        title:      'Letter Awaiting Approval',
+        message:    `A ${letter.letterType} letter for ${letter.subjectName} has been generated and is awaiting HR approval.`,
+        entityType: 'generatedLetter',
+        entityId:   letter.id,
+      },
+    );
+
+    await QueueService.logAudit({
+      userId:   generatedBy,
+      action:   'LETTER_GENERATED',
+      entity:   'GeneratedLetter',
+      entityId: letter.id,
+      newValue: { title: letter.title, letterType: letter.letterType, subjectName: letter.subjectName },
+    });
+
+    return this.sanitiseLetter(letter);
+  }
+
+  async approveRecord(
+    letterId:   string,
+    decision:   'APPROVED' | 'REJECTED',
+    notes:      string | undefined,
+    approvedBy: string,
+  ): Promise<GeneratedLetterResponse> {
+    const existing = await prisma.generatedLetter.findUnique({ where: { id: letterId } });
+    if (!existing) throw new NotFoundError('Letter not found');
+    if (existing.approvalStatus !== 'PENDING') {
+      throw new AppError(
+        `This letter has already been ${existing.approvalStatus.toLowerCase()}. Only PENDING letters can be reviewed.`,
+        400,
+      );
+    }
+
+    const updated = await prisma.generatedLetter.update({
+      where: { id: letterId },
+      data: {
+        approvalStatus: decision,
+        approvedBy,
+        approvedAt:    new Date(),
+        approvalNotes: notes?.trim() ?? null,
+      },
+      include: this.LETTER_INCLUDE,
+    });
+
+    await notificationService.send({
+      userId:     existing.generatedBy,
+      type:       'SYSTEM',
+      title:      decision === 'APPROVED' ? 'Letter Approved' : 'Letter Rejected',
+      message:    decision === 'APPROVED'
+        ? `Your ${existing.letterType} letter for ${existing.subjectName} has been approved by HR and is now official.`
+        : `Your ${existing.letterType} letter for ${existing.subjectName} was rejected.${notes ? ` Reason: ${notes}` : ''}`,
+      entityType: 'generatedLetter',
+      entityId:   letterId,
+    });
+
+    await QueueService.logAudit({
+      userId:   approvedBy,
+      action:   `LETTER_${decision}`,
+      entity:   'GeneratedLetter',
+      entityId: letterId,
+      newValue: { decision, approvedBy, notes },
+    });
+
+    return this.sanitiseLetter(updated);
+  }
+
+  async listRecords(query: {
+    subjectId?:     string;
+    approvalStatus?:string;
+    letterType?:    string;
+    generatedBy?:   string;
+    page:           number;
+    limit:          number;
+  }): Promise<PaginatedResponse<GeneratedLetterResponse>> {
+    const where: any = { isActive: true };
+    if (query.subjectId)      where.subjectId      = query.subjectId;
+    if (query.approvalStatus) where.approvalStatus = query.approvalStatus;
+    if (query.letterType)     where.letterType     = query.letterType;
+    if (query.generatedBy)    where.generatedBy    = query.generatedBy;
+
+    const [items, total] = await Promise.all([
+      prisma.generatedLetter.findMany({
+        where,
+        include:  this.LETTER_INCLUDE,
+        orderBy:  { generatedAt: 'desc' },
+        skip:     (query.page - 1) * query.limit,
+        take:     query.limit,
+      }),
+      prisma.generatedLetter.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / query.limit);
+    return {
+      data: items.map(l => this.sanitiseLetter(l)),
+      pagination: { total, page: query.page, limit: query.limit, totalPages, hasNext: query.page < totalPages, hasPrev: query.page > 1 },
+    };
+  }
+
+  async getRecord(id: string): Promise<GeneratedLetterResponse> {
+    const l = await prisma.generatedLetter.findUnique({ where: { id }, include: this.LETTER_INCLUDE });
+    if (!l) throw new NotFoundError('Letter not found');
+    return this.sanitiseLetter(l);
   }
 }
 

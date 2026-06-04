@@ -9,6 +9,9 @@ import type {
   IssueItemInput,
   ReturnItemInput,
   StockAdjustmentInput,
+  AdjustConditionInput,
+  BatchIssueInput,
+  BatchIssueResult,
 } from '@stap/shared';
 
 export const inventoryApi = {
@@ -76,6 +79,18 @@ export const inventoryApi = {
   getLowStockItems(): Promise<InventoryItemResponse[]> {
     return api
       .get<{ success: boolean; data: InventoryItemResponse[] }>('/inventory/items/low-stock')
+      .then((r) => r.data.data);
+  },
+
+  adjustCondition(itemId: string, data: AdjustConditionInput): Promise<InventoryItemResponse> {
+    return api
+      .patch<{ success: boolean; data: InventoryItemResponse }>(`/inventory/items/${itemId}/condition`, data)
+      .then((r) => r.data.data);
+  },
+
+  batchIssueItems(data: BatchIssueInput): Promise<BatchIssueResult> {
+    return api
+      .post<{ success: boolean; data: BatchIssueResult }>('/inventory/items/issue/batch', data)
       .then((r) => r.data.data);
   },
 };

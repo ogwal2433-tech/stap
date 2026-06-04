@@ -156,6 +156,8 @@ import {
   IssueItemSchema,
   ReturnItemSchema,
   StockAdjustmentSchema,
+  AdjustConditionSchema,
+  BatchIssueSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -201,7 +203,18 @@ router.get(
   }),
 );
 
+// NOTE: /items/issue/batch must be before /items/issue to avoid Express route confusion.
 // NOTE: /items/issue, /items/return, /items/adjust-stock must be before /:id
+router.post(
+  '/items/issue/batch',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  validate(BatchIssueSchema),
+  asyncHandler(async (req, res) => {
+    const data = await inventoryService.batchIssue(req.body.guardId, req.body.items, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
 router.post(
   '/items/issue',
   requireRole(...MGMT_ROLES),
@@ -247,6 +260,16 @@ router.patch(
   validate(UpdateInventoryItemSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.updateItem(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/items/:id/condition',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  validate(AdjustConditionSchema),
+  asyncHandler(async (req, res) => {
+    const data = await inventoryService.adjustCondition(req.params.id, req.body, req.user!.userId);
     res.json({ success: true, data });
   }),
 );

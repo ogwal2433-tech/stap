@@ -6,6 +6,9 @@ import type {
   IssueItemInput,
   ReturnItemInput,
   StockAdjustmentInput,
+  AdjustConditionInput,
+  BatchIssueInput,
+  InventoryItemResponse,
 } from '@stap/shared';
 
 export function useInventoryItems(params?: Parameters<typeof inventoryApi.listItems>[0]) {
@@ -93,6 +96,31 @@ export function useAdjustStock() {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['inventory-items'] });
       qc.invalidateQueries({ queryKey: ['inventory-txns'] });
+      qc.invalidateQueries({ queryKey: ['low-stock'] });
+    },
+  });
+}
+
+export function useAdjustCondition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, data }: { itemId: string; data: AdjustConditionInput }) =>
+      inventoryApi.adjustCondition(itemId, data),
+    onSuccess: (_result: InventoryItemResponse) => {
+      qc.invalidateQueries({ queryKey: ['inventory-items'] });
+      qc.invalidateQueries({ queryKey: ['low-stock'] });
+    },
+  });
+}
+
+export function useBatchIssueItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BatchIssueInput) => inventoryApi.batchIssueItems(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-items'] });
+      qc.invalidateQueries({ queryKey: ['inventory-txns'] });
+      qc.invalidateQueries({ queryKey: ['guard-inventory'] });
       qc.invalidateQueries({ queryKey: ['low-stock'] });
     },
   });

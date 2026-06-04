@@ -6,6 +6,7 @@ import {
 } from 'react-bootstrap';
 import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
+import { useLettersBySubject } from '../../hooks/useLetters';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
@@ -16,6 +17,8 @@ import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
 import DisciplinaryRecordModal from '../../components/guards/DisciplinaryRecordModal';
 import LetterGenerationModal from '../../components/guards/LetterGenerationModal';
+import GenerateLetterModal from '../../components/letters/GenerateLetterModal';
+import LetterStatusBadge from '../../components/letters/LetterStatusBadge';
 import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
@@ -243,9 +246,12 @@ export default function GuardDetailPage() {
   );
   const { data: disciplinaryRecords = [], refetch: refetchDisciplinary } = useDisciplinaryRecords(id ?? '');
   const { data: guardLetters = [], refetch: refetchLetters } = useGuardLetters(id ?? '');
+  const { data: letterRecordsRes, refetch: refetchLetterRecords } = useLettersBySubject(id ?? '');
+  const letterRecords = letterRecordsRes?.data ?? [];
 
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
+  const [showGenerateLetterModal, setShowGenerateLetterModal] = useState(false);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -1109,49 +1115,85 @@ export default function GuardDetailPage() {
             </Table>
           )}
 
-          {/* Generated Letters section */}
-          <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
-            <div className="mt-4">
-              <h6 className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.75rem', letterSpacing: '0.06em' }}>
-                Generated Letters
+          {/* Generated Letters section — visible to all internal roles */}
+          <div className="mt-4">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <h6 className="text-uppercase text-muted fw-semibold mb-0" style={{ fontSize: '0.75rem', letterSpacing: '0.06em' }}>
+                HR Letters
               </h6>
-              {guardLetters.length === 0 ? (
-                <Alert variant="light" className="small py-2">No letters generated yet.</Alert>
-              ) : (
-                <Table size="sm" hover responsive className="align-middle small">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Letter Type</th>
-                      <th>Date Generated</th>
-                      <th>Version</th>
-                      <th>Download</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {guardLetters.map((l) => (
-                      <tr key={l.id}>
-                        <td><Badge bg="secondary">{l.documentType.replace(/_/g, ' ')}</Badge></td>
-                        <td>{new Date(l.uploadedAt).toLocaleDateString()}</td>
-                        <td>v{l.version}</td>
-                        <td>
-                          <Button
-                            size="sm"
-                            variant="outline-primary"
-                            href={l.filePath}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            as="a"
-                          >
-                            <i className="bi bi-download" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
+              <Button size="sm" variant="outline-primary" onClick={() => setShowGenerateLetterModal(true)}>
+                + Generate Letter
+              </Button>
             </div>
-          </RoleGuard>
+
+            {letterRecords.length === 0 ? (
+              <Alert variant="light" className="small py-2">No letters generated for this guard yet.</Alert>
+            ) : (
+              <div className="d-flex flex-column gap-2">
+                {letterRecords.map(l => (
+                  <div key={l.id} style={{
+                    padding: '10px 14px', border: '1px solid #e9ecef', borderRadius: '0.5rem',
+                    borderLeft: `4px solid ${
+                      l.approvalStatus === 'APPROVED' ? '#1E8449'
+                      : l.approvalStatus === 'REJECTED' ? '#dc3545'
+                      : '#E8701A'
+                    }`,
+                  }}>
+                    <div className="d-flex align-items-start justify-content-between gap-2">
+                      <div style={{ flex: 1 }}>
+                        <div className="fw-bold" style={{ fontSize: '0.88rem' }}>{l.title}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: 2 }}>
+                          {l.letterType.replace(/_/g, ' ')} · By {l.generatedBy.name} ·{' '}
+                          {new Date(l.generatedAt).toLocaleDateString('en-GB')}
+                        </div>
+                        {l.approvalStatus === 'APPROVED' && l.approvedBy && (
+                          <div style={{ fontSize: '0.72rem', color: '#1E8449', marginTop: 2 }}>
+                            Approved by {l.approvedBy.name} on {new Date(l.approvedAt!).toLocaleDateString('en-GB')}
+                          </div>
+                        )}
+                        {l.approvalStatus === 'REJECTED' && l.approvalNotes && (
+                          <div style={{ fontSize: '0.72rem', color: '#842029', marginTop: 2, fontStyle: 'italic' }}>
+                            Rejected: {l.approvalNotes}
+                          </div>
+                        )}
+                      </div>
+                      <LetterStatusBadge status={l.approvalStatus} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* PDF letters (HR-generated) */}
+            <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+              {guardLetters.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.7rem', letterSpacing: '0.06em' }}>
+                    PDF Letters (Legacy)
+                  </div>
+                  <Table size="sm" hover responsive className="align-middle small">
+                    <thead className="table-light">
+                      <tr><th>Letter Type</th><th>Date</th><th>Version</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {guardLetters.map(l => (
+                        <tr key={l.id}>
+                          <td><Badge bg="secondary">{l.documentType.replace(/_/g, ' ')}</Badge></td>
+                          <td>{new Date(l.uploadedAt).toLocaleDateString()}</td>
+                          <td>v{l.version}</td>
+                          <td>
+                            <Button size="sm" variant="outline-primary" href={l.filePath} target="_blank" rel="noopener noreferrer" as="a">
+                              <i className="bi bi-download" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </RoleGuard>
+          </div>
         </Tab>
 
         {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
@@ -1281,6 +1323,16 @@ export default function GuardDetailPage() {
           disciplinaryRecords={disciplinaryRecords}
           onClose={() => setShowLetterModal(false)}
           onSuccess={() => refetchLetters()}
+        />
+      )}
+      {showGenerateLetterModal && (
+        <GenerateLetterModal
+          show={showGenerateLetterModal}
+          subjectType="GUARD"
+          subjectId={id!}
+          subjectName={guard.fullName}
+          onClose={() => setShowGenerateLetterModal(false)}
+          onSuccess={() => refetchLetterRecords()}
         />
       )}
       {showDeductionModal && (

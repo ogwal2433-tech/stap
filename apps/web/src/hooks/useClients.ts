@@ -61,6 +61,14 @@ export function useArchiveClient() {
   });
 }
 
+export function useAllSites() {
+  return useQuery({
+    queryKey: ['all-sites'],
+    queryFn:  () => clientsApi.getAllSites({ limit: 500 }).then(r => r.data),
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
 export function useClientSites(clientId: string) {
   return useQuery({
     queryKey: ['client-sites', clientId],

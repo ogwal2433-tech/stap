@@ -15,6 +15,7 @@ import { hrRouter } from './hr';
 import { inventoryRouter } from './inventory';
 import { settingsRouter } from './settings';
 import zonesRouter from './zones';
+import { lettersRouter } from './letters';
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use('/hr', hrRouter);
 router.use('/inventory', inventoryRouter);
 router.use('/settings', settingsRouter);
 router.use('/zones', zonesRouter);
+router.use('/letters', lettersRouter);
 
 export default router;

@@ -7,10 +7,21 @@ import { useToast } from '../../context/ToastContext';
 import {
   useInventoryItems, useLowStockItems, useInventoryTransactions,
   useCreateInventoryItem, useUpdateInventoryItem,
-  useIssueItem, useReturnItem, useAdjustStock,
+  useReturnItem, useAdjustStock, useAdjustCondition, useBatchIssueItems,
 } from '../../hooks/useInventory';
 import { useGuardList } from '../../hooks/useGuards';
-import type { InventoryItemResponse } from '@stap/shared';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import type {
+  InventoryItemResponse,
+  StockConditionBreakdown,
+  ItemCondition,
+  AdjustConditionInput,
+} from '@stap/shared';
+import {
+  ITEM_CONDITIONS,
+  ITEM_CONDITION_COLORS,
+  ITEM_CONDITION_BG,
+} from '@stap/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +39,176 @@ const ACTION_BADGES: Record<string, { bg: string; text?: string; style?: React.C
   STOCK_IN:         { bg: 'success', style: { background: '#0F7B6C', color: '#fff', border: 'none' } },
   STOCK_ADJUSTMENT: { bg: 'secondary' },
 };
+
+// ── Condition Breakdown Bar ────────────────────────────────────────────────────
+
+const ORDERED_CONDITIONS: ItemCondition[] = ['NEW', 'GOOD', 'FAIR', 'DAMAGED'];
+
+function ConditionBreakdownBar({ breakdown, total }: { breakdown: StockConditionBreakdown; total: number }) {
+  if (total === 0) {
+    return <span className="text-muted small">Out of stock</span>;
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 5, width: 130 }}>
+        {ORDERED_CONDITIONS.map(c =>
+          breakdown[c] > 0 ? (
+            <div
+              key={c}
+              style={{ width: `${(breakdown[c] / total) * 100}%`, background: ITEM_CONDITION_COLORS[c] }}
+            />
+          ) : null,
+        )}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {ORDERED_CONDITIONS.map(c =>
+          breakdown[c] > 0 ? (
+            <span
+              key={c}
+              style={{
+                fontSize: '0.7rem', padding: '1px 7px', borderRadius: 10,
+                background: ITEM_CONDITION_BG[c], color: ITEM_CONDITION_COLORS[c], fontWeight: 600,
+              }}
+            >
+              {ITEM_CONDITIONS[c]}: {breakdown[c]}
+            </span>
+          ) : null,
+        )}
+      </div>
+      <div style={{ fontSize: '0.72rem', color: '#6c757d', marginTop: 2 }}>
+        Total: {total}
+      </div>
+    </div>
+  );
+}
+
+// ── Adjust Condition Modal ─────────────────────────────────────────────────────
+
+function AdjustConditionModal({ item, onHide }: { item: InventoryItemResponse; onHide: () => void }) {
+  const { showToast } = useToast();
+  const adjust = useAdjustCondition();
+
+  const [form, setForm] = useState<AdjustConditionInput>({
+    quantityNew:     item.conditionBreakdown.NEW,
+    quantityGood:    item.conditionBreakdown.GOOD,
+    quantityFair:    item.conditionBreakdown.FAIR,
+    quantityDamaged: item.conditionBreakdown.DAMAGED,
+    notes:           '',
+  });
+
+  const newTotal = form.quantityNew + form.quantityGood + form.quantityFair + form.quantityDamaged;
+
+  const conditionConfig = [
+    { key: 'quantityNew'     as const, label: 'New',     helper: 'Brand new, never used' },
+    { key: 'quantityGood'    as const, label: 'Good',    helper: 'Used but in good condition' },
+    { key: 'quantityFair'    as const, label: 'Fair',    helper: 'Serviceable, showing wear' },
+    { key: 'quantityDamaged' as const, label: 'Damaged', helper: 'Damaged, needs repair' },
+  ];
+
+  const conditionToItemCondition: Record<string, ItemCondition> = {
+    quantityNew: 'NEW', quantityGood: 'GOOD', quantityFair: 'FAIR', quantityDamaged: 'DAMAGED',
+  };
+
+  const handleSave = () => {
+    adjust.mutate(
+      { itemId: item.id, data: form },
+      {
+        onSuccess: () => { showToast('Condition breakdown updated', 'success'); onHide(); },
+        onError:   (err: any) => showToast(err?.response?.data?.error ?? 'Failed to update condition', 'danger'),
+      },
+    );
+  };
+
+  return (
+    <Modal show onHide={onHide} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title style={{ fontSize: '1rem' }}>
+          Adjust Condition Breakdown — <strong>{item.itemName}</strong>
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Alert variant="info" className="small py-2 mb-3">
+          Correct the condition breakdown for this item. The total stock quantity will be
+          recalculated automatically as the sum of all four condition counts.
+        </Alert>
+        <Row className="g-3 mb-3">
+          {conditionConfig.map(({ key, label, helper }) => {
+            const ic = conditionToItemCondition[key];
+            const color = ITEM_CONDITION_COLORS[ic];
+            const bg    = ITEM_CONDITION_BG[ic];
+            return (
+              <Col md={6} key={key}>
+                <div style={{ border: `2px solid ${bg}`, borderRadius: '0.5rem', padding: 12, background: bg }}>
+                  <div style={{ fontWeight: 700, color, marginBottom: 2, fontSize: '0.88rem' }}>{label}</div>
+                  <div style={{ fontSize: '0.73rem', color, opacity: 0.8, marginBottom: 8 }}>{helper}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, [key]: Math.max(0, f[key] - 1) }))}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', border: `1px solid ${color}`,
+                        background: '#fff', cursor: 'pointer', color, fontWeight: 'bold', fontSize: '1rem',
+                        lineHeight: 1,
+                      }}
+                    >−</button>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form[key]}
+                      onChange={e => setForm(f => ({ ...f, [key]: Math.max(0, Number(e.target.value) || 0) }))}
+                      style={{
+                        width: 70, textAlign: 'center', border: `2px solid ${color}`, borderRadius: 6,
+                        padding: '4px', fontSize: '1.1rem', fontWeight: 700, color, background: '#fff',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, [key]: f[key] + 1 }))}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', border: `1px solid ${color}`,
+                        background: '#fff', cursor: 'pointer', color, fontWeight: 'bold', fontSize: '1rem',
+                        lineHeight: 1,
+                      }}
+                    >+</button>
+                  </div>
+                </div>
+              </Col>
+            );
+          })}
+        </Row>
+
+        <div style={{
+          padding: '10px 16px', background: '#F2F4F7', borderRadius: '0.5rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
+        }}>
+          <span style={{ fontWeight: 600, color: '#1B3A6B' }}>New total in stock:</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: 700, color: newTotal === 0 ? '#dc3545' : '#1B3A6B' }}>
+            {newTotal} unit(s)
+          </span>
+        </div>
+
+        <Form.Group>
+          <Form.Label className="small fw-bold">
+            Reason for Adjustment <span className="text-muted fw-normal">(optional)</span>
+          </Form.Label>
+          <Form.Control
+            size="sm"
+            type="text"
+            placeholder="e.g. Stocktake 01 June 2026 — correcting condition breakdown"
+            value={form.notes ?? ''}
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onHide}>Cancel</Button>
+        <Button variant="primary" onClick={handleSave} disabled={adjust.isPending}>
+          {adjust.isPending ? <Spinner size="sm" animation="border" /> : 'Save Condition Breakdown'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
 
 // ── Item Form Modal ────────────────────────────────────────────────────────────
 
@@ -142,6 +323,168 @@ function ItemFormModal({
 
 // ── Issue Item Modal ───────────────────────────────────────────────────────────
 
+// ── Line Item Row (used inside IssueItemsModal) ────────────────────────────────
+
+interface LineItem {
+  id:            string;
+  itemId:        string;
+  quantity:      number;
+  itemCondition: string;
+  conditionNote: string;
+}
+
+const QUICK_FILLS = ['New', 'Good condition', 'Serviceable', 'Minor wear', 'Repaired — usable'];
+
+function LineItemRow({
+  index,
+  lineItem,
+  inventoryItems,
+  onChange,
+  onRemove,
+  isLast,
+}: {
+  index:          number;
+  lineItem:       LineItem;
+  inventoryItems: InventoryItemResponse[];
+  onChange:       (updated: LineItem) => void;
+  onRemove:       () => void;
+  isLast:         boolean;
+}) {
+  const inv = inventoryItems.find(i => i.id === lineItem.itemId) ?? null;
+  const noteInvalid = lineItem.conditionNote.length > 0 && lineItem.conditionNote.trim().length < 3;
+
+  return (
+    <div style={{
+      padding:      '12px 14px',
+      borderBottom: isLast ? 'none' : '1px solid #e9ecef',
+      background:   index % 2 === 0 ? '#fff' : '#fafafa',
+    }}>
+      <div className="d-flex align-items-start gap-2">
+        <div style={{
+          width: 24, height: 24, background: '#1B3A6B', color: '#fff', borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, marginTop: 6,
+        }}>
+          {index + 1}
+        </div>
+        <div style={{ flex: 1 }}>
+          <Row className="g-2 mb-2">
+            <Col md={6}>
+              <Form.Label className="small fw-bold mb-1">Item <span className="text-danger">*</span></Form.Label>
+              <Form.Select
+                size="sm"
+                value={lineItem.itemId}
+                onChange={e => onChange({ ...lineItem, itemId: e.target.value })}
+                isInvalid={!lineItem.itemId}
+              >
+                <option value="">— Select item —</option>
+                {inventoryItems
+                  .filter(i => i.isActive && i.stockQuantity > 0)
+                  .map(i => (
+                    <option key={i.id} value={i.id}>
+                      {i.itemName} ({i.stockQuantity} in stock)
+                    </option>
+                  ))}
+              </Form.Select>
+            </Col>
+            <Col md={3}>
+              <Form.Label className="small fw-bold mb-1">Qty <span className="text-danger">*</span></Form.Label>
+              <Form.Control
+                size="sm"
+                type="number"
+                min={1}
+                max={inv?.stockQuantity ?? undefined}
+                value={lineItem.quantity}
+                onChange={e => onChange({ ...lineItem, quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                isInvalid={!!inv && lineItem.quantity > inv.stockQuantity}
+                style={{ textAlign: 'center' }}
+              />
+              {inv && (
+                <Form.Text style={{ fontSize: '0.7rem', color: lineItem.quantity > inv.stockQuantity ? '#dc3545' : '#6c757d' }}>
+                  Max: {inv.stockQuantity}
+                </Form.Text>
+              )}
+            </Col>
+            <Col md={3}>
+              <Form.Label className="small fw-bold mb-1">Condition</Form.Label>
+              <Form.Select
+                size="sm"
+                value={lineItem.itemCondition}
+                onChange={e => onChange({ ...lineItem, itemCondition: e.target.value })}
+              >
+                <option value="NEW">New</option>
+                <option value="GOOD">Good</option>
+                <option value="FAIR">Fair</option>
+                <option value="DAMAGED">Damaged</option>
+              </Form.Select>
+            </Col>
+          </Row>
+
+          {inv && (
+            <div className="d-flex gap-1 flex-wrap mb-2">
+              {ORDERED_CONDITIONS
+                .filter(c => (inv.conditionBreakdown[c] ?? 0) > 0)
+                .map(c => (
+                  <span key={c} style={{
+                    fontSize: '0.68rem', padding: '1px 6px', borderRadius: 10,
+                    background: ITEM_CONDITION_BG[c], color: ITEM_CONDITION_COLORS[c], fontWeight: 600,
+                  }}>
+                    {ITEM_CONDITIONS[c]}: {inv.conditionBreakdown[c]}
+                  </span>
+                ))}
+            </div>
+          )}
+
+          <Form.Label className="small fw-bold mb-1">
+            Condition Note <span className="text-danger">*</span>
+          </Form.Label>
+          <div className="d-flex flex-wrap gap-1 mb-1">
+            {QUICK_FILLS.map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onChange({ ...lineItem, conditionNote: s })}
+                style={{
+                  background: '#F2F4F7', border: '1px solid #D0D5DD', borderRadius: '1rem',
+                  padding: '1px 8px', fontSize: '0.7rem', color: '#1B3A6B', cursor: 'pointer',
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <Form.Control
+            as="textarea"
+            rows={2}
+            size="sm"
+            placeholder="Describe condition before issuing…"
+            value={lineItem.conditionNote}
+            onChange={e => onChange({ ...lineItem, conditionNote: e.target.value })}
+            isInvalid={noteInvalid}
+            style={{ fontSize: '0.82rem' }}
+          />
+          {noteInvalid && (
+            <div style={{ color: '#dc3545', fontSize: '0.75rem', marginTop: 2 }}>
+              At least 3 characters required.
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          style={{
+            background: 'none', border: 'none', color: '#dc3545',
+            cursor: 'pointer', fontSize: '1.1rem', padding: '4px', flexShrink: 0, marginTop: 4,
+          }}
+          title="Remove"
+        >✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Issue Items Modal (multi-item batch) ───────────────────────────────────────
+
 function IssueItemModal({
   show,
   preItem,
@@ -151,100 +494,237 @@ function IssueItemModal({
   preItem?: InventoryItemResponse | null;
   onHide: () => void;
 }) {
-  const { showToast } = useToast();
-  const issue = useIssueItem();
+  const { showToast }  = useToast();
+  const mutation       = useBatchIssueItems();
   const { data: itemsData } = useInventoryItems({ page: 1, limit: 200 });
-  const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200 });
-  const items  = itemsData?.data  ?? [];
-  const guards = guardsData?.data ?? [];
-  const [form, setForm] = useState({ itemId: preItem?.id ?? '', guardId: '', quantity: '1', conditionNote: '' });
+  const { data: guardsData, isLoading: guardsLoading } = useGuardList({ page: 1, limit: 200 });
+  const inventoryItems = itemsData?.data ?? [];
+  const guards         = guardsData?.data ?? [];
 
+  const [selectedGuardId, setSelectedGuardId] = useState('');
+  const [lineItems, setLineItems]             = useState<LineItem[]>([]);
+
+  const selectedGuard = guards.find(g => g.id === selectedGuardId) ?? null;
+
+  // Pre-populate first line item when opened from a catalogue row
   React.useEffect(() => {
-    if (preItem) setForm(f => ({ ...f, itemId: preItem.id }));
-  }, [preItem]);
+    if (show && preItem) {
+      setLineItems([{
+        id:            crypto.randomUUID(),
+        itemId:        preItem.id,
+        quantity:      1,
+        itemCondition: 'GOOD',
+        conditionNote: '',
+      }]);
+    }
+  }, [show, preItem?.id]);
 
-  const selectedItem = items.find(i => i.id === form.itemId);
-  const qty          = Number(form.quantity);
-  const showWarning  = selectedItem && qty > 0 && qty > (selectedItem.stockQuantity * 0.5);
+  const addLineItem = () => {
+    setLineItems(prev => [...prev, {
+      id: crypto.randomUUID(), itemId: '', quantity: 1, itemCondition: 'GOOD', conditionNote: '',
+    }]);
+  };
+  const updateLineItem = (index: number, updated: LineItem) => {
+    setLineItems(prev => prev.map((l, i) => i === index ? updated : l));
+  };
+  const removeLineItem = (index: number) => {
+    setLineItems(prev => prev.filter((_, i) => i !== index));
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    issue.mutate(
-      { itemId: form.itemId, guardId: form.guardId, quantity: qty, conditionNote: form.conditionNote || undefined },
-      {
-        onSuccess: () => { showToast('Item issued', 'success'); onHide(); },
-        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
-      },
+  const handleClose = () => {
+    setSelectedGuardId('');
+    setLineItems([]);
+    onHide();
+  };
+
+  const isValid =
+    !!selectedGuardId &&
+    lineItems.length > 0 &&
+    lineItems.every(l =>
+      l.itemId !== '' &&
+      l.quantity >= 1 &&
+      l.conditionNote.trim().length >= 3,
     );
+
+  const duplicateItemIds = lineItems
+    .map(l => l.itemId)
+    .filter((id, i, arr) => id !== '' && arr.indexOf(id) !== i);
+  const hasDuplicates = duplicateItemIds.length > 0;
+
+  const hasOverStock = lineItems.some(l => {
+    const inv = inventoryItems.find(i => i.id === l.itemId);
+    return inv && l.quantity > inv.stockQuantity;
+  });
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    try {
+      const result = await mutation.mutateAsync({
+        guardId: selectedGuardId,
+        items:   lineItems.map(l => ({
+          itemId:        l.itemId,
+          quantity:      l.quantity,
+          itemCondition: l.itemCondition as any,
+          conditionNote: l.conditionNote.trim(),
+        })),
+      });
+      showToast(
+        `${result.totalIssued} item type(s) issued to ${result.guardName}.`,
+        'success',
+      );
+      handleClose();
+    } catch {
+      // error shown inline via mutation.isError
+    }
   };
 
   return (
-    <Modal show={show} onHide={onHide} centered>
-      <Modal.Header closeButton><Modal.Title>Issue Item to Guard</Modal.Title></Modal.Header>
-      <Modal.Body>
-        <Form onSubmit={handleSubmit}>
-          <Form.Group className="mb-2">
-            <Form.Label className="small fw-medium">Item *</Form.Label>
-            <Form.Select size="sm" value={form.itemId} onChange={e => setForm(f => ({ ...f, itemId: e.target.value }))} required>
-              <option value="">Select item…</option>
-              {items.filter(i => i.isActive && i.stockQuantity > 0).map(i => (
-                <option key={i.id} value={i.id}>{i.itemCode} — {i.itemName} (Stock: {i.stockQuantity})</option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-          {selectedItem?.issuedFree && (
-            <Alert variant="info" className="small py-1 px-2 mb-2">
-              This item is issued <strong>free of charge</strong> — no payroll deduction will be applied.
-            </Alert>
+    <Modal show={show} onHide={handleClose} size="lg">
+      <Modal.Header closeButton>
+        <div>
+          <Modal.Title>Issue Items to Guard</Modal.Title>
+          <div className="text-muted small fw-normal">Add one or more items and submit all at once</div>
+        </div>
+      </Modal.Header>
+      <Modal.Body style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+        {/* Guard selector */}
+        <div className="mb-4">
+          <Form.Label className="fw-bold">
+            Guard <span className="text-danger">*</span>
+          </Form.Label>
+          <SearchableSelect
+            options={guards.map(g => ({
+              value:    g.id,
+              label:    `${g.firstName} ${g.lastName}`,
+              sublabel: g.rank ?? 'Guard',
+            }))}
+            value={selectedGuardId}
+            onChange={id => { setSelectedGuardId(id); setLineItems([]); }}
+            placeholder="— Search and select guard —"
+            searchPlaceholder="Type guard name…"
+            isLoading={guardsLoading}
+          />
+          {selectedGuard && (
+            <div style={{
+              marginTop: 8, padding: '8px 12px', background: '#D6E0F0',
+              borderRadius: '0.375rem', fontSize: '0.82rem', color: '#1B3A6B',
+            }}>
+              <strong>{selectedGuard.firstName} {selectedGuard.lastName}</strong>
+              {' · '}
+              {selectedGuard.rank ?? 'Guard'}
+            </div>
           )}
-          {selectedItem?.isShoeItem && (
-            <Alert variant="warning" className="small py-2 mb-2">
-              Issuing shoes will automatically create a <strong>UGX 30,000 payroll deduction</strong> for the guard on joining.
-            </Alert>
-          )}
-          <Form.Group className="mb-2">
-            <Form.Label className="small fw-medium">Guard *</Form.Label>
-            {guardsError ? (
-              <Alert variant="danger" className="small py-1 px-2 mb-0 d-flex align-items-center justify-content-between">
-                Failed to load guards.
-                <Button size="sm" variant="link" className="p-0 ms-2" onClick={() => refetchGuards()}>Retry</Button>
-              </Alert>
-            ) : (
-              <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required disabled={guardsLoading}>
-                <option value="">{guardsLoading ? 'Loading guards…' : 'Select guard…'}</option>
-                {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
-              </Form.Select>
-            )}
-          </Form.Group>
-          <Form.Group className="mb-2">
-            <Form.Label className="small fw-medium">Quantity *</Form.Label>
-            <Form.Control
+        </div>
+
+        {/* Line items */}
+        <div className="mb-3">
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <div className="fw-bold">
+              Items to Issue
+              {lineItems.length > 0 && (
+                <Badge bg="primary" className="ms-2">{lineItems.length}</Badge>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline-primary"
               size="sm"
-              type="number"
-              min="1"
-              max={selectedItem?.stockQuantity ?? undefined}
-              value={form.quantity}
-              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
-              required
-            />
-          </Form.Group>
-          {showWarning && (
-            <Alert variant="warning" className="small py-1 px-2 mb-2">
-              ⚠️ Issuing {qty} of {selectedItem!.stockQuantity} available
-            </Alert>
-          )}
-          <Form.Group className="mb-3">
-            <Form.Label className="small fw-medium">Condition Note</Form.Label>
-            <Form.Control size="sm" value={form.conditionNote} onChange={e => setForm(f => ({ ...f, conditionNote: e.target.value }))} />
-          </Form.Group>
-          <div className="d-flex justify-content-end gap-2">
-            <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={issue.isPending}>
-              {issue.isPending ? <Spinner size="sm" /> : 'Issue Item'}
+              disabled={!selectedGuardId}
+              onClick={addLineItem}
+              title={!selectedGuardId ? 'Select a guard first' : 'Add another item'}
+            >
+              + Add Item
             </Button>
           </div>
-        </Form>
+
+          {lineItems.length === 0 ? (
+            <div style={{
+              border: '2px dashed #ced4da', borderRadius: '0.5rem',
+              padding: '32px 16px', textAlign: 'center', color: '#6c757d',
+            }}>
+              <div style={{ fontSize: '2rem', marginBottom: 8 }}>📦</div>
+              <div className="fw-bold mb-1">No items added yet</div>
+              <div style={{ fontSize: '0.82rem' }}>
+                {selectedGuardId
+                  ? 'Click "+ Add Item" to build the issue list'
+                  : 'Select a guard above first, then add items'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ border: '1px solid #ced4da', borderRadius: '0.5rem', overflow: 'hidden' }}>
+              {lineItems.map((line, i) => (
+                <LineItemRow
+                  key={line.id}
+                  index={i}
+                  lineItem={line}
+                  inventoryItems={inventoryItems}
+                  onChange={updated => updateLineItem(i, updated)}
+                  onRemove={() => removeLineItem(i)}
+                  isLast={i === lineItems.length - 1}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Review summary */}
+        {lineItems.length > 0 && selectedGuardId && (
+          <div style={{
+            padding: '12px 14px', background: '#D6E0F0',
+            borderRadius: '0.5rem', marginBottom: 16, fontSize: '0.82rem',
+          }}>
+            <div className="fw-bold mb-2">📋 Issue Summary</div>
+            <div>Guard: <strong>{selectedGuard?.firstName} {selectedGuard?.lastName}</strong></div>
+            <div className="mt-1">Items to issue: <strong>{lineItems.length} type(s)</strong></div>
+            <ul className="mb-0 mt-1" style={{ paddingLeft: 16, fontSize: '0.78rem', color: '#4A5568' }}>
+              {lineItems.filter(l => l.itemId).map((line, i) => {
+                const inv = inventoryItems.find(it => it.id === line.itemId);
+                return (
+                  <li key={i}>
+                    {inv?.itemName ?? 'Unknown'} ×{line.quantity} —{' '}
+                    {line.itemCondition.charAt(0) + line.itemCondition.slice(1).toLowerCase()}
+                  </li>
+                );
+              })}
+            </ul>
+            {hasDuplicates && (
+              <div className="mt-2" style={{ color: '#856404', fontWeight: 600, fontSize: '0.8rem' }}>
+                ⚠️ Duplicate items detected. Adjust quantity instead of adding the same item twice.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Validation alerts */}
+        {mutation.isError && (
+          <Alert variant="danger" className="mb-3 py-2">
+            <small>
+              ❌ {(mutation.error as any)?.response?.data?.error ?? 'Failed to issue items. Please check your inputs.'}
+            </small>
+          </Alert>
+        )}
+        {hasOverStock && (
+          <Alert variant="danger" className="mb-3 py-2">
+            <small>❌ One or more items have a quantity exceeding available stock.</small>
+          </Alert>
+        )}
       </Modal.Body>
+      <Modal.Footer>
+        <Button variant="outline-secondary" onClick={handleClose} disabled={mutation.isPending}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          disabled={!isValid || hasDuplicates || hasOverStock || mutation.isPending}
+          onClick={handleSubmit}
+        >
+          {mutation.isPending ? (
+            <><Spinner size="sm" animation="border" className="me-1" />Issuing {lineItems.length} item(s)…</>
+          ) : (
+            `Issue ${lineItems.length || ''} Item${lineItems.length !== 1 ? 's' : ''} to ${selectedGuard?.firstName ?? 'Guard'}`
+          )}
+        </Button>
+      </Modal.Footer>
     </Modal>
   );
 }
@@ -453,6 +933,7 @@ export default function InventoryPage() {
   const [showReturn, setShowReturn]       = useState(false);
   const [showAdjust, setShowAdjust]       = useState(false);
   const [quickItem, setQuickItem]         = useState<InventoryItemResponse | null>(null);
+  const [conditionItem, setConditionItem] = useState<InventoryItemResponse | null>(null);
 
   const { data: itemsData, isLoading: loadingItems } = useInventoryItems({
     itemType:   typeFilter   || undefined,
@@ -505,7 +986,7 @@ export default function InventoryPage() {
                 <i className="bi bi-plus-lg me-1" />Add Item
               </Button>
               <Button size="sm" variant="outline-primary" onClick={() => setShowIssue(true)}>
-                Issue Item
+                Issue Items
               </Button>
               <Button size="sm" variant="outline-secondary" onClick={() => setShowReturn(true)}>
                 Record Return
@@ -528,7 +1009,7 @@ export default function InventoryPage() {
                   <th>Item Name</th>
                   <th>Type</th>
                   <th>Unit Cost</th>
-                  <th className="text-center">In Stock</th>
+                  <th>Stock by Condition</th>
                   <th className="text-center">Threshold</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -557,10 +1038,11 @@ export default function InventoryPage() {
                       </Badge>
                     </td>
                     <td className="small">UGX {item.unitCost.toLocaleString()}</td>
-                    <td
-                      className={`text-center fw-bold ${item.isLowStock ? 'text-danger' : 'text-dark'}`}
-                    >
-                      {item.stockQuantity}
+                    <td>
+                      <ConditionBreakdownBar
+                        breakdown={item.conditionBreakdown}
+                        total={item.stockQuantity}
+                      />
                     </td>
                     <td className="text-center text-muted small">{item.reorderThreshold}</td>
                     <td>
@@ -593,6 +1075,15 @@ export default function InventoryPage() {
                           onClick={() => setEditItem(item)}
                         >
                           Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          title="Adjust condition breakdown"
+                          onClick={() => setConditionItem(item)}
+                        >
+                          📊
                         </Button>
                       </div>
                     </td>
@@ -646,7 +1137,14 @@ export default function InventoryPage() {
                         </Badge>
                       </td>
                       <td className="text-center">{t.quantity}</td>
-                      <td className="small text-muted">{t.conditionNote ?? '—'}</td>
+                      <td className="small" style={{
+                        color:     t.conditionNote === 'Not recorded — pre-existing record' ? '#adb5bd' : '#4A5568',
+                        fontStyle: 'italic',
+                      }}>
+                        {t.conditionNote === 'Not recorded — pre-existing record'
+                          ? '(No condition note — pre-existing record)'
+                          : t.conditionNote || '—'}
+                      </td>
                       <td className="small">
                         {t.chargedAmount != null ? `UGX ${t.chargedAmount.toLocaleString()}` : '—'}
                       </td>
@@ -729,6 +1227,9 @@ export default function InventoryPage() {
         onHide={() => { setShowReturn(false); setQuickItem(null); }}
       />
       <StockAdjustmentModal show={showAdjust} onHide={() => setShowAdjust(false)} />
+      {conditionItem && (
+        <AdjustConditionModal item={conditionItem} onHide={() => setConditionItem(null)} />
+      )}
     </div>
   );
 }

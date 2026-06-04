@@ -10,6 +10,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { usersApi } from '../../lib/users.api';
 import { clientsApi } from '../../lib/clients.api';
+import SitePicker from '../../components/zones/SitePicker';
 import type { ZoneResponse } from '@stap/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -54,11 +55,12 @@ export default function ZonesPage() {
   const assignSites = useAssignSitesToZone();
 
   // ── Modal state ────────────────────────────────────────────────────────────
-  const [showCreate, setShowCreate]   = useState(false);
-  const [editTarget, setEditTarget]   = useState<ZoneResponse | null>(null);
-  const [sitesTarget, setSitesTarget] = useState<ZoneResponse | null>(null);
-  const [form, setForm]               = useState<ZoneFormState>(BLANK_FORM);
-  const [siteSearch, setSiteSearch]   = useState('');
+  const [showCreate, setShowCreate]     = useState(false);
+  const [editTarget, setEditTarget]     = useState<ZoneResponse | null>(null);
+  const [sitesTarget, setSitesTarget]   = useState<ZoneResponse | null>(null);
+  const [form, setForm]                 = useState<ZoneFormState>(BLANK_FORM);
+  const [siteSearch, setSiteSearch]     = useState('');
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
 
   // Site assignment state — tracks which sites are toggled for the open zone
   const [checkedSiteIds, setCheckedSiteIds] = useState<Set<string>>(new Set());
@@ -70,6 +72,7 @@ export default function ZonesPage() {
   // ── Handlers: zone form ────────────────────────────────────────────────────
   function openCreate() {
     setForm(BLANK_FORM);
+    setSelectedSiteIds([]);
     setShowCreate(true);
   }
 
@@ -81,6 +84,7 @@ export default function ZonesPage() {
       alternateId:  zone.alternateId  ?? '',
       isActive:     zone.isActive,
     });
+    setSelectedSiteIds((zone.sites ?? []).map(s => s.id));
     setEditTarget(zone);
   }
 
@@ -94,7 +98,7 @@ export default function ZonesPage() {
   }
 
   async function handleSaveZone() {
-    const payload = {
+    const basePayload = {
       name:         form.name.trim(),
       description:  form.description.trim() || undefined,
       supervisorId: form.supervisorId || undefined,
@@ -103,13 +107,22 @@ export default function ZonesPage() {
 
     try {
       if (editTarget) {
-        await updateZone.mutateAsync({ id: editTarget.id, data: { ...payload, isActive: form.isActive } });
+        await updateZone.mutateAsync({ id: editTarget.id, data: { ...basePayload, isActive: form.isActive } });
+        // Sync site assignments: compute add/remove diff
+        const currentSiteIds = new Set((editTarget.sites ?? []).map(s => s.id));
+        const addSiteIds    = selectedSiteIds.filter(id => !currentSiteIds.has(id));
+        const removeSiteIds = [...currentSiteIds].filter(id => !selectedSiteIds.includes(id));
+        if (addSiteIds.length > 0 || removeSiteIds.length > 0) {
+          await assignSites.mutateAsync({ zoneId: editTarget.id, addSiteIds, removeSiteIds });
+        }
         showToast('Zone updated', 'success');
         setEditTarget(null);
+        setSelectedSiteIds([]);
       } else {
-        await createZone.mutateAsync(payload);
+        await createZone.mutateAsync({ ...basePayload, siteIds: selectedSiteIds });
         showToast('Zone created', 'success');
         setShowCreate(false);
+        setSelectedSiteIds([]);
       }
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Failed to save zone', 'danger');
@@ -285,8 +298,9 @@ export default function ZonesPage() {
       {/* ── Create / Edit modal ──────────────────────────────────────────── */}
       <Modal
         show={showCreate || !!editTarget}
-        onHide={() => { setShowCreate(false); setEditTarget(null); }}
+        onHide={() => { setShowCreate(false); setEditTarget(null); setSelectedSiteIds([]); }}
         centered
+        size="xl"
       >
         <Modal.Header closeButton>
           <Modal.Title className="h6 fw-bold">
@@ -366,19 +380,56 @@ export default function ZonesPage() {
               </Form.Group>
             )}
           </Form>
+
+          {/* Site assignment section */}
+          <div style={{ borderTop: '1px solid #e9ecef', marginTop: 24, paddingTop: 20 }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: 600, color: '#6c757d',
+              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14,
+            }}>
+              Assign Sites
+            </div>
+            <SitePicker
+              selectedSiteIds={selectedSiteIds}
+              onSelectionChange={setSelectedSiteIds}
+              maxHeight="220px"
+            />
+          </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" size="sm" onClick={() => { setShowCreate(false); setEditTarget(null); }}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-            disabled={!form.name.trim() || isSaving}
-            onClick={handleSaveZone}
-          >
-            {isSaving ? <><Spinner size="sm" animation="border" className="me-1" />Saving...</> : 'Save Zone'}
-          </Button>
+          <div className="d-flex align-items-center justify-content-between w-100">
+            <div style={{ fontSize: '0.82rem', color: '#6c757d' }}>
+              {selectedSiteIds.length > 0
+                ? `${selectedSiteIds.length} site(s) will be assigned to this zone`
+                : 'No sites selected — can assign later'}
+            </div>
+            <div className="d-flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { setShowCreate(false); setEditTarget(null); setSelectedSiteIds([]); }}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+                disabled={!form.name.trim() || isSaving}
+                onClick={handleSaveZone}
+              >
+                {isSaving ? (
+                  <><Spinner size="sm" animation="border" className="me-1" />Saving…</>
+                ) : editTarget ? (
+                  'Save Changes'
+                ) : selectedSiteIds.length > 0 ? (
+                  `Create Zone with ${selectedSiteIds.length} Site(s)`
+                ) : (
+                  'Create Zone'
+                )}
+              </Button>
+            </div>
+          </div>
         </Modal.Footer>
       </Modal>
 

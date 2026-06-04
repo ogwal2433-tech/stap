@@ -107,6 +107,62 @@ export const SaveLetterTemplateSchema = z.object({
 });
 export type SaveLetterTemplateInput = z.infer<typeof SaveLetterTemplateSchema>;
 
+// ── Generated Letter schemas ────────────────────────────────────────────────────
+
+export const GENERATED_LETTER_TYPES = {
+  WARNING:       'Warning Letter',
+  SUSPENSION:    'Suspension Letter',
+  COMMENDATION:  'Commendation Letter',
+  TERMINATION:   'Termination Letter',
+  REINSTATEMENT: 'Reinstatement Letter',
+  GENERAL:       'General Letter',
+} as const;
+
+export type GeneratedLetterType = keyof typeof GENERATED_LETTER_TYPES;
+
+export const LETTER_APPROVAL_STATUS = {
+  PENDING:  'Pending Approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+} as const;
+
+export const GenerateLetterSchema = z.object({
+  subjectType: z.enum(['GUARD', 'STAFF', 'APPLICANT']),
+  subjectId:   z.string().min(1),
+  subjectName: z.string().min(1),
+  title:       z.string().min(1).max(200),
+  body:        z.string().min(10),
+  letterType:  z.enum(['WARNING', 'SUSPENSION', 'COMMENDATION', 'TERMINATION', 'REINSTATEMENT', 'GENERAL']).default('GENERAL'),
+});
+export type GenerateLetterInput = z.infer<typeof GenerateLetterSchema>;
+
+export const ApproveLetterSchema = z.object({
+  approvalStatus: z.enum(['APPROVED', 'REJECTED']),
+  approvalNotes:  z.string().max(1000).optional(),
+}).refine(
+  data => data.approvalStatus !== 'REJECTED' || (!!data.approvalNotes && data.approvalNotes.trim().length > 0),
+  { message: 'A reason is required when rejecting a letter.', path: ['approvalNotes'] },
+);
+export type ApproveLetterInput = z.infer<typeof ApproveLetterSchema>;
+
+export interface GeneratedLetterResponse {
+  id:             string;
+  subjectType:    string;
+  subjectId:      string;
+  subjectName:    string;
+  title:          string;
+  body:           string;
+  letterType:     string;
+  generatedBy:    { id: string; name: string; role: string };
+  generatedAt:    string;
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedBy:     { id: string; name: string } | null;
+  approvedAt:     string | null;
+  approvalNotes:  string | null;
+  isActive:       boolean;
+  createdAt:      string;
+}
+
 // ── Document verification + vetting schemas ────────────────────────────────────
 
 export const DocumentVerificationSchema = z.object({

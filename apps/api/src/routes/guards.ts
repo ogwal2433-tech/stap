@@ -616,10 +616,10 @@ router.get(
   }),
 );
 
-// ── POST /:id/letters — generate a letter for a guard ─────────────────────────
+// ── POST /:id/letters — generate a PDF letter for a guard ─────────────────────
 router.post(
   '/:id/letters',
-  requireRole(...GUARD_WRITE_ROLES),
+  requireRole(...INTERNAL_ROLES),
   validate(LetterGenerationSchema),
   asyncHandler(async (req, res) => {
     const result = await letterService.generateLetter(
@@ -633,7 +633,7 @@ router.post(
 // ── GET /:id/letters — list generated letters for a guard ─────────────────────
 router.get(
   '/:id/letters',
-  requireRole(...HR_ROLES),
+  requireRole(...INTERNAL_ROLES),
   asyncHandler(async (req, res) => {
     const docs = await prisma.guardDocument.findMany({
       where: {

@@ -40,7 +40,11 @@ export function useCreateZone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateZoneInput) => zonesApi.create(data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['zones'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['zones'] });
+      qc.invalidateQueries({ queryKey: ['all-sites'] });
+      qc.invalidateQueries({ queryKey: ['sites-all'] });
+    },
   });
 }
 
@@ -48,7 +52,11 @@ export function useUpdateZone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateZoneInput }) => zonesApi.update(id, data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['zones'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['zones'] });
+      qc.invalidateQueries({ queryKey: ['all-sites'] });
+      qc.invalidateQueries({ queryKey: ['sites-all'] });
+    },
   });
 }
 

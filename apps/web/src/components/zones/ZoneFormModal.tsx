@@ -52,6 +52,7 @@ export default function ZoneFormModal({ show, zone, onHide, onSave, isSaving }: 
         description:  description.trim() || undefined,
         supervisorId: supervisorId || undefined,
         alternateId:  alternateId  || undefined,
+        siteIds:      [],
       });
     } catch (e: any) {
       setError(e?.response?.data?.error ?? 'An error occurred.');
