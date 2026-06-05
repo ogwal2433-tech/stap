@@ -10,6 +10,8 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
+import CopyRosterModal from '../../components/attendance/CopyRosterModal';
+import ReplacementModal from '../../components/attendance/ReplacementModal';
 import { ROLES, type UserRole } from '@stap/shared';
 import type { MarkAttendanceInput, DeploymentResponse } from '@stap/shared';
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
@@ -78,6 +80,15 @@ export default function AttendancePage() {
   const [selectedDate,   setSelectedDate]   = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [selectedZoneId, setSelectedZoneId] = useState('');
+  const [showCopyModal,  setShowCopyModal]  = useState(false);
+  const [replacementTarget, setReplacementTarget] = useState<{
+    id: string; guardId: string; guardName: string; systemId: string | null;
+    siteId: string; siteName: string; clientName: string; shiftType: string; date: string;
+  } | null>(null);
+  // Tracks which deployment IDs currently show the inline replacement prompt.
+  // Must live in the parent — GuardRow is defined inside AttendancePage, so its
+  // own useState resets on every parent re-render (remount).
+  const [absencePromptIds, setAbsencePromptIds] = useState<Set<string>>(new Set());
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Record<string, AttendanceEdit>>({});
 
@@ -196,7 +207,23 @@ export default function AttendancePage() {
     const rowBg = edit.status ? (STATUS_ROW_BG[edit.status] ?? '#fff') : '#fff';
     const selectBg = edit.status ? (STATUS_SELECT_BG[edit.status] ?? '#fff') : '#fff';
 
+    const showReplacementPrompt = absencePromptIds.has(dep.id);
+
+    const setShowReplacementPrompt = (show: boolean) => {
+      setAbsencePromptIds(prev => {
+        const next = new Set(prev);
+        show ? next.add(dep.id) : next.delete(dep.id);
+        return next;
+      });
+    };
+
+    const handleStatusChange = (newStatus: AttendanceStatus) => {
+      setEdit(key, { status: newStatus });
+      setShowReplacementPrompt(['ABSENT', 'AWOL'].includes(newStatus));
+    };
+
     return (
+      <>
       <tr style={{ background: rowBg, fontSize: '0.85rem' }}>
         <td className="text-muted align-middle" style={{ width: 36 }}>{index}</td>
         <td className="align-middle">
@@ -207,6 +234,16 @@ export default function AttendancePage() {
               {dep.guard.rank && (
                 <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
                   {dep.guard.rank.replace(/_/g, ' ')}
+                </div>
+              )}
+              {dep.attendance?.replacedByGuardId && (
+                <div style={{ fontSize: '0.72rem', color: '#0F7B6C', marginTop: 1 }}>
+                  🔄 Replacement assigned
+                </div>
+              )}
+              {dep.isReplacement && (
+                <div style={{ fontSize: '0.72rem', color: '#1E8449', marginTop: 1 }}>
+                  🔄 Replacement{dep.replacementReason ? ` — ${dep.replacementReason.toLowerCase()}` : ''}
                 </div>
               )}
             </div>
@@ -220,7 +257,7 @@ export default function AttendancePage() {
           <Form.Select
             size="sm"
             value={edit.status}
-            onChange={(e) => setEdit(key, { status: e.target.value as AttendanceStatus })}
+            onChange={(e) => handleStatusChange(e.target.value as AttendanceStatus)}
             style={{ fontSize: '0.8rem', background: selectBg }}
           >
             {STATUS_OPTIONS.map((o) => (
@@ -259,6 +296,51 @@ export default function AttendancePage() {
           </RoleGuard>
         </td>
       </tr>
+      {showReplacementPrompt && (
+        <tr style={{ background: '#fffbe6' }}>
+          <td colSpan={7} style={{ padding: '6px 14px' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 8, padding: '6px 10px', background: '#fff3cd',
+              borderRadius: '0.375rem', border: '1px solid #ffc107',
+            }}>
+              <div style={{ fontSize: '0.8rem', color: '#664d03', fontWeight: 500 }}>
+                ⚠️ Guard marked absent — assign a replacement?
+              </div>
+              <div className="d-flex gap-2">
+                <Button
+                  size="sm" variant="warning"
+                  style={{ fontSize: '0.75rem', padding: '3px 10px' }}
+                  onClick={() => {
+                    setShowReplacementPrompt(false);
+                    setReplacementTarget({
+                      id:         dep.id,
+                      guardId:    dep.guard.id,
+                      guardName:  dep.guard.fullName,
+                      systemId:   null,
+                      siteId:     dep.site.id,
+                      siteName:   dep.site.siteName,
+                      clientName: dep.site.client.clientName,
+                      shiftType:  dep.shiftType,
+                      date:       dep.date,
+                    });
+                  }}
+                >
+                  🔄 Find Replacement
+                </Button>
+                <Button
+                  size="sm" variant="outline-secondary"
+                  style={{ fontSize: '0.75rem', padding: '3px 10px' }}
+                  onClick={() => setShowReplacementPrompt(false)}
+                >
+                  Skip
+                </Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+      </>
     );
   }
 
@@ -314,6 +396,11 @@ export default function AttendancePage() {
               <Button variant="outline-secondary" size="sm" onClick={() => window.print()}>
                 <i className="bi bi-printer me-1" />Print
               </Button>
+              <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+                <Button variant="outline-primary" size="sm" onClick={() => setShowCopyModal(true)}>
+                  📋 Copy Roster
+                </Button>
+              </RoleGuard>
             </Col>
           </Row>
         </Card.Body>
@@ -420,6 +507,14 @@ export default function AttendancePage() {
                         <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#6c757d' }}>
                           📍 {siteGroup.site.location}
                         </span>
+                        {(() => {
+                          const copied = siteGroup.deployments.find((d: any) => d.copiedFromDate);
+                          return copied ? (
+                            <span style={{ marginLeft: 8, fontSize: '0.72rem', color: '#6c757d', fontStyle: 'italic' }}>
+                              📋 Copied from {new Date((copied as any).copiedFromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                       <div className="d-flex align-items-center gap-2 flex-wrap">
                         <span style={{
@@ -597,6 +692,27 @@ export default function AttendancePage() {
       <div className="d-none d-print-block">
         {deploymentSheet}
       </div>
+
+      <CopyRosterModal
+        show={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        onSuccess={(targetDate) => {
+          setSelectedDate(targetDate.split('T')[0]);
+          setShowCopyModal(false);
+          showToast(`Roster copied. Viewing ${new Date(targetDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 'success');
+        }}
+      />
+
+      <ReplacementModal
+        show={!!replacementTarget}
+        absentDeployment={replacementTarget}
+        onClose={() => setReplacementTarget(null)}
+        onSuccess={(result) => {
+          setReplacementTarget(null);
+          refetch();
+          showToast(`✅ ${result.replacementDeployment.guardName} assigned as replacement.`, 'success');
+        }}
+      />
 
       <style>{`
         @media print {

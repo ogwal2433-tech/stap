@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError } from '../errors/AppError';
+import { generateClientId } from '../lib/systemId';
 import type {
   CreateClientInput,
   UpdateClientInput,
@@ -13,6 +14,7 @@ import type {
 function toClientResponse(client: Record<string, unknown>): ClientResponse {
   return {
     id:              client.id as string,
+    systemId:        (client.systemId as string | null) ?? null,
     clientName:      client.clientName as string,
     contactPerson:   client.contactPerson as string,
     contactPhone:    client.contactPhone as string,
@@ -53,6 +55,7 @@ class ClientService {
         { clientName:    { contains: search, mode: 'insensitive' } },
         { contactPerson: { contains: search, mode: 'insensitive' } },
         { email:         { contains: search, mode: 'insensitive' } },
+        { systemId:      { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -127,8 +130,10 @@ class ClientService {
   // ── Create ─────────────────────────────────────────────────────────────────
 
   async create(data: CreateClientInput, createdBy: string): Promise<ClientResponse> {
+    const systemId = await generateClientId();
     const client = await prisma.client.create({
       data: {
+        systemId,
         clientName:     data.clientName,
         contactPerson:  data.contactPerson,
         contactPhone:   data.contactPhone,

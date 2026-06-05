@@ -30,11 +30,31 @@ export type CreateRosterInput = z.input<typeof CreateRosterSchema>;
 // ── Attendance marking ─────────────────────────────────────────────────────────
 
 export const CopyRosterSchema = z.object({
-  sourceDate: z.string().datetime(),
-  targetDate: z.string().datetime(),
+  sourceDate:        z.string().datetime(),
+  targetDate:        z.string().datetime(),
+  siteIds:           z.array(z.string().min(1)).optional(),
+  overwriteExisting: z.boolean().default(false),
 });
 
 export type CopyRosterInput = z.infer<typeof CopyRosterSchema>;
+
+export interface CopyRosterResult {
+  sourceDate:    string;
+  targetDate:    string;
+  created:       number;
+  skipped:       number;
+  skippedReasons: {
+    guardId:   string;
+    guardName: string;
+    reason:    'ALREADY_DEPLOYED' | 'INACTIVE' | 'ON_LEAVE';
+  }[];
+  sitesSummary: {
+    siteId:   string;
+    siteName: string;
+    copied:   number;
+    skipped:  number;
+  }[];
+}
 
 export const MarkAttendanceSchema = z.object({
   records: z.array(z.object({
@@ -104,6 +124,56 @@ export interface RosterCreationResult {
   message?:  string;
 }
 
+export const REPLACEMENT_REASONS = {
+  SICK:      'Sick / Unwell',
+  AWOL:      'AWOL — No notice given',
+  PERSONAL:  'Personal Emergency',
+  EMERGENCY: 'Family Emergency',
+  SUSPENDED: 'Suspended',
+  OTHER:     'Other Reason',
+} as const;
+
+export type ReplacementReason = keyof typeof REPLACEMENT_REASONS;
+
+export const RequestReplacementSchema = z.object({
+  absentDeploymentId: z.string().min(1),
+  replacementGuardId: z.string().min(1),
+  reason:             z.enum(['SICK', 'AWOL', 'PERSONAL', 'EMERGENCY', 'SUSPENDED', 'OTHER']),
+  note:               z.string().max(500).optional(),
+});
+export type RequestReplacementInput = z.infer<typeof RequestReplacementSchema>;
+
+export interface GuardAvailabilityResponse {
+  id:              string;
+  systemId:        string | null;
+  firstName:       string;
+  lastName:        string;
+  fullName:        string;
+  phone:           string;
+  photoUrl:        string | null;
+  rank:            string | null;
+  alreadyDeployed: boolean;
+  deployedAt:      string | null;
+  onLeave:         boolean;
+}
+
+export interface ReplacementResult {
+  originalDeployment: {
+    id:        string;
+    guardName: string;
+    siteName:  string;
+    shiftType: string;
+    date:      string;
+  };
+  replacementDeployment: {
+    id:        string;
+    guardName: string;
+    systemId:  string | null;
+  };
+  reason: string;
+  note:   string | null;
+}
+
 export interface DeploymentResponse {
   id:         string;
   guard:      { id: string; fullName: string; phone: string; photoUrl: string | null; rank: string | null };
@@ -116,11 +186,16 @@ export interface DeploymentResponse {
   shiftType:  'DAY' | 'NIGHT' | 'FULL_24';
   date:       string;
   createdAt:  string;
+  isReplacement:    boolean;
+  replacementForId: string | null;
+  replacementReason:string | null;
   attendance?: {
-    status:  string;
-    timeIn:  string | null;
-    timeOut: string | null;
-    notes:   string | null;
+    status:           string;
+    timeIn:           string | null;
+    timeOut:          string | null;
+    notes:            string | null;
+    replacedByGuardId:string | null;
+    replacementNote:  string | null;
   } | null;
 }
 

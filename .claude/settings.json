@@ -121,7 +121,9 @@
       "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"director@stapsecurity.co.ug\",\"password\":\"director123\"}')",
       "Bash(pnpm --filter api test --run src/__tests__/auth)",
       "Bash(pnpm --filter @stap/shared build --silent)",
-      "Bash(pnpm --filter @stap/api test run)"
+      "Bash(pnpm --filter @stap/api test run)",
+      "Bash(pnpm --filter api exec prisma migrate deploy)",
+      "Bash(SEED_PASSWORD=12345678 pnpm --filter api exec tsx src/db/seed.ts)"
     ],
     "additionalDirectories": [
       "/tmp",

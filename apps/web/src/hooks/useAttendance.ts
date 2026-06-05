@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { attendanceApi } from '../lib/attendance.api';
 import type {
   CreateRosterInput,
+  CopyRosterInput,
+  RequestReplacementInput,
   DeploymentListQuery,
   AttendanceQuery,
   MarkAttendanceInput,
@@ -103,5 +105,45 @@ export function useAttendanceDashboard() {
     queryFn:  () => attendanceApi.getAttendanceDashboard(),
     staleTime: 60 * 1000,
     refetchInterval: 2 * 60 * 1000,
+  });
+}
+
+export function usePastRosterDates(limit = 14) {
+  return useQuery({
+    queryKey: ['past-roster-dates', limit],
+    queryFn:  () => attendanceApi.getPastRosterDates(limit),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCopyRoster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CopyRosterInput) => attendanceApi.copyRoster(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['daily-sheet'] });
+      qc.invalidateQueries({ queryKey: ['deployments'] });
+      qc.invalidateQueries({ queryKey: ['past-roster-dates'] });
+    },
+  });
+}
+
+export function useAvailableReplacements(params: { siteId: string; date: string; absentGuardId: string } | null) {
+  return useQuery({
+    queryKey: ['replacements', params],
+    queryFn:  () => attendanceApi.getAvailableReplacements(params!),
+    enabled:  !!params,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useAssignReplacement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: RequestReplacementInput) => attendanceApi.assignReplacement(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['daily-sheet'] });
+      qc.invalidateQueries({ queryKey: ['replacements'] });
+    },
   });
 }

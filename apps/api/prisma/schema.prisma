@@ -103,6 +103,7 @@ enum ShiftType {
 
 model User {
   id           String     @id @default(cuid())
+  systemId     String?    @unique
   name         String
   email        String     @unique
   passwordHash String
@@ -142,6 +143,7 @@ model User {
 
 model Guard {
   id               String           @id @default(cuid())
+  systemId         String?          @unique
   firstName        String
   lastName         String
   otherNames       String?
@@ -356,6 +358,7 @@ model DisciplinaryRecord {
 
 model Client {
   id              String               @id @default(cuid())
+  systemId        String?              @unique
   clientName      String
   contactPerson   String
   contactPhone    String
@@ -508,6 +511,9 @@ model Deployment {
   copiedFromDate         DateTime?
   replacementForGuardId  String?
   isPrimaryDeployment    Boolean   @default(true)
+  isReplacement          Boolean   @default(false)
+  replacementForId       String?
+  replacementReason      String?
   createdAt              DateTime  @default(now())
 
   guard      Guard @relation(fields: [guardId], references: [id], onDelete: Restrict)
@@ -527,6 +533,8 @@ model AttendanceRecord {
   timeOut             DateTime?
   supervisorCheckinId String?
   notes               String?
+  replacedByGuardId   String?
+  replacementNote     String?
   createdAt           DateTime         @default(now())
 
   guard             Guard              @relation(fields: [guardId], references: [id], onDelete: Restrict)

@@ -199,7 +199,8 @@ export type CreateIncidentInput = z.infer<typeof CreateIncidentSchema>;
 // ── Response interfaces ────────────────────────────────────────────────────────
 
 export interface ClientResponse {
-  id: string;
+  id:       string;
+  systemId: string | null;
   clientName: string;
   contactPerson: string;
   contactPhone: string;

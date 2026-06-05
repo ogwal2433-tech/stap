@@ -87,6 +87,7 @@ import {
   SupervisorCheckinSchema,
   DeploymentListQuerySchema,
   AttendanceQuerySchema,
+  RequestReplacementSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -319,15 +320,22 @@ router.get(
 // ── POST /roster/copy — copy a previous day's roster to a target date ─────────
 router.post(
   '/roster/copy',
-  requireRole(ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR),
   asyncHandler(async (req, res) => {
     const parsed = CopyRosterSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0]?.message ?? 'Invalid input', 400);
-    const result = await deploymentService.copyPreviousRoster(
-      parsed.data.sourceDate,
-      parsed.data.targetDate,
-      req.user!.userId,
-    );
+    const result = await deploymentService.copyRoster(parsed.data, req.user!.userId);
+    res.json({ success: true, data: result });
+  }),
+);
+
+// ── GET /roster/past-dates — past dates that have rosters (for quick-pick) ────
+router.get(
+  '/roster/past-dates',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR),
+  asyncHandler(async (req, res) => {
+    const limit  = parseInt(req.query.limit as string) || 14;
+    const result = await deploymentService.getPastRosterDates(limit);
     res.json({ success: true, data: result });
   }),
 );
@@ -335,18 +343,25 @@ router.post(
 // ── GET /replacements — available guards to replace an absent guard ────────────
 router.get(
   '/replacements',
-  requireRole(ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR),
   asyncHandler(async (req, res) => {
     const { siteId, date, absentGuardId } = req.query as {
       siteId?: string; date?: string; absentGuardId?: string;
     };
-    if (!date || !absentGuardId) throw new AppError('date and absentGuardId are required', 400);
-    const guards = await deploymentService.getAvailableReplacements(
-      siteId ?? '',
-      date,
-      absentGuardId,
-    );
+    if (!siteId || !date || !absentGuardId) throw new AppError('siteId, date, and absentGuardId are required', 400);
+    const guards = await deploymentService.getAvailableReplacements(siteId, date, absentGuardId);
     res.json({ success: true, data: guards });
+  }),
+);
+
+// ── POST /replacements — assign a replacement guard ───────────────────────────
+router.post(
+  '/replacements',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR),
+  validate(RequestReplacementSchema),
+  asyncHandler(async (req, res) => {
+    const result = await deploymentService.assignReplacement(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: result });
   }),
 );
 

@@ -1,6 +1,11 @@
 import api from './api';
 import type {
   CreateRosterInput,
+  CopyRosterInput,
+  CopyRosterResult,
+  RequestReplacementInput,
+  ReplacementResult,
+  GuardAvailabilityResponse,
   ConflictDetail,
   DeploymentResponse,
   AttendanceRecord,
@@ -103,6 +108,33 @@ export const attendanceApi = {
   getAttendanceDashboard(): Promise<AttendanceDashboardData> {
     return api
       .get<{ success: boolean; data: AttendanceDashboardData }>('/attendance/dashboard')
+      .then((r) => r.data.data);
+  },
+
+  copyRoster(data: CopyRosterInput): Promise<CopyRosterResult> {
+    return api
+      .post<{ success: boolean; data: CopyRosterResult }>('/attendance/roster/copy', data)
+      .then((r) => r.data.data);
+  },
+
+  getPastRosterDates(limit = 14): Promise<{ date: string; siteCount: number; guardCount: number; siteSummary: string }[]> {
+    return api
+      .get<{ success: boolean; data: { date: string; siteCount: number; guardCount: number; siteSummary: string }[] }>(
+        '/attendance/roster/past-dates',
+        { params: { limit } },
+      )
+      .then((r) => r.data.data);
+  },
+
+  getAvailableReplacements(params: { siteId: string; date: string; absentGuardId: string }): Promise<GuardAvailabilityResponse[]> {
+    return api
+      .get<{ success: boolean; data: GuardAvailabilityResponse[] }>('/attendance/replacements', { params })
+      .then((r) => r.data.data);
+  },
+
+  assignReplacement(data: RequestReplacementInput): Promise<ReplacementResult> {
+    return api
+      .post<{ success: boolean; data: ReplacementResult }>('/attendance/replacements', data)
       .then((r) => r.data.data);
   },
 };

@@ -7,6 +7,7 @@ import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, type UserRole } from '@stap/shared';
+import { generateGuardId } from '../lib/systemId';
 import type {
   CreateGuardInput,
   UpdateGuardInput,
@@ -96,10 +97,11 @@ class GuardService {
 
     if (search) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
+        { firstName:  { contains: search, mode: 'insensitive' } },
+        { lastName:   { contains: search, mode: 'insensitive' } },
         { nationalId: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
+        { phone:      { contains: search, mode: 'insensitive' } },
+        { systemId:   { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -201,8 +203,11 @@ class GuardService {
 
     const { vettingData, ...guardFields } = data;
 
+    const systemId = await generateGuardId();
+
     const guard = await prisma.guard.create({
       data: {
+        systemId,
         firstName:   guardFields.firstName,
         lastName:    guardFields.lastName,
         otherNames:  guardFields.otherNames,
@@ -681,6 +686,7 @@ class GuardService {
 
     const response: GuardResponse = {
       id:        guard.id,
+      systemId:  guard.systemId ?? null,
       firstName: guard.firstName,
       lastName:  guard.lastName,
       otherNames:guard.otherNames ?? null,
@@ -1358,7 +1364,7 @@ class GuardService {
       <div class="info">
         <div class="name">${guard.firstName} ${guard.lastName}</div>
         <div class="rank">${guard.rank.replace(/_/g, ' ')}</div>
-        <div class="field">Guard ID: <span>${guard.id.slice(-8).toUpperCase()}</span></div>
+        <div class="field">ID No: <span style="font-family:monospace;letter-spacing:0.5px;font-weight:bold;color:#1B3A6B;">${guard.systemId ?? 'PENDING'}</span></div>
         <div class="field">NIN: <span>${maskedNid}</span></div>
         <div class="field">Emergency: <span>${guard.nextOfKinPhone ?? '—'}</span></div>
         ${directorName ? `<div class="field">Director: <span>${directorName}</span></div>` : ''}

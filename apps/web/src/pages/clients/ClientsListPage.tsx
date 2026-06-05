@@ -100,7 +100,7 @@ export default function ClientsListPage() {
               <InputGroup size="sm">
                 <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
                 <Form.Control
-                  placeholder="Company name, contact…"
+                  placeholder="Company name, contact, or SSLC number…"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />
@@ -178,6 +178,11 @@ export default function ClientsListPage() {
                     <td>
                       <div className="fw-semibold">{c.clientName}</div>
                       <div className="text-muted small">{c.contactPerson}</div>
+                      {c.systemId && (
+                        <div style={{ fontSize: '0.72rem', color: '#0F7B6C', fontFamily: 'monospace', fontWeight: 600 }}>
+                          {c.systemId}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div>{c.contactPhone}</div>

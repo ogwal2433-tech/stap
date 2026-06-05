@@ -300,7 +300,18 @@ export default function GuardDetailPage() {
 
       {/* Action bar */}
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>{guard.fullName}</h4>
+        <div className="d-flex align-items-center flex-wrap gap-2">
+          <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>{guard.fullName}</h4>
+          {guard.systemId && (
+            <span style={{
+              background: '#1B3A6B', color: '#fff', padding: '2px 10px',
+              borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
+              letterSpacing: '0.5px', fontFamily: 'monospace',
+            }}>
+              {guard.systemId}
+            </span>
+          )}
+        </div>
         <ButtonGroup size="sm">
           <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
             <Button variant="outline-primary" onClick={() => navigate(`/guards/${id}/edit`)}>
@@ -623,6 +634,7 @@ export default function GuardDetailPage() {
                   ['Spouse Telephone', (guard as any).spouseTelephone],
                   ['Phone', guard.phone],
                   ['Preferred Payment Contact', (guard as any).preferredPaymentContact],
+                  ['Guard ID Number (SSLG)', guard.systemId],
                   ['National ID (NIN)', guard.nationalId],
                   ['NSSF Number', (guard as any).nssfNumber],
                   ['TIN Number', (guard as any).tinNumber],

@@ -171,6 +171,7 @@ export interface SystemSettingResponse {
 
 export interface UserResponse {
   id:        string;
+  systemId:  string | null;
   name:      string;
   email:     string;
   role:      string;

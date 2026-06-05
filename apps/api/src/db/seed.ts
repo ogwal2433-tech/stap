@@ -1,6 +1,10 @@
 import { PrismaClient, Role, UserStatus, EmploymentStatus, ContractStatus, ClientContractStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+function fmtId(prefix: string, n: number): string {
+  return `${prefix}${n.toString().padStart(3, '0')}`;
+}
+
 const prisma = new PrismaClient();
 
 const PASSWORD = process.env.SEED_PASSWORD as string;
@@ -10,8 +14,32 @@ if (!PASSWORD) {
 }
 const SALT_ROUNDS = 12;
 
+async function backfillSystemIds() {
+  console.log('📋 Backfilling system IDs...');
+
+  const guards = await prisma.guard.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+  for (let i = 0; i < guards.length; i++) {
+    await prisma.guard.update({ where: { id: guards[i].id }, data: { systemId: fmtId('SSLG', i + 1) } });
+  }
+  if (guards.length) console.log(`✅ Backfilled ${guards.length} guard IDs`);
+
+  const clients = await prisma.client.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+  for (let i = 0; i < clients.length; i++) {
+    await prisma.client.update({ where: { id: clients[i].id }, data: { systemId: fmtId('SSLC', i + 1) } });
+  }
+  if (clients.length) console.log(`✅ Backfilled ${clients.length} client IDs`);
+
+  const users = await prisma.user.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+  for (let i = 0; i < users.length; i++) {
+    await prisma.user.update({ where: { id: users[i].id }, data: { systemId: fmtId('SSLS', i + 1) } });
+  }
+  if (users.length) console.log(`✅ Backfilled ${users.length} user IDs`);
+}
+
 async function main() {
   console.log('🌱 Starting seed...\n');
+
+  await backfillSystemIds();
 
   const passwordHash = await bcrypt.hash(PASSWORD, SALT_ROUNDS);
 

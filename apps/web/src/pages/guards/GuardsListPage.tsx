@@ -154,7 +154,7 @@ export default function GuardsListPage() {
       <Row className="g-2 mb-2">
         <Col md={5}>
           <Form.Control
-            placeholder="Search by name, NIN or phone…"
+            placeholder="Search by name, NIN, phone, or SSLG number…"
             value={search}
             onChange={handleSearchChange}
           />
@@ -350,6 +350,11 @@ export default function GuardsListPage() {
                         )}
                       </div>
                       <div className="text-muted">{g.nationalId ?? '—'}</div>
+                      {g.systemId && (
+                        <div style={{ fontSize: '0.72rem', color: '#1B3A6B', fontFamily: 'monospace', fontWeight: 600, marginTop: 1 }}>
+                          {g.systemId}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <Badge

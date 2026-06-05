@@ -933,6 +933,7 @@ export default function SettingsPage() {
             <Table hover size="sm" responsive>
               <thead className="table-light">
                 <tr>
+                  <th>Staff ID</th>
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
@@ -944,6 +945,9 @@ export default function SettingsPage() {
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#1B3A6B', fontWeight: 600 }}>
+                      {u.systemId ?? '—'}
+                    </td>
                     <td className="fw-medium">{u.name}</td>
                     <td className="small text-muted">{u.email}</td>
                     <td>

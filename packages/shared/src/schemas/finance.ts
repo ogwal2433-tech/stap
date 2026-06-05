@@ -22,14 +22,9 @@ export const RecordPaymentSchema = z.object({
 
 export const CreateDeductionSchema = z.object({
   guardId:       z.string().min(1),
-  type:          z.enum([
-    'UNIFORM_RECOVERY',
-    'DAMAGE_LOSS',
-    'DISCIPLINARY_PENALTY',
-    'SALARY_ADVANCE_REPAYMENT',
-    'LATE_COMING',
-    'NSSF',
-  ]),
+  // Deduction types are stored in the DeductionType table and can be user-defined,
+  // so we accept any non-empty string rather than a hardcoded enum.
+  type:          z.string().min(1),
   amount:        z.number().int().positive(),
   description:   z.string().min(5),
   // Accept both YYYY-MM-DD (from date inputs) and full ISO strings (from API callers)

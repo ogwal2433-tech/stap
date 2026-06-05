@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
+import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
@@ -44,6 +45,7 @@ function fmtSetting(s: any): SystemSettingResponse {
 function fmtUser(u: any): UserResponse {
   return {
     id:        u.id,
+    systemId:  u.systemId ?? null,
     name:      u.name,
     email:     u.email,
     role:      u.role,
@@ -158,8 +160,9 @@ class SettingsService {
     if (existing) throw new AppError('A user with this email already exists', 409);
 
     const passwordHash = await bcrypt.hash(data.password, 12);
+    const systemId     = await generateStaffId();
     const user = await prisma.user.create({
-      data: { name: data.name, email: data.email, passwordHash, role: data.role as any },
+      data: { systemId, name: data.name, email: data.email, passwordHash, role: data.role as any },
     });
 
     await QueueService.sendEmail({

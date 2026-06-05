@@ -226,6 +226,7 @@ export interface GuardAssociateResponse {
 
 export interface GuardResponse {
   id:          string;
+  systemId:    string | null;
   firstName:   string;
   lastName:    string;
   otherNames:  string | null;

@@ -132,7 +132,18 @@ export default function ClientDetailPage() {
 
       {/* Action bar */}
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>{client.clientName}</h4>
+        <div className="d-flex align-items-center flex-wrap gap-2">
+          <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>{client.clientName}</h4>
+          {client.systemId && (
+            <span style={{
+              background: '#0F7B6C', color: '#fff', padding: '2px 10px',
+              borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
+              letterSpacing: '0.5px', fontFamily: 'monospace',
+            }}>
+              {client.systemId}
+            </span>
+          )}
+        </div>
         <ButtonGroup size="sm">
           <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
             <Button variant="outline-primary" onClick={() => navigate(`/clients/${id}/edit`)}>
@@ -155,7 +166,14 @@ export default function ClientDetailPage() {
         <Card.Body>
           <Row className="align-items-center g-3">
             <Col>
-              <h5 className="fw-bold mb-1">{client.clientName}</h5>
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <h5 className="fw-bold mb-0">{client.clientName}</h5>
+                {client.systemId && (
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#0F7B6C', fontWeight: 700 }}>
+                    {client.systemId}
+                  </span>
+                )}
+              </div>
               <div className="text-muted small">{client.contactPerson}</div>
               <div className="text-muted small">{client.contactPhone}</div>
               {client.email && <div className="text-muted small">{client.email}</div>}
