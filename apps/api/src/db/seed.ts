@@ -148,7 +148,7 @@ async function main() {
     create: {
       id:                  'site-ura-nakawa',
       clientId:            ura.id,
-      siteName:            'URA Head Office – Nakawa',
+      siteName:            'URA Head Office - Nakawa',
       location:            'Nakawa Industrial Area, Kampala',
       gpsLat:              0.3280,
       gpsLon:              32.6218,

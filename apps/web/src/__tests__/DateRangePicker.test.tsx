@@ -52,10 +52,10 @@ describe('DateRangePicker', () => {
     expect(screen.getByText(/Click a day to set the start date/)).toBeInTheDocument();
   });
 
-  it('✕ button clears both dates', () => {
+  it('X button clears both dates', () => {
     const onRangeChange = vi.fn();
     renderPicker({ startDate: '2026-07-10', endDate: '2026-07-12', onRangeChange });
-    const clearBtn = screen.getByText('✕');
+    const clearBtn = screen.getByText('X');
     fireEvent.click(clearBtn);
     expect(onRangeChange).toHaveBeenCalledWith('', '');
   });

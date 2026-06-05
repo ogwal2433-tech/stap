@@ -137,7 +137,7 @@ export default function DateRangePicker({
             onClick={(e) => { e.stopPropagation(); onRangeChange('', ''); setSelectingEnd(false); }}
             style={{ background: 'none', border: 'none', color: '#6c757d', cursor: 'pointer', padding: '0 4px', fontSize: '1rem' }}
           >
-            ✕
+            X
           </button>
         )}
         <span style={{ color: '#6c757d', fontSize: '0.75rem' }}>{isOpen ? '▲' : '▼'}</span>

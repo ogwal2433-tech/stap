@@ -242,7 +242,7 @@ export default function GuardsListPage() {
               style={{ fontSize: '0.78rem', cursor: 'pointer' }}
               onClick={clear}
             >
-              {label} <span aria-hidden>✕</span>
+              {label} <span aria-hidden>X</span>
             </Badge>
           ))}
         </div>
@@ -255,7 +255,7 @@ export default function GuardsListPage() {
           {pagination.total === 0
             ? 0
             : (page - 1) * limit + 1}
-          –{Math.min(page * limit, pagination.total)} of {pagination.total} guards
+          -{Math.min(page * limit, pagination.total)} of {pagination.total} guards
         </p>
       )}
 

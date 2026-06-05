@@ -12,7 +12,7 @@ import type {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const TOTAL_WORKING_DAYS = 26; // Mon–Sat average
+const TOTAL_WORKING_DAYS = 26; // Mon-Sat average
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

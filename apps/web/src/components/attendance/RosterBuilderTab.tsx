@@ -733,7 +733,7 @@ export default function RosterBuilderTab() {
                             }}
                             title="Remove guard"
                           >
-                            ✕
+                            X
                           </button>
                         </div>
                       ))}

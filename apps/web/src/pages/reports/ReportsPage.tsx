@@ -78,7 +78,7 @@ function ScheduleFormModal({ onClose }: { onClose: () => void }) {
           <div className="d-flex flex-wrap gap-1">
             {form.recipients!.map(email => (
               <Badge key={email} bg="secondary" style={{ cursor: 'pointer' }} onClick={() => setForm(f => ({ ...f, recipients: f.recipients!.filter(r => r !== email) }))}>
-                {email} ✕
+                {email} X
               </Badge>
             ))}
           </div>

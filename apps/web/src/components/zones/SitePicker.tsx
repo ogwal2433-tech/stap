@@ -184,7 +184,7 @@ export default function SitePicker({
                       }}
                       title="Remove from zone"
                     >
-                      ✕
+                      X
                     </button>
                   </div>
                 ))

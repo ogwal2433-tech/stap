@@ -547,8 +547,8 @@ function ARAgingTab() {
 
   const buckets = [
     { label: 'Current (0-30 days)', value: report.buckets.current,   color: 'success' },
-    { label: '31–60 Days',          value: report.buckets.days31_60, color: 'warning' },
-    { label: '61–90 Days',          value: report.buckets.days61_90, color: 'warning' },
+    { label: '31-60 Days',          value: report.buckets.days31_60, color: 'warning' },
+    { label: '61-90 Days',          value: report.buckets.days61_90, color: 'warning' },
     { label: '90+ Days',            value: report.buckets.over90,    color: 'danger' },
   ];
 

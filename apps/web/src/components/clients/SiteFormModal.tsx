@@ -277,7 +277,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
                       <div style={{ fontSize: '0.78rem', color: siteType === 'TEMPORARY' ? '#856404' : '#b02a37', marginTop: '2px' }}>
                         {siteType === 'TEMPORARY'
                           ? 'Select the start and end date for this temporary assignment.'
-                          : 'Select the exact dates this special duty covers. Special duties are typically 1–7 days.'}
+                          : 'Select the exact dates this special duty covers. Special duties are typically 1-7 days.'}
                       </div>
                     </div>
                   </div>
@@ -563,7 +563,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
                       <span>
                         {shift.name}
                         {shift.startTime && (
-                          <span className="text-muted ms-2 small">{shift.startTime}–{shift.endTime}</span>
+                          <span className="text-muted ms-2 small">{shift.startTime}-{shift.endTime}</span>
                         )}
                       </span>
                     }

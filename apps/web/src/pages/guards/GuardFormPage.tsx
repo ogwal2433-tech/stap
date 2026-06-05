@@ -952,7 +952,7 @@ export default function GuardFormPage() {
                       <td><Form.Control size="sm" value={rel.relationship} onChange={(e) => updateRelative(i, 'relationship', e.target.value)} placeholder="e.g. Brother" /></td>
                       <td><Form.Control size="sm" value={rel.occupation} onChange={(e) => updateRelative(i, 'occupation', e.target.value)} placeholder="e.g. Driver" /></td>
                       <td><Form.Control size="sm" value={rel.placeOfResidence} onChange={(e) => updateRelative(i, 'placeOfResidence', e.target.value)} placeholder="e.g. Nateete" /></td>
-                      <td><Button size="sm" variant="outline-danger" onClick={() => removeRelative(i)}>✕</Button></td>
+                      <td><Button size="sm" variant="outline-danger" onClick={() => removeRelative(i)}>X</Button></td>
                     </tr>
                   ))}
                 </tbody>

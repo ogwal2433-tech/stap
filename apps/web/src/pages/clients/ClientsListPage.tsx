@@ -238,7 +238,7 @@ export default function ClientsListPage() {
         {data && data.pagination.totalPages > 1 && (
           <Card.Footer className="d-flex justify-content-between align-items-center small text-muted">
             <span>
-              Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, data.pagination.total)} of {data.pagination.total}
+              Showing {(page - 1) * 20 + 1}-{Math.min(page * 20, data.pagination.total)} of {data.pagination.total}
             </span>
             <div className="d-flex gap-2">
               <Button size="sm" variant="outline-secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>

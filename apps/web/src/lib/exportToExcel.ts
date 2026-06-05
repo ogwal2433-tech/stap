@@ -48,9 +48,9 @@ function fmtShift(s: string): string {
 }
 
 function shiftLabel(s: string): string {
-  return s === 'DAY'     ? 'Day Shift   (06:00 – 18:00)'
-       : s === 'NIGHT'   ? 'Night Shift (18:00 – 06:00)'
-       :                   '24-Hour     (06:00 – 06:00)';
+  return s === 'DAY'     ? 'Day Shift   (06:00 - 18:00)'
+       : s === 'NIGHT'   ? 'Night Shift (18:00 - 06:00)'
+       :                   '24-Hour     (06:00 - 06:00)';
 }
 
 // Build a WorkSheet from AOA rows, column widths, merges, and optional row heights.
@@ -160,7 +160,7 @@ export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): 
         rowHeights.push(15);
       }
 
-      // Site totals (spans cols 1–7)
+      // Site totals (spans cols 1-7)
       {
         const r    = rows.length;
         const row: CellValue[] = new Array(NUM_COLS).fill(null);

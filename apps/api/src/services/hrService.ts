@@ -132,7 +132,7 @@ function fmtTemplate(t: any): LetterTemplateResponse {
   };
 }
 
-/** Count Mon–Sat days between two dates (inclusive). */
+/** Count Mon-Sat days between two dates (inclusive). */
 function countWorkingDays(start: Date, end: Date): number {
   let count = 0;
   const cur = new Date(start);

@@ -477,7 +477,7 @@ function LineItemRow({
             cursor: 'pointer', fontSize: '1.1rem', padding: '4px', flexShrink: 0, marginTop: 4,
           }}
           title="Remove"
-        >✕</button>
+        >X</button>
       </div>
     </div>
   );
