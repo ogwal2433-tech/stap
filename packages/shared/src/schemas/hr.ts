@@ -132,7 +132,7 @@ export const GenerateLetterSchema = z.object({
   subjectName: z.string().min(1),
   title:       z.string().min(1).max(200),
   body:        z.string().min(10),
-  letterType:  z.enum(['WARNING', 'SUSPENSION', 'COMMENDATION', 'TERMINATION', 'REINSTATEMENT', 'GENERAL']).default('GENERAL'),
+  letterType:  z.enum(['WARNING', 'SUSPENSION', 'COMMENDATION', 'TERMINATION', 'REINSTATEMENT', 'GENERAL', 'COMMITMENT_AGREEMENT']).default('GENERAL'),
 });
 export type GenerateLetterInput = z.infer<typeof GenerateLetterSchema>;
 

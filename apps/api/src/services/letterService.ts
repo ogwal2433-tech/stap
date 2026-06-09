@@ -5,6 +5,8 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
+import { sendEmail } from '../lib/mailer';
+import { buildLetterHtml } from '../lib/templates/letterBase';
 import type {
   LetterGenerationInput,
   GenerateLetterInput,
@@ -609,6 +611,18 @@ class LetterService {
       newValue: { decision, approvedBy, notes },
     });
 
+    // Auto-email PDF for structured letter types when approved
+    if (decision === 'APPROVED' && this.isStructuredType(existing.letterType)) {
+      this.sendLetterByEmail({
+        id:          existing.id,
+        letterType:  existing.letterType,
+        title:       existing.title,
+        subjectName: existing.subjectName,
+        body:        existing.body,
+        generatedAt: existing.generatedAt,
+      }).catch(err => console.error('[LetterService] Failed to email approved letter:', err));
+    }
+
     return this.sanitiseLetter(updated);
   }
 
@@ -648,6 +662,108 @@ class LetterService {
     const l = await prisma.generatedLetter.findUnique({ where: { id }, include: this.LETTER_INCLUDE });
     if (!l) throw new NotFoundError('Letter not found');
     return this.sanitiseLetter(l);
+  }
+
+  // ── Structured letter PDF (for COMMITMENT_AGREEMENT and future structured types) ─
+
+  private isStructuredType(letterType: string): boolean {
+    return letterType === 'COMMITMENT_AGREEMENT';
+  }
+
+  private buildStructuredHtml(l: {
+    letterType: string;
+    body: string;
+    subjectName: string;
+    title: string;
+    generatedAt: Date;
+    id: string;
+  }): string {
+    const issueDate = l.generatedAt.toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+    const refNumber = `STAP/${l.generatedAt.getFullYear()}/CA/${l.id.substring(0, 8).toUpperCase()}`;
+
+    return buildLetterHtml({
+      refNumber,
+      issueDate,
+      body:         l.body,
+      directorName: 'Director, STAP Security Ltd',
+      employeeName: l.subjectName,
+    });
+  }
+
+  private async renderPdf(html: string): Promise<Buffer> {
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pdf = await page.pdf({
+        format: 'A4',
+        // Puppeteer applies these margins on EVERY page.
+        // top/bottom clear the header (~4.5cm) and footer (~1.5cm) of the
+        // background letterhead image. The position:fixed bg still fills
+        // the full A4 behind these margins — do not add padding in the HTML.
+        margin: { top: '47mm', right: '15mm', bottom: '17mm', left: '18mm' },
+        printBackground: true,
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  async getPdf(letterId: string): Promise<{ buffer: Buffer; fileName: string }> {
+    const l = await prisma.generatedLetter.findUnique({
+      where: { id: letterId },
+      include: this.LETTER_INCLUDE,
+    });
+    if (!l) throw new NotFoundError('Letter not found');
+    if (!this.isStructuredType(l.letterType)) {
+      throw new AppError('PDF download is only available for structured letter types.', 400);
+    }
+
+    const html   = this.buildStructuredHtml(l);
+    const buffer = await this.renderPdf(html);
+    const safeName = l.subjectName.replace(/\s+/g, '_');
+    const fileName = `${l.letterType}-${safeName}-${l.id.substring(0, 8)}.pdf`;
+
+    return { buffer, fileName };
+  }
+
+  private async sendLetterByEmail(l: {
+    id: string;
+    letterType: string;
+    title: string;
+    subjectName: string;
+    body: string;
+    generatedAt: Date;
+  }): Promise<void> {
+    const pdfBuffer = await this.renderPdf(this.buildStructuredHtml(l as any));
+    const hrEmail   = process.env.HR_EMAIL ?? 'hr@stapsecurity.co.ug';
+
+    await sendEmail({
+      to:      hrEmail,
+      subject: `Approved Letter: ${l.title} — ${l.subjectName}`,
+      html: `
+        <p>The following letter has been approved and is attached as a PDF.</p>
+        <ul>
+          <li><strong>Employee:</strong> ${l.subjectName}</li>
+          <li><strong>Letter Type:</strong> ${l.letterType.replace(/_/g, ' ')}</li>
+          <li><strong>Title:</strong> ${l.title}</li>
+        </ul>
+        <p>Please print and have the employee sign the attached copy.</p>
+        <p style="color:#999;font-size:11px;">STAP Security Ltd — Automated HR System</p>
+      `,
+      attachments: [{
+        filename:    `${l.letterType}-${l.subjectName.replace(/\s+/g, '_')}.pdf`,
+        content:     pdfBuffer,
+        contentType: 'application/pdf',
+      }],
+    });
   }
 }
 

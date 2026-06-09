@@ -36,4 +36,15 @@ export const lettersApi = {
       .patch<{ success: boolean; data: GeneratedLetterResponse }>(`/letters/${id}/approve`, data)
       .then(r => r.data.data);
   },
+
+  async downloadPdf(id: string, fileName?: string): Promise<void> {
+    const resp = await api.get(`/letters/${id}/pdf`, { responseType: 'blob' });
+    const blob = new Blob([resp.data as BlobPart], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = fileName ?? `letter-${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };

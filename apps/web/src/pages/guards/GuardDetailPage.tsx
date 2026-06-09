@@ -10,6 +10,7 @@ import { useLettersBySubject } from '../../hooks/useLetters';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
+import { lettersApi } from '../../lib/letters.api';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
@@ -1169,7 +1170,19 @@ export default function GuardDetailPage() {
                           </div>
                         )}
                       </div>
-                      <LetterStatusBadge status={l.approvalStatus} />
+                      <div className="d-flex flex-column align-items-end gap-1">
+                        <LetterStatusBadge status={l.approvalStatus} />
+                        {l.approvalStatus === 'APPROVED' && l.letterType === 'COMMITMENT_AGREEMENT' && (
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                            onClick={() => lettersApi.downloadPdf(l.id, `${l.letterType}-${l.subjectName}.pdf`)}
+                          >
+                            ↓ PDF
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

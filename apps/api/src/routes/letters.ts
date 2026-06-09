@@ -50,6 +50,17 @@ router.get(
   }),
 );
 
+router.get(
+  '/:id/pdf',
+  requireRole(...GENERATE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { buffer, fileName } = await letterService.getPdf(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }),
+);
+
 // Only HR (Director / Assistant Manager) can approve or reject letters.
 router.patch(
   '/:id/approve',
