@@ -63,6 +63,18 @@ export const invoicesApi = {
       .get<{ success: boolean; data: ARAgingReport }>('/finance/invoices/aging')
       .then((r) => r.data.data);
   },
+
+  sendEmail(invoiceId: string): Promise<void> {
+    return api
+      .post(`/finance/invoices/${invoiceId}/send-email`)
+      .then(() => undefined);
+  },
+
+  runAutoSend(): Promise<void> {
+    return api
+      .post('/finance/invoices/run-auto-send')
+      .then(() => undefined);
+  },
 };
 
 // ── Deductions ────────────────────────────────────────────────────────────────

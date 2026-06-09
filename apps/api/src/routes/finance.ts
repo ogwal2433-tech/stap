@@ -138,6 +138,7 @@ import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { invoiceService } from '../services/invoiceService';
+import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
 import { payrollService } from '../services/payrollService';
 import { cashbookService } from '../services/cashbookService';
@@ -198,6 +199,26 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.getById(req.params.id);
     res.json({ success: true, data: invoice });
+  }),
+);
+
+// POST /finance/invoices/run-auto-send — manually trigger the batch email job
+router.post(
+  '/invoices/run-auto-send',
+  requireRole(ROLES.DIRECTOR, ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (_req: Request, res: Response) => {
+    await runInvoiceEmailJob();
+    res.json({ success: true, message: 'Auto-send job completed' });
+  }),
+);
+
+// POST /finance/invoices/:id/send-email — send a specific invoice by email
+router.post(
+  '/invoices/:id/send-email',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (req: Request, res: Response) => {
+    await invoiceService.sendInvoiceEmail(req.params.id);
+    res.json({ success: true, message: 'Invoice email sent' });
   }),
 );
 

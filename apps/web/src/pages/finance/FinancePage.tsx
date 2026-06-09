@@ -18,6 +18,7 @@ import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { ROLES } from '@stap/shared';
 import type { InvoiceResponse, PayslipResponse } from '@stap/shared';
+import { invoicesApi } from '../../lib/finance.api';
 
 const NAVY = '#1B3A6B';
 
@@ -53,9 +54,23 @@ function isOverdue(dueDate: string) {
 function InvoicesTab() {
   const [showCreate, setShowCreate]       = useState(false);
   const [payInvoice, setPayInvoice]       = useState<InvoiceResponse | null>(null);
+  const [sendingId, setSendingId]         = useState<string | null>(null);
   const { data, isLoading }               = useInvoices();
   const { showToast }                     = useToast();
   const queryClient                       = useQueryClient();
+
+  const handleSendEmail = async (inv: InvoiceResponse) => {
+    setSendingId(inv.id);
+    try {
+      await invoicesApi.sendEmail(inv.id);
+      showToast(`Invoice ${inv.invoiceNumber} sent to ${inv.clientName}`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to send invoice email', 'danger');
+    } finally {
+      setSendingId(null);
+    }
+  };
 
   const invoices = data?.data ?? [];
 
@@ -132,18 +147,37 @@ function InvoicesTab() {
                 </td>
                 <td>{statusBadge(inv.status)}</td>
                 <td>
-                  {inv.pdfPath && (
-                    <a href={inv.pdfPath} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary me-1">
-                      PDF
-                    </a>
-                  )}
-                  {['PENDING', 'OVERDUE'].includes(inv.status) && (
+                  <div className="d-flex gap-1 flex-wrap">
+                    {inv.pdfPath && (
+                      <a href={inv.pdfPath} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary">
+                        PDF
+                      </a>
+                    )}
                     <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                      <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
-                        Pay
+                      <Button
+                        size="sm"
+                        variant={inv.emailSentAt ? 'outline-secondary' : 'outline-primary'}
+                        disabled={!!inv.emailSentAt || sendingId === inv.id}
+                        onClick={() => handleSendEmail(inv)}
+                        title={inv.emailSentAt ? `Sent to ${inv.emailSentTo} on ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}` : 'Send invoice by email'}
+                      >
+                        {sendingId === inv.id ? (
+                          <><Spinner size="sm" animation="border" className="me-1" />Sending…</>
+                        ) : inv.emailSentAt ? (
+                          `✅ Sent ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}`
+                        ) : (
+                          '📧 Send'
+                        )}
                       </Button>
                     </RoleGuard>
-                  )}
+                    {['PENDING', 'OVERDUE'].includes(inv.status) && (
+                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
+                        <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
+                          Pay
+                        </Button>
+                      </RoleGuard>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

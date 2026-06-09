@@ -26,7 +26,8 @@ export type UpdateComplaintInput = z.infer<typeof UpdateComplaintSchema>;
 
 export interface ComplaintResponse {
   id:          string;
-  client:      { id: string; clientName: string };
+  clientId:    string;
+  client:      { id: string; clientName: string; systemId: string | null };
   site:        { id: string; siteName: string } | null;
   subject:     string;
   category:    string;
@@ -40,6 +41,20 @@ export interface ComplaintResponse {
   updatedAt:   string;
   daysOpen:    number;
 }
+
+// ── Badge colour helpers ────────────────────────────────────────────────────────
+
+export const COMPLAINT_SEVERITY_COLORS = {
+  LOW:    'success',
+  MEDIUM: 'warning',
+  HIGH:   'danger',
+} as const;
+
+export const COMPLAINT_STATUS_COLORS = {
+  OPEN:        'danger',
+  IN_PROGRESS: 'warning',
+  RESOLVED:    'success',
+} as const;
 
 export interface ComplaintDashboard {
   openByCategory:    { category: string; count: number }[];

@@ -6,12 +6,16 @@ import {
 } from 'react-bootstrap';
 import { useClient, useClientSites, useArchiveClient, useDeleteSite, useSiteIncidents } from '../../hooks/useClients';
 import { useClientContracts, useDeleteContract } from '../../hooks/useContracts';
+import { useClientComplaints } from '../../hooks/useComplaints';
 import RoleGuard from '../../components/RoleGuard';
 import SiteFormModal from '../../components/clients/SiteFormModal';
 import IncidentFormModal from '../../components/clients/IncidentFormModal';
 import ContractFormModal from '../../components/clients/ContractFormModal';
+import ComplaintCard from '../../components/complaints/ComplaintCard';
+import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
+import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
@@ -61,6 +65,7 @@ export default function ClientDetailPage() {
   const { data: client, isLoading, isError, refetch } = useClient(id ?? '');
   const { data: sites, refetch: refetchSites } = useClientSites(id ?? '');
   const { data: contracts, refetch: refetchContracts } = useClientContracts(id ?? '');
+  const { data: complaintsData, isLoading: complaintsLoading, refetch: refetchComplaints } = useClientComplaints(id ?? '');
   const archiveClient = useArchiveClient();
   const deleteSite = useDeleteSite();
   const deleteContract = useDeleteContract(id ?? '');
@@ -70,6 +75,13 @@ export default function ClientDetailPage() {
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [contractModal, setContractModal] = useState<{ contract?: ContractResponse } | null>(null);
   const [incidentPage, setIncidentPage] = useState(1);
+  const [showLogComplaintModal, setShowLogComplaintModal] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState<ComplaintResponse | null>(null);
+  const [showComplaintDetail, setShowComplaintDetail] = useState(false);
+  const [complaintFilter, setComplaintFilter] = useState<string>('ALL');
+
+  const complaints = complaintsData?.data ?? [];
+  const filteredComplaints = complaints.filter(c => complaintFilter === 'ALL' || c.status === complaintFilter);
 
   // Incidents across client's sites — aggregate via first site for now (full impl in CLT-006)
   const firstSiteId = sites?.[0]?.id;
@@ -591,11 +603,88 @@ export default function ClientDetailPage() {
         </Tab>
 
         {/* Tab 4 — Complaints */}
-        <Tab eventKey="complaints" title={`Complaints (${client._count?.clientComplaints ?? 0})`}>
-          <Alert variant="info">
-            <i className="bi bi-info-circle me-2" />
-            Complaint management coming in Sprint 3.
-          </Alert>
+        <Tab eventKey="complaints" title={`Complaints (${complaintsLoading ? '…' : complaints.length})`}>
+          {/* Header row */}
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <div className="fw-bold text-navy">Complaints</div>
+              {complaints.length > 0 && (
+                <div style={{ fontSize: '0.8rem', color: '#6c757d' }}>
+                  {complaints.filter(c => c.status === 'OPEN').length} open · {complaints.length} total
+                </div>
+              )}
+            </div>
+            <Button variant="outline-danger" size="sm" onClick={() => setShowLogComplaintModal(true)}>
+              + Log Complaint
+            </Button>
+          </div>
+
+          {/* Status filter */}
+          {complaints.length > 0 && (
+            <div className="d-flex gap-2 mb-3 flex-wrap">
+              {(['ALL', 'OPEN', 'IN_PROGRESS', 'RESOLVED'] as const).map(s => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant={complaintFilter === s ? 'primary' : 'outline-secondary'}
+                  style={{ fontSize: '0.75rem' }}
+                  onClick={() => setComplaintFilter(s)}
+                >
+                  {s === 'ALL' ? 'All' : s.replace('_', ' ')}
+                  {s === 'OPEN' && (
+                    <Badge bg="danger" className="ms-1" style={{ fontSize: '0.65rem' }}>
+                      {complaints.filter(c => c.status === 'OPEN').length}
+                    </Badge>
+                  )}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {/* Complaints list */}
+          {complaintsLoading ? (
+            <div className="text-center py-4">
+              <Spinner size="sm" className="me-2" />
+              Loading complaints…
+            </div>
+          ) : filteredComplaints.length === 0 ? (
+            <div className="text-center py-5" style={{ color: '#6c757d' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📋</div>
+              <div className="fw-bold mb-1">
+                {complaints.length === 0 ? 'No complaints logged yet' : 'No complaints match this filter'}
+              </div>
+              <div style={{ fontSize: '0.82rem' }}>
+                {complaints.length === 0
+                  ? 'Use the button above to log a complaint for this client.'
+                  : 'Try a different status filter.'}
+              </div>
+            </div>
+          ) : (
+            <div>
+              {filteredComplaints.map(complaint => (
+                <ComplaintCard
+                  key={complaint.id}
+                  complaint={complaint}
+                  onViewMore={() => {
+                    setSelectedComplaint(complaint);
+                    setShowComplaintDetail(true);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Complaint detail modal */}
+          {selectedComplaint && (
+            <ClientComplaintDetailModal
+              show={showComplaintDetail}
+              complaint={selectedComplaint}
+              onClose={() => {
+                setShowComplaintDetail(false);
+                setSelectedComplaint(null);
+              }}
+            />
+          )}
         </Tab>
 
         {/* Tab 5 — Incidents */}
@@ -661,6 +750,18 @@ export default function ClientDetailPage() {
           contract={contractModal.contract}
           onClose={() => setContractModal(null)}
           onSuccess={() => { refetchContracts(); refetch(); }}
+        />
+      )}
+
+      {showLogComplaintModal && (
+        <ComplaintFormModal
+          show={showLogComplaintModal}
+          onClose={() => setShowLogComplaintModal(false)}
+          onSuccess={() => {
+            refetchComplaints();
+            refetch();
+          }}
+          preselectedClient={{ id: client.id, clientName: client.clientName }}
         />
       )}
     </div>

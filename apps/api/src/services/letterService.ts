@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import puppeteer from 'puppeteer';
 import prisma from '../db/prisma';
+import { renderToPdf } from '../lib/pdfBase';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
@@ -37,59 +37,17 @@ interface LetterData {
   [key: string]: string | undefined;
 }
 
-// ── Common HTML styles ─────────────────────────────────────────────────────────
+// ── Letter HTML builder ────────────────────────────────────────────────────────
+// Returns inner content HTML only — wrapWithLetterhead() in pdfBase.ts adds the
+// full page wrapper, background image, and base body styles.
 
-const COMMON_STYLES = `
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 12pt;
-      color: #222;
-      line-height: 1.6;
-    }
-    .header {
-      border-bottom: 2px solid #1B3A6B;
-      padding-bottom: 12px;
-      margin-bottom: 20px;
-    }
-    .company-name {
-      font-size: 20pt;
-      font-weight: bold;
-      color: #1B3A6B;
-      letter-spacing: 1px;
-    }
-    .company-address {
-      font-size: 9pt;
-      color: #555;
-      margin-top: 4px;
-    }
-    .date-ref {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      font-size: 10pt;
-    }
-    .subject {
-      font-weight: bold;
-      text-decoration: underline;
-      margin-bottom: 16px;
-      font-size: 12pt;
-    }
+function wrapLetter(body: string, data: LetterData): string {
+  return `<style>
+    .date-ref { display: flex; justify-content: space-between; margin-bottom: 24px; font-size: 10pt; }
+    .subject { font-weight: bold; text-decoration: underline; margin-bottom: 16px; }
     .body-text { margin-bottom: 14px; }
     .signature-block { margin-top: 40px; }
     .signature-line { border-top: 1px solid #333; width: 200px; margin-bottom: 4px; margin-top: 30px; }
-    .footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 9pt;
-      color: #888;
-      border-top: 1px solid #ddd;
-      padding: 6px 0;
-    }
     .warning-box {
       border: 2px solid #dc3545;
       background: #fff5f5;
@@ -101,35 +59,11 @@ const COMMON_STYLES = `
     }
     .salutation { margin-bottom: 16px; }
   </style>
-`;
-
-const COMPANY_HEADER = `
-  <div class="header">
-    <div class="company-name">STAP SECURITY LTD</div>
-    <div class="company-address">
-      Plot 45, Kampala Road, Kampala, Uganda &nbsp;|&nbsp;
-      Tel: +256 414 000 000 &nbsp;|&nbsp;
-      Email: info@stapsecurity.co.ug
-    </div>
+  <div class="date-ref">
+    <span>Ref: ${data.refNumber}</span>
+    <span>${data.issueDate}</span>
   </div>
-`;
-
-function wrapLetter(body: string, data: LetterData): string {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head><meta charset="UTF-8">${COMMON_STYLES}</head>
-    <body>
-      ${COMPANY_HEADER}
-      <div class="date-ref">
-        <span>Ref: ${data.refNumber}</span>
-        <span>${data.issueDate}</span>
-      </div>
-      ${body}
-      <div class="footer">STAP Security Ltd — Confidential &nbsp;|&nbsp; Page <span class="pageNumber"></span></div>
-    </body>
-    </html>
-  `;
+  ${body}`;
 }
 
 // ── Letter templates ───────────────────────────────────────────────────────────
@@ -438,24 +372,9 @@ class LetterService {
     const filePath = path.join(letterDir, fileName);
     const publicPath = `/uploads/guards/${guard.id}/letters/${fileName}`;
 
-    // Generate PDF with Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({
-        path: filePath,
-        format: 'A4',
-        margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
-        printBackground: true,
-      });
-    } finally {
-      await browser.close();
-    }
+    // Generate PDF
+    const pdfBuf = await renderToPdf(html);
+    fs.writeFileSync(filePath, pdfBuf);
 
     // Determine document type for GuardDocument record
     const WARNING_TYPES = ['VERBAL_WARNING', 'FIRST_WARNING', 'FINAL_WARNING', 'TERMINATION_NOTICE'];
@@ -692,30 +611,6 @@ class LetterService {
     });
   }
 
-  private async renderPdf(html: string): Promise<Buffer> {
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      const pdf = await page.pdf({
-        format: 'A4',
-        // Puppeteer applies these margins on EVERY page.
-        // top/bottom clear the header (~4.5cm) and footer (~1.5cm) of the
-        // background letterhead image. The position:fixed bg still fills
-        // the full A4 behind these margins — do not add padding in the HTML.
-        margin: { top: '47mm', right: '15mm', bottom: '17mm', left: '18mm' },
-        printBackground: true,
-      });
-      return Buffer.from(pdf);
-    } finally {
-      await browser.close();
-    }
-  }
-
   async getPdf(letterId: string): Promise<{ buffer: Buffer; fileName: string }> {
     const l = await prisma.generatedLetter.findUnique({
       where: { id: letterId },
@@ -727,7 +622,7 @@ class LetterService {
     }
 
     const html   = this.buildStructuredHtml(l);
-    const buffer = await this.renderPdf(html);
+    const buffer = await renderToPdf(html);
     const safeName = l.subjectName.replace(/\s+/g, '_');
     const fileName = `${l.letterType}-${safeName}-${l.id.substring(0, 8)}.pdf`;
 
@@ -742,7 +637,7 @@ class LetterService {
     body: string;
     generatedAt: Date;
   }): Promise<void> {
-    const pdfBuffer = await this.renderPdf(this.buildStructuredHtml(l as any));
+    const pdfBuffer = await renderToPdf(this.buildStructuredHtml(l as any));
     const hrEmail   = process.env.HR_EMAIL ?? 'hr@stapsecurity.co.ug';
 
     await sendEmail({

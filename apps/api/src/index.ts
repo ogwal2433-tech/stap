@@ -42,6 +42,7 @@ import { invoiceService } from './services/invoiceService';
 import { reportService } from './services/reportService';
 import { inventoryService } from './services/inventoryService';
 import { guardService } from './services/guardService';
+import { runInvoiceEmailJob } from './jobs/invoiceCron';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -103,6 +104,13 @@ cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
 cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
   timezone: 'Africa/Kampala',
 });
+
+// Email due/overdue invoices that haven't been sent yet — daily at 07:00 EAT
+cron.schedule('0 7 * * *', () => runInvoiceEmailJob(), {
+  timezone: 'Africa/Kampala',
+});
+// Also run on startup to catch any missed sends
+runInvoiceEmailJob().catch(console.error);
 
 // Initialise any persisted scheduled reports on startup
 reportService.initScheduledReports();

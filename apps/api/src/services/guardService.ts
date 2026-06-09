@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import puppeteer, { type Browser } from 'puppeteer';
 import prisma from '../db/prisma';
+import { renderRawPdf } from '../lib/pdfBase';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
@@ -26,29 +26,6 @@ import type {
 
 // Roles allowed to see the accountNumber field
 const ACCOUNT_VISIBLE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
-
-// Reused across requests — launching Chromium per-request is the main timeout cause.
-let _browser: Browser | null = null;
-let _browserPromise: Promise<Browser> | null = null;
-
-async function getBrowser(): Promise<Browser> {
-  if (_browser && _browser.connected) return _browser;
-  if (_browserPromise) return _browserPromise;
-  _browserPromise = puppeteer
-    .launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    })
-    .then((b) => {
-      _browser = b;
-      _browserPromise = null;
-      b.on('disconnected', () => { _browser = null; _browserPromise = null; });
-      return b;
-    })
-    .catch((err) => { _browserPromise = null; throw err; });
-  return _browserPromise;
-}
 
 class GuardService {
   // ── List ───────────────────────────────────────────────────────────────────
@@ -1383,18 +1360,8 @@ class GuardService {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, `${guardId}.pdf`);
 
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    let pdfBuffer: Buffer;
-    try {
-      // HTML is self-contained (inline base64 + inline CSS) — 'load' is sufficient
-      // and avoids the 500ms idle-wait that 'networkidle0' imposes.
-      await page.setContent(html, { waitUntil: 'load', timeout: 10_000 });
-      pdfBuffer = Buffer.from(await page.pdf({ width: '321px', height: '204px', printBackground: true }));
-    } finally {
-      await page.close();
-    }
-
+    // HTML is self-contained (inline base64 + inline CSS) — 'load' is sufficient.
+    const pdfBuffer = await renderRawPdf(html, { width: '321px', height: '204px', printBackground: true });
     fs.writeFileSync(filePath, pdfBuffer);
     return pdfBuffer;
   }

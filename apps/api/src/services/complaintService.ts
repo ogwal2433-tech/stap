@@ -13,7 +13,7 @@ import type {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const INCLUDE = {
-  client:   { select: { id: true, clientName: true, email: true } },
+  client:   { select: { id: true, clientName: true, systemId: true, email: true } },
   site:     { select: { id: true, siteName: true } },
   assignee: { select: { id: true, name: true } },
 } as const;
@@ -26,7 +26,8 @@ function daysOpen(createdAt: Date, resolvedAt: Date | null): number {
 function fmtComplaint(c: any): ComplaintResponse {
   return {
     id:          c.id,
-    client:      { id: c.client.id, clientName: c.client.clientName },
+    clientId:    c.clientId,
+    client:      { id: c.client.id, clientName: c.client.clientName, systemId: c.client.systemId ?? null },
     site:        c.site ? { id: c.site.id, siteName: c.site.siteName } : null,
     subject:     c.subject,
     category:    c.category,
