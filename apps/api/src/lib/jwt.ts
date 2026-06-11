@@ -1,8 +1,15 @@
 import jwt from 'jsonwebtoken';
 import type { UserRole } from '@stap/shared';
 
-const ACCESS_SECRET = process.env.JWT_SECRET!;
+const ACCESS_SECRET  = process.env.JWT_SECRET!;
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET!;
+
+if (!ACCESS_SECRET || ACCESS_SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be set and at least 32 characters long');
+}
+if (!REFRESH_SECRET || REFRESH_SECRET.length < 32) {
+  throw new Error('JWT_REFRESH_SECRET must be set and at least 32 characters long');
+}
 
 export interface AccessTokenPayload {
   sub: string;

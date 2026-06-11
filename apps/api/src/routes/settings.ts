@@ -163,6 +163,7 @@ import { rankService } from '../services/rankService';
 import { shiftTypeService } from '../services/shiftTypeService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError, ForbiddenError } from '../errors/AppError';
 import {
@@ -176,6 +177,8 @@ import {
   CreateShiftTypeSchema,
   UpdateShiftTypeSchema,
   ReorderShiftTypesSchema,
+  CreateUserSchema,
+  ResetPasswordSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -233,6 +236,7 @@ router.get(
 router.post(
   '/users',
   requireRole(ROLES.DIRECTOR),
+  validate(CreateUserSchema),
   asyncHandler(async (req, res) => {
     const data = await settingsService.createUser(req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
@@ -254,6 +258,7 @@ router.patch(
 router.post(
   '/users/:id/reset-password',
   requireRole(ROLES.DIRECTOR),
+  validate(ResetPasswordSchema),
   asyncHandler(async (req, res) => {
     const { newPassword } = req.body as { newPassword: string };
     await settingsService.resetPassword(req.params.id, newPassword, req.user!.userId);

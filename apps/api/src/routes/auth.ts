@@ -4,7 +4,7 @@ import { LoginSchema, ROLES } from '@stap/shared';
 import { authService } from '../services/authService';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole, requireMinimumRole } from '../middleware/rbac';
+import { requireRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';
 import prisma from '../db/prisma';
 import { UnauthorisedError } from '../errors/AppError';
@@ -22,10 +22,10 @@ const REFRESH_COOKIE_OPTIONS = {
 
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: 'Too many login attempts. Try again later.' },
+  message: { success: false, error: 'Too many login attempts. Please try again in 15 minutes.' },
 });
 
 /**
@@ -162,26 +162,6 @@ router.get(
     }
 
     res.status(200).json({ success: true, data: user });
-  }),
-);
-
-// TODO: remove before production — RBAC smoke-test endpoint (Director only)
-router.get(
-  '/rbac-test/:role',
-  authenticate,
-  requireRole(ROLES.DIRECTOR),
-  asyncHandler(async (req, res) => {
-    res.status(200).json({ success: true, data: req.user });
-  }),
-);
-
-// TODO: remove before production — minimum-role smoke-test endpoint (≥ ACCOUNTS_OFFICER)
-router.get(
-  '/minimum-role-test',
-  authenticate,
-  requireMinimumRole(ROLES.ACCOUNTS_OFFICER),
-  asyncHandler(async (req, res) => {
-    res.status(200).json({ success: true, data: req.user });
   }),
 );
 

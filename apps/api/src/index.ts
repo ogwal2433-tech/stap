@@ -46,6 +46,7 @@ import { runInvoiceEmailJob } from './jobs/invoiceCron';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
+import { authenticate } from './middleware/authenticate';
 
 const app: Express = express();
 // Trust the first proxy (Nginx) — required when running behind a reverse proxy
@@ -66,8 +67,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ── Static files — serve uploaded files ───────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+// ── Static files — uploaded files require authentication ──────────────────────
+app.use('/uploads', authenticate, express.static(path.join(__dirname, '../public/uploads')));
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 app.get('/api/v1/health', (_req, res) => {

@@ -1,26 +1,27 @@
-import e, { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
+
+const isDev = process.env.NODE_ENV !== 'production';
 
 export function errorHandler(
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction,
 ) {
-  // Always log the full error — this is what we need to see
+  // Log full error server-side — never log req.body (may contain passwords)
   console.error('❌ ERROR:', {
     message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-    body: req.body,
+    path:    req.path,
+    method:  req.method,
+    ...(isDev && { stack: err.stack }),
   });
 
   if (err instanceof ZodError) {
     return res.status(400).json({
       success: false,
-      error: 'Validation failed',
+      error:   'Validation failed',
       details: err.flatten(),
     });
   }
@@ -31,12 +32,10 @@ export function errorHandler(
     return res.status(err.statusCode).json(body);
   }
 
-  // Default 500
+  // 500 — hide internal details in production
   return res.status(500).json({
     success: false,
-    // error: process.env.NODE_ENV === 'production'
-    //   ? 'Internal server error'
-    //   : err.message,
-    error: err.message,
+    error:   isDev ? err.message : 'Internal server error',
+    ...(isDev && { stack: err.stack }),
   });
 }
