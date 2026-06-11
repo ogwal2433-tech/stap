@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Spinner, Table,
+  Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useCreateRoster } from '../../hooks/useAttendance';
 import { useMyZones, useZones, useZoneRosterData } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import type { ConflictDetail, RosterCreationResult, ZoneSite, ZoneRosterGuard } from '@stap/shared';
+import type { ConflictDetail, ZoneSite, ZoneRosterGuard } from '@stap/shared';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import { exportRosterDraft } from '../../lib/exportToExcel';
 
@@ -124,6 +124,9 @@ export default function RosterBuilderTab() {
     setSelectedSite(isSame ? null : site);
     setSelectedGuards([]);
     setGuardSearch('');
+    if (!isSame && site.defaultShiftType) {
+      setSelectedShift(site.defaultShiftType as 'DAY' | 'NIGHT' | 'FULL_24');
+    }
   }
 
   function selectGuard(guard: ZoneRosterGuard) {
@@ -177,11 +180,8 @@ export default function RosterBuilderTab() {
         startDate:   `${selectedDate}T00:00:00.000Z`,
         recurring:   false,
       });
-      const rosterResult = data as RosterCreationResult;
-      setResult(rosterResult);
-      if (rosterResult.conflicts?.length === 0) {
-        showToast(`${rosterResult.created} guard(s) deployed successfully.`, 'success');
-      }
+      setResult(data);
+      showToast(`${data.created} deployment(s) created`, 'success');
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Failed to create roster', 'danger');
     }
@@ -192,7 +192,6 @@ export default function RosterBuilderTab() {
 
   // ── Success screen ─────────────────────────────────────────────────────────
   if (result) {
-    const hasConflicts = result.conflicts.length > 0;
     return (
       <Card className="border-0 shadow-sm">
         <Card.Body>
@@ -407,59 +406,13 @@ export default function RosterBuilderTab() {
                             <small className="text-muted">{site.guardsRequired} req.</small>
                           </div>
                         </div>
-                        {site.isArmed && (
+                        {(site.firearmsRequired > 0 || site.armedGuardsRequired > 0) && (
                           <div className="mt-2 d-flex gap-1 flex-wrap">
                             {site.firearmsRequired > 0 && (
-                              <Badge bg="danger" style={{ fontSize: '0.65rem' }}>🔥 {site.firearmsRequired} Firearm(s)</Badge>
+                              <Badge bg="danger" style={{ fontSize: '0.65rem' }}>🔥 Firearms</Badge>
                             )}
                             {site.armedGuardsRequired > 0 && (
-                              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>🔫 {site.armedGuardsRequired} Armed</Badge>
-                            )}
-                            {site.batonRequired > 0 && (
-                              <Badge bg="secondary" style={{ fontSize: '0.65rem' }}>🛡️ {site.batonRequired} Baton(s)</Badge>
-                            )}
-                          </div>
-                        )}
-                        {site.specialInstructions && (
-                          <div style={{
-                            marginTop: '8px', paddingTop: '8px',
-                            borderTop: '1px solid #e0e0e0',
-                            fontSize: '0.75rem', color: '#4A5568', lineHeight: 1.4,
-                          }}>
-                            <span style={{
-                              fontWeight: 600, color: '#1B3A6B', fontSize: '0.72rem',
-                              textTransform: 'uppercase', letterSpacing: '0.3px',
-                            }}>
-                              📋 Instructions:{' '}
-                            </span>
-                            {site.specialInstructions.length > 80
-                              ? `${site.specialInstructions.substring(0, 80)}...`
-                              : site.specialInstructions}
-                          </div>
-                        )}
-                        {site.hasPeriod && (
-                          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #e9ecef', fontSize: '0.75rem' }}>
-                            {site.sitePeriodStart && site.sitePeriodEnd ? (
-                              <>
-                                <Badge
-                                  bg={site.siteType === 'TEMPORARY' ? 'warning' : 'danger'}
-                                  text={site.siteType === 'TEMPORARY' ? 'dark' : undefined}
-                                  style={{ fontSize: '0.7rem' }}
-                                >
-                                  📅{' '}
-                                  {new Date(site.sitePeriodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                  {' → '}
-                                  {new Date(site.sitePeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                  {site.periodDays ? ` · ${site.periodDays}d` : ''}
-                                </Badge>
-                                {site.sitePeriodNotes && (
-                                  <div className="text-muted mt-1" style={{ fontSize: '0.72rem' }}>
-                                    {site.sitePeriodNotes}
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-warning small">⚠️ No period set</span>
+                              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>🔫 Armed</Badge>
                             )}
                           </div>
                         )}
@@ -486,68 +439,6 @@ export default function RosterBuilderTab() {
             <span className="fw-bold">Assign Guards to {selectedSite.siteName}</span>
           </Card.Header>
           <Card.Body>
-
-            {/* Special instructions alert */}
-            {selectedSite.specialInstructions && (
-              <Alert variant="warning" className="mb-4" style={{
-                borderLeft: '4px solid #E8701A', background: '#FEF9E7', borderRadius: '0.5rem',
-              }}>
-                <div className="d-flex align-items-start gap-2">
-                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>📋</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: '#1B3A6B', fontSize: '0.88rem', marginBottom: '4px' }}>
-                      Special Instructions — {selectedSite.siteName}
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#4A5568', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                      {selectedSite.specialInstructions}
-                    </div>
-                    <div style={{ marginTop: '8px', fontSize: '0.72rem', color: '#6c757d' }}>
-                      These instructions apply to all guards deployed at this site. Ensure all guards are briefed before deployment.
-                    </div>
-                  </div>
-                </div>
-              </Alert>
-            )}
-
-            {/* Special duty period alert */}
-            {selectedSite.hasPeriod && selectedSite.sitePeriodStart && selectedSite.sitePeriodEnd && (
-              <Alert variant="warning" className="mb-3" style={{
-                borderLeft: `4px solid ${selectedSite.siteType === 'TEMPORARY' ? '#ffc107' : '#dc3545'}`,
-                background: selectedSite.siteType === 'TEMPORARY' ? '#fff3cd' : '#f8d7da',
-              }}>
-                <div className="fw-bold small mb-1">
-                  {selectedSite.siteType === 'TEMPORARY' ? '⏳ Temporary Assignment' : '🎯 Special Duty Assignment'}
-                </div>
-                <div className="small">
-                  {selectedSite.siteType === 'TEMPORARY' ? 'This temporary assignment runs from' : 'This special duty is active from'}{' '}
-                  <strong>
-                    {new Date(selectedSite.sitePeriodStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </strong>
-                  {' to '}
-                  <strong>
-                    {new Date(selectedSite.sitePeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </strong>
-                  {' '}({selectedSite.periodDays} day(s)).
-                  {selectedSite.sitePeriodNotes && (
-                    <span className="ms-1 fst-italic">{selectedSite.sitePeriodNotes}.</span>
-                  )}
-                </div>
-                {selectedDate && (() => {
-                  const rosterDate = new Date(`${selectedDate}T00:00:00`);
-                  const dutyStart  = new Date(selectedSite.sitePeriodStart!);
-                  const dutyEnd    = new Date(selectedSite.sitePeriodEnd!);
-                  if (rosterDate < dutyStart || rosterDate > dutyEnd) {
-                    return (
-                      <div className="mt-2 text-danger small fw-bold">
-                        ⚠️ Warning: The selected roster date (
-                        {rosterDate.toLocaleDateString('en-GB')}) is outside this site's duty period. Are you sure you want to deploy on this date?
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </Alert>
-            )}
 
             {/* Shift selection */}
             <div className="mb-3">
@@ -733,7 +624,7 @@ export default function RosterBuilderTab() {
                             }}
                             title="Remove guard"
                           >
-                            X
+                            ✕
                           </button>
                         </div>
                       ))}

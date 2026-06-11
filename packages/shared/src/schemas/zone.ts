@@ -7,7 +7,7 @@ export const CreateZoneSchema = z.object({
   description:  z.string().optional(),
   supervisorId: z.string().optional(),
   alternateId:  z.string().optional(),
-  siteIds:      z.array(z.string().min(1)).optional().default([]),
+  siteIds:      z.array(z.string()).optional(),
 });
 
 export const UpdateZoneSchema = CreateZoneSchema.partial().extend({
@@ -25,7 +25,7 @@ export interface ZonePersonRef {
   role: string;
 }
 
-export interface ZoneDetailSite {
+export interface ZoneResponseSite {
   id:             string;
   siteName:       string;
   location:       string;
@@ -44,7 +44,7 @@ export interface ZoneResponse {
   supervisor:  ZonePersonRef | null;
   alternate:   ZonePersonRef | null;
   siteCount:   number;
-  sites:       ZoneDetailSite[];
+  sites:       ZoneResponseSite[];
   createdAt:   string;
   updatedAt:   string;
 }
@@ -55,19 +55,18 @@ export interface ZoneSite {
   location:            string;
   guardsRequired:      number;
   siteType:            string;
-  /** @deprecated No longer collected. Will be null for all new sites. */
-  defaultShiftType?:   string | null;
+  defaultShiftType:    string | null;
   armedGuardsRequired: number;
   firearmsRequired:    number;
   batonRequired:       number;
   otherWeaponsNotes:   string | null;
   isArmed:             boolean;
   specialInstructions: string | null;
-  sitePeriodStart: string | null;
-  sitePeriodEnd:   string | null;
-  sitePeriodNotes: string | null;
-  periodDays:      number | null;
-  hasPeriod:       boolean;
+  sitePeriodStart:     string | null;
+  sitePeriodEnd:       string | null;
+  sitePeriodNotes:     string | null;
+  hasPeriod:           boolean;
+  periodDays:          number | null;
   client: {
     id:         string;
     clientName: string;

@@ -13,14 +13,12 @@ export const CreateDisciplinarySchema = z.object({
 export const LetterGenerationSchema = z.object({
   guardId: z.string().min(1),
   letterType: z.enum([
+    'WARNING',
     'VERBAL_WARNING',
     'FIRST_WARNING',
     'FINAL_WARNING',
     'TERMINATION_NOTICE',
-    'APPOINTMENT_LETTER',
-    'CONTRACT_EXTENSION',
-    'CONFIRMATION_OF_EMPLOYMENT',
-    'SALARY_REVIEW',
+    'REINSTATEMENT',
   ]),
   disciplinaryRecordId: z
     .string()
