@@ -173,6 +173,7 @@ import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
 import { bulkImportService } from '../services/bulkImportService';
 import { letterService } from '../services/letterService';
+import { renderToPdf } from '../lib/pdfBase';
 import { uploadService } from '../services/uploadService';
 import { guardDocumentUpload } from '../config/multer';
 import { authenticate } from '../middleware/authenticate';
@@ -250,6 +251,43 @@ router.get(
   asyncHandler(async (_req, res) => {
     const stats = await guardService.getDashboardStats();
     res.status(200).json({ success: true, data: stats });
+  }),
+);
+
+// ── GET /payment-slip — printable A4 sheet of 6 payment-details confirmation slips ──
+router.get(
+  '/payment-slip',
+  requireRole(...INTERNAL_ROLES),
+  asyncHandler(async (_req, res) => {
+    const slip = `
+      <style>
+        .slip { border-bottom: 1px dashed #888; padding: 5px 0 8px; }
+        .slip:last-child { border-bottom: none; }
+        .slip-title { font-weight: bold; font-size: 9pt; margin: 0 0 4px; }
+        .slip table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+        .slip td { padding: 1.5px 0; }
+        .slip td.label { width: 42%; }
+        .slip td.value { border-bottom: 1px solid #555; padding-left: 4px; }
+        .slip .nb { font-size: 7pt; font-style: italic; color: #333; margin: 3px 0 0; }
+      </style>
+      ${Array(6).fill(null).map(() => `
+      <div class="slip">
+        <p class="slip-title">STAP Security Payment Details Confirmation:</p>
+        <table>
+          <tr><td class="label">Name:</td><td class="value">&nbsp;</td></tr>
+          <tr><td class="label">Deployment:</td><td class="value">&nbsp;</td></tr>
+          <tr><td class="label">Payment Number:</td><td class="value">&nbsp;</td></tr>
+          <tr><td class="label">Payment Number Names:</td><td class="value">&nbsp;</td></tr>
+          <tr><td class="label">Signature:</td><td class="value">&nbsp;</td></tr>
+          <tr><td class="label">Date:</td><td class="value">&nbsp;</td></tr>
+        </table>
+        <p class="nb"><strong>N.B:</strong> If there is a change of this number, strictly whatsapp or call <strong>0787417404</strong>. STAP security will not be liable for any money loss out of changing the phone number without communication to the above specific office number.</p>
+      </div>`).join('')}
+    `;
+    const buffer = await renderToPdf(slip, { marginTop: '56mm', marginBottom: '14mm', marginLeft: '14mm', marginRight: '14mm' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=STAP-Payment-Slip.pdf');
+    res.send(buffer);
   }),
 );
 

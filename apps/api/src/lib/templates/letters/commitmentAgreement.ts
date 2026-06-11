@@ -6,62 +6,72 @@ export interface CommitmentAgreementData {
 
 export function buildCommitmentAgreementBody(data: CommitmentAgreementData): string {
   return `
-    <p>Dear <strong>${data.guardName}</strong>,</p>
+<p>Dear <strong>${data.guardName}</strong>,</p>
 
-    <p style="font-weight:bold; text-decoration:underline; font-size:12pt; margin-bottom:16px;">
-      RE: EMPLOYMENT COMMITMENT AGREEMENT
-    </p>
+<p>We are pleased to offer you employment as a Security Guard with STAP Security Ltd. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
 
-    <p>
-      This Employment Commitment Agreement is entered into between <strong>STAP Security Ltd</strong>
-      (hereinafter "the Company") and <strong>${data.guardName}</strong> (hereinafter "the Employee"),
-      effective from <strong>${data.startDate}</strong>.
-    </p>
+<p>By signing this agreement, you acknowledge and commit to the following terms:</p>
 
-    <p style="font-weight:bold; margin-top:18px;">1. Employment Duration</p>
-    <p>
-      The Employee commits to remaining in the employment of STAP Security Ltd for a minimum period of
-      <strong>${data.minimumPeriod}</strong> from the effective start date of
-      <strong>${data.startDate}</strong>. The Employee shall not resign or abandon their post before
-      this minimum period elapses without prior written notice and management approval.
-    </p>
+<p style="font-weight:bold;margin-top:14px;">1. Minimum Service Period:</p>
+<ul style="margin:4px 0 10px 24px;line-height:1.6;">
+  <li>You agree to work with STAP Security Ltd for a minimum of <strong>${data.minimumPeriod}</strong> from <strong>${data.startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
+</ul>
 
-    <p style="font-weight:bold; margin-top:18px;">2. Training &amp; Development</p>
-    <p>
-      STAP Security Ltd commits to providing the Employee with the necessary training, uniform, personal
-      protective equipment, and any other resources required to perform their assigned security duties
-      effectively. Any training provided shall remain the property of the Company for the duration of
-      the commitment period.
-    </p>
+<p style="font-weight:bold;margin-top:14px;">2. Resignation or Termination Before Committed Period:</p>
+<ul style="margin:4px 0 10px 24px;line-height:1.6;">
+  <li>If you choose to resign before completing the agreed period, you must provide one month's written notice.</li>
+  <li>You will not be entitled to any salary payment for the days or weeks worked prior to resignation.</li>
+  <li>You will be required to pay a non-refundable fee of <strong>UGX 50,000</strong> as a training cost, and an additional <strong>UGX 30,000</strong> for meals and accommodation during training.</li>
+  <li>You will also be required to return all company-issued items (e.g., uniform, boots, belt, ID card, etc.). Failure to do so will result in additional charges equivalent to the value of the missing items.</li>
+  <li>Regardless of whether you officially resign, if you leave before completing your committed period, you will be classified as a deserter. The company reserves the right to take legal action and report the desertion to relevant authorities or agencies.</li>
+  <li>Any exceptions to this clause may be reviewed on a case-by-case basis at the company's sole discretion.</li>
+</ul>
 
-    <p style="font-weight:bold; margin-top:18px;">3. Employee Obligations</p>
-    <p>
-      The Employee agrees to adhere to all Company policies, rules, and regulations as detailed in the
-      STAP Security Ltd Staff Handbook, including but not limited to the Code of Conduct, uniform
-      standards, attendance requirements, and site assignment directives. The Employee shall conduct
-      themselves professionally and uphold the reputation of the Company at all times.
-    </p>
+<p style="font-weight:bold;margin-top:14px;">3. Code of Conduct &amp; Performance:</p>
+<ul style="margin:4px 0 10px 24px;line-height:1.6;">
+  <li>You agree to comply with all company policies, maintain professional conduct, and meet job performance expectations.</li>
+  <li>Any form of misconduct, breach of company rules, or poor performance may result in disciplinary action, including termination without notice.</li>
+</ul>
 
-    <p style="font-weight:bold; margin-top:18px;">4. Early Departure Consequences</p>
-    <p>
-      Should the Employee resign, abandon their post, or otherwise terminate their employment before
-      the minimum commitment period of <strong>${data.minimumPeriod}</strong> has elapsed, STAP
-      Security Ltd reserves the right to recover reasonable costs associated with training, uniform,
-      and equipment issued to the Employee, as determined by Management. The Employee acknowledges
-      and accepts this condition as a material term of their employment.
-    </p>
+<p style="font-weight:bold;margin-top:14px;">4. Training &amp; Professional Development:</p>
+<ul style="margin:4px 0 10px 24px;line-height:1.6;">
+  <li>The company will provide training programs to enhance your skills and professionalism.</li>
+  <li>You are required to attend and actively participate in all assigned training programs. Failure to comply may result in disciplinary action or dismissal.</li>
+</ul>
 
-    <p style="font-weight:bold; margin-top:18px;">5. Governing Law &amp; Dispute Resolution</p>
-    <p>
-      This Agreement shall be governed by and construed in accordance with the laws of the Republic
-      of Uganda. Any dispute arising from or in connection with this Agreement shall be resolved in
-      the first instance through the Company's internal grievance procedure. Where no resolution is
-      reached, the matter may be referred to the relevant statutory authority.
-    </p>
+<p style="font-weight:bold;margin-top:14px;">5. Confidentiality &amp; Security Ethics:</p>
+<ul style="margin:4px 0 10px 24px;line-height:1.6;">
+  <li>You are required to maintain confidentiality in all security-related matters and uphold the highest level of integrity in your role.</li>
+  <li>Any sharing of confidential information or unethical behavior will result in disciplinary action or legal consequences.</li>
+</ul>
 
-    <p style="margin-top:20px;">
-      By signing below, the Employee confirms that they have read, understood, and voluntarily agree
-      to the terms of this Employment Commitment Agreement.
-    </p>
-  `;
+<p style="margin-top:14px;">By signing below, you confirm that you have read, understood, and agreed to the above terms and conditions, including the financial obligations and penalties should you fail to honor this employment commitment.</p>
+
+<div style="margin-top:28px;">
+  <p style="font-weight:bold;">Signed &amp; Agreed By:</p>
+  <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:10pt;">
+    <tr>
+      <td style="width:55%;padding-bottom:6px;">Employee's Name: <span style="display:inline-block;width:160px;border-bottom:1px solid #333;">&nbsp;</span></td>
+      <td>Signature: <span style="display:inline-block;width:130px;border-bottom:1px solid #333;">&nbsp;</span></td>
+    </tr>
+    <tr>
+      <td colspan="2" style="padding-top:10px;">Date: <span style="display:inline-block;width:160px;border-bottom:1px solid #333;">&nbsp;</span></td>
+    </tr>
+  </table>
+
+  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of STAP Security Ltd:</p>
+  <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:10pt;">
+    <tr>
+      <td style="width:55%;padding-bottom:6px;">Authorized Representative Name: <span style="display:inline-block;width:100px;border-bottom:1px solid #333;">&nbsp;</span></td>
+      <td>Signature: <span style="display:inline-block;width:130px;border-bottom:1px solid #333;">&nbsp;</span></td>
+    </tr>
+    <tr>
+      <td style="padding-top:10px;">Position: <span style="display:inline-block;width:180px;border-bottom:1px solid #333;">&nbsp;</span></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td colspan="2" style="padding-top:10px;">Date: <span style="display:inline-block;width:160px;border-bottom:1px solid #333;">&nbsp;</span></td>
+    </tr>
+  </table>
+</div>`;
 }

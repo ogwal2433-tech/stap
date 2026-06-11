@@ -22,24 +22,16 @@ type FormValues = z.infer<typeof FormSchema>;
 
 const LETTER_GROUPS = {
   'Disciplinary Letters': [
-    { value: 'VERBAL_WARNING', label: 'Verbal Warning Notice' },
-    { value: 'FIRST_WARNING', label: 'First Written Warning' },
-    { value: 'FINAL_WARNING', label: 'Final Written Warning' },
+    { value: 'WARNING',          label: 'Warning Letter' },
     { value: 'TERMINATION_NOTICE', label: 'Termination Notice' },
-  ],
-  'HR Letters': [
-    { value: 'APPOINTMENT_LETTER', label: 'Appointment Letter' },
-    { value: 'CONTRACT_EXTENSION', label: 'Contract Extension' },
-    { value: 'CONFIRMATION_OF_EMPLOYMENT', label: 'Confirmation of Employment' },
-    { value: 'SALARY_REVIEW', label: 'Salary Review Notification' },
+    { value: 'REINSTATEMENT',    label: 'Reinstatement Letter' },
   ],
 };
 
 const DISCIPLINARY_TYPES = new Set([
-  'VERBAL_WARNING',
-  'FIRST_WARNING',
-  'FINAL_WARNING',
+  'WARNING',
   'TERMINATION_NOTICE',
+  'REINSTATEMENT',
 ]);
 
 interface Props {
@@ -69,7 +61,7 @@ export default function LetterGenerationModal({
     resolver: zodResolver(FormSchema),
     defaultValues: {
       directorName: 'The Director',
-      letterType: 'VERBAL_WARNING',
+      letterType: 'WARNING',
     },
   });
 

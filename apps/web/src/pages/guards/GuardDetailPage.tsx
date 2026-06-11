@@ -50,8 +50,7 @@ function formatDate(iso: string): string {
 }
 
 const DISCIPLINARY_BADGE: Record<string, { bg: string; text?: string; style?: React.CSSProperties }> = {
-  VERBAL_WARNING: { bg: 'warning', text: 'dark' },
-  WRITTEN_WARNING: { bg: 'warning', text: 'dark', style: { backgroundColor: '#E8701A', borderColor: '#E8701A' } },
+  WARNING: { bg: 'warning', text: 'dark' },
   SUSPENSION: { bg: 'danger' },
   TERMINATION: { bg: 'dark' },
   REINSTATEMENT: { bg: 'success' },

@@ -83,14 +83,15 @@ const STATUS_BADGES: Record<string, string> = {
 };
 
 const LETTER_TYPE_LABELS: Record<string, string> = {
-  VERBAL_WARNING:             'Verbal Warning',
-  FIRST_WARNING:              'First Written Warning',
-  FINAL_WARNING:              'Final Written Warning',
-  TERMINATION_NOTICE:         'Termination Notice',
-  APPOINTMENT_LETTER:         'Appointment Letter',
-  CONTRACT_EXTENSION:         'Contract Extension',
-  CONFIRMATION_OF_EMPLOYMENT: 'Confirmation of Employment',
-  SALARY_REVIEW:              'Salary Review',
+  WARNING:               'Warning Letter',
+  SUSPENSION:            'Suspension Letter',
+  TERMINATION_NOTICE:    'Termination Notice',
+  REINSTATEMENT:         'Reinstatement Letter',
+  COMMITMENT_AGREEMENT:  'Commitment Agreement',
+  CLEARANCE_FORM:        'Clearance Form',
+  SICK_LEAVE:            'Sick Leave Approval',
+  RESIGNATION_ACCEPTANCE: 'Resignation Acceptance',
+  EXPULSION:             'Expulsion Letter',
 };
 
 const SAMPLE_DATA: Record<string, string> = {

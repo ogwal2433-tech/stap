@@ -123,7 +123,12 @@
       "Bash(pnpm --filter @stap/shared build --silent)",
       "Bash(pnpm --filter @stap/api test run)",
       "Bash(pnpm --filter api exec prisma migrate deploy)",
-      "Bash(SEED_PASSWORD=12345678 pnpm --filter api exec tsx src/db/seed.ts)"
+      "Bash(SEED_PASSWORD=12345678 pnpm --filter api exec tsx src/db/seed.ts)",
+      "Bash(sed -n '30,60p' apps/api/src/services/guardService.ts)",
+      "Bash(sed -n '1380,1410p' apps/api/src/services/guardService.ts)",
+      "Bash(sed -n '100,140p' apps/api/src/services/letterService.ts)",
+      "Bash(sed -n '430,470p' apps/api/src/services/letterService.ts)",
+      "Bash(sed -n '670,720p' apps/api/src/services/letterService.ts)"
     ],
     "additionalDirectories": [
       "/tmp",

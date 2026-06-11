@@ -11,12 +11,15 @@ interface Props {
 }
 
 const LETTER_TYPE_LABELS: Record<string, string> = {
-  WARNING:       'Warning Letter',
-  SUSPENSION:    'Suspension Letter',
-  COMMENDATION:  'Commendation Letter',
-  TERMINATION:   'Termination Letter',
-  REINSTATEMENT: 'Reinstatement Letter',
-  GENERAL:       'General Letter',
+  WARNING:               'Warning Letter',
+  SUSPENSION:            'Suspension Letter',
+  TERMINATION:           'Termination Letter',
+  REINSTATEMENT:         'Reinstatement Letter',
+  COMMITMENT_AGREEMENT:  'Commitment Agreement',
+  CLEARANCE_FORM:        'Clearance Form',
+  SICK_LEAVE:            'Sick Leave Approval',
+  RESIGNATION_ACCEPTANCE: 'Resignation Acceptance',
+  EXPULSION:             'Expulsion Letter',
 };
 
 export default function ApproveLetterModal({ letter, show, onClose }: Props) {

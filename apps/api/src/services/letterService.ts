@@ -25,12 +25,7 @@ interface LetterData {
   reason?: string;
   outcome?: string;
   salaryRate?: string;
-  newSalaryRate?: string;
-  oldSalaryRate?: string;
-  salaryChangePercent?: string;
   contractStart?: string;
-  contractEnd?: string;
-  newContractEnd?: string;
   directorName: string;
   issueDate: string;
   refNumber: string;
@@ -71,66 +66,21 @@ function wrapLetter(body: string, data: LetterData): string {
 class LetterService {
   getLetterTemplate(letterType: string, data: LetterData): string {
     switch (letterType) {
+      case 'WARNING':
       case 'VERBAL_WARNING':
-        return wrapLetter(
-          `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">VERBAL WARNING — ${data.reason ? data.reason.substring(0, 80).toUpperCase() : 'MISCONDUCT'}</div>
-          <p class="body-text">This letter serves as formal documentation of a verbal warning issued to you on <strong>${data.issueDate}</strong>.</p>
-          <p class="body-text">On <strong>${data.incidentDate ?? data.issueDate}</strong>, the matter of the following was brought to management's attention:</p>
-          <p class="body-text" style="padding-left:16px; border-left: 3px solid #1B3A6B;"><em>${data.reason ?? 'Conduct contrary to company policy'}</em></p>
-          <p class="body-text">You were verbally informed of this matter and reminded of the conduct standards required of all STAP Security Ltd employees. You are expected to improve your conduct with immediate effect.</p>
-          <p class="body-text"><strong>Outcome:</strong> ${data.outcome ?? 'Verbal warning issued. No further action at this time.'}</p>
-          <p class="body-text"><strong>Please note:</strong> Should a similar incident recur, a written warning will be issued. Repeated misconduct may result in suspension or termination of employment.</p>
-          <div class="signature-block">
-            <p>Yours sincerely,</p>
-            <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
-          </div>
-          `,
-          data,
-        );
-
       case 'FIRST_WARNING':
-        return wrapLetter(
-          `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">FIRST WRITTEN WARNING</div>
-          <p class="body-text">Dear ${data.guardName},</p>
-          <p class="body-text">This letter constitutes your <strong>First Written Warning</strong> in accordance with the company disciplinary procedure.</p>
-          <p class="body-text">On <strong>${data.incidentDate ?? data.issueDate}</strong>, the following misconduct was reported:</p>
-          <p class="body-text" style="padding-left:16px; border-left: 3px solid #1B3A6B;"><em>${data.reason ?? 'Conduct contrary to company policy'}</em></p>
-          <p class="body-text"><strong>Outcome / Action Taken:</strong> ${data.outcome ?? 'First written warning issued.'}</p>
-          <p class="body-text">You are required to improve your conduct immediately. This written warning will remain on your employment record. A further breach of company policy may result in a final written warning, suspension, or termination of employment.</p>
-          <p class="body-text">You have the right to appeal this decision in writing within seven (7) working days of receiving this letter.</p>
-          <div class="signature-block">
-            <p>Yours sincerely,</p>
-            <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
-          </div>
-          `,
-          data,
-        );
-
       case 'FINAL_WARNING':
         return wrapLetter(
           `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">FINAL WRITTEN WARNING</div>
+          <div class="subject" style="text-align:center;">WARNING LETTER</div>
+          <p class="body-text">To: <strong>${data.guardName}</strong></p>
+          <p class="body-text">Position: ${data.position}</p>
           <p class="body-text">Dear ${data.guardName},</p>
-          <p class="body-text">This letter constitutes your <strong>FINAL Written Warning</strong>. This is the last warning you will receive before the company takes further disciplinary action, up to and including termination of your employment.</p>
-          <p class="body-text">On <strong>${data.incidentDate ?? data.issueDate}</strong>, the following serious misconduct was reported:</p>
-          <p class="body-text" style="padding-left:16px; border-left: 3px solid #dc3545;"><em>${data.reason ?? 'Serious conduct contrary to company policy'}</em></p>
-          <p class="body-text"><strong>Outcome / Action Taken:</strong> ${data.outcome ?? 'Final written warning issued.'}</p>
-          <p class="body-text">You are hereby placed on final notice. Any further breach of company policy, no matter how minor, will result in your immediate suspension pending investigation and likely termination of employment without further warning.</p>
-          <p class="body-text">You have the right to appeal this decision in writing within seven (7) working days of receiving this letter.</p>
+          <p class="body-text">This letter serves as a formal warning regarding <strong>${data.reason ?? 'misconduct contrary to company policy'}</strong>. You are expected to improve your conduct immediately. Further violations may result in suspension or termination.</p>
           <div class="signature-block">
-            <p>Yours sincerely,</p>
+            <p>Approved by:</p>
             <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
+            <div class="signature-line" style="margin-top:10px;"></div>
           </div>
           `,
           data,
@@ -139,128 +89,32 @@ class LetterService {
       case 'TERMINATION_NOTICE':
         return wrapLetter(
           `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">NOTICE OF TERMINATION OF EMPLOYMENT</div>
+          <div class="subject" style="text-align:center;">TERMINATION LETTER</div>
+          <p class="body-text">To: <strong>${data.guardName}</strong></p>
+          <p class="body-text">Position: ${data.position}</p>
           <p class="body-text">Dear ${data.guardName},</p>
-          <div class="warning-box">⚠ This letter terminates your employment with STAP Security Ltd effective immediately.</div>
-          <p class="body-text">After careful consideration and following the company's disciplinary procedure, STAP Security Ltd has resolved to terminate your contract of employment with effect from <strong>${data.issueDate}</strong>.</p>
-          <p class="body-text"><strong>Reason for Termination:</strong></p>
-          <p class="body-text" style="padding-left:16px; border-left: 3px solid #dc3545;"><em>${data.reason ?? 'Serious misconduct'}</em></p>
-          <p class="body-text">You are required to:</p>
-          <ul style="margin: 0 0 14px 24px;">
-            <li>Return all company property (uniform, equipment, access cards) immediately.</li>
-            <li>Your final salary and any accrued leave entitlements will be calculated and paid through the normal payroll process.</li>
-            <li>Surrender your company identification without delay.</li>
-          </ul>
-          <p class="body-text">You have the right to appeal this decision in writing within seven (7) working days of receiving this letter. Appeals should be addressed to the Human Resources Office.</p>
+          <p class="body-text">We regret to inform you that your employment with STAP Security Ltd is terminated effective <strong>${data.issueDate}</strong> due to <strong>${data.reason ?? 'reasons stated by management'}</strong>. Please return all company property immediately.</p>
           <div class="signature-block">
-            <p>Yours sincerely,</p>
+            <p>Approved by:</p>
             <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
+            <div class="signature-line" style="margin-top:10px;"></div>
           </div>
           `,
           data,
         );
 
-      case 'APPOINTMENT_LETTER':
+      case 'REINSTATEMENT':
         return wrapLetter(
           `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId}</div>
-          <div class="subject">LETTER OF APPOINTMENT — SECURITY GUARD</div>
+          <div class="subject" style="text-align:center;">REINSTATEMENT LETTER</div>
+          <p class="body-text">To: <strong>${data.guardName}</strong></p>
+          <p class="body-text">Position: ${data.position}</p>
           <p class="body-text">Dear ${data.guardName},</p>
-          <p class="body-text">We are pleased to offer you employment with <strong>STAP Security Ltd</strong> on the following terms and conditions:</p>
-          <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
-            <tr><td style="padding:4px 8px; font-weight:bold; width:40%;">Position:</td><td style="padding:4px 8px;">Security Guard</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Start Date:</td><td style="padding:4px 8px;">${data.contractStart ?? data.issueDate}</td></tr>
-            <tr><td style="padding:4px 8px; font-weight:bold;">Monthly Salary:</td><td style="padding:4px 8px;">${data.salaryRate ?? 'As agreed'}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Reporting To:</td><td style="padding:4px 8px;">Operations Supervisor / Director</td></tr>
-            <tr><td style="padding:4px 8px; font-weight:bold;">Probation Period:</td><td style="padding:4px 8px;">Three (3) months from start date</td></tr>
-          </table>
-          <p class="body-text">A valid PSO Certificate issued by the Internal Security Organisation (ISO) is a condition of your employment. Failure to maintain a valid certificate may result in immediate suspension.</p>
-          <p class="body-text">Your employment is subject to the STAP Security Ltd Staff Handbook, which you will receive separately. Please sign and return a copy of this letter to acknowledge acceptance of these terms.</p>
-          <p class="body-text">We welcome you to the team and look forward to your contribution to STAP Security Ltd.</p>
+          <p class="body-text">Following a review, you are hereby reinstated to your position effective <strong>${data.issueDate}</strong>, we expect full compliance with company policies moving forward.</p>
           <div class="signature-block">
-            <p>Yours sincerely,</p>
+            <p>Approved by:</p>
             <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
-            <br/>
-            <p>I, <strong>${data.guardName}</strong>, accept the above terms of employment.</p>
-            <div class="signature-line"></div>
-            <p>Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: _______________</p>
-          </div>
-          `,
-          data,
-        );
-
-      case 'CONTRACT_EXTENSION':
-        return wrapLetter(
-          `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">CONTRACT EXTENSION NOTICE</div>
-          <p class="body-text">Dear ${data.guardName},</p>
-          <p class="body-text">We are pleased to inform you that your contract of employment with STAP Security Ltd has been extended on the following terms:</p>
-          <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
-            <tr><td style="padding:4px 8px; font-weight:bold; width:40%;">Original Contract Start:</td><td style="padding:4px 8px;">${data.contractStart ?? '—'}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Previous Contract End:</td><td style="padding:4px 8px;">${data.contractEnd ?? '—'}</td></tr>
-            <tr><td style="padding:4px 8px; font-weight:bold;">New Contract End Date:</td><td style="padding:4px 8px;"><strong>${data.newContractEnd ?? '—'}</strong></td></tr>
-          </table>
-          <p class="body-text">All other terms and conditions of your original employment contract remain unchanged and continue to apply during the extended period.</p>
-          <p class="body-text">Please sign and return a copy of this letter to acknowledge your acceptance of the extension.</p>
-          <div class="signature-block">
-            <p>Yours sincerely,</p>
-            <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
-          </div>
-          `,
-          data,
-        );
-
-      case 'CONFIRMATION_OF_EMPLOYMENT':
-        return wrapLetter(
-          `
-          <div class="salutation">To Whom It May Concern</div>
-          <div class="subject">CONFIRMATION OF EMPLOYMENT</div>
-          <p class="body-text">This is to confirm that <strong>${data.guardName}</strong> (NIN: ${data.nationalId}) is a bonafide employee of STAP Security Ltd.</p>
-          <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
-            <tr><td style="padding:4px 8px; font-weight:bold; width:40%;">Position:</td><td style="padding:4px 8px;">${data.position}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Employment Start Date:</td><td style="padding:4px 8px;">${data.contractStart ?? '—'}</td></tr>
-            <tr><td style="padding:4px 8px; font-weight:bold;">Monthly Salary:</td><td style="padding:4px 8px;">${data.salaryRate ?? 'Confidential'}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Employment Status:</td><td style="padding:4px 8px;">Active / Permanent</td></tr>
-          </table>
-          <p class="body-text">This letter is issued at the request of the employee for official purposes.</p>
-          <p class="body-text">For any verification, please contact our offices at the address above.</p>
-          <div class="signature-block">
-            <p>Yours faithfully,</p>
-            <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
-          </div>
-          `,
-          data,
-        );
-
-      case 'SALARY_REVIEW':
-        return wrapLetter(
-          `
-          <div class="salutation">To: <strong>${data.guardName}</strong> &nbsp;|&nbsp; NIN: ${data.nationalId} &nbsp;|&nbsp; Position: ${data.position}</div>
-          <div class="subject">SALARY REVIEW NOTIFICATION</div>
-          <p class="body-text">Dear ${data.guardName},</p>
-          <p class="body-text">Following the annual salary review, we are pleased to inform you of an adjustment to your monthly remuneration with effect from <strong>${data.issueDate}</strong>.</p>
-          <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
-            <tr><td style="padding:4px 8px; font-weight:bold; width:40%;">Previous Salary:</td><td style="padding:4px 8px;">${data.oldSalaryRate ?? '—'}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">New Salary:</td><td style="padding:4px 8px;"><strong>${data.newSalaryRate ?? data.salaryRate ?? '—'}</strong></td></tr>
-            <tr><td style="padding:4px 8px; font-weight:bold;">Change:</td><td style="padding:4px 8px;">${data.salaryChangePercent ?? '—'}</td></tr>
-            <tr style="background:#f8f9fa;"><td style="padding:4px 8px; font-weight:bold;">Effective Date:</td><td style="padding:4px 8px;">${data.issueDate}</td></tr>
-          </table>
-          <p class="body-text">All other terms and conditions of your employment remain unchanged. We thank you for your continued dedication to STAP Security Ltd.</p>
-          <div class="signature-block">
-            <p>Yours sincerely,</p>
-            <div class="signature-line"></div>
-            <p><strong>${data.directorName}</strong></p>
-            <p>For: STAP Security Ltd</p>
+            <div class="signature-line" style="margin-top:10px;"></div>
           </div>
           `,
           data,
@@ -586,7 +440,7 @@ class LetterService {
   // ── Structured letter PDF (for COMMITMENT_AGREEMENT and future structured types) ─
 
   private isStructuredType(letterType: string): boolean {
-    return letterType === 'COMMITMENT_AGREEMENT';
+    return ['COMMITMENT_AGREEMENT', 'SUSPENSION', 'CLEARANCE_FORM', 'SICK_LEAVE', 'RESIGNATION_ACCEPTANCE', 'EXPULSION'].includes(letterType);
   }
 
   private buildStructuredHtml(l: {
@@ -608,6 +462,7 @@ class LetterService {
       body:         l.body,
       directorName: 'Director, STAP Security Ltd',
       employeeName: l.subjectName,
+      skipSigBlock: ['COMMITMENT_AGREEMENT', 'SUSPENSION', 'CLEARANCE_FORM', 'SICK_LEAVE', 'RESIGNATION_ACCEPTANCE', 'EXPULSION'].includes(l.letterType),
     });
   }
 

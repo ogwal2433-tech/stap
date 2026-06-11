@@ -126,6 +126,10 @@ export function useDownloadIdCard() {
   });
 }
 
+export function useDownloadPaymentSlip() {
+  return useMutation({ mutationFn: () => guardsApi.downloadPaymentSlip() });
+}
+
 export function useTransferGuard(guardId: string) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();

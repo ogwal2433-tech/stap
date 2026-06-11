@@ -27,8 +27,6 @@ async function getBrowser(): Promise<Browser> {
 }
 
 // ── Logo loader ────────────────────────────────────────────────────────────────
-// Tries src/assets/logo.png first (transparent PNG), then falls back to
-// logo-removebg-preview.png at workspace root (4 levels up).
 
 function getLogoBase64(): string {
   const candidates: Array<[string, string]> = [
@@ -48,8 +46,27 @@ function getLogoBase64(): string {
   return '';
 }
 
+// ── Watermark loader ───────────────────────────────────────────────────────────
+// Uses image.png (copied to src/assets/watermark.png) as the page watermark.
+
+function getWatermarkBase64(): string {
+  const candidates: Array<[string, string]> = [
+    [path.resolve(__dirname, '../assets/watermark.png'), 'image/png'],
+    [path.resolve(__dirname, '../../../../image.png'),   'image/png'],
+  ];
+  for (const [p, mime] of candidates) {
+    try {
+      const buf = fs.readFileSync(p);
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      // try next candidate
+    }
+  }
+  return '';
+}
+
 // ── Header template ────────────────────────────────────────────────────────────
-// Full-width amber band (~80mm).
+// Full-width amber band (~53mm — 2/3 of original 80mm).
 // Left 1/3 : transparent logo PNG centred, amber shows through.
 // Right 2/3 : company name, tagline, phone / email / website.
 
@@ -57,13 +74,12 @@ function buildHeaderHtml(logoBase64: string): string {
   const logoContent = logoBase64
     ? `<img src="${logoBase64}"
             alt="STAP Security Ltd"
-            style="max-height:100%; max-width:100%; object-fit:contain;" />`
-    : `<span style="font-weight:900; font-size:16pt; color:#1B3A6B;">STAP</span>`;
+            style="width:100%; height:100%; object-fit:contain; display:block;" />`
+    : `<span style="font-weight:900; font-size:11pt; color:#1B3A6B;">STAP</span>`;
 
-  return `
-    <div style="
+  return `<div style="
       width:              210mm;
-      height:             80mm;
+      height:             53mm;
       background-color:   #f2aa20;
       display:            flex;
       flex-direction:     row;
@@ -74,57 +90,63 @@ function buildHeaderHtml(logoBase64: string): string {
       print-color-adjust: exact;
     ">
 
-      <!-- LEFT: Logo (1/3) -->
+      <!-- LEFT: Logo (1/4) — fills the full column box -->
       <div style="
-        width:            33.33%;
-        display:          flex;
-        align-items:      center;
-        justify-content:  center;
-        padding:          10px;
-        border-right:     1px solid rgba(255,255,255,0.5);
+        width:            25%;
+        overflow:         hidden;
         box-sizing:       border-box;
       ">
         ${logoContent}
       </div>
 
-      <!-- RIGHT: Company text (2/3) -->
+      <!-- RIGHT: Company text (3/4) — reverse-cone: each row smaller than the one above -->
       <div style="
-        width:            66.67%;
+        width:            75%;
         display:          flex;
         flex-direction:   column;
         justify-content:  center;
-        padding:          12px 20px;
-        gap:              4px;
+        align-items:      center;
+        padding:          8px 13px;
+        gap:              5px;
         box-sizing:       border-box;
       ">
+        <!-- Row 1 — largest -->
         <div style="
           font-family:    'Arial Black', Arial, sans-serif;
-          font-size:      22pt;
+          font-size:      32pt;
           font-weight:    900;
-          color:          #1B3A6B;
-          letter-spacing: 1px;
-          line-height:    1.1;
+          color:          #ffffff;
+          letter-spacing: 1.5px;
+          line-height:    1.05;
+          text-align:     center;
+          white-space:    nowrap;
         ">STAP SECURITY LTD</div>
 
-        <div style="
-          font-size:  11pt;
-          font-style: italic;
-          color:      #1B3A6B;
-          margin-top: 2px;
-        ">Excellence in Security</div>
-
-        <div style="
-          margin-top:  8px;
-          font-size:   9pt;
-          color:       #1B3A6B;
-          line-height: 1.6;
-        ">
-          &#128222; +256 700 467 551 &nbsp;|&nbsp; +256 787 417 404<br/>
-          &#9993;&nbsp; staps218@gmail.com
+        <!-- Row 2 — address + email -->
+        <div style="font-size:10pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="12" viewBox="0 0 24 30" fill="white" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.5 8 18 8 18S20 13.5 20 8c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z"/></svg><span style="vertical-align:middle;">P. O. Box 11518 Kampala Uganda</span>
+          &nbsp;&nbsp;&#9993;&nbsp;<span style="vertical-align:middle;">staps218@gmail.com</span>
         </div>
 
-        <div style="font-size:9pt; color:#1B3A6B;">
-          &#127760;&nbsp; www.stapsecurity.co.ug
+        <!-- Row 3 — social handles -->
+        <div style="font-size:8.5pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><span style="vertical-align:middle;">STAP security ltd</span>
+          &nbsp;&nbsp;
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><rect x="7" y="7" width="10" height="10" rx="3" ry="3" fill="#f2aa20"/><circle cx="12" cy="12" r="3" fill="white"/><circle cx="17" cy="7" r="1.5" fill="white"/></svg><span style="vertical-align:middle;">stapsecurity</span>
+          &nbsp;&nbsp;
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.264 5.634L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg><span style="vertical-align:middle;">@stapsecurity2</span>
+        </div>
+
+        <!-- Row 4 — phone / whatsapp -->
+        <div style="font-size:8pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.58.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.29 21 3 13.71 3 4.5c0-.55.45-1 1-1H7.5c.55 0 1 .45 1 1 0 1.25.2 2.46.57 3.58.11.35.03.74-.24 1.02L6.6 10.8z"/></svg><span style="vertical-align:middle;">0700467551</span>
+          &nbsp;&nbsp;
+          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.07L2 22l5.07-1.36C8.44 21.51 10.19 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm.01 18c-1.63 0-3.15-.45-4.46-1.23l-.32-.19-3.27.87.88-3.21-.21-.33A7.95 7.95 0 0 1 4 12c0-4.42 3.59-8 8.01-8 4.43 0 7.99 3.58 7.99 8s-3.57 8-7.99 8zm4.39-5.96c-.24-.12-1.41-.69-1.63-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.93-1.18-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.29-.74-1.77-.19-.46-.39-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.39 1.37.5.57.18 1.09.15 1.5.09.46-.07 1.41-.58 1.61-1.13.2-.56.2-1.03.14-1.13-.06-.1-.22-.16-.46-.28z"/></svg><span style="vertical-align:middle;">0787417404</span>
+        </div>
+
+        <!-- Row 5 — tagline -->
+        <div style="font-size:7.5pt;font-weight:700;font-style:italic;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
+          24/7 Protection Guarantee
         </div>
       </div>
 
@@ -138,9 +160,10 @@ function buildFooterHtml(): string {
     <div style="
       width: 210mm;
       padding: 3mm 18mm;
-      border-top: 1px solid #ccc;
+      border-top: 3px solid #f2aa20;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 8.5pt;
+      font-weight: 700;
       font-style: italic;
       color: #555;
       text-align: center;
@@ -153,30 +176,48 @@ function buildFooterHtml(): string {
 }
 
 // ── Content wrapper ────────────────────────────────────────────────────────────
-// No @page { margin: 0 } here — that was overriding Puppeteer's CDP margins.
-// Margin control is handled entirely by page.pdf({ margin }) below.
+// @page { margin: 0 } makes the content area = the full page, so
+// position:fixed;top:0 lands at the true page edge (not offset by a margin).
+// body { padding } then keeps letter text from overlapping the header/footer.
+// No CDP margin is passed to page.pdf(), so there is no @page vs CDP conflict.
 
-export function wrapContent(contentHtml: string): string {
+export function wrapContent(
+  contentHtml:   string,
+  headerHtml?:   string,
+  footerHtml?:   string,
+  paddingTop?:   string,
+  paddingBottom?: string,
+  paddingLeft?:  string,
+  paddingRight?: string,
+): string {
+  const pt = paddingTop    ?? '56mm';
+  const pb = paddingBottom ?? '14mm';
+  const pl = paddingLeft   ?? '18mm';
+  const pr = paddingRight  ?? '15mm';
+
+  const watermarkBase64 = getWatermarkBase64();
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <style>
-    @page { size: A4; }
+    @page { size: A4; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: Arial, Helvetica, sans-serif;
       font-size: 11pt;
       color: #1a1a1a;
       line-height: 1.7;
+      padding: ${pt} ${pr} ${pb} ${pl};
     }
-    .content { padding: 0; }
   </style>
 </head>
 <body>
-  <div class="content">
-    ${contentHtml}
-  </div>
+  ${headerHtml ? `<div style="position:fixed;top:0;left:0;width:100%;z-index:1;">${headerHtml}</div>` : ''}
+  ${footerHtml ? `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:1;">${footerHtml}</div>` : ''}
+  ${watermarkBase64 ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:130mm;z-index:0;pointer-events:none;opacity:0.07;"><img src="${watermarkBase64}" style="width:100%;height:auto;display:block;" /></div>` : ''}
+  <div style="position:relative;z-index:2;">${contentHtml}</div>
 </body>
 </html>`;
 }
@@ -187,9 +228,10 @@ export function wrapContent(contentHtml: string): string {
 // directly at /dev/letter-preview and refresh after editing pdfBase.ts.
 
 export function buildPreviewHtml(contentHtml: string): string {
-  const logoBase64 = getLogoBase64();
-  const header     = buildHeaderHtml(logoBase64);
-  const footer     = buildFooterHtml();
+  const logoBase64      = getLogoBase64();
+  const watermarkBase64 = getWatermarkBase64();
+  const header          = buildHeaderHtml(logoBase64);
+  const footer          = buildFooterHtml();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -206,22 +248,37 @@ export function buildPreviewHtml(contentHtml: string): string {
       box-shadow: 0 4px 24px rgba(0,0,0,.25);
       display: flex;
       flex-direction: column;
+      position: relative;
+      overflow: hidden;
     }
-    .page-header { flex-shrink: 0; }
+    .page-header { flex-shrink: 0; overflow: hidden; line-height: 0; font-size: 0; }
+    .page-watermark {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 130mm;
+      opacity: 0.07;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .page-watermark img { width: 100%; height: auto; display: block; }
     .page-body {
       flex: 1;
       padding: 3mm 15mm 4mm 18mm;
       font-size: 11pt;
       color: #1a1a1a;
       line-height: 1.7;
+      position: relative;
+      z-index: 2;
     }
-    .page-footer { flex-shrink: 0; }
+    .page-footer { flex-shrink: 0; position: relative; z-index: 2; }
     @media print { body { background: none; padding: 0; } .page { box-shadow: none; } }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="page-header">${header}</div>
+    ${watermarkBase64 ? `<div class="page-watermark"><img src="${watermarkBase64}" alt="" /></div>` : ''}
     <div class="page-body">${contentHtml}</div>
     <div class="page-footer">${footer}</div>
   </div>
@@ -250,23 +307,23 @@ export async function renderToPdf(
   opts?: PdfRenderOptions,
 ): Promise<Buffer> {
   const logoBase64 = getLogoBase64();
-  const html       = wrapContent(contentHtml);
-  const browser    = await getBrowser();
-  const page       = await browser.newPage();
+  const html       = wrapContent(
+    contentHtml,
+    buildHeaderHtml(logoBase64),
+    buildFooterHtml(),
+    opts?.marginTop,    // becomes body padding-top
+    opts?.marginBottom,
+    opts?.marginLeft,
+    opts?.marginRight,
+  );
+  const browser = await getBrowser();
+  const page    = await browser.newPage();
   try {
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      displayHeaderFooter: true,
-      headerTemplate: buildHeaderHtml(logoBase64),
-      footerTemplate: buildFooterHtml(),
-      margin: {
-        top:    opts?.marginTop    ?? '83mm',   // 80mm header + 3mm gap
-        bottom: opts?.marginBottom ?? '14mm',
-        left:   opts?.marginLeft   ?? '18mm',
-        right:  opts?.marginRight  ?? '15mm',
-      },
+      // Margins are driven by @page CSS inside wrapContent — no CDP margin here.
     });
     return Buffer.from(pdf);
   } finally {

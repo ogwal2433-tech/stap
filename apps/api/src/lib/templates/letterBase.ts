@@ -4,6 +4,7 @@ export interface LetterHtmlOptions {
   body:         string;
   directorName: string;
   employeeName: string;
+  skipSigBlock?: boolean;
 }
 
 /**
@@ -42,7 +43,7 @@ export function buildLetterHtml(opts: LetterHtmlOptions): string {
   <div class="letter-body">
     ${opts.body}
   </div>
-  <div class="sig-block">
+  ${opts.skipSigBlock ? '' : `<div class="sig-block">
     <div class="sig-col">
       <div class="sig-label">Employee</div>
       <div class="sig-line"></div>
@@ -55,5 +56,5 @@ export function buildLetterHtml(opts: LetterHtmlOptions): string {
       <div><strong>${opts.directorName}</strong></div>
       <div class="sig-label">Director &nbsp;&nbsp; Date: _______________</div>
     </div>
-  </div>`;
+  </div>`}`;
 }
