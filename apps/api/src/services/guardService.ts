@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import prisma from '../db/prisma';
-import { renderRawPdf } from '../lib/pdfBase';
+import { generateIdCardPdf } from '../lib/idCard/generateIdCardPdf';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
@@ -1268,101 +1268,33 @@ class GuardService {
   // ── Generate ID Card ───────────────────────────────────────────────────────
 
   async generateIdCard(guardId: string): Promise<Buffer> {
-    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
+    const guard = await prisma.guard.findUnique({
+      where:  { id: guardId },
+      select: {
+        systemId:  true,
+        firstName: true,
+        lastName:  true,
+        rank:      true,
+        photoUrl:  true,
+      },
+    });
     if (!guard) throw new NotFoundError('Guard not found');
 
-    const [companyName, companyPhone, directorName] = await Promise.all([
-      settingsService.get('company_name'),
-      settingsService.get('company_phone'),
-      settingsService.get('director_name'),
-    ]);
+    const photoPath = guard.photoUrl
+      ? path.join(process.cwd(), 'public', guard.photoUrl)
+      : '';
 
-    const initialsHtml = `<div style="width:70px;height:70px;border-radius:50%;background:#1B3A6B;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;font-weight:bold;">${guard.firstName[0]}${guard.lastName[0]}</div>`;
-    let photoHtml: string;
-    if (guard.photoUrl) {
-      const absPath = path.join(process.cwd(), 'public', guard.photoUrl);
-      try {
-        const data = fs.readFileSync(absPath);
-        const ext = path.extname(guard.photoUrl).toLowerCase().slice(1) || 'jpeg';
-        const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-        photoHtml = `<img src="data:${mime};base64,${data.toString('base64')}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid #1B3A6B;">`;
-      } catch {
-        photoHtml = initialsHtml;
-      }
-    } else {
-      photoHtml = initialsHtml;
-    }
-
-    const maskedNid = guard.nationalId
-      ? '****' + guard.nationalId.slice(-4)
-      : 'PENDING';
-
-    const contractTypeBg    = guard.contractType === 'TEMPORARY' ? '#FEF9E7' : '#D5F5E3';
-    const contractTypeColor = guard.contractType === 'TEMPORARY' ? '#E8701A' : '#1E8449';
-
-    const expiryText = guard.contractEnd
-      ? new Date(guard.contractEnd).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-      : 'Ongoing';
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { width:321px; height:204px; font-family:Arial,sans-serif; overflow:hidden; }
-    .card { width:321px; height:204px; border-radius:8px; overflow:hidden; border:1px solid #1B3A6B; }
-    .header { background:#1B3A6B; color:white; padding:6px 10px; display:flex; align-items:center; gap:8px; }
-    .header .company { font-size:11px; font-weight:bold; line-height:1.3; }
-    .header .tagline { font-size:8px; opacity:0.8; }
-    .body { display:flex; padding:8px 10px; gap:10px; background:white; }
-    .photo { flex-shrink:0; }
-    .info { flex:1; }
-    .name { font-size:13px; font-weight:bold; color:#1B3A6B; line-height:1.2; }
-    .rank { font-size:9px; color:#0F7B6C; text-transform:uppercase; letter-spacing:0.5px; margin:2px 0; }
-    .field { font-size:8px; color:#4A5568; margin-top:2px; }
-    .field span { font-weight:bold; color:#1A1A1A; }
-    .footer { background:#F2F4F7; padding:4px 10px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #D0D5DD; }
-    .footer .phone { font-size:8px; color:#4A5568; }
-    .footer .type { font-size:8px; font-weight:bold; padding:1px 6px; border-radius:3px; background:${contractTypeBg}; color:${contractTypeColor}; }
-    .footer .expiry { font-size:7px; color:#4A5568; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="header">
-      <div>
-        <div class="company">${companyName ?? 'STAP Security Ltd'}</div>
-        <div class="tagline">24/7 Protection Guarantee</div>
-      </div>
-      <div style="margin-left:auto;font-size:9px;opacity:0.7;">GUARD ID CARD</div>
-    </div>
-    <div class="body">
-      <div class="photo">${photoHtml}</div>
-      <div class="info">
-        <div class="name">${guard.firstName} ${guard.lastName}</div>
-        <div class="rank">${guard.rank.replace(/_/g, ' ')}</div>
-        <div class="field">ID No: <span style="font-family:monospace;letter-spacing:0.5px;font-weight:bold;color:#1B3A6B;">${guard.systemId ?? 'PENDING'}</span></div>
-        <div class="field">NIN: <span>${maskedNid}</span></div>
-        <div class="field">Emergency: <span>${guard.nextOfKinPhone ?? '—'}</span></div>
-        ${directorName ? `<div class="field">Director: <span>${directorName}</span></div>` : ''}
-      </div>
-    </div>
-    <div class="footer">
-      <div class="phone">${companyPhone ?? ''}</div>
-      <div class="type">${guard.contractType}</div>
-      <div class="expiry">Exp: ${expiryText}</div>
-    </div>
-  </div>
-</body>
-</html>`;
+    const pdfBuffer = await generateIdCardPdf({
+      systemId: guard.systemId ?? `SSLG${guardId.slice(0, 6).toUpperCase()}`,
+      fullName: `${guard.firstName} ${guard.lastName}`,
+      position: guard.rank?.replace(/_/g, ' ') ?? 'Security Guard',
+      photoPath,
+    });
 
     const dir = path.join(process.cwd(), 'public', 'uploads', 'id-cards');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, `${guardId}.pdf`);
+    fs.writeFileSync(path.join(dir, `${guardId}.pdf`), pdfBuffer);
 
-    // HTML is self-contained (inline base64 + inline CSS) — 'load' is sufficient.
-    const pdfBuffer = await renderRawPdf(html, { width: '321px', height: '204px', printBackground: true });
-    fs.writeFileSync(filePath, pdfBuffer);
     return pdfBuffer;
   }
 }
