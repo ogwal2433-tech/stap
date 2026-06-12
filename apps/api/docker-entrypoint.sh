@@ -21,5 +21,9 @@ cd /app
 node apps/api/dist/db/initSettings.js
 echo "✅ Settings initialised"
 
+echo "📄  Initialising default letter templates..."
+node apps/api/dist/db/initTemplates.js
+echo "✅ Templates initialised"
+
 echo "🚀 Starting API server..."
 exec node apps/api/dist/index.js
