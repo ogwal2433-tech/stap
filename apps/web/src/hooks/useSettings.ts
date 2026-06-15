@@ -141,6 +141,20 @@ export function useReorderRanks() {
   });
 }
 
+export function useBulkUpdateRankSalary() {
+  return useMutation({
+    mutationFn: ({
+      id,
+      newSalary,
+      previousSalary,
+    }: {
+      id: string;
+      newSalary: number;
+      previousSalary?: number;
+    }) => settingsApi.bulkUpdateRankSalary(id, newSalary, previousSalary),
+  });
+}
+
 // ── Deduction Type hooks ───────────────────────────────────────────────────────
 
 export function useDeductionTypes(activeOnly = true) {

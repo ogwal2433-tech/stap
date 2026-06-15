@@ -321,6 +321,24 @@ router.patch(
   }),
 );
 
+router.post(
+  '/ranks/:id/bulk-update-salary',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req, res) => {
+    const { newSalary, previousSalary } = req.body as { newSalary: number; previousSalary?: number };
+    if (!newSalary || typeof newSalary !== 'number' || newSalary <= 0) {
+      throw new AppError('newSalary must be a positive number', 400);
+    }
+    const data = await rankService.bulkUpdateGuardSalaryByRank(
+      req.params.id,
+      newSalary,
+      req.user!.userId,
+      typeof previousSalary === 'number' ? previousSalary : undefined,
+    );
+    res.json({ success: true, data });
+  }),
+);
+
 router.patch(
   '/ranks/:id/deactivate',
   requireRole(ROLES.DIRECTOR),

@@ -220,6 +220,13 @@ export default function ContractFormModal({
 
             {/* Guard Rates table */}
             <div className="col-12">
+              <Alert variant="warning" className="py-2 mb-3">
+                <small>
+                  <strong>⚠️ Billing Note:</strong> Guards have varying salaries — totals shown are
+                  estimates and may not match actual payroll figures. Rates can be adjusted per
+                  contract as needed.
+                </small>
+              </Alert>
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <Form.Label className="small fw-semibold mb-0">Guard Rates (optional)</Form.Label>
                 <Button

@@ -116,6 +116,19 @@ export const settingsApi = {
       .then((r) => r.data.data);
   },
 
+  bulkUpdateRankSalary(
+    id: string,
+    newSalary: number,
+    previousSalary?: number,
+  ): Promise<{ updatedCount: number }> {
+    return api
+      .post<{ success: boolean; data: { updatedCount: number } }>(
+        `/settings/ranks/${id}/bulk-update-salary`,
+        { newSalary, previousSalary },
+      )
+      .then((r) => r.data.data);
+  },
+
   // ── Deduction Types ──────────────────────────────────────────────────────────
 
   getDeductionTypes(activeOnly = true): Promise<DeductionTypeResponse[]> {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
-import { useUpdateRank } from '../../hooks/useSettings';
+import { useUpdateRank, useBulkUpdateRankSalary } from '../../hooks/useSettings';
 import type { GuardRankResponse } from '@stap/shared';
 
 interface Props {
@@ -12,12 +12,16 @@ interface Props {
 
 export default function EditRankModal({ show, onHide, rank }: Props) {
   const { showToast } = useToast();
-  const { mutate: updateRank, isPending } = useUpdateRank();
+  const { mutateAsync: updateRank, isPending: isSaving } = useUpdateRank();
+  const { mutateAsync: bulkUpdateSalary, isPending: isBulking } = useBulkUpdateRankSalary();
 
   const [name, setName] = useState('');
   const [defaultSalary, setDefaultSalary] = useState('');
   const [displayOrder, setDisplayOrder] = useState(0);
   const [nameError, setNameError] = useState('');
+
+  // original salary captured when modal opens — used for filtering guards with old default
+  const originalSalaryRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (rank && show) {
@@ -25,32 +29,66 @@ export default function EditRankModal({ show, onHide, rank }: Props) {
       setDefaultSalary(rank.defaultSalary != null ? String(rank.defaultSalary) : '');
       setDisplayOrder(rank.displayOrder);
       setNameError('');
+      originalSalaryRef.current = rank.defaultSalary ?? null;
     }
   }, [rank, show]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!rank) return;
     setNameError('');
-    const salary = parseInt(defaultSalary.replace(/,/g, ''), 10);
-    updateRank(
-      { id: rank.id, data: { name: name.trim(), defaultSalary: defaultSalary ? salary : null, displayOrder } },
-      {
-        onSuccess: () => {
-          showToast('Rank updated successfully', 'success');
-          onHide();
-        },
-        onError: (err: any) => {
-          const msg: string = err?.response?.data?.error ?? err.message ?? 'Failed to update rank';
-          if (err?.response?.status === 409) {
-            setNameError('A rank with this name already exists.');
-          } else {
-            showToast(msg, 'danger');
-          }
-        },
-      },
-    );
+
+    const salary = defaultSalary ? parseInt(defaultSalary.replace(/,/g, ''), 10) : null;
+    const updatePayload = { name: name.trim(), defaultSalary: salary, displayOrder };
+
+    const originalSalary = originalSalaryRef.current;
+    const salaryChanged = salary !== originalSalary;
+    const newSalaryIsSet = salary !== null && salary > 0;
+
+    try {
+      if (salaryChanged && newSalaryIsSet) {
+        const confirmed = window.confirm(
+          `The default salary for ${name.trim()} has changed to UGX ${salary.toLocaleString()}.\n\n` +
+          `Do you want to update the salary for all existing ACTIVE guards currently on this rank ` +
+          `whose salary has not been manually customised?\n\n` +
+          `Click OK to update existing guards.\n` +
+          `Click Cancel to apply to new assignments only.`,
+        );
+
+        await updateRank({ id: rank.id, data: updatePayload });
+
+        if (confirmed) {
+          const result = await bulkUpdateSalary({
+            id:             rank.id,
+            newSalary:      salary,
+            previousSalary: originalSalary ?? undefined,
+          });
+          showToast(
+            `Rank updated. ${result.updatedCount} guard(s) salary updated to UGX ${salary.toLocaleString()}.`,
+            'success',
+          );
+        } else {
+          showToast(
+            'Rank salary updated. Existing guard salaries unchanged — applies to new assignments only.',
+            'success',
+          );
+        }
+      } else {
+        await updateRank({ id: rank.id, data: updatePayload });
+        showToast('Rank updated successfully', 'success');
+      }
+      onHide();
+    } catch (err: any) {
+      const msg: string = err?.response?.data?.error ?? err.message ?? 'Failed to update rank';
+      if (err?.response?.status === 409) {
+        setNameError('A rank with this name already exists.');
+      } else {
+        showToast(msg, 'danger');
+      }
+    }
   }
+
+  const isPending = isSaving || isBulking;
 
   return (
     <Modal show={show} onHide={onHide} size="sm" centered>
@@ -83,7 +121,8 @@ export default function EditRankModal({ show, onHide, rank }: Props) {
               placeholder="e.g. 450000"
             />
             <Form.Text className="text-muted">
-              Auto-filled in the guard form when this rank is selected.
+              Auto-filled in the guard form when this rank is selected. Changing this will prompt
+              you to update existing guards on this rank.
             </Form.Text>
           </Form.Group>
           <Form.Group>

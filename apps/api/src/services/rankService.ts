@@ -170,6 +170,43 @@ class RankService {
     );
     return this.listRanks();
   }
+
+  async bulkUpdateGuardSalaryByRank(
+    rankId:       string,
+    newSalary:    number,
+    updatedBy:    string,
+    prevSalary?:  number,
+  ): Promise<{ updatedCount: number }> {
+    const rank = await prisma.guardRank.findUnique({ where: { id: rankId } });
+    if (!rank) throw new NotFoundError('Rank not found');
+
+    const salaryFilter = prevSalary !== undefined ? prevSalary : (rank.defaultSalary ?? undefined);
+
+    const result = await prisma.guard.updateMany({
+      where: {
+        rank:             rank.name,
+        employmentStatus: 'ACTIVE',
+        ...(salaryFilter !== undefined ? { salaryRate: salaryFilter } : {}),
+      },
+      data: { salaryRate: newSalary },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action:   'RANK_SALARY_BULK_UPDATE',
+        entity:   'guard',
+        entityId: rankId,
+        newValue: {
+          rankName:      rank.name,
+          newSalary,
+          guardsUpdated: result.count,
+          updatedBy,
+        },
+      },
+    });
+
+    return { updatedCount: result.count };
+  }
 }
 
 export const rankService = new RankService();

@@ -16,6 +16,10 @@ import type { RequisitionResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function statusBadge(status: string) {
   const map: Record<string, { bg: string; text?: string }> = {
     SUBMITTED: { bg: 'warning', text: 'dark' },
@@ -62,27 +66,46 @@ function MyRequisitionsTab() {
           <thead className="table-light">
             <tr>
               <th>Date</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th className="text-end">Est. Total</th>
-              <th>Urgency</th>
-              <th>Status</th>
+              <th>Particulars</th>
+              <th className="text-end">Requisition Amount</th>
+              <th>HR Approves</th>
+              <th>Director Approves</th>
+              <th>Assigned To</th>
+              <th>Progress</th>
+              <th>Remarks</th>
+              <th>Account Details</th>
+              <th>Account Name</th>
+              <th>Bank Name</th>
               <th>Actions</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {reqs.length === 0 ? (
-              <tr><td colSpan={8} className="text-center text-muted py-4">No requisitions yet</td></tr>
+              <tr><td colSpan={13} className="text-center text-muted py-4">No requisitions yet</td></tr>
             ) : reqs.map((r) => (
               <tr key={r.id}>
-                <td>{new Date(r.createdAt).toLocaleDateString('en-GB')}</td>
-                <td><Badge bg="light" text="dark" className="border">{r.category}</Badge></td>
-                <td className="text-truncate" style={{ maxWidth: 200 }}>{r.description}</td>
-                <td>{r.quantity}</td>
-                <td className="text-end">UGX {r.estimatedTotal.toLocaleString()}</td>
-                <td>{urgencyBadge(r.urgency)}</td>
-                <td>{statusBadge(r.status)}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.createdAt)}</td>
+                <td className="text-truncate" style={{ maxWidth: 150 }}>{r.particulars ?? '—'}</td>
+                <td className="text-end" style={{ whiteSpace: 'nowrap' }}>UGX {r.estimatedTotal.toLocaleString()}</td>
+                <td>
+                  {r.hrApprovedAt
+                    ? <Badge bg="success">✅ {formatDate(r.hrApprovedAt)}</Badge>
+                    : <Badge bg="warning" text="dark">Pending</Badge>
+                  }
+                </td>
+                <td>
+                  {r.dirApprovedAt
+                    ? <Badge bg="success">✅ {formatDate(r.dirApprovedAt)}</Badge>
+                    : <Badge bg="warning" text="dark">Pending</Badge>
+                  }
+                </td>
+                <td>{r.assignedToName ?? '—'}</td>
+                <td className="text-truncate" style={{ maxWidth: 120 }}>{r.progress ?? '—'}</td>
+                <td className="text-truncate" style={{ maxWidth: 120 }}>{r.remarks ?? '—'}</td>
+                <td className="text-truncate" style={{ maxWidth: 120 }}>{r.accountDetails ?? '—'}</td>
+                <td>{r.accountName ?? '—'}</td>
+                <td>{r.bankName ?? '—'}</td>
                 <td>
                   {r.status === 'APPROVED' && r.purchaseOrders.length === 0 && (
                     <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}>
@@ -92,6 +115,7 @@ function MyRequisitionsTab() {
                     </RoleGuard>
                   )}
                 </td>
+                <td>{statusBadge(r.status)}</td>
               </tr>
             ))}
           </tbody>
