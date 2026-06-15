@@ -47,14 +47,16 @@ export type ReorderDeductionTypesInput = z.infer<typeof ReorderDeductionTypesSch
 // ── Guard Rank schemas ─────────────────────────────────────────────────────────
 
 export const CreateGuardRankSchema = z.object({
-  name:         z.string().min(1).max(100),
-  displayOrder: z.coerce.number().int().min(0).default(0),
+  name:          z.string().min(1).max(100),
+  defaultSalary: z.coerce.number().int().positive().optional().nullable(),
+  displayOrder:  z.coerce.number().int().min(0).default(0),
 });
 
 export const UpdateGuardRankSchema = z.object({
-  name:         z.string().min(1).max(100).optional(),
-  displayOrder: z.coerce.number().int().min(0).optional(),
-  isActive:     z.boolean().optional(),
+  name:          z.string().min(1).max(100).optional(),
+  defaultSalary: z.coerce.number().int().positive().optional().nullable(),
+  displayOrder:  z.coerce.number().int().min(0).optional(),
+  isActive:      z.boolean().optional(),
 });
 
 export const ReorderGuardRanksSchema = z.object({
@@ -64,11 +66,12 @@ export const ReorderGuardRanksSchema = z.object({
 // ── Guard Rank response type ───────────────────────────────────────────────────
 
 export interface GuardRankResponse {
-  id:           string;
-  name:         string;
-  displayOrder: number;
-  isActive:     boolean;
-  createdAt:    string;
+  id:            string;
+  name:          string;
+  defaultSalary: number | null;
+  displayOrder:  number;
+  isActive:      boolean;
+  createdAt:     string;
 }
 
 // ── Inferred input types ───────────────────────────────────────────────────────

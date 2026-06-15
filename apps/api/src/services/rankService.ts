@@ -10,11 +10,12 @@ import type {
 
 function fmt(r: any): GuardRankResponse {
   return {
-    id:           r.id,
-    name:         r.name,
-    displayOrder: r.displayOrder,
-    isActive:     r.isActive,
-    createdAt:    r.createdAt.toISOString(),
+    id:            r.id,
+    name:          r.name,
+    defaultSalary: r.defaultSalary ?? null,
+    displayOrder:  r.displayOrder,
+    isActive:      r.isActive,
+    createdAt:     r.createdAt.toISOString(),
   };
 }
 
@@ -39,8 +40,9 @@ class RankService {
 
     const rank = await prisma.guardRank.create({
       data: {
-        name:         data.name,
-        displayOrder: data.displayOrder ?? 0,
+        name:          data.name,
+        defaultSalary: data.defaultSalary ?? null,
+        displayOrder:  data.displayOrder ?? 0,
       },
     });
 

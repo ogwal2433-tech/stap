@@ -83,6 +83,7 @@ enum ComplaintSeverity {
 enum ComplaintStatus {
   OPEN
   IN_PROGRESS
+  UNDER_INVESTIGATION
   RESOLVED
 }
 
@@ -125,6 +126,8 @@ model User {
   deployments         Deployment[]         @relation("DeploymentSupervisor")
   checkins            SupervisorCheckin[]  @relation("CheckinSupervisor")
   assignedComplaints  ClientComplaint[]    @relation("ComplaintAssignee")
+  receivedComplaints  ClientComplaint[]    @relation("ComplaintReceiver")
+  assignedRequisitions Requisition[]       @relation("RequisitionAssignee")
   auditLogs           AuditLog[]
   reportedIncidents   Incident[]           @relation("IncidentReporter")
   raisedRequisitions  Requisition[]        @relation("RaisedRequisitions")
@@ -382,11 +385,12 @@ model Client {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  clientUser User?             @relation("ClientUser", fields: [clientUserId], references: [id])
-  sites      Site[]
-  contracts  Contract[]
-  complaints ClientComplaint[]
-  invoices   Invoice[]
+  clientUser      User?             @relation("ClientUser", fields: [clientUserId], references: [id])
+  sites           Site[]
+  contracts       Contract[]
+  complaints      ClientComplaint[]
+  invoices        Invoice[]
+  serviceRequests ServiceRequest[]
 }
 
 model Site {
@@ -426,6 +430,7 @@ model Site {
   transfersFrom     GuardTransfer[]     @relation("TransferFromSite")
   transfersTo       GuardTransfer[]     @relation("TransferToSite")
   equipmentItems    SiteEquipmentItem[]
+  serviceRequests   ServiceRequest[]
 }
 
 model SiteEquipmentItem {
@@ -472,29 +477,33 @@ model Contract {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  invoices Invoice[]
+  client     Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  invoices   Invoice[]
+  guardRates ContractGuardRate[]
 }
 
 model ClientComplaint {
-  id          String            @id @default(cuid())
-  clientId    String
-  siteId      String?
-  subject     String
-  category    ComplaintCategory
-  description String
-  severity    ComplaintSeverity
-  assignedTo  String?
-  status      ComplaintStatus   @default(OPEN)
-  resolvedAt  DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  clientId     String
+  siteId       String?
+  subject      String
+  category     ComplaintCategory
+  description  String
+  severity     ComplaintSeverity
+  receivedById String?
+  assignedTo   String?
+  assignedAt   DateTime?
+  status       ComplaintStatus   @default(OPEN)
+  resolvedAt   DateTime?
+  resolvedBy   String?
+  resolution   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   site     Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  receiver User?  @relation("ComplaintReceiver", fields: [receivedById], references: [id], onDelete: SetNull)
   assignee User?  @relation("ComplaintAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
-
-  resolution String?
 }
 
 model Deployment {
@@ -629,7 +638,8 @@ model Invoice {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  payments Payment[]
+  payments  Payment[]
+  lineItems InvoiceLineItem[]
 }
 
 model Payment {
@@ -716,12 +726,25 @@ model Requisition {
   raisedBy          String
   raisedByUser      User      @relation("RaisedRequisitions", fields: [raisedBy], references: [id])
   category          String
+  categories        String[]  @default([])
   description       String
+  particulars       String?   @db.Text
   quantity          Int       @default(1)
   estimatedUnitCost Int
   estimatedTotal    Int
   urgency           String    @default("NORMAL")
   justification     String?
+  progress          String?
+  remarks           String?
+  accountDetails    String?
+  accountName       String?
+  bankName          String?
+  assignedToId      String?
+  assignedToUser    User?     @relation("RequisitionAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  hrApprovedAt      DateTime?
+  hrApprovedBy      String?
+  dirApprovedAt     DateTime?
+  dirApprovedBy     String?
   status            String    @default("DRAFT")
   approvedBy        String?
   approvedAt        DateTime?
@@ -997,12 +1020,57 @@ model SystemSetting {
 }
 
 model GuardRank {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  defaultSalary Int?
+  displayOrder  Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── New UAT Models ────────────────────────────────────────────────────────────
+
+model ContractGuardRate {
   id           String   @id @default(cuid())
-  name         String   @unique
-  displayOrder Int      @default(0)
-  isActive     Boolean  @default(true)
+  contractId   String
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  guardType    String   @default("UNARMED") // UNARMED | ARMED | SUPERVISOR | OTHER
+  guardsCount  Int      @default(1)
+  ratePerGuard Int
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model InvoiceLineItem {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description  String
+  guardType    String?
+  guardsCount  Int      @default(1)
+  ratePerGuard Int
+  amount       Int
+  createdAt    DateTime @default(now())
+}
+
+model ServiceRequest {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  siteId      String?
+  site        Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  type        String    @default("OTHER") // SITE_ADDITION | GUARD_CHANGE | BILLING_QUERY | SCHEDULE_CHANGE | OTHER
+  subject     String
+  description String
+  status      String    @default("PENDING") // PENDING | IN_PROGRESS | RESOLVED | CANCELLED
+  priority    String    @default("NORMAL")  // LOW | NORMAL | HIGH | URGENT
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  resolution  String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model DeductionType {

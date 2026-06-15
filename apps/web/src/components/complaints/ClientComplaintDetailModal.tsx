@@ -35,10 +35,10 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
           </Badge>
           <Badge
             bg={COMPLAINT_STATUS_COLORS[complaint.status]}
-            text={complaint.status === 'IN_PROGRESS' ? 'dark' : undefined}
+            text={['IN_PROGRESS', 'UNDER_INVESTIGATION'].includes(complaint.status) ? 'dark' : undefined}
             style={{ fontSize: '0.82rem' }}
           >
-            {complaint.status.replace('_', ' ')}
+            {complaint.status.replace(/_/g, ' ')}
           </Badge>
           <span className="text-muted small ms-auto">
             Logged {formatDate(complaint.createdAt)}
@@ -106,10 +106,21 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
               {complaint.daysOpen} day{complaint.daysOpen !== 1 ? 's' : ''}
             </div>
           </Col>
+          {complaint.receivedBy && (
+            <Col md={6}>
+              <div className="text-muted small">Received By</div>
+              <div className="fw-bold">{complaint.receivedBy.name}</div>
+            </Col>
+          )}
           {complaint.assignedTo && (
             <Col md={6}>
               <div className="text-muted small">Assigned To</div>
-              <div className="fw-bold">{complaint.assignedTo.name}</div>
+              <div className="fw-bold">
+                {complaint.assignedTo.name}
+                {complaint.assignedAt && (
+                  <span className="text-muted small ms-2">on {formatDate(complaint.assignedAt)}</span>
+                )}
+              </div>
             </Col>
           )}
         </Row>
@@ -150,6 +161,7 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
             {complaint.resolvedAt && (
               <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '8px' }}>
                 Resolved on {formatDate(complaint.resolvedAt)}
+                {complaint.resolvedBy && ` by ${complaint.resolvedBy}`}
               </div>
             )}
           </div>

@@ -13,9 +13,11 @@ export const CreateComplaintSchema = z.object({
 export type CreateComplaintInput = z.infer<typeof CreateComplaintSchema>;
 
 export const UpdateComplaintSchema = z.object({
-  assignedTo: z.string().min(1).optional(),
-  status:     z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
-  resolution: z.string().min(10).optional(),
+  receivedById: z.string().min(1).optional(),
+  assignedTo:   z.string().min(1).optional(),
+  status:       z.enum(['OPEN', 'IN_PROGRESS', 'UNDER_INVESTIGATION', 'RESOLVED']).optional(),
+  resolution:   z.string().min(10).optional(),
+  resolvedBy:   z.string().optional(),
 }).refine(
   data => data.status !== 'RESOLVED' || !!data.resolution,
   { message: 'Resolution notes required when resolving a complaint' },
@@ -25,21 +27,24 @@ export type UpdateComplaintInput = z.infer<typeof UpdateComplaintSchema>;
 // ── Interfaces ─────────────────────────────────────────────────────────────────
 
 export interface ComplaintResponse {
-  id:          string;
-  clientId:    string;
-  client:      { id: string; clientName: string; systemId: string | null };
-  site:        { id: string; siteName: string } | null;
-  subject:     string;
-  category:    string;
-  description: string;
-  severity:    'LOW' | 'MEDIUM' | 'HIGH';
-  status:      'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
-  assignedTo:  { id: string; name: string } | null;
-  resolution:  string | null;
-  resolvedAt:  string | null;
-  createdAt:   string;
-  updatedAt:   string;
-  daysOpen:    number;
+  id:           string;
+  clientId:     string;
+  client:       { id: string; clientName: string; systemId: string | null };
+  site:         { id: string; siteName: string } | null;
+  subject:      string;
+  category:     string;
+  description:  string;
+  severity:     'LOW' | 'MEDIUM' | 'HIGH';
+  status:       'OPEN' | 'IN_PROGRESS' | 'UNDER_INVESTIGATION' | 'RESOLVED';
+  receivedBy:   { id: string; name: string } | null;
+  assignedTo:   { id: string; name: string } | null;
+  assignedAt:   string | null;
+  resolution:   string | null;
+  resolvedAt:   string | null;
+  resolvedBy:   string | null;
+  createdAt:    string;
+  updatedAt:    string;
+  daysOpen:     number;
 }
 
 // ── Badge colour helpers ────────────────────────────────────────────────────────
@@ -51,9 +56,10 @@ export const COMPLAINT_SEVERITY_COLORS = {
 } as const;
 
 export const COMPLAINT_STATUS_COLORS = {
-  OPEN:        'danger',
-  IN_PROGRESS: 'warning',
-  RESOLVED:    'success',
+  OPEN:                'danger',
+  IN_PROGRESS:         'warning',
+  UNDER_INVESTIGATION: 'info',
+  RESOLVED:            'success',
 } as const;
 
 export interface ComplaintDashboard {

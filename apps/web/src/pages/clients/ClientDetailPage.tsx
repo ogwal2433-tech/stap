@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Card, Col,
-  Row, Spinner, Tab, Table, Tabs,
+  Form, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useClient, useClientSites, useArchiveClient, useDeleteSite, useSiteIncidents } from '../../hooks/useClients';
 import { useClientContracts, useDeleteContract } from '../../hooks/useContracts';
 import { useClientComplaints } from '../../hooks/useComplaints';
+import { useClientServiceRequests, useCreateServiceRequest, useUpdateServiceRequest } from '../../hooks/useServiceRequests';
 import RoleGuard from '../../components/RoleGuard';
 import SiteFormModal from '../../components/clients/SiteFormModal';
 import IncidentFormModal from '../../components/clients/IncidentFormModal';
@@ -15,7 +16,7 @@ import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse, type ServiceRequestResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
@@ -66,6 +67,9 @@ export default function ClientDetailPage() {
   const { data: sites, refetch: refetchSites } = useClientSites(id ?? '');
   const { data: contracts, refetch: refetchContracts } = useClientContracts(id ?? '');
   const { data: complaintsData, isLoading: complaintsLoading, refetch: refetchComplaints } = useClientComplaints(id ?? '');
+  const { data: srData, isLoading: srLoading, refetch: refetchSR } = useClientServiceRequests(id ?? '');
+  const createSR = useCreateServiceRequest(id ?? '');
+  const updateSR = useUpdateServiceRequest(id ?? '');
   const archiveClient = useArchiveClient();
   const deleteSite = useDeleteSite();
   const deleteContract = useDeleteContract(id ?? '');
@@ -79,6 +83,12 @@ export default function ClientDetailPage() {
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintResponse | null>(null);
   const [showComplaintDetail, setShowComplaintDetail] = useState(false);
   const [complaintFilter, setComplaintFilter] = useState<string>('ALL');
+  const [showSRForm, setShowSRForm] = useState(false);
+  const [srSubject, setSrSubject] = useState('');
+  const [srDescription, setSrDescription] = useState('');
+  const [srType, setSrType] = useState('OTHER');
+  const [srPriority, setSrPriority] = useState('NORMAL');
+  const [selectedSR, setSelectedSR] = useState<ServiceRequestResponse | null>(null);
 
   const complaints = complaintsData?.data ?? [];
   const filteredComplaints = complaints.filter(c => complaintFilter === 'ALL' || c.status === complaintFilter);
@@ -721,6 +731,144 @@ export default function ClientDetailPage() {
                 })}
               </tbody>
             </Table>
+          )}
+        </Tab>
+
+        {/* Tab 5 — Service Requests */}
+        <Tab eventKey="service-requests" title={`Service Requests (${srLoading ? '…' : (srData?.data?.length ?? 0)})`}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="text-muted small">{srData?.data?.length ?? 0} request(s)</span>
+            <Button
+              size="sm"
+              style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              onClick={() => { setSrSubject(''); setSrDescription(''); setSrType('OTHER'); setSrPriority('NORMAL'); setShowSRForm(true); }}
+            >
+              + New Request
+            </Button>
+          </div>
+
+          {showSRForm && (
+            <div className="border rounded p-3 mb-3 bg-light">
+              <div className="fw-semibold small mb-2">New Service Request</div>
+              <Row className="g-2">
+                <Col md={6}>
+                  <Form.Select size="sm" value={srType} onChange={(e) => setSrType(e.target.value)}>
+                    {Object.entries(SERVICE_REQUEST_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </Form.Select>
+                </Col>
+                <Col md={3}>
+                  <Form.Select size="sm" value={srPriority} onChange={(e) => setSrPriority(e.target.value)}>
+                    {['LOW', 'NORMAL', 'HIGH', 'URGENT'].map((p) => <option key={p} value={p}>{p}</option>)}
+                  </Form.Select>
+                </Col>
+                <Col md={12}>
+                  <Form.Control size="sm" placeholder="Subject *" value={srSubject} onChange={(e) => setSrSubject(e.target.value)} />
+                </Col>
+                <Col md={12}>
+                  <Form.Control as="textarea" rows={2} size="sm" placeholder="Description *" value={srDescription} onChange={(e) => setSrDescription(e.target.value)} />
+                </Col>
+                <Col md={12} className="d-flex gap-2 justify-content-end">
+                  <Button size="sm" variant="secondary" onClick={() => setShowSRForm(false)}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+                    disabled={createSR.isPending || !srSubject.trim() || srDescription.trim().length < 10}
+                    onClick={async () => {
+                      await createSR.mutateAsync({ clientId: id!, type: srType as any, subject: srSubject.trim(), description: srDescription.trim(), priority: srPriority as any });
+                      setShowSRForm(false);
+                      refetchSR();
+                    }}
+                  >
+                    {createSR.isPending ? 'Submitting…' : 'Submit'}
+                  </Button>
+                </Col>
+              </Row>
+            </div>
+          )}
+
+          {srLoading ? (
+            <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
+          ) : !srData?.data?.length ? (
+            <div className="text-muted text-center py-4 small">No service requests yet.</div>
+          ) : (
+            <Table size="sm" hover responsive className="align-middle small">
+              <thead className="table-light">
+                <tr>
+                  <th>Subject</th>
+                  <th>Type</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {srData.data.map((sr) => (
+                  <tr key={sr.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedSR(sr)}>
+                    <td>{sr.subject}</td>
+                    <td>{SERVICE_REQUEST_TYPES[sr.type as keyof typeof SERVICE_REQUEST_TYPES] ?? sr.type}</td>
+                    <td>
+                      <Badge bg={SERVICE_REQUEST_PRIORITY_COLORS[sr.priority] ?? 'secondary'} text={sr.priority === 'HIGH' ? 'dark' : undefined}>
+                        {sr.priority}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge bg={SERVICE_REQUEST_STATUS_COLORS[sr.status] ?? 'secondary'} text={sr.status === 'IN_PROGRESS' ? 'dark' : undefined}>
+                        {sr.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </td>
+                    <td>{new Date(sr.createdAt).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                    <td>
+                      {sr.status === 'PENDING' && (
+                        <Button
+                          size="sm" variant="outline-success"
+                          onClick={(e) => { e.stopPropagation(); updateSR.mutate({ id: sr.id, data: { status: 'IN_PROGRESS' } }); }}
+                        >
+                          Start
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+
+          {/* Service Request detail panel */}
+          {selectedSR && (
+            <div className="border rounded p-3 mt-2 bg-white">
+              <div className="d-flex justify-content-between align-items-start mb-2">
+                <div className="fw-semibold">{selectedSR.subject}</div>
+                <Button size="sm" variant="outline-secondary" onClick={() => setSelectedSR(null)}>×</Button>
+              </div>
+              <div className="small text-muted mb-2" style={{ whiteSpace: 'pre-wrap' }}>{selectedSR.description}</div>
+              {selectedSR.status !== 'RESOLVED' && selectedSR.status !== 'CANCELLED' && (
+                <div className="d-flex gap-2 mt-2">
+                  {selectedSR.status === 'IN_PROGRESS' && (
+                    <Button
+                      size="sm" variant="success"
+                      onClick={() => {
+                        const res = window.prompt('Resolution notes:');
+                        if (res && res.trim().length >= 10) {
+                          updateSR.mutate({ id: selectedSR.id, data: { status: 'RESOLVED', resolution: res.trim() } });
+                          setSelectedSR(null);
+                        }
+                      }}
+                    >
+                      Resolve
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline-secondary" onClick={() => { updateSR.mutate({ id: selectedSR.id, data: { status: 'CANCELLED' } }); setSelectedSR(null); }}>
+                    Cancel Request
+                  </Button>
+                </div>
+              )}
+              {selectedSR.resolution && (
+                <div className="mt-2 p-2 bg-success bg-opacity-10 rounded small">
+                  <strong>Resolution:</strong> {selectedSR.resolution}
+                </div>
+              )}
+            </div>
           )}
         </Tab>
       </Tabs>

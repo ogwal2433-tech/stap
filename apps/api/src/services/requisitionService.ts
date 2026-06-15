@@ -18,12 +18,25 @@ function fmtRequisition(r: any): RequisitionResponse {
     raisedBy:          r.raisedBy,
     raisedByName:      r.raisedByUser?.name ?? '',
     category:          r.category,
+    categories:        r.categories ?? [],
     description:       r.description,
+    particulars:       r.particulars ?? null,
     quantity:          r.quantity,
     estimatedUnitCost: r.estimatedUnitCost,
     estimatedTotal:    r.estimatedTotal,
     urgency:           r.urgency,
     justification:     r.justification,
+    progress:          r.progress ?? null,
+    remarks:           r.remarks ?? null,
+    accountDetails:    r.accountDetails ?? null,
+    accountName:       r.accountName ?? null,
+    bankName:          r.bankName ?? null,
+    assignedToId:      r.assignedToId ?? null,
+    assignedToName:    r.assignedToUser?.name ?? null,
+    hrApprovedAt:      r.hrApprovedAt?.toISOString() ?? null,
+    hrApprovedBy:      r.hrApprovedBy ?? null,
+    dirApprovedAt:     r.dirApprovedAt?.toISOString() ?? null,
+    dirApprovedBy:     r.dirApprovedBy ?? null,
     status:            r.status,
     approvedBy:        r.approvedBy,
     approvedByName:    r.approvedByUser?.name ?? null,
@@ -56,6 +69,7 @@ function fmtPO(po: any): PurchaseOrderResponse {
 
 const INCLUDE = {
   raisedByUser:    { select: { name: true } },
+  assignedToUser:  { select: { name: true } },
   purchaseOrders:  { include: { supplier: true } },
 } as const;
 
@@ -68,13 +82,20 @@ class RequisitionService {
     const requisition = await prisma.requisition.create({
       data: {
         raisedBy,
-        category:          data.category,
+        categories:        data.categories,
+        category:          data.categories[0] ?? 'OTHER',
         description:       data.description,
+        particulars:       data.particulars ?? null,
         quantity:          data.quantity,
         estimatedUnitCost: data.estimatedUnitCost,
         estimatedTotal,
         urgency:           data.urgency ?? 'NORMAL',
         justification:     data.justification ?? null,
+        progress:          data.progress ?? null,
+        remarks:           data.remarks ?? null,
+        accountDetails:    data.accountDetails ?? null,
+        accountName:       data.accountName ?? null,
+        bankName:          data.bankName ?? null,
         status:            'SUBMITTED',
       },
       include: INCLUDE,
@@ -89,7 +110,7 @@ class RequisitionService {
       if (approver.email) {
         await QueueService.sendEmail({
           to:       approver.email,
-          subject:  `New Requisition: ${data.category}`,
+          subject:  `New Requisition: ${data.categories.join(', ')}`,
           template: 'requisition-approval',
           data: {
             description:    data.description,
@@ -106,7 +127,7 @@ class RequisitionService {
       action:   'REQUISITION_SUBMITTED',
       entity:   'requisition',
       entityId: requisition.id,
-      newValue: { category: data.category, estimatedTotal },
+      newValue: { categories: data.categories, estimatedTotal },
     });
 
     return fmtRequisition(requisition);

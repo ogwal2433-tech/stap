@@ -20,20 +20,46 @@ export const CreateContractSchema = z.object({
   guardsRequired:  z.number().int().min(1),
   billingPerGuard: z.number().int().positive()
                      .describe('Monthly billing per guard in UGX'),
-  status:          z.enum(['DRAFT', 'ACTIVE', 'EXPIRING', 'EXPIRED']).default('ACTIVE'),
 
   // Security deployment details
   weaponsAllocation: z.number().int().min(0).optional(),
   shiftPattern:      z.enum(['SINGLE_SHIFT', 'TWO_SHIFTS', 'THREE_SHIFTS', 'CUSTOM']).optional(),
+
+  // Guard rate lines (Item 6)
+  guardRates: z.array(z.object({
+    guardType:    z.string().min(1),
+    guardsCount:  z.number().int().min(1),
+    ratePerGuard: z.number().int().positive(),
+  })).optional(),
 });
 
 export type CreateContractInput = z.infer<typeof CreateContractSchema>;
 
-export const UpdateContractSchema = CreateContractSchema.omit({ clientId: true }).partial();
+export const UpdateContractSchema = z.object({
+  contractStart:   z.string().datetime().optional(),
+  contractEnd:     z.string().datetime().optional(),
+  guardsRequired:  z.number().int().min(1).optional(),
+  billingPerGuard: z.number().int().positive().optional(),
+  status:          z.enum(['DRAFT', 'ACTIVE', 'EXPIRING', 'EXPIRED']).optional(),
+  weaponsAllocation: z.number().int().min(0).optional(),
+  shiftPattern:    z.enum(['SINGLE_SHIFT', 'TWO_SHIFTS', 'THREE_SHIFTS', 'CUSTOM']).optional(),
+  guardRates: z.array(z.object({
+    guardType:    z.string().min(1),
+    guardsCount:  z.number().int().min(1),
+    ratePerGuard: z.number().int().positive(),
+  })).optional(),
+});
 
 export type UpdateContractInput = z.infer<typeof UpdateContractSchema>;
 
 // ── Response interface ─────────────────────────────────────────────────────────
+
+export interface ContractGuardRateResponse {
+  id:           string;
+  guardType:    string;
+  guardsCount:  number;
+  ratePerGuard: number;
+}
 
 export interface ContractResponse {
   id:              string;
@@ -49,6 +75,9 @@ export interface ContractResponse {
   // Security deployment details
   weaponsAllocation: number | null;
   shiftPattern:      ShiftPattern | null;
+
+  // Guard rates (Item 6)
+  guardRates: ContractGuardRateResponse[];
 
   createdAt:       string;
   updatedAt:       string;

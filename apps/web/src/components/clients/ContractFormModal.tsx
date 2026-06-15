@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Alert, Button, Form, InputGroup, Modal, Spinner } from 'react-bootstrap';
+import { Alert, Button, Form, InputGroup, Modal, Spinner, Table } from 'react-bootstrap';
 import ContractDurationPicker from '../common/ContractDurationPicker';
 import { useCreateContract, useUpdateContract } from '../../hooks/useContracts';
 import { SHIFT_PATTERNS } from '@stap/shared';
-import type { ContractResponse, ShiftPattern } from '@stap/shared';
+import type { ContractResponse, ShiftPattern, ContractGuardRateResponse } from '@stap/shared';
+
+const GUARD_TYPES = ['UNARMED', 'ARMED', 'SUPERVISOR', 'OTHER'] as const;
 
 interface ContractFormModalProps {
   clientId: string;
@@ -46,13 +48,16 @@ export default function ContractFormModal({
     contract ? formatWithCommas(String(contract.billingPerGuard)) : '',
   );
   const [status, setStatus] = useState<'DRAFT' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED'>(
-    contract ? (contract.status as 'DRAFT' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED') : 'ACTIVE',
+    contract?.status ?? 'ACTIVE',
   );
   const [weaponsAllocation, setWeaponsAllocation] = useState(
     contract?.weaponsAllocation != null ? String(contract.weaponsAllocation) : '',
   );
   const [shiftPattern, setShiftPattern] = useState<ShiftPattern | ''>(
     (contract?.shiftPattern as ShiftPattern | null) ?? '',
+  );
+  const [guardRates, setGuardRates] = useState<Omit<ContractGuardRateResponse, 'id'>[]>(
+    contract?.guardRates?.map(({ guardType, guardsCount, ratePerGuard }) => ({ guardType, guardsCount, ratePerGuard })) ?? [],
   );
   const [error, setError] = useState('');
 
@@ -73,9 +78,10 @@ export default function ContractFormModal({
       contractEnd:       `${contractEnd}T23:59:59.999Z`,
       guardsRequired:    guards,
       billingPerGuard,
-      status,
+      ...(isEdit && { status }),
       weaponsAllocation: weaponsAllocation !== '' && !isNaN(weapons) ? weapons : undefined,
       shiftPattern:      shiftPattern || undefined,
+      guardRates:        guardRates.length > 0 ? guardRates : undefined,
     };
 
     try {
@@ -164,23 +170,25 @@ export default function ContractFormModal({
               />
             </div>
 
-            {/* Status */}
-            <div className="col-md-6">
-              <Form.Label className="small fw-semibold">Status</Form.Label>
-              <Form.Select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as typeof status)}
-              >
-                <option value="DRAFT">Draft</option>
-                <option value="ACTIVE">Active</option>
-                <option value="EXPIRING">Expiring</option>
-                <option value="EXPIRED">Expired</option>
-              </Form.Select>
-              <Form.Text className="text-muted">Status is auto-computed on save based on dates.</Form.Text>
-            </div>
+            {/* Status — edit mode only; on create it's auto-set from dates */}
+            {isEdit && (
+              <div className="col-md-6">
+                <Form.Label className="small fw-semibold">Status</Form.Label>
+                <Form.Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as typeof status)}
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="EXPIRING">Expiring</option>
+                  <option value="EXPIRED">Expired</option>
+                </Form.Select>
+                <Form.Text className="text-muted">Auto-computed from dates on create.</Form.Text>
+              </div>
+            )}
 
             {/* Shift Pattern */}
-            <div className="col-md-6">
+            <div className={isEdit ? 'col-md-6' : 'col-md-6'}>
               <Form.Label className="small fw-semibold">Shift Pattern</Form.Label>
               <Form.Select
                 value={shiftPattern}
@@ -208,6 +216,72 @@ export default function ContractFormModal({
                 <InputGroup.Text>weapons</InputGroup.Text>
               </InputGroup>
               <Form.Text className="text-muted">Number of weapons allocated under this contract (leave blank if none).</Form.Text>
+            </div>
+
+            {/* Guard Rates table */}
+            <div className="col-12">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <Form.Label className="small fw-semibold mb-0">Guard Rates (optional)</Form.Label>
+                <Button
+                  size="sm"
+                  variant="outline-primary"
+                  onClick={() => setGuardRates((prev) => [...prev, { guardType: 'UNARMED', guardsCount: 1, ratePerGuard: 0 }])}
+                >
+                  + Add Rate Line
+                </Button>
+              </div>
+              {guardRates.length > 0 && (
+                <Table size="sm" bordered className="small mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Guard Type</th>
+                      <th>Count</th>
+                      <th>Rate / Guard (UGX)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guardRates.map((row, i) => (
+                      <tr key={i}>
+                        <td>
+                          <Form.Select
+                            size="sm"
+                            value={row.guardType}
+                            onChange={(e) => setGuardRates((prev) => prev.map((r, idx) => idx === i ? { ...r, guardType: e.target.value } : r))}
+                          >
+                            {GUARD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </Form.Select>
+                        </td>
+                        <td>
+                          <Form.Control
+                            size="sm" type="number" min={1}
+                            value={row.guardsCount}
+                            onChange={(e) => setGuardRates((prev) => prev.map((r, idx) => idx === i ? { ...r, guardsCount: parseInt(e.target.value, 10) || 1 } : r))}
+                          />
+                        </td>
+                        <td>
+                          <Form.Control
+                            size="sm" type="number" min={0}
+                            value={row.ratePerGuard}
+                            onChange={(e) => setGuardRates((prev) => prev.map((r, idx) => idx === i ? { ...r, ratePerGuard: parseInt(e.target.value, 10) || 0 } : r))}
+                          />
+                        </td>
+                        <td>
+                          <Button
+                            size="sm" variant="outline-danger"
+                            onClick={() => setGuardRates((prev) => prev.filter((_, idx) => idx !== i))}
+                          >
+                            ×
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+              <Form.Text className="text-muted">
+                Variable billing rates per guard type. Leave empty to use the flat Billing Per Guard rate above.
+              </Form.Text>
             </div>
           </div>
         </Modal.Body>

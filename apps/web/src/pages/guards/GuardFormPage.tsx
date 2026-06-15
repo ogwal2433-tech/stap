@@ -289,6 +289,17 @@ export default function GuardFormPage() {
   const hasDisability    = watch('hasDisability');
   const hasAllergies     = watch('hasAllergies');
   const isIncompleteNID  = watch('isIncompleteNID');
+  const watchedRank      = watch('rank');
+
+  // Auto-fill salary when rank is selected in create mode
+  useEffect(() => {
+    if (!isEdit && watchedRank) {
+      const matched = ranks.find((r) => r.name === watchedRank);
+      if (matched?.defaultSalary) {
+        setValue('salaryRate', matched.defaultSalary);
+      }
+    }
+  }, [watchedRank, ranks, isEdit, setValue]);
   const age = dobValue ? calcAge(dobValue.split('T')[0]) : null;
 
   // ── Photo upload ───────────────────────────────────────────────────────────

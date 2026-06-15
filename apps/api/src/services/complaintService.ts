@@ -15,6 +15,7 @@ import type {
 const INCLUDE = {
   client:   { select: { id: true, clientName: true, systemId: true, email: true } },
   site:     { select: { id: true, siteName: true } },
+  receiver: { select: { id: true, name: true } },
   assignee: { select: { id: true, name: true } },
 } as const;
 
@@ -34,9 +35,12 @@ function fmtComplaint(c: any): ComplaintResponse {
     description: c.description,
     severity:    c.severity,
     status:      c.status,
+    receivedBy:  c.receiver ? { id: c.receiver.id, name: c.receiver.name } : null,
     assignedTo:  c.assignee ? { id: c.assignee.id, name: c.assignee.name } : null,
+    assignedAt:  c.assignedAt?.toISOString() ?? null,
     resolution:  c.resolution ?? null,
     resolvedAt:  c.resolvedAt?.toISOString() ?? null,
+    resolvedBy:  c.resolvedBy ?? null,
     createdAt:   c.createdAt.toISOString(),
     updatedAt:   c.updatedAt.toISOString(),
     daysOpen:    daysOpen(c.createdAt, c.resolvedAt),
@@ -52,13 +56,14 @@ class ComplaintService {
 
     const complaint = await prisma.clientComplaint.create({
       data: {
-        clientId:    data.clientId,
-        siteId:      data.siteId,
-        subject:     data.subject,
-        category:    data.category,
-        description: data.description,
-        severity:    data.severity,
-        status:      'OPEN',
+        clientId:     data.clientId,
+        siteId:       data.siteId,
+        subject:      data.subject,
+        category:     data.category,
+        description:  data.description,
+        severity:     data.severity,
+        receivedById: createdBy,
+        status:       'OPEN',
       },
       include: INCLUDE,
     });
@@ -91,9 +96,16 @@ class ComplaintService {
     if (!existing) throw new NotFoundError('Complaint not found');
 
     const updateData: any = {};
-    if (data.assignedTo !== undefined) updateData.assignedTo = data.assignedTo;
+    if (data.receivedById !== undefined) updateData.receivedById = data.receivedById;
+    if (data.assignedTo   !== undefined) {
+      updateData.assignedTo = data.assignedTo;
+      if (data.assignedTo && data.assignedTo !== existing.assignedTo) {
+        updateData.assignedAt = new Date();
+      }
+    }
     if (data.status     !== undefined) updateData.status     = data.status;
     if (data.resolution !== undefined) updateData.resolution = data.resolution;
+    if (data.resolvedBy !== undefined) updateData.resolvedBy = data.resolvedBy;
 
     if (data.status === 'RESOLVED') {
       if (!data.resolution) throw new AppError('Resolution notes required when resolving a complaint', 400);
@@ -140,7 +152,7 @@ class ComplaintService {
           userId:     data.assignedTo,
           type:       'COMPLAINT_ASSIGNED',
           title:      'Complaint Assigned to You',
-          message:    `A ${existing.category} complaint from ${existing.client.clientName} has been assigned to you`,
+          message:    `A ${existing.category} complaint from ${(existing as any).client.clientName} has been assigned to you`,
           entityType: 'complaint',
           entityId:   id,
         }),

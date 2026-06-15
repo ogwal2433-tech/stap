@@ -5,9 +5,15 @@ import type {
   CreateContractInput,
   UpdateContractInput,
   ContractResponse,
+  ContractGuardRateResponse,
   PaginatedResponse,
   ShiftPattern,
 } from '@stap/shared';
+
+const CONTRACT_INCLUDE = {
+  client:     { select: { id: true, clientName: true } },
+  guardRates: true,
+} as const;
 
 class ContractService {
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -26,7 +32,7 @@ class ContractService {
       throw new AppError('Contract end date must be after start date', 400);
     }
 
-    const status = data.status === 'DRAFT' ? 'DRAFT' : this.computeStatus(start, end);
+    const status = this.computeStatus(start, end);
 
     const contract = await prisma.contract.create({
       data: {
@@ -38,14 +44,17 @@ class ContractService {
         status,
         weaponsAllocation: data.weaponsAllocation ?? null,
         shiftPattern:      data.shiftPattern ?? null,
+        ...(data.guardRates?.length && {
+          guardRates: { create: data.guardRates },
+        }),
       },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
 
     await QueueService.logAudit({
-      userId: createdBy,
-      action: 'CONTRACT_CREATED',
-      entity: 'contract',
+      userId:   createdBy,
+      action:   'CONTRACT_CREATED',
+      entity:   'contract',
       entityId: contract.id,
       newValue: { clientId: data.clientId, status, guardsRequired: data.guardsRequired },
     });
@@ -58,7 +67,7 @@ class ContractService {
   async update(id: string, data: UpdateContractInput, updatedBy: string): Promise<ContractResponse> {
     const existing = await prisma.contract.findUnique({
       where: { id },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
     if (!existing) throw new NotFoundError('Contract not found');
 
@@ -81,14 +90,20 @@ class ContractService {
         ...(data.weaponsAllocation !== undefined && { weaponsAllocation: data.weaponsAllocation ?? null }),
         ...(data.shiftPattern      !== undefined && { shiftPattern:      data.shiftPattern ?? null }),
         status: newStatus,
+        ...(data.guardRates !== undefined && {
+          guardRates: {
+            deleteMany: {},
+            create: data.guardRates,
+          },
+        }),
       },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
 
     await QueueService.logAudit({
-      userId: updatedBy,
-      action: 'CONTRACT_UPDATED',
-      entity: 'contract',
+      userId:   updatedBy,
+      action:   'CONTRACT_UPDATED',
+      entity:   'contract',
       entityId: id,
       oldValue: { status: existing.status, guardsRequired: existing.guardsRequired },
       newValue: { status: newStatus, guardsRequired: updated.guardsRequired },
@@ -103,7 +118,7 @@ class ContractService {
     const contracts = await prisma.contract.findMany({
       where: { clientId },
       orderBy: { contractStart: 'desc' },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
 
     return contracts.map((c) => this.formatContract(c));
@@ -131,7 +146,7 @@ class ContractService {
         skip,
         take: limit,
         orderBy: { contractStart: 'desc' },
-        include: { client: { select: { id: true, clientName: true } } },
+        include: CONTRACT_INCLUDE,
       }),
       prisma.contract.count({ where }),
     ]);
@@ -156,7 +171,7 @@ class ContractService {
   async getById(id: string): Promise<ContractResponse & { siteCount: number }> {
     const contract = await prisma.contract.findUnique({
       where: { id },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
     if (!contract) throw new NotFoundError('Contract not found');
 
@@ -178,7 +193,7 @@ class ContractService {
         contractEnd: { lte: threshold },
       },
       orderBy: { contractEnd: 'asc' },
-      include: { client: { select: { id: true, clientName: true } } },
+      include: CONTRACT_INCLUDE,
     });
 
     return contracts.map((c) => this.formatContract(c));
@@ -191,31 +206,19 @@ class ContractService {
     const thirtyDaysLater = new Date(now);
     thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
 
-    // Expire contracts past their end date
     const expired = await prisma.contract.updateMany({
-      where: {
-        status: { not: 'DRAFT' },
-        contractEnd: { lt: now },
-      },
-      data: { status: 'EXPIRED' },
+      where: { status: { not: 'DRAFT' }, contractEnd: { lt: now } },
+      data:  { status: 'EXPIRED' },
     });
 
-    // Mark contracts within 30 days as EXPIRING
     const expiring = await prisma.contract.updateMany({
-      where: {
-        status: { in: ['ACTIVE'] },
-        contractEnd: { gte: now, lte: thirtyDaysLater },
-      },
-      data: { status: 'EXPIRING' },
+      where: { status: { in: ['ACTIVE'] }, contractEnd: { gte: now, lte: thirtyDaysLater } },
+      data:  { status: 'EXPIRING' },
     });
 
-    // Ensure contracts with future end date beyond 30 days are ACTIVE (not EXPIRING)
     const reactivated = await prisma.contract.updateMany({
-      where: {
-        status: 'EXPIRING',
-        contractEnd: { gt: thirtyDaysLater },
-      },
-      data: { status: 'ACTIVE' },
+      where: { status: 'EXPIRING', contractEnd: { gt: thirtyDaysLater } },
+      data:  { status: 'ACTIVE' },
     });
 
     console.log(
@@ -234,10 +237,7 @@ class ContractService {
 
   // ── Private: compute status ────────────────────────────────────────────────
 
-  private computeStatus(
-    start: Date,
-    end: Date,
-  ): 'ACTIVE' | 'EXPIRING' | 'EXPIRED' {
+  private computeStatus(start: Date, end: Date): 'ACTIVE' | 'EXPIRING' | 'EXPIRED' {
     const now = new Date();
     if (now > end) return 'EXPIRED';
 
@@ -250,7 +250,6 @@ class ContractService {
 
   // ── Private: format contract response ─────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private formatContract(c: any): ContractResponse {
     const now = new Date();
     const end = c.contractEnd instanceof Date ? c.contractEnd : new Date(c.contractEnd);
@@ -269,6 +268,12 @@ class ContractService {
       daysRemaining,
       weaponsAllocation: c.weaponsAllocation ?? null,
       shiftPattern:      (c.shiftPattern as ShiftPattern | null) ?? null,
+      guardRates: (c.guardRates ?? []).map((r: any): ContractGuardRateResponse => ({
+        id:           r.id,
+        guardType:    r.guardType,
+        guardsCount:  r.guardsCount,
+        ratePerGuard: r.ratePerGuard,
+      })),
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
       updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
     };

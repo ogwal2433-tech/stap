@@ -2,13 +2,25 @@ import { z } from 'zod';
 
 // ── Input schemas ──────────────────────────────────────────────────────────────
 
+export const REQUISITION_CATEGORIES = [
+  'UNIFORM', 'EQUIPMENT', 'STATIONERY', 'VEHICLE_MAINTENANCE', 'OTHER',
+] as const;
+
+export type RequisitionCategory = typeof REQUISITION_CATEGORIES[number];
+
 export const CreateRequisitionSchema = z.object({
-  category:          z.enum(['UNIFORM', 'EQUIPMENT', 'STATIONERY', 'VEHICLE_MAINTENANCE', 'OTHER']),
+  categories:        z.array(z.enum(['UNIFORM', 'EQUIPMENT', 'STATIONERY', 'VEHICLE_MAINTENANCE', 'OTHER'])).min(1, 'Select at least one category'),
   description:       z.string().min(10),
+  particulars:       z.string().optional(),
   quantity:          z.number().int().min(1),
   estimatedUnitCost: z.number().int().positive(),
   urgency:           z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
   justification:     z.string().optional(),
+  progress:          z.string().optional(),
+  remarks:           z.string().optional(),
+  accountDetails:    z.string().optional(),
+  accountName:       z.string().optional(),
+  bankName:          z.string().optional(),
 });
 
 export const ApproveRequisitionSchema = z.object({
@@ -52,12 +64,25 @@ export interface RequisitionResponse {
   raisedBy:          string;
   raisedByName:      string;
   category:          string;
+  categories:        string[];
   description:       string;
+  particulars:       string | null;
   quantity:          number;
   estimatedUnitCost: number;
   estimatedTotal:    number;
   urgency:           string;
   justification:     string | null;
+  progress:          string | null;
+  remarks:           string | null;
+  accountDetails:    string | null;
+  accountName:       string | null;
+  bankName:          string | null;
+  assignedToId:      string | null;
+  assignedToName:    string | null;
+  hrApprovedAt:      string | null;
+  hrApprovedBy:      string | null;
+  dirApprovedAt:     string | null;
+  dirApprovedBy:     string | null;
   status:            string;
   approvedBy:        string | null;
   approvedByName:    string | null;

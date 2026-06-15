@@ -15,12 +15,14 @@ export default function EditRankModal({ show, onHide, rank }: Props) {
   const { mutate: updateRank, isPending } = useUpdateRank();
 
   const [name, setName] = useState('');
+  const [defaultSalary, setDefaultSalary] = useState('');
   const [displayOrder, setDisplayOrder] = useState(0);
   const [nameError, setNameError] = useState('');
 
   useEffect(() => {
     if (rank && show) {
       setName(rank.name);
+      setDefaultSalary(rank.defaultSalary != null ? String(rank.defaultSalary) : '');
       setDisplayOrder(rank.displayOrder);
       setNameError('');
     }
@@ -30,8 +32,9 @@ export default function EditRankModal({ show, onHide, rank }: Props) {
     e.preventDefault();
     if (!rank) return;
     setNameError('');
+    const salary = parseInt(defaultSalary.replace(/,/g, ''), 10);
     updateRank(
-      { id: rank.id, data: { name: name.trim(), displayOrder } },
+      { id: rank.id, data: { name: name.trim(), defaultSalary: defaultSalary ? salary : null, displayOrder } },
       {
         onSuccess: () => {
           showToast('Rank updated successfully', 'success');
@@ -69,6 +72,19 @@ export default function EditRankModal({ show, onHide, rank }: Props) {
               required
             />
             <Form.Control.Feedback type="invalid">{nameError}</Form.Control.Feedback>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Default Salary (UGX)</Form.Label>
+            <Form.Control
+              type="text"
+              inputMode="numeric"
+              value={defaultSalary}
+              onChange={(e) => setDefaultSalary(e.target.value.replace(/[^\d]/g, ''))}
+              placeholder="e.g. 450000"
+            />
+            <Form.Text className="text-muted">
+              Auto-filled in the guard form when this rank is selected.
+            </Form.Text>
           </Form.Group>
           <Form.Group>
             <Form.Label>Display Order</Form.Label>
