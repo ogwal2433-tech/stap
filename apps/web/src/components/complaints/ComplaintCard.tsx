@@ -3,9 +3,9 @@ import type { ComplaintResponse } from '@stap/shared';
 import { COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS } from '@stap/shared';
 
 const BORDER_COLORS: Record<string, string> = {
-  OPEN:        '#dc3545',
-  IN_PROGRESS: '#ffc107',
-  RESOLVED:    '#1E8449',
+  OPEN:                '#6c757d',
+  UNDER_INVESTIGATION: '#ffc107',
+  RESOLVED:            '#1E8449',
 };
 
 function formatDate(iso: string): string {
@@ -51,7 +51,7 @@ export default function ComplaintCard({ complaint, onViewMore }: ComplaintCardPr
           </Badge>
           <Badge
             bg={COMPLAINT_STATUS_COLORS[complaint.status]}
-            text={complaint.status === 'IN_PROGRESS' ? 'dark' : undefined}
+            text={complaint.status === 'UNDER_INVESTIGATION' ? 'dark' : undefined}
             style={{ fontSize: '0.68rem' }}
           >
             {complaint.status.replace('_', ' ')}
@@ -94,6 +94,13 @@ export default function ComplaintCard({ complaint, onViewMore }: ComplaintCardPr
           View More →
         </Button>
       </div>
+
+      {/* Assigned indicator */}
+      {complaint.assignedTo && (
+        <div style={{ fontSize: '0.72rem', color: '#6c757d', marginTop: '4px' }}>
+          👤 Assigned to <strong>{complaint.assignedTo.name}</strong>
+        </div>
+      )}
 
       {/* Resolution preview */}
       {complaint.resolution && complaint.status !== 'OPEN' && (

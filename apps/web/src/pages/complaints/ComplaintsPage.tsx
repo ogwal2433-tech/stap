@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import {
-  Alert, Badge, Button, Col, Container, Form, Modal, Row, Spinner, Table,
+  Badge, Button, Col, Container, Form, Row, Spinner, Table,
 } from 'react-bootstrap';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { complaintsApi } from '../../lib/complaints.api';
-import { useToast } from '../../context/ToastContext';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
-import type { ComplaintResponse, UpdateComplaintInput } from '@stap/shared';
+import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
+import type { ComplaintResponse } from '@stap/shared';
 
 // ── Badge helpers ──────────────────────────────────────────────────────────────
 
@@ -18,93 +18,15 @@ const CAT_BADGE: Record<string, { bg: string; text?: string }> = {
   OTHER:           { bg: 'light', text: 'dark' },
 };
 const SEV_BADGE: Record<string, string> = { LOW: 'success', MEDIUM: 'warning', HIGH: 'danger' };
-const STA_BADGE: Record<string, string> = { OPEN: 'danger', IN_PROGRESS: 'warning', RESOLVED: 'success' };
+const STA_BADGE: Record<string, string> = {
+  OPEN:                'danger',
+  UNDER_INVESTIGATION: 'warning',
+  RESOLVED:            'success',
+};
 
 function CatBadge({ c }: { c: string }) {
   const { bg, text } = CAT_BADGE[c] ?? { bg: 'secondary' };
   return <Badge bg={bg} text={text}>{c.replace(/_/g, ' ')}</Badge>;
-}
-
-// ── Detail / update modal ──────────────────────────────────────────────────────
-
-function ComplaintDetailModal({ complaint, onClose }: { complaint: ComplaintResponse; onClose: () => void }) {
-  const { showToast } = useToast();
-  const qc            = useQueryClient();
-  const [update, setUpdate] = useState<UpdateComplaintInput>({});
-
-  const save = useMutation({
-    mutationFn: (data: UpdateComplaintInput) => complaintsApi.update(complaint.id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['complaints'] });
-      showToast('Complaint updated', 'success');
-      onClose();
-    },
-    onError: () => showToast('Failed to update', 'danger'),
-  });
-
-  return (
-    <Modal show onHide={onClose} size="lg">
-      <Modal.Header closeButton>
-        <Modal.Title className="d-flex flex-column gap-1">
-          <span>{complaint.subject}</span>
-          <span className="d-flex gap-2 flex-wrap">
-            <CatBadge c={complaint.category} />
-            <Badge bg={SEV_BADGE[complaint.severity]}>{complaint.severity}</Badge>
-          </span>
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        <p className="small text-muted mb-1">Client: <strong>{complaint.client.clientName}</strong>{complaint.site ? ` · ${complaint.site.siteName}` : ''}</p>
-        <p className="small text-muted mb-3">Opened {complaint.daysOpen} day{complaint.daysOpen !== 1 ? 's' : ''} ago</p>
-        <p>{complaint.description}</p>
-
-        {complaint.status === 'RESOLVED' && complaint.resolution && (
-          <Alert variant="success" className="small">
-            <strong>Resolution:</strong> {complaint.resolution}
-            {complaint.resolvedAt && <div className="text-muted mt-1">Resolved: {new Date(complaint.resolvedAt).toLocaleDateString('en-UG')}</div>}
-          </Alert>
-        )}
-
-        {complaint.status !== 'RESOLVED' && (
-          <>
-            <Form.Group className="mb-3">
-              <Form.Label className="small fw-semibold">Update Status</Form.Label>
-              <Form.Select size="sm" value={update.status ?? ''} onChange={e => setUpdate(u => ({ ...u, status: e.target.value as any || undefined }))}>
-                <option value="">— no change —</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-              </Form.Select>
-            </Form.Group>
-
-            {update.status === 'RESOLVED' && (
-              <Form.Group className="mb-3">
-                <Form.Label className="small fw-semibold">Resolution Notes <span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                  as="textarea" rows={3} size="sm"
-                  value={update.resolution ?? ''}
-                  onChange={e => setUpdate(u => ({ ...u, resolution: e.target.value }))}
-                  placeholder="Describe how the complaint was resolved…"
-                />
-                <Form.Text className="text-muted">Client will be automatically notified by email.</Form.Text>
-              </Form.Group>
-            )}
-          </>
-        )}
-      </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" onClick={onClose}>Close</Button>
-        {complaint.status !== 'RESOLVED' && Object.keys(update).length > 0 && (
-          <Button
-            variant="primary"
-            disabled={save.isPending || (update.status === 'RESOLVED' && !update.resolution)}
-            onClick={() => save.mutate(update)}
-          >
-            {save.isPending ? <Spinner size="sm" animation="border" /> : 'Save Changes'}
-          </Button>
-        )}
-      </Modal.Footer>
-    </Modal>
-  );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -134,13 +56,15 @@ export default function ComplaintsPage() {
         <Col md={3}>
           <Form.Select size="sm" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value, page: 1 }))}>
             <option value="">All Statuses</option>
-            {['OPEN','IN_PROGRESS','RESOLVED'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {(['OPEN', 'UNDER_INVESTIGATION', 'RESOLVED'] as const).map(s => (
+              <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+            ))}
           </Form.Select>
         </Col>
         <Col md={3}>
           <Form.Select size="sm" value={filters.category} onChange={e => setFilters(f => ({ ...f, category: e.target.value, page: 1 }))}>
             <option value="">All Categories</option>
-            {['GUARD_CONDUCT','LATE_DEPLOYMENT','BILLING_DISPUTE','EQUIPMENT','OTHER'].map(c => (
+            {['GUARD_CONDUCT', 'LATE_DEPLOYMENT', 'BILLING_DISPUTE', 'EQUIPMENT', 'OTHER'].map(c => (
               <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
             ))}
           </Form.Select>
@@ -168,7 +92,14 @@ export default function ComplaintsPage() {
                 <td style={{ maxWidth: 220 }} className="text-truncate">{c.subject}</td>
                 <td><CatBadge c={c.category} /></td>
                 <td><Badge bg={SEV_BADGE[c.severity]}>{c.severity}</Badge></td>
-                <td><Badge bg={STA_BADGE[c.status]}>{c.status.replace(/_/g,' ')}</Badge></td>
+                <td>
+                  <Badge
+                    bg={STA_BADGE[c.status] ?? 'secondary'}
+                    text={c.status === 'UNDER_INVESTIGATION' ? 'dark' : undefined}
+                  >
+                    {c.status.replace(/_/g, ' ')}
+                  </Badge>
+                </td>
                 <td style={{ color: c.daysOpen > 7 ? '#dc3545' : undefined }}>{c.daysOpen}d</td>
                 <td>{c.assignedTo?.name ?? <span className="text-muted">Unassigned</span>}</td>
                 <td><Button size="sm" variant="outline-primary" onClick={() => setSelected(c)}>View</Button></td>
@@ -187,7 +118,13 @@ export default function ComplaintsPage() {
       )}
 
       <ComplaintFormModal show={showCreate} onClose={() => setShowCreate(false)} />
-      {selected && <ComplaintDetailModal complaint={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ClientComplaintDetailModal
+          show
+          complaint={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </Container>
   );
 }

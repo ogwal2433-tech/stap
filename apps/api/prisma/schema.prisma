@@ -107,6 +107,7 @@ model User {
   systemId     String?    @unique
   name         String
   email        String     @unique
+  phone        String?
   passwordHash String
   role         Role
   status       UserStatus @default(ACTIVE)
@@ -125,8 +126,8 @@ model User {
   disciplinaryActions DisciplinaryRecord[] @relation("DisciplinaryOfficer")
   deployments         Deployment[]         @relation("DeploymentSupervisor")
   checkins            SupervisorCheckin[]  @relation("CheckinSupervisor")
-  assignedComplaints  ClientComplaint[]    @relation("ComplaintAssignee")
-  receivedComplaints  ClientComplaint[]    @relation("ComplaintReceiver")
+  complaintsAssigned  ClientComplaint[]    @relation("ComplaintAssignedTo")
+  complaintsReceived  ClientComplaint[]    @relation("ComplaintReceivedBy")
   assignedRequisitions Requisition[]       @relation("RequisitionAssignee")
   auditLogs           AuditLog[]
   reportedIncidents   Incident[]           @relation("IncidentReporter")
@@ -490,20 +491,20 @@ model ClientComplaint {
   category     ComplaintCategory
   description  String
   severity     ComplaintSeverity
-  receivedById String?
-  assignedTo   String?
-  assignedAt   DateTime?
-  status       ComplaintStatus   @default(OPEN)
-  resolvedAt   DateTime?
-  resolvedBy   String?
-  resolution   String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  receivedById  String?
+  assignedToId  String?
+  assignedAt    DateTime?
+  status        ComplaintStatus   @default(OPEN)
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  resolution    String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  site     Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  receiver User?  @relation("ComplaintReceiver", fields: [receivedById], references: [id], onDelete: SetNull)
-  assignee User?  @relation("ComplaintAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  client          Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site            Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  receivedByUser  User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  assignedToUser  User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 }
 
 model Deployment {

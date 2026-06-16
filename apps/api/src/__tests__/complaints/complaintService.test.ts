@@ -6,6 +6,7 @@ vi.mock('../../db/prisma', () => ({
   default: {
     client:          { findUnique: vi.fn() },
     clientComplaint: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
+    auditLog:        { create: vi.fn() },
   },
 }));
 
@@ -39,22 +40,28 @@ const MOCK_CLIENT = {
   contactPhone: '+256700000001',
 };
 
+// Shape matches the INCLUDE projection used by sanitiseComplaint()
 const MOCK_COMPLAINT = {
-  id:          'comp-1',
-  clientId:    'client-1',
-  siteId:      null,
-  category:    'GUARD_CONDUCT',
-  description: 'Guard was sleeping on duty during the night shift.',
-  severity:    'HIGH',
-  status:      'OPEN',
-  assignedTo:  null,
-  resolution:  null,
-  resolvedAt:  null,
-  createdAt:   new Date('2026-04-10T08:00:00Z'),
-  updatedAt:   new Date('2026-04-10T08:00:00Z'),
-  client:      { id: 'client-1', clientName: 'KCCA', email: 'kcca@test.ug' },
-  site:        null,
-  assignee:    null,
+  id:             'comp-1',
+  clientId:       'client-1',
+  siteId:         null,
+  subject:        'Guard misconduct',
+  category:       'GUARD_CONDUCT',
+  description:    'Guard was sleeping on duty during the night shift.',
+  severity:       'HIGH',
+  status:         'OPEN',
+  receivedById:   null,
+  assignedToId:   null,
+  assignedAt:     null,
+  resolution:     null,
+  resolvedAt:     null,
+  resolvedBy:     null,
+  createdAt:      new Date('2026-04-10T08:00:00Z'),
+  updatedAt:      new Date('2026-04-10T08:00:00Z'),
+  client:         { id: 'client-1', clientName: 'KCCA', systemId: null, email: 'kcca@test.ug' },
+  site:           null,
+  receivedByUser: null,
+  assignedToUser: null,
 };
 
 beforeEach(() => {
@@ -65,6 +72,7 @@ beforeEach(() => {
   mp.clientComplaint.findMany.mockResolvedValue([MOCK_COMPLAINT]);
   mp.clientComplaint.count.mockResolvedValue(1);
   mp.clientComplaint.update.mockResolvedValue(MOCK_COMPLAINT);
+  mp.auditLog.create.mockResolvedValue({});
 });
 
 // ── create() ───────────────────────────────────────────────────────────────────
@@ -74,6 +82,7 @@ describe('complaintService.create()', () => {
     const result = await complaintService.create(
       {
         clientId:    'client-1',
+        subject:     'Guard misconduct',
         category:    'GUARD_CONDUCT',
         description: 'Guard was sleeping on duty during the night shift.',
         severity:    'HIGH',
@@ -95,7 +104,7 @@ describe('complaintService.create()', () => {
 
     await expect(
       complaintService.create(
-        { clientId: 'ghost', category: 'OTHER', description: 'test', severity: 'LOW' },
+        { clientId: 'ghost', subject: 'Test', category: 'OTHER', description: 'test', severity: 'LOW' },
         'user-1',
       ),
     ).rejects.toThrow('Client not found');
@@ -103,84 +112,13 @@ describe('complaintService.create()', () => {
 
   it('logs an audit event on creation', async () => {
     await complaintService.create(
-      { clientId: 'client-1', category: 'BILLING_DISPUTE', description: 'Incorrect invoice amount.', severity: 'MEDIUM' },
+      { clientId: 'client-1', subject: 'Invoice issue', category: 'BILLING_DISPUTE', description: 'Incorrect invoice amount.', severity: 'MEDIUM' },
       'user-1',
     );
 
     expect(mq.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'COMPLAINT_CREATED', entity: 'ClientComplaint' }),
     );
-  });
-});
-
-// ── update() ───────────────────────────────────────────────────────────────────
-
-describe('complaintService.update()', () => {
-  it('throws if complaint does not exist', async () => {
-    mp.clientComplaint.findUnique.mockResolvedValue(null);
-
-    await expect(
-      complaintService.update('ghost', { status: 'IN_PROGRESS' }, 'user-1'),
-    ).rejects.toThrow('Complaint not found');
-  });
-
-  it('requires resolution notes when resolving', async () => {
-    await expect(
-      complaintService.update('comp-1', { status: 'RESOLVED' }, 'user-1'),
-    ).rejects.toThrow('Resolution notes required');
-  });
-
-  it('sets resolvedAt and emails the client when resolving', async () => {
-    const resolved = {
-      ...MOCK_COMPLAINT,
-      status:     'RESOLVED',
-      resolution: 'Guard reprimanded and reassigned.',
-      resolvedAt: new Date(),
-    };
-    mp.clientComplaint.update.mockResolvedValue(resolved);
-
-    await complaintService.update(
-      'comp-1',
-      { status: 'RESOLVED', resolution: 'Guard reprimanded and reassigned.' },
-      'user-1',
-    );
-
-    expect(mp.clientComplaint.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ resolvedAt: expect.any(Date) }),
-      }),
-    );
-    expect(mq.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to:       MOCK_CLIENT.email,
-        template: 'complaint-resolved',
-      }),
-    );
-  });
-
-  it('notifies the new assignee when assignedTo changes', async () => {
-    await complaintService.update(
-      'comp-1',
-      { assignedTo: 'user-99' },
-      'user-1',
-    );
-
-    expect(mns.send).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-99', type: 'COMPLAINT_ASSIGNED' }),
-    );
-  });
-
-  it('does NOT notify assignee if assignedTo is unchanged', async () => {
-    const sameAssignee = { ...MOCK_COMPLAINT, assignedTo: 'user-99' };
-    mp.clientComplaint.findUnique.mockResolvedValue(sameAssignee);
-
-    await complaintService.update(
-      'comp-1',
-      { assignedTo: 'user-99' },
-      'user-1',
-    );
-
-    expect(mns.send).not.toHaveBeenCalled();
   });
 });
 
@@ -212,11 +150,10 @@ describe('complaintService.list()', () => {
 
 describe('complaintService.getDashboard()', () => {
   it('returns all required dashboard fields', async () => {
-    // open complaints
     mp.clientComplaint.findMany.mockImplementation(({ where }: any) => {
-      if (where?.status?.in) return Promise.resolve([MOCK_COMPLAINT]);                 // allOpen
-      if (where?.status === 'RESOLVED') return Promise.resolve([]);                    // allResolved
-      return Promise.resolve([MOCK_COMPLAINT]);                                        // recentComplaints
+      if (where?.status?.in) return Promise.resolve([MOCK_COMPLAINT]);   // allOpen
+      if (where?.status === 'RESOLVED') return Promise.resolve([]);       // allResolved
+      return Promise.resolve([MOCK_COMPLAINT]);                           // recentComplaints
     });
 
     const dash = await complaintService.getDashboard();

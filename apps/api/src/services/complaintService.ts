@@ -4,7 +4,7 @@ import { notificationService } from './notificationService';
 import { AppError, NotFoundError } from '../errors/AppError';
 import type {
   CreateComplaintInput,
-  UpdateComplaintInput,
+  AssignComplaintInput,
   ComplaintResponse,
   ComplaintDashboard,
   PaginatedResponse,
@@ -13,18 +13,25 @@ import type {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const INCLUDE = {
-  client:   { select: { id: true, clientName: true, systemId: true, email: true } },
-  site:     { select: { id: true, siteName: true } },
-  receiver: { select: { id: true, name: true } },
-  assignee: { select: { id: true, name: true } },
+  client:         { select: { id: true, clientName: true, systemId: true, email: true } },
+  site:           { select: { id: true, siteName: true } },
+  receivedByUser: { select: { id: true, name: true } },
+  assignedToUser: { select: { id: true, name: true, role: true, phone: true } },
 } as const;
+
+function roleToTitle(role: string): string {
+  return role
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function daysOpen(createdAt: Date, resolvedAt: Date | null): number {
   const end = resolvedAt ?? new Date();
   return Math.floor((end.getTime() - createdAt.getTime()) / 86_400_000);
 }
 
-function fmtComplaint(c: any): ComplaintResponse {
+function sanitiseComplaint(c: any): ComplaintResponse {
   return {
     id:          c.id,
     clientId:    c.clientId,
@@ -35,8 +42,17 @@ function fmtComplaint(c: any): ComplaintResponse {
     description: c.description,
     severity:    c.severity,
     status:      c.status,
-    receivedBy:  c.receiver ? { id: c.receiver.id, name: c.receiver.name } : null,
-    assignedTo:  c.assignee ? { id: c.assignee.id, name: c.assignee.name } : null,
+    receivedBy:  c.receivedByUser
+      ? { id: c.receivedByUser.id, name: c.receivedByUser.name }
+      : null,
+    assignedTo:  c.assignedToUser
+      ? {
+          id:    c.assignedToUser.id,
+          name:  c.assignedToUser.name,
+          title: roleToTitle(c.assignedToUser.role),
+          phone: c.assignedToUser.phone ?? 'Not provided',
+        }
+      : null,
     assignedAt:  c.assignedAt?.toISOString() ?? null,
     resolution:  c.resolution ?? null,
     resolvedAt:  c.resolvedAt?.toISOString() ?? null,
@@ -56,14 +72,13 @@ class ComplaintService {
 
     const complaint = await prisma.clientComplaint.create({
       data: {
-        clientId:     data.clientId,
-        siteId:       data.siteId,
-        subject:      data.subject,
-        category:     data.category,
-        description:  data.description,
-        severity:     data.severity,
-        receivedById: createdBy,
-        status:       'OPEN',
+        clientId:    data.clientId,
+        siteId:      data.siteId,
+        subject:     data.subject,
+        category:    data.category,
+        description: data.description,
+        severity:    data.severity,
+        status:      'OPEN',
       },
       include: INCLUDE,
     });
@@ -88,80 +103,115 @@ class ComplaintService {
       }),
     ]);
 
-    return fmtComplaint(complaint);
+    return sanitiseComplaint(complaint);
   }
 
-  async update(id: string, data: UpdateComplaintInput, updatedBy: string): Promise<ComplaintResponse> {
-    const existing = await prisma.clientComplaint.findUnique({ where: { id }, include: INCLUDE });
-    if (!existing) throw new NotFoundError('Complaint not found');
+  async assignComplaint(
+    complaintId:  string,
+    data:         AssignComplaintInput,
+    actingUserId: string,
+  ): Promise<ComplaintResponse> {
+    const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
+    if (!complaint) throw new NotFoundError('Complaint not found');
 
-    const updateData: any = {};
-    if (data.receivedById !== undefined) updateData.receivedById = data.receivedById;
-    if (data.assignedTo   !== undefined) {
-      updateData.assignedTo = data.assignedTo;
-      if (data.assignedTo && data.assignedTo !== existing.assignedTo) {
-        updateData.assignedAt = new Date();
-      }
+    const [receiver, assignee] = await Promise.all([
+      prisma.user.findUnique({
+        where:  { id: data.receivedById },
+        select: { id: true, name: true, role: true },
+      }),
+      prisma.user.findUnique({
+        where:  { id: data.assignedToId },
+        select: { id: true, name: true, role: true, phone: true },
+      }),
+    ]);
+
+    if (!receiver) throw new NotFoundError('Receiving staff member not found');
+    if (!assignee) throw new NotFoundError('Assigned staff member not found');
+
+    const updated = await prisma.clientComplaint.update({
+      where: { id: complaintId },
+      data:  {
+        receivedById: data.receivedById,
+        assignedToId: data.assignedToId,
+        assignedAt:   new Date(),
+      },
+      include: INCLUDE,
+    });
+
+    await Promise.all([
+      notificationService.send({
+        userId:     data.assignedToId,
+        type:       'SYSTEM',
+        title:      'Complaint Assigned to You',
+        message:    `A complaint from ${updated.client.clientName} has been assigned to you. Subject: "${updated.subject}".`,
+        entityType: 'complaint',
+        entityId:   complaintId,
+      }),
+      prisma.auditLog.create({
+        data: {
+          action:   'COMPLAINT_ASSIGNED',
+          entity:   'clientComplaint',
+          entityId: complaintId,
+          newValue: {
+            receivedBy: receiver.name,
+            assignedTo: assignee.name,
+          },
+        },
+      }),
+    ]);
+
+    return sanitiseComplaint(updated);
+  }
+
+  async updateStatus(
+    complaintId:  string,
+    newStatus:    'UNDER_INVESTIGATION' | 'RESOLVED',
+    actingUserId: string,
+  ): Promise<ComplaintResponse> {
+    const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
+    if (!complaint) throw new NotFoundError('Complaint not found');
+
+    if (!complaint.assignedToId) {
+      throw new AppError('This complaint must be assigned to a staff member before its status can be updated.', 400);
     }
-    if (data.status     !== undefined) updateData.status     = data.status;
-    if (data.resolution !== undefined) updateData.resolution = data.resolution;
-    if (data.resolvedBy !== undefined) updateData.resolvedBy = data.resolvedBy;
 
-    if (data.status === 'RESOLVED') {
-      if (!data.resolution) throw new AppError('Resolution notes required when resolving a complaint', 400);
+    const actingUser = await prisma.user.findUnique({
+      where:  { id: actingUserId },
+      select: { role: true },
+    });
+
+    const isAssignedPerson = complaint.assignedToId === actingUserId;
+    const isHR = ['DIRECTOR', 'ASSISTANT_MANAGER'].includes(actingUser?.role ?? '');
+
+    if (!isAssignedPerson && !isHR) {
+      throw new AppError(
+        'Only the staff member this complaint is assigned to (or HR) can update its status.',
+        403,
+      );
+    }
+
+    const updateData: any = { status: newStatus };
+    if (newStatus === 'RESOLVED') {
       updateData.resolvedAt = new Date();
+      updateData.resolvedBy = actingUserId;
     }
 
     const updated = await prisma.clientComplaint.update({
-      where:   { id },
+      where:   { id: complaintId },
       data:    updateData,
       include: INCLUDE,
     });
 
-    const sideEffects: Promise<any>[] = [
-      QueueService.logAudit({
-        userId:   updatedBy,
-        action:   'COMPLAINT_UPDATED',
-        entity:   'ClientComplaint',
-        entityId: id,
-        newValue: updateData,
-      }),
-    ];
+    await prisma.auditLog.create({
+      data: {
+        action:   'COMPLAINT_STATUS_UPDATED',
+        entity:   'clientComplaint',
+        entityId: complaintId,
+        newValue: { status: newStatus, updatedBy: actingUserId },
+      },
+    });
 
-    if (data.status === 'RESOLVED') {
-      const clientEmail = (existing.client as any).email;
-      if (clientEmail) {
-        sideEffects.push(
-          QueueService.sendEmail({
-            to:       clientEmail,
-            subject:  'Your complaint has been resolved',
-            template: 'complaint-resolved',
-            data:     {
-              complaintCategory: existing.category,
-              resolution:        data.resolution,
-              clientName:        existing.client.clientName,
-            },
-          }),
-        );
-      }
-    }
-
-    if (data.assignedTo && data.assignedTo !== existing.assignedTo) {
-      sideEffects.push(
-        notificationService.send({
-          userId:     data.assignedTo,
-          type:       'COMPLAINT_ASSIGNED',
-          title:      'Complaint Assigned to You',
-          message:    `A ${existing.category} complaint from ${(existing as any).client.clientName} has been assigned to you`,
-          entityType: 'complaint',
-          entityId:   id,
-        }),
-      );
-    }
-
-    await Promise.all(sideEffects);
-
-    return fmtComplaint(updated);
+    return sanitiseComplaint(updated);
   }
 
   async list(query: {
@@ -188,17 +238,23 @@ class ComplaintService {
       }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
     return {
-      data:       items.map(fmtComplaint),
-      pagination: { total, page, limit, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+      data:       items.map(sanitiseComplaint),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasNext:    page < Math.ceil(total / limit),
+        hasPrev:    page > 1,
+      },
     };
   }
 
   async getById(id: string): Promise<ComplaintResponse> {
     const c = await prisma.clientComplaint.findUnique({ where: { id }, include: INCLUDE });
     if (!c) throw new NotFoundError('Complaint not found');
-    return fmtComplaint(c);
+    return sanitiseComplaint(c);
   }
 
   async getDashboard(): Promise<ComplaintDashboard> {
@@ -207,7 +263,7 @@ class ComplaintService {
 
     const [allOpen, allResolved, recentComplaints] = await Promise.all([
       prisma.clientComplaint.findMany({
-        where:   { status: { in: ['OPEN', 'IN_PROGRESS'] } },
+        where:   { status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } },
         include: { client: { select: { clientName: true } } },
       }),
       prisma.clientComplaint.findMany({
@@ -221,40 +277,31 @@ class ComplaintService {
       }),
     ]);
 
-    // openByCategory
     const catMap = new Map<string, number>();
     for (const c of allOpen) {
       catMap.set(c.category, (catMap.get(c.category) ?? 0) + 1);
     }
-    const openByCategory = [...catMap.entries()].map(([category, count]) => ({ category, count }));
 
-    // avgResolutionDays
     const avgResolutionDays = allResolved.length
       ? Math.round(
           allResolved.reduce((s, c) => s + daysOpen(c.createdAt, c.resolvedAt), 0) / allResolved.length,
         )
       : 0;
 
-    // openByClient — top 5
     const clientMap = new Map<string, number>();
     for (const c of allOpen) {
       const name = (c as any).client?.clientName ?? 'Unknown';
       clientMap.set(name, (clientMap.get(name) ?? 0) + 1);
     }
-    const openByClient = [...clientMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([clientName, count]) => ({ clientName, count }));
 
-    // monthlyTrend — last 6 months
     const months = Array.from({ length: 6 }, (_, i) => {
       const d = new Date();
       d.setMonth(d.getMonth() - (5 - i));
       return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString('en', { month: 'short' }) };
     });
-    const trendMap = new Map(months.map(m => [m.key, { month: m.label, opened: 0, resolved: 0 }]));
+    const trendMap = new Map(months.map((m) => [m.key, { month: m.label, opened: 0, resolved: 0 }]));
     for (const c of recentComplaints) {
-      const key = `${c.createdAt.getFullYear()}-${c.createdAt.getMonth()}`;
+      const key  = `${c.createdAt.getFullYear()}-${c.createdAt.getMonth()}`;
       const bucket = trendMap.get(key);
       if (bucket) {
         bucket.opened++;
@@ -263,12 +310,15 @@ class ComplaintService {
     }
 
     return {
-      openByCategory,
+      openByCategory:    [...catMap.entries()].map(([category, count]) => ({ category, count })),
       avgResolutionDays,
-      totalOpen:     allOpen.length,
-      totalResolved: allResolved.length,
-      openByClient,
-      monthlyTrend:  [...trendMap.values()],
+      totalOpen:         allOpen.length,
+      totalResolved:     allResolved.length,
+      openByClient:      [...clientMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([clientName, count]) => ({ clientName, count })),
+      monthlyTrend:      [...trendMap.values()],
     };
   }
 }
