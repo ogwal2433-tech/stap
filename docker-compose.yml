@@ -36,10 +36,10 @@ services:
 
   # ── API (Node.js) ───────────────────────────────────────────────────
   api:
+    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-api:latest
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: stap-api:latest
     container_name: stap-api
     restart: unless-stopped
     environment:
@@ -64,10 +64,10 @@ services:
 
   # ── Worker (BullMQ) ─────────────────────────────────────────────────
   worker:
+    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-api:latest
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: stap-api:latest
     container_name: stap-worker
     restart: unless-stopped
     command: ["node", "apps/api/dist/worker.js"]
@@ -89,6 +89,7 @@ services:
 
   # ── Frontend (React + Nginx) ────────────────────────────────────────
   web:
+    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-web:latest
     build:
       context: .
       dockerfile: apps/web/Dockerfile
