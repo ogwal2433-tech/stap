@@ -36,10 +36,10 @@ services:
 
   # ── API (Node.js) ───────────────────────────────────────────────────
   api:
-    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-api:latest
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    image: stap-api:latest
     container_name: stap-api
     restart: unless-stopped
     environment:
@@ -62,12 +62,9 @@ services:
       redis:
         condition: service_healthy
 
-  # ── Worker (BullMQ) ─────────────────────────────────────────────────
+  # ── Worker (BullMQ) — shares the same image as api ──────────────────
   worker:
-    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-api:latest
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: stap-api:latest
     container_name: stap-worker
     restart: unless-stopped
     command: ["node", "apps/api/dist/worker.js"]
@@ -89,10 +86,10 @@ services:
 
   # ── Frontend (React + Nginx) ────────────────────────────────────────
   web:
-    image: ${DOCKER_REGISTRY:-ghcr.io/biiteek-glode-ltd/stap-security}/stap-web:latest
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    image: stap-web:latest
     container_name: stap-web
     restart: unless-stopped
     networks:
