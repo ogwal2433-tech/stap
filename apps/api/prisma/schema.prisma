@@ -474,6 +474,7 @@ model Contract {
   // Security deployment details
   weaponsAllocation Int?         // Number of weapons allocated under this contract
   shiftPattern      String?      // SINGLE_SHIFT | TWO_SHIFTS | THREE_SHIFTS | CUSTOM
+  billingNote       String?
 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -1061,9 +1062,10 @@ model ServiceRequest {
   client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   siteId      String?
   site        Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  type        String    @default("OTHER") // SITE_ADDITION | GUARD_CHANGE | BILLING_QUERY | SCHEDULE_CHANGE | OTHER
+  type        String    @default("OTHER") // SITE_ADDITION | GUARD_CHANGE | BILLING_QUERY | SCHEDULE_CHANGE | MORE_GUARDS | FEWER_GUARDS | EQUIPMENT | OTHER
   subject     String
   description String
+  quantity    Int?
   status      String    @default("PENDING") // PENDING | IN_PROGRESS | RESOLVED | CANCELLED
   priority    String    @default("NORMAL")  // LOW | NORMAL | HIGH | URGENT
   resolvedBy  String?

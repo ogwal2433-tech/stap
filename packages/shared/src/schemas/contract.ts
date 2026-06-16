@@ -31,6 +31,8 @@ export const CreateContractSchema = z.object({
     guardsCount:  z.number().int().min(1),
     ratePerGuard: z.number().int().positive(),
   })).optional(),
+
+  billingNote: z.string().max(1000).optional().nullable(),
 });
 
 export type CreateContractInput = z.infer<typeof CreateContractSchema>;
@@ -48,6 +50,8 @@ export const UpdateContractSchema = z.object({
     guardsCount:  z.number().int().min(1),
     ratePerGuard: z.number().int().positive(),
   })).optional(),
+
+  billingNote: z.string().max(1000).optional().nullable(),
 });
 
 export type UpdateContractInput = z.infer<typeof UpdateContractSchema>;
@@ -78,6 +82,8 @@ export interface ContractResponse {
 
   // Guard rates (Item 6)
   guardRates: ContractGuardRateResponse[];
+
+  billingNote: string | null;
 
   createdAt:       string;
   updatedAt:       string;

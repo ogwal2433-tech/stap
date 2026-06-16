@@ -32,8 +32,6 @@ class ContractService {
       throw new AppError('Contract end date must be after start date', 400);
     }
 
-    const status = this.computeStatus(start, end);
-
     const contract = await prisma.contract.create({
       data: {
         clientId:          data.clientId,
@@ -41,9 +39,10 @@ class ContractService {
         contractEnd:       end,
         guardsRequired:    data.guardsRequired,
         billingPerGuard:   data.billingPerGuard,
-        status,
+        status:            'ACTIVE',
         weaponsAllocation: data.weaponsAllocation ?? null,
         shiftPattern:      data.shiftPattern ?? null,
+        billingNote:       data.billingNote ?? null,
         ...(data.guardRates?.length && {
           guardRates: { create: data.guardRates },
         }),
@@ -56,7 +55,7 @@ class ContractService {
       action:   'CONTRACT_CREATED',
       entity:   'contract',
       entityId: contract.id,
-      newValue: { clientId: data.clientId, status, guardsRequired: data.guardsRequired },
+      newValue: { clientId: data.clientId, status: 'ACTIVE', guardsRequired: data.guardsRequired },
     });
 
     return this.formatContract(contract);
@@ -89,6 +88,7 @@ class ContractService {
         ...(data.billingPerGuard   !== undefined && { billingPerGuard:   data.billingPerGuard }),
         ...(data.weaponsAllocation !== undefined && { weaponsAllocation: data.weaponsAllocation ?? null }),
         ...(data.shiftPattern      !== undefined && { shiftPattern:      data.shiftPattern ?? null }),
+        ...(data.billingNote       !== undefined && { billingNote:       data.billingNote ?? null }),
         status: newStatus,
         ...(data.guardRates !== undefined && {
           guardRates: {
@@ -274,6 +274,7 @@ class ContractService {
         guardsCount:  r.guardsCount,
         ratePerGuard: r.ratePerGuard,
       })),
+      billingNote: c.billingNote ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
       updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
     };

@@ -59,6 +59,7 @@ export default function ContractFormModal({
   const [guardRates, setGuardRates] = useState<Omit<ContractGuardRateResponse, 'id'>[]>(
     contract?.guardRates?.map(({ guardType, guardsCount, ratePerGuard }) => ({ guardType, guardsCount, ratePerGuard })) ?? [],
   );
+  const [billingNote, setBillingNote] = useState(contract?.billingNote ?? '');
   const [error, setError] = useState('');
 
   const billingPerGuard = parseBilling(billingDisplay);
@@ -82,6 +83,7 @@ export default function ContractFormModal({
       weaponsAllocation: weaponsAllocation !== '' && !isNaN(weapons) ? weapons : undefined,
       shiftPattern:      shiftPattern || undefined,
       guardRates:        guardRates.length > 0 ? guardRates : undefined,
+      billingNote:       billingNote.trim() || null,
     };
 
     try {
@@ -289,6 +291,22 @@ export default function ContractFormModal({
               <Form.Text className="text-muted">
                 Variable billing rates per guard type. Leave empty to use the flat Billing Per Guard rate above.
               </Form.Text>
+
+              <Form.Group className="mt-3">
+                <Form.Label className="small fw-semibold">
+                  Additional Billing Notes
+                  <span className="text-muted fw-normal ms-1">(optional)</span>
+                </Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  size="sm"
+                  placeholder="Any extra context on billing for this contract…"
+                  value={billingNote}
+                  onChange={(e) => setBillingNote(e.target.value)}
+                  maxLength={1000}
+                />
+              </Form.Group>
             </div>
           </div>
         </Modal.Body>

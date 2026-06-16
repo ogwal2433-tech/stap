@@ -87,6 +87,7 @@ export default function ClientDetailPage() {
   const [srSubject, setSrSubject] = useState('');
   const [srDescription, setSrDescription] = useState('');
   const [srType, setSrType] = useState('OTHER');
+  const [srQuantity, setSrQuantity] = useState('');
   const [srPriority, setSrPriority] = useState('NORMAL');
   const [selectedSR, setSelectedSR] = useState<ServiceRequestResponse | null>(null);
 
@@ -741,7 +742,7 @@ export default function ClientDetailPage() {
             <Button
               size="sm"
               style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-              onClick={() => { setSrSubject(''); setSrDescription(''); setSrType('OTHER'); setSrPriority('NORMAL'); setShowSRForm(true); }}
+              onClick={() => { setSrSubject(''); setSrDescription(''); setSrType('OTHER'); setSrQuantity(''); setSrPriority('NORMAL'); setShowSRForm(true); }}
             >
               + New Request
             </Button>
@@ -752,7 +753,7 @@ export default function ClientDetailPage() {
               <div className="fw-semibold small mb-2">New Service Request</div>
               <Row className="g-2">
                 <Col md={6}>
-                  <Form.Select size="sm" value={srType} onChange={(e) => setSrType(e.target.value)}>
+                  <Form.Select size="sm" value={srType} onChange={(e) => { setSrType(e.target.value); setSrQuantity(''); }}>
                     {Object.entries(SERVICE_REQUEST_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </Form.Select>
                 </Col>
@@ -761,6 +762,16 @@ export default function ClientDetailPage() {
                     {['LOW', 'NORMAL', 'HIGH', 'URGENT'].map((p) => <option key={p} value={p}>{p}</option>)}
                   </Form.Select>
                 </Col>
+                {(srType === 'MORE_GUARDS' || srType === 'FEWER_GUARDS') && (
+                  <Col md={3}>
+                    <Form.Control
+                      size="sm" type="number" min={1}
+                      placeholder="Quantity *"
+                      value={srQuantity}
+                      onChange={(e) => setSrQuantity(e.target.value)}
+                    />
+                  </Col>
+                )}
                 <Col md={12}>
                   <Form.Control size="sm" placeholder="Subject *" value={srSubject} onChange={(e) => setSrSubject(e.target.value)} />
                 </Col>
@@ -772,9 +783,15 @@ export default function ClientDetailPage() {
                   <Button
                     size="sm"
                     style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-                    disabled={createSR.isPending || !srSubject.trim() || srDescription.trim().length < 10}
+                    disabled={
+                      createSR.isPending ||
+                      !srSubject.trim() ||
+                      srDescription.trim().length < 10 ||
+                      ((srType === 'MORE_GUARDS' || srType === 'FEWER_GUARDS') && !srQuantity)
+                    }
                     onClick={async () => {
-                      await createSR.mutateAsync({ clientId: id!, type: srType as any, subject: srSubject.trim(), description: srDescription.trim(), priority: srPriority as any });
+                      const qty = srQuantity ? parseInt(srQuantity, 10) : undefined;
+                      await createSR.mutateAsync({ clientId: id!, type: srType as any, subject: srSubject.trim(), description: srDescription.trim(), quantity: qty, priority: srPriority as any });
                       setShowSRForm(false);
                       refetchSR();
                     }}
@@ -805,7 +822,12 @@ export default function ClientDetailPage() {
               <tbody>
                 {srData.data.map((sr) => (
                   <tr key={sr.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedSR(sr)}>
-                    <td>{sr.subject}</td>
+                    <td>
+                      {sr.subject}
+                      {sr.quantity != null && (
+                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>Qty: {sr.quantity}</div>
+                      )}
+                    </td>
                     <td>{SERVICE_REQUEST_TYPES[sr.type as keyof typeof SERVICE_REQUEST_TYPES] ?? sr.type}</td>
                     <td>
                       <Badge bg={SERVICE_REQUEST_PRIORITY_COLORS[sr.priority] ?? 'secondary'} text={sr.priority === 'HIGH' ? 'dark' : undefined}>
@@ -841,6 +863,9 @@ export default function ClientDetailPage() {
                 <div className="fw-semibold">{selectedSR.subject}</div>
                 <Button size="sm" variant="outline-secondary" onClick={() => setSelectedSR(null)}>×</Button>
               </div>
+              {selectedSR.quantity != null && (
+                <div className="small mb-1"><strong>Quantity:</strong> {selectedSR.quantity}</div>
+              )}
               <div className="small text-muted mb-2" style={{ whiteSpace: 'pre-wrap' }}>{selectedSR.description}</div>
               {selectedSR.status !== 'RESOLVED' && selectedSR.status !== 'CANCELLED' && (
                 <div className="d-flex gap-2 mt-2">
