@@ -587,6 +587,13 @@ export default function SettingsPage() {
                         )}
                       </span>
 
+                      {/* Salary */}
+                      <span className="small text-muted me-1" style={{ minWidth: 120, textAlign: 'right' }}>
+                        {rank.defaultSalary != null
+                          ? `UGX ${rank.defaultSalary.toLocaleString()}`
+                          : <span className="fst-italic">No salary set</span>}
+                      </span>
+
                       {/* Actions */}
                       <div className="d-flex gap-1">
                         <Button

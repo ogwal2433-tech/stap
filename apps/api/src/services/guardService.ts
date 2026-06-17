@@ -180,6 +180,15 @@ class GuardService {
 
     const { vettingData, ...guardFields } = data;
 
+    // Auto-fill salary from rank's defaultSalary when no explicit salary provided
+    let effectiveSalary = guardFields.salaryRate;
+    if (guardFields.rank && effectiveSalary === undefined) {
+      const matchedRank = await prisma.guardRank.findFirst({ where: { name: guardFields.rank } });
+      if (matchedRank?.defaultSalary != null) {
+        effectiveSalary = matchedRank.defaultSalary;
+      }
+    }
+
     const systemId = await generateGuardId();
 
     const guard = await prisma.guard.create({
@@ -195,7 +204,7 @@ class GuardService {
         nextOfKinPhone: guardFields.nextOfKinPhone,
         bankName:    guardFields.bankName,
         accountNumber,
-        salaryRate:    guardFields.salaryRate,
+        salaryRate:    effectiveSalary,
         contractStart: new Date(guardFields.contractStart),
         contractEnd:   guardFields.contractEnd ? new Date(guardFields.contractEnd) : undefined,
         psoCertNumber: guardFields.psoCertNumber,
@@ -355,6 +364,13 @@ class GuardService {
     if (guardFields.placeOfBirth !== undefined)            updateData.placeOfBirth            = guardFields.placeOfBirth;
     if (guardFields.educationLevel !== undefined)          updateData.educationLevel          = guardFields.educationLevel;
     if (guardFields.rank !== undefined)                    updateData.rank                    = guardFields.rank;
+    // Auto-fill salary when rank changes and no explicit salary included in this request
+    if (guardFields.rank !== undefined && guardFields.rank !== existing.rank && guardFields.salaryRate === undefined) {
+      const matchedRank = await prisma.guardRank.findFirst({ where: { name: guardFields.rank } });
+      if (matchedRank?.defaultSalary != null) {
+        updateData.salaryRate = matchedRank.defaultSalary;
+      }
+    }
     if (guardFields.contractType !== undefined)              updateData.contractType              = guardFields.contractType;
     if (guardFields.probationStatus !== undefined)           updateData.probationStatus           = guardFields.probationStatus;
     if (guardFields.probationEndDate !== undefined)

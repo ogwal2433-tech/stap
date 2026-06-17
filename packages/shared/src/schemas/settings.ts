@@ -48,13 +48,13 @@ export type ReorderDeductionTypesInput = z.infer<typeof ReorderDeductionTypesSch
 
 export const CreateGuardRankSchema = z.object({
   name:          z.string().min(1).max(100),
-  defaultSalary: z.coerce.number().int().positive().optional().nullable(),
+  defaultSalary: z.coerce.number().int().min(0).optional().nullable(),
   displayOrder:  z.coerce.number().int().min(0).default(0),
 });
 
 export const UpdateGuardRankSchema = z.object({
   name:          z.string().min(1).max(100).optional(),
-  defaultSalary: z.coerce.number().int().positive().optional().nullable(),
+  defaultSalary: z.coerce.number().int().min(0).optional().nullable(),
   displayOrder:  z.coerce.number().int().min(0).optional(),
   isActive:      z.boolean().optional(),
 });

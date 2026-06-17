@@ -297,9 +297,10 @@ export default function GuardFormPage() {
       const matched = ranks.find((r) => r.name === watchedRank);
       if (matched?.defaultSalary) {
         setValue('salaryRate', matched.defaultSalary);
+        showToast(`Salary auto-filled from ${matched.name} rank: UGX ${matched.defaultSalary.toLocaleString()}`, 'info');
       }
     }
-  }, [watchedRank, ranks, isEdit, setValue]);
+  }, [watchedRank, ranks, isEdit, setValue, showToast]);
   const age = dobValue ? calcAge(dobValue.split('T')[0]) : null;
 
   // ── Photo upload ───────────────────────────────────────────────────────────
@@ -564,7 +565,7 @@ export default function GuardFormPage() {
                     </option>
                     {ranks.map((rank) => (
                       <option key={rank.id} value={rank.name}>
-                        {rank.name}
+                        {rank.name}{rank.defaultSalary != null ? ` (UGX ${rank.defaultSalary.toLocaleString()})` : ''}
                       </option>
                     ))}
                   </Form.Select>
