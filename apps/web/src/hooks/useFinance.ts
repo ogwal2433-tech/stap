@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoicesApi, deductionsApi, payrollApi, cashbookApi } from '../lib/finance.api';
 import type {
   CreateInvoiceInput,
+  GenerateInvoiceInput,
   RecordPaymentInput,
   CreateDeductionInput,
   RunPayrollInput,
@@ -55,6 +56,14 @@ export function useARAgingReport() {
     queryKey: ['invoices', 'aging'],
     queryFn:  () => invoicesApi.getARAgingReport(),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGenerateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: GenerateInvoiceInput) => invoicesApi.generate(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   });
 }
 

@@ -1,6 +1,7 @@
 import api from './api';
 import type {
   InvoiceResponse,
+  InvoicePreviewResponse,
   PaymentResponse,
   DeductionResponse,
   PayrollRunResponse,
@@ -10,6 +11,7 @@ import type {
   PayrollSummary,
   PaginatedResponse,
   CreateInvoiceInput,
+  GenerateInvoiceInput,
   RecordPaymentInput,
   CreateDeductionInput,
   RunPayrollInput,
@@ -74,6 +76,22 @@ export const invoicesApi = {
     return api
       .post('/finance/invoices/run-auto-send')
       .then(() => undefined);
+  },
+
+  getInvoicePreview(params: {
+    contractId: string;
+    sourceMode: 'ACTUAL_GUARDS' | 'CONTRACT_RATES';
+    billingDays?: number;
+  }): Promise<InvoicePreviewResponse> {
+    return api
+      .get<{ success: boolean; data: InvoicePreviewResponse }>('/finance/invoices/preview', { params })
+      .then((r) => r.data.data);
+  },
+
+  generate(data: GenerateInvoiceInput): Promise<InvoiceResponse> {
+    return api
+      .post<{ success: boolean; data: InvoiceResponse }>('/finance/invoices/generate', data)
+      .then((r) => r.data.data);
   },
 };
 

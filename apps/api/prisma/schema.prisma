@@ -163,7 +163,8 @@ model Guard {
   nextOfKinPhone   String
   bankName         String?
   accountNumber    String?
-  salaryRate       Int
+  salaryRate        Int
+  billingRatePerDay Int?   // What the client is charged per day for this guard (distinct from salaryRate)
   employmentStatus EmploymentStatus @default(ACTIVE)
   contractStart    DateTime
   contractEnd      DateTime?
@@ -1064,11 +1065,13 @@ model InvoiceLineItem {
   id           String   @id @default(cuid())
   invoiceId    String
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  guardId      String?             // set when line item is for a specific named guard
   description  String
   guardType    String?
-  guardsCount  Int      @default(1)
-  ratePerGuard Int
-  amount       Int
+  guardsCount  Int      @default(1)  // maps to quantity in responses
+  ratePerGuard Int                   // maps to ratePerDay in responses
+  days         Int      @default(30)
+  amount       Int                   // maps to lineTotal in responses
   createdAt    DateTime @default(now())
 }
 

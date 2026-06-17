@@ -147,6 +147,7 @@ import {
   FINANCE_ROLES,
   HR_ROLES,
   CreateInvoiceSchema,
+  GenerateInvoiceSchema,
   RecordPaymentSchema,
   CreateDeductionSchema,
   RunPayrollSchema,
@@ -190,6 +191,30 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const report = await invoiceService.getARAgingReport();
     res.json({ success: true, data: report });
+  }),
+);
+
+router.get(
+  '/invoices/preview',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { contractId, sourceMode, billingDays } = req.query;
+    const preview = await invoiceService.getInvoicePreview(
+      contractId as string,
+      (sourceMode as 'ACTUAL_GUARDS' | 'CONTRACT_RATES') ?? 'ACTUAL_GUARDS',
+      parseInt(billingDays as string) || 30,
+    );
+    res.json({ success: true, data: preview });
+  }),
+);
+
+router.post(
+  '/invoices/generate',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(GenerateInvoiceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.generateInvoice(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: invoice });
   }),
 );
 
