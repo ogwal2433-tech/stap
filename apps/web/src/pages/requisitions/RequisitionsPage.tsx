@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import {
-  Badge, Breadcrumb, Button, Card, Alert,
-  Col, Row, Spinner, Tab, Table, Tabs,
+  Badge, Breadcrumb, Button, Card, Alert, Form,
+  Col, Row, Spinner, Tab, Table, Tabs, Modal,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { useRequisitions, useSuppliers } from '../../hooks/useRequisitions';
+import {
+  useRequisitions, useSuppliers, useApproveRequisition,
+  useHRApproveRequisition, useDirectorApproveRequisition,
+  useAssignRequisition, useUpdateRequisitionProgress,
+  useCreatePurchaseOrder,
+} from '../../hooks/useRequisitions';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import RequisitionFormModal from '../../components/requisitions/RequisitionFormModal';
@@ -22,31 +27,198 @@ function formatDate(iso: string): string {
 
 function statusBadge(status: string) {
   const map: Record<string, { bg: string; text?: string }> = {
-    SUBMITTED: { bg: 'warning', text: 'dark' },
-    APPROVED:  { bg: 'success' },
-    REJECTED:  { bg: 'danger' },
-    CANCELLED: { bg: 'secondary' },
+    PENDING:     { bg: 'warning', text: 'dark' },
+    SUBMITTED:   { bg: 'warning', text: 'dark' },
+    APPROVED:    { bg: 'success' },
+    ASSIGNED:    { bg: 'info', text: 'dark' },
+    IN_PROGRESS: { bg: 'primary' },
+    COMPLETED:   { bg: 'success' },
+    REJECTED:    { bg: 'danger' },
+    CANCELLED:   { bg: 'secondary' },
   };
   const cfg = map[status] ?? { bg: 'secondary' };
-  return <Badge bg={cfg.bg} text={cfg.text}>{status}</Badge>;
+  return <Badge bg={cfg.bg} text={cfg.text as any}>{status.replace('_', ' ')}</Badge>;
 }
 
-function urgencyBadge(urgency: string) {
-  const map: Record<string, { bg: string; text?: string }> = {
-    LOW:    { bg: 'secondary' },
-    NORMAL: { bg: 'info' },
-    HIGH:   { bg: 'warning', text: 'dark' },
-    URGENT: { bg: 'danger' },
-  };
-  const cfg = map[urgency] ?? { bg: 'secondary' };
-  return <Badge bg={cfg.bg} text={cfg.text}>{urgency}</Badge>;
+// ── Category badges helper ────────────────────────────────────────────────────
+
+function CategoryBadges({ items }: { items: RequisitionResponse['categoryItems'] }) {
+  return (
+    <div className="d-flex flex-wrap gap-1 mt-1">
+      {items.map((item) => (
+        <Badge key={item.id} bg="light" text="dark" style={{ fontSize: '0.65rem', border: '1px solid #dee2e6' }}>
+          {item.category}: {item.quantity}{item.unit ? ` ${item.unit}` : ''}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+
+function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; onClose: () => void }) {
+  return (
+    <Modal show onHide={onClose} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title className="fs-6 fw-semibold">Requisition Detail</Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="small">
+        <Row className="g-3">
+          <Col md={4}><strong>Date:</strong><div>{formatDate(req.date)}</div></Col>
+          <Col md={4}><strong>Status:</strong><div className="mt-1">{statusBadge(req.status)}</div></Col>
+          <Col md={4}><strong>Amount:</strong><div>UGX {req.amount.toLocaleString()}</div></Col>
+
+          <Col md={12}>
+            <strong>Particulars:</strong>
+            <div className="mt-1">{req.particulars}</div>
+          </Col>
+
+          {req.categoryItems.length > 0 && (
+            <Col md={12}>
+              <strong>Category Breakdown:</strong>
+              <Table size="sm" bordered className="mt-1 mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>Category</th>
+                    <th style={{ width: 100 }} className="text-center">Quantity</th>
+                    <th style={{ width: 120 }} className="text-center">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {req.categoryItems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.category}</td>
+                      <td className="text-center">{item.quantity}</td>
+                      <td className="text-center">{item.unit ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Col>
+          )}
+
+          <Col md={6}><strong>Requested By:</strong><div>{req.requestedBy.name}</div></Col>
+          <Col md={6}><strong>Assigned To:</strong><div>{req.assignedTo?.name ?? '—'}</div></Col>
+
+          <Col md={6}>
+            <strong>HR Approval:</strong>
+            <div>{req.hrApproved.at ? `✓ ${req.hrApproved.by?.name ?? ''} on ${formatDate(req.hrApproved.at)}` : 'Pending'}</div>
+          </Col>
+          <Col md={6}>
+            <strong>Director Approval:</strong>
+            <div>{req.directorApproved.at ? `✓ ${req.directorApproved.by?.name ?? ''} on ${formatDate(req.directorApproved.at)}` : 'Pending'}</div>
+          </Col>
+
+          {req.progress && (
+            <Col md={12}><strong>Progress:</strong><div>{req.progress}</div></Col>
+          )}
+          {req.remarks && (
+            <Col md={12}><strong>Remarks:</strong><div>{req.remarks}</div></Col>
+          )}
+          {(req.accountName || req.accountDetails || req.bankName) && (
+            <>
+              <Col md={4}><strong>Account Name:</strong><div>{req.accountName ?? '—'}</div></Col>
+              <Col md={4}><strong>Account Details:</strong><div>{req.accountDetails ?? '—'}</div></Col>
+              <Col md={4}><strong>Bank:</strong><div>{req.bankName ?? '—'}</div></Col>
+            </>
+          )}
+          {req.rejectionReason && (
+            <Col md={12}>
+              <Alert variant="danger" className="mb-0 py-2">
+                <strong>Rejection reason:</strong> {req.rejectionReason}
+              </Alert>
+            </Col>
+          )}
+        </Row>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+// ── Assign Modal ──────────────────────────────────────────────────────────────
+
+function AssignModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
+  const [userId, setUserId] = useState('');
+  const assign = useAssignRequisition();
+
+  async function handleAssign() {
+    if (!userId.trim()) return;
+    try {
+      await assign.mutateAsync({ id: requisition.id, data: { assignedToId: userId.trim() } });
+      onClose();
+    } catch { /* mutation handles error display */ }
+  }
+
+  return (
+    <Modal show onHide={onClose}>
+      <Modal.Header closeButton><Modal.Title>Assign Requisition</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form.Group>
+          <Form.Label>Assignee User ID</Form.Label>
+          <Form.Control
+            type="text"
+            placeholder="Paste user ID…"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button style={{ background: NAVY, borderColor: NAVY }} onClick={handleAssign} disabled={assign.isPending || !userId.trim()}>
+          {assign.isPending ? 'Assigning…' : 'Assign'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+// ── Progress Modal ────────────────────────────────────────────────────────────
+
+function ProgressModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
+  const [note, setNote] = useState(requisition.progress ?? '');
+  const update = useUpdateRequisitionProgress();
+
+  async function handleSave() {
+    if (!note.trim()) return;
+    try {
+      await update.mutateAsync({ id: requisition.id, data: { progress: note.trim() } });
+      onClose();
+    } catch { /* mutation handles error display */ }
+  }
+
+  return (
+    <Modal show onHide={onClose}>
+      <Modal.Header closeButton><Modal.Title>Update Progress</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Form.Group>
+          <Form.Label>Progress Note</Form.Label>
+          <Form.Control
+            as="textarea" rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Describe current status / progress…"
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button style={{ background: NAVY, borderColor: NAVY }} onClick={handleSave} disabled={update.isPending || !note.trim()}>
+          {update.isPending ? 'Saving…' : 'Save Progress'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
 }
 
 // ── My Requisitions Tab ───────────────────────────────────────────────────────
 
 function MyRequisitionsTab() {
   const [showCreate, setShowCreate] = useState(false);
-  const [poReq, setPoReq]           = useState<RequisitionResponse | null>(null);
+  const [detailReq, setDetailReq]   = useState<RequisitionResponse | null>(null);
   const { data, isLoading }         = useRequisitions();
   const reqs = data?.data ?? [];
 
@@ -76,45 +248,42 @@ function MyRequisitionsTab() {
               <th>Account Details</th>
               <th>Account Name</th>
               <th>Bank Name</th>
-              <th>Actions</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {reqs.length === 0 ? (
-              <tr><td colSpan={13} className="text-center text-muted py-4">No requisitions yet</td></tr>
+              <tr><td colSpan={12} className="text-center text-muted py-4">No requisitions yet</td></tr>
             ) : reqs.map((r) => (
-              <tr key={r.id}>
-                <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.createdAt)}</td>
-                <td className="text-truncate" style={{ maxWidth: 150 }}>{r.particulars ?? '—'}</td>
-                <td className="text-end" style={{ whiteSpace: 'nowrap' }}>UGX {r.estimatedTotal.toLocaleString()}</td>
+              <tr
+                key={r.id}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setDetailReq(r)}
+              >
+                <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.date)}</td>
+                <td style={{ maxWidth: 180 }}>
+                  <div className="text-truncate">{r.particulars}</div>
+                  <CategoryBadges items={r.categoryItems} />
+                </td>
+                <td className="text-end" style={{ whiteSpace: 'nowrap' }}>UGX {r.amount.toLocaleString()}</td>
                 <td>
-                  {r.hrApprovedAt
-                    ? <Badge bg="success">✅ {formatDate(r.hrApprovedAt)}</Badge>
+                  {r.hrApproved.at
+                    ? <Badge bg="success">✓ {formatDate(r.hrApproved.at)}</Badge>
                     : <Badge bg="warning" text="dark">Pending</Badge>
                   }
                 </td>
                 <td>
-                  {r.dirApprovedAt
-                    ? <Badge bg="success">✅ {formatDate(r.dirApprovedAt)}</Badge>
+                  {r.directorApproved.at
+                    ? <Badge bg="success">✓ {formatDate(r.directorApproved.at)}</Badge>
                     : <Badge bg="warning" text="dark">Pending</Badge>
                   }
                 </td>
-                <td>{r.assignedToName ?? '—'}</td>
+                <td>{r.assignedTo?.name ?? '—'}</td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.progress ?? '—'}</td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.remarks ?? '—'}</td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.accountDetails ?? '—'}</td>
                 <td>{r.accountName ?? '—'}</td>
                 <td>{r.bankName ?? '—'}</td>
-                <td>
-                  {r.status === 'APPROVED' && r.purchaseOrders.length === 0 && (
-                    <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}>
-                      <Button size="sm" variant="outline-primary" onClick={() => setPoReq(r)}>
-                        Create PO
-                      </Button>
-                    </RoleGuard>
-                  )}
-                </td>
                 <td>{statusBadge(r.status)}</td>
               </tr>
             ))}
@@ -123,24 +292,36 @@ function MyRequisitionsTab() {
       )}
 
       {showCreate && <RequisitionFormModal onClose={() => setShowCreate(false)} />}
-      {poReq && <PurchaseOrderModal requisition={poReq} onClose={() => setPoReq(null)} />}
+      {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
     </>
   );
 }
 
-// ── Pending Approval Tab ──────────────────────────────────────────────────────
+// ── Manage Tab (Director / Admin) ─────────────────────────────────────────────
 
-function PendingApprovalTab() {
-  const [approveReq, setApproveReq] = useState<{ req: RequisitionResponse; action: 'APPROVE' | 'REJECT' } | null>(null);
-  const [poReq, setPoReq]           = useState<RequisitionResponse | null>(null);
-  const { data, isLoading }         = useRequisitions({ status: 'SUBMITTED' });
+function ManageTab() {
+  const [rejectReq, setRejectReq]     = useState<RequisitionResponse | null>(null);
+  const [assignReq, setAssignReq]     = useState<RequisitionResponse | null>(null);
+  const [progressReq, setProgressReq] = useState<RequisitionResponse | null>(null);
+  const [poReq, setPoReq]             = useState<RequisitionResponse | null>(null);
+  const [detailReq, setDetailReq]     = useState<RequisitionResponse | null>(null);
+
+  const { data, isLoading } = useRequisitions();
+  const { user }            = useAuth();
+  const hrApprove           = useHRApproveRequisition();
+  const dirApprove          = useDirectorApproveRequisition();
   const reqs = data?.data ?? [];
+
+  const isDirector = user?.role === ROLES.DIRECTOR;
+  const isAdmin    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+
+  const pendingCount = reqs.filter((r) => ['PENDING', 'SUBMITTED'].includes(r.status)).length;
 
   return (
     <>
-      {reqs.length > 0 && (
+      {pendingCount > 0 && (
         <Alert variant="warning" className="small py-2">
-          {reqs.length} requisition{reqs.length > 1 ? 's' : ''} awaiting your approval
+          {pendingCount} requisition(s) awaiting approval
         </Alert>
       )}
 
@@ -151,35 +332,83 @@ function PendingApprovalTab() {
           <thead className="table-light">
             <tr>
               <th>Date</th>
-              <th>Raised By</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th className="text-end">Est. Total</th>
-              <th>Urgency</th>
+              <th>Particulars</th>
+              <th className="text-end">Amount</th>
+              <th>Requested By</th>
+              <th>HR Approves</th>
+              <th>Director Approves</th>
+              <th>Assigned To</th>
+              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {reqs.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-muted py-4">No pending approvals</td></tr>
+              <tr><td colSpan={9} className="text-center text-muted py-4">No requisitions</td></tr>
             ) : reqs.map((r) => (
               <tr key={r.id}>
-                <td>{new Date(r.createdAt).toLocaleDateString('en-GB')}</td>
-                <td>{r.raisedByName}</td>
-                <td><Badge bg="light" text="dark" className="border">{r.category}</Badge></td>
-                <td className="text-truncate" style={{ maxWidth: 180 }}>{r.description}</td>
-                <td className="text-end">UGX {r.estimatedTotal.toLocaleString()}</td>
-                <td>{urgencyBadge(r.urgency)}</td>
+                <td
+                  style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
+                  onClick={() => setDetailReq(r)}
+                >
+                  {formatDate(r.date)}
+                </td>
+                <td style={{ maxWidth: 160, cursor: 'pointer' }} onClick={() => setDetailReq(r)}>
+                  <div className="text-truncate">{r.particulars}</div>
+                  <CategoryBadges items={r.categoryItems} />
+                </td>
+                <td className="text-end">UGX {r.amount.toLocaleString()}</td>
+                <td>{r.requestedBy.name}</td>
                 <td>
-                  <div className="d-flex gap-1">
-                    <Button size="sm" variant="success"
-                      onClick={() => setApproveReq({ req: r, action: 'APPROVE' })}>
-                      Approve
-                    </Button>
-                    <Button size="sm" variant="danger"
-                      onClick={() => setApproveReq({ req: r, action: 'REJECT' })}>
-                      Reject
-                    </Button>
+                  {r.hrApproved.at
+                    ? <Badge bg="success">✓ {r.hrApproved.by?.name ?? ''}</Badge>
+                    : <Badge bg="warning" text="dark">Pending</Badge>
+                  }
+                </td>
+                <td>
+                  {r.directorApproved.at
+                    ? <Badge bg="success">✓ {r.directorApproved.by?.name ?? ''}</Badge>
+                    : <Badge bg="warning" text="dark">Pending</Badge>
+                  }
+                </td>
+                <td>{r.assignedTo?.name ?? '—'}</td>
+                <td>{statusBadge(r.status)}</td>
+                <td>
+                  <div className="d-flex gap-1 flex-wrap">
+                    {isAdmin && !r.hrApproved.at && ['PENDING', 'SUBMITTED'].includes(r.status) && (
+                      <Button size="sm" variant="outline-success"
+                        disabled={hrApprove.isPending}
+                        onClick={() => hrApprove.mutate(r.id)}>
+                        HR ✓
+                      </Button>
+                    )}
+                    {isDirector && r.hrApproved.at && !r.directorApproved.at && (
+                      <Button size="sm" variant="success"
+                        disabled={dirApprove.isPending}
+                        onClick={() => dirApprove.mutate(r.id)}>
+                        Dir ✓
+                      </Button>
+                    )}
+                    {isAdmin && r.status === 'APPROVED' && !r.assignedTo && (
+                      <Button size="sm" variant="outline-primary" onClick={() => setAssignReq(r)}>
+                        Assign
+                      </Button>
+                    )}
+                    {isAdmin && ['ASSIGNED', 'IN_PROGRESS', 'APPROVED'].includes(r.status) && (
+                      <Button size="sm" variant="outline-secondary" onClick={() => setProgressReq(r)}>
+                        Progress
+                      </Button>
+                    )}
+                    {isAdmin && r.status === 'APPROVED' && r.purchaseOrders.length === 0 && (
+                      <Button size="sm" variant="outline-info" onClick={() => setPoReq(r)}>
+                        Create PO
+                      </Button>
+                    )}
+                    {isAdmin && ['PENDING', 'SUBMITTED'].includes(r.status) && (
+                      <Button size="sm" variant="outline-danger" onClick={() => setRejectReq(r)}>
+                        Reject
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -188,14 +417,13 @@ function PendingApprovalTab() {
         </Table>
       )}
 
-      {approveReq && (
-        <ApprovalModal
-          requisition={approveReq.req}
-          action={approveReq.action}
-          onClose={() => setApproveReq(null)}
-        />
+      {rejectReq && (
+        <ApprovalModal requisition={rejectReq} action="REJECT" onClose={() => setRejectReq(null)} />
       )}
+      {assignReq && <AssignModal requisition={assignReq} onClose={() => setAssignReq(null)} />}
+      {progressReq && <ProgressModal requisition={progressReq} onClose={() => setProgressReq(null)} />}
       {poReq && <PurchaseOrderModal requisition={poReq} onClose={() => setPoReq(null)} />}
+      {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
     </>
   );
 }
@@ -254,7 +482,7 @@ function SuppliersTab() {
 export default function RequisitionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canApprove = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any);
+  const canManage = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
 
   return (
     <div className="py-4 px-3">
@@ -271,9 +499,9 @@ export default function RequisitionsPage() {
             <Tab eventKey="mine" title="My Requisitions">
               <MyRequisitionsTab />
             </Tab>
-            {canApprove && (
-              <Tab eventKey="pending" title="Pending Approval">
-                <PendingApprovalTab />
+            {canManage && (
+              <Tab eventKey="manage" title="Manage">
+                <ManageTab />
               </Tab>
             )}
             <Tab eventKey="suppliers" title="Suppliers">

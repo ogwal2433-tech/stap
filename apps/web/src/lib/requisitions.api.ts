@@ -6,6 +6,8 @@ import type {
   PaginatedResponse,
   CreateRequisitionInput,
   ApproveRequisitionInput,
+  AssignRequisitionInput,
+  UpdateProgressInput,
   CreatePurchaseOrderInput,
   CreateSupplierInput,
 } from '@stap/shared';
@@ -13,8 +15,6 @@ import type {
 export const requisitionsApi = {
   list(params?: {
     status?: string;
-    category?: string;
-    raisedBy?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<RequisitionResponse>> {
@@ -32,6 +32,30 @@ export const requisitionsApi = {
   approve(id: string, data: ApproveRequisitionInput): Promise<RequisitionResponse> {
     return api
       .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/approve`, data)
+      .then((r) => r.data.data);
+  },
+
+  hrApprove(id: string): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/hr-approve`, {})
+      .then((r) => r.data.data);
+  },
+
+  directorApprove(id: string): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/director-approve`, {})
+      .then((r) => r.data.data);
+  },
+
+  assign(id: string, data: AssignRequisitionInput): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/assign`, data)
+      .then((r) => r.data.data);
+  },
+
+  updateProgress(id: string, data: UpdateProgressInput): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/progress`, data)
       .then((r) => r.data.data);
   },
 

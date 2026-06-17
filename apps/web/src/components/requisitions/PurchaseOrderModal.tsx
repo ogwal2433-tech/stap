@@ -33,8 +33,8 @@ export default function PurchaseOrderModal({ requisition, onClose }: Props) {
   } = useForm<FormValues>({
     resolver: zodResolver(Schema),
     defaultValues: {
-      quantity: requisition.quantity,
-      unitCost: requisition.estimatedUnitCost,
+      quantity: 1,
+      unitCost: requisition.amount,
     },
   });
 
@@ -68,7 +68,8 @@ export default function PurchaseOrderModal({ requisition, onClose }: Props) {
       <Form onSubmit={handleSubmit(onSubmit)}>
         <Modal.Body>
           <div className="mb-3 p-2 rounded bg-light small">
-            Requisition: <strong>{requisition.category}</strong> — {requisition.description}
+            Requisition: <strong>{requisition.categoryItems.map((c) => c.category).join(', ')}</strong> — {requisition.particulars}
+            <div className="mt-1">Amount: <strong>UGX {requisition.amount.toLocaleString()}</strong></div>
           </div>
           <Row className="g-3">
             <Col md={12}>

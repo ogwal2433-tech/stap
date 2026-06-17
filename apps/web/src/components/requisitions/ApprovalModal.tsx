@@ -43,8 +43,8 @@ export default function ApprovalModal({ requisition, action, onClose }: Props) {
       <Form onSubmit={handleSubmit(onSubmit)}>
         <Modal.Body>
           <Alert variant={action === 'APPROVE' ? 'success' : 'danger'} className="small">
-            <strong>{requisition.category}</strong> — {requisition.description}
-            <div className="mt-1">Est. Total: <strong>UGX {requisition.estimatedTotal.toLocaleString()}</strong></div>
+            <strong>{requisition.categoryItems.map((c) => c.category).join(', ')}</strong> — {requisition.particulars}
+            <div className="mt-1">Amount: <strong>UGX {requisition.amount.toLocaleString()}</strong></div>
           </Alert>
 
           {action === 'REJECT' && (

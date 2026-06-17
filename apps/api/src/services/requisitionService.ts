@@ -4,49 +4,61 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import type {
   CreateRequisitionInput,
   ApproveRequisitionInput,
+  AssignRequisitionInput,
+  UpdateProgressInput,
   CreatePurchaseOrderInput,
   RequisitionResponse,
+  CategoryItemResponse,
   PurchaseOrderResponse,
   PaginatedResponse,
 } from '@stap/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+function fmtCategoryItem(item: any): CategoryItemResponse {
+  return {
+    id:       item.id,
+    category: item.category,
+    quantity: item.quantity,
+    unit:     item.unit ?? null,
+  };
+}
+
 function fmtRequisition(r: any): RequisitionResponse {
   return {
-    id:                r.id,
-    raisedBy:          r.raisedBy,
-    raisedByName:      r.raisedByUser?.name ?? '',
-    category:          r.category,
-    categories:        r.categories ?? [],
-    description:       r.description,
-    particulars:       r.particulars ?? null,
-    quantity:          r.quantity,
-    estimatedUnitCost: r.estimatedUnitCost,
-    estimatedTotal:    r.estimatedTotal,
-    urgency:           r.urgency,
-    justification:     r.justification,
-    progress:          r.progress ?? null,
-    remarks:           r.remarks ?? null,
-    accountDetails:    r.accountDetails ?? null,
-    accountName:       r.accountName ?? null,
-    bankName:          r.bankName ?? null,
-    assignedToId:      r.assignedToId ?? null,
-    assignedToName:    r.assignedToUser?.name ?? null,
-    hrApprovedAt:      r.hrApprovedAt?.toISOString() ?? null,
-    hrApprovedBy:      r.hrApprovedBy ?? null,
-    dirApprovedAt:     r.dirApprovedAt?.toISOString() ?? null,
-    dirApprovedBy:     r.dirApprovedBy ?? null,
-    status:            r.status,
-    approvedBy:        r.approvedBy,
-    approvedByName:    r.approvedByUser?.name ?? null,
-    approvedAt:        r.approvedAt?.toISOString() ?? null,
-    rejectedBy:        r.rejectedBy,
-    rejectedAt:        r.rejectedAt?.toISOString() ?? null,
-    rejectionReason:   r.rejectionReason,
-    comments:          r.comments,
-    createdAt:         r.createdAt.toISOString(),
-    purchaseOrders:    (r.purchaseOrders ?? []).map(fmtPO),
+    id:               r.id,
+    date:             (r.date instanceof Date ? r.date : new Date(r.date)).toISOString(),
+    particulars:      r.particulars ?? '',
+    amount:           r.amount,
+    categoryItems:    (r.categoryItems ?? []).map(fmtCategoryItem),
+    requestedBy:      { id: r.requestedById, name: r.requestedByUser?.name ?? '' },
+    hrApproved: {
+      by: r.hrApprovedByUser
+        ? { id: r.hrApprovedById, name: r.hrApprovedByUser.name }
+        : null,
+      at: r.hrApprovedAt?.toISOString() ?? null,
+    },
+    directorApproved: {
+      by: r.directorApprovedByUser
+        ? { id: r.directorApprovedById, name: r.directorApprovedByUser.name }
+        : null,
+      at: r.directorApprovedAt?.toISOString() ?? null,
+    },
+    assignedTo:       r.assignedToUser
+      ? { id: r.assignedToId, name: r.assignedToUser.name }
+      : null,
+    progress:         r.progress ?? null,
+    remarks:          r.remarks ?? null,
+    accountDetails:   r.accountDetails ?? null,
+    accountName:      r.accountName ?? null,
+    bankName:         r.bankName ?? null,
+    status:           r.status,
+    rejectedBy:       r.rejectedBy ?? null,
+    rejectedAt:       r.rejectedAt?.toISOString() ?? null,
+    rejectionReason:  r.rejectionReason ?? null,
+    purchaseOrders:   (r.purchaseOrders ?? []).map(fmtPO),
+    createdAt:        r.createdAt.toISOString(),
+    updatedAt:        r.updatedAt.toISOString(),
   };
 }
 
@@ -68,54 +80,61 @@ function fmtPO(po: any): PurchaseOrderResponse {
 }
 
 const INCLUDE = {
-  raisedByUser:    { select: { name: true } },
-  assignedToUser:  { select: { name: true } },
-  purchaseOrders:  { include: { supplier: true } },
+  requestedByUser:        { select: { name: true } },
+  hrApprovedByUser:       { select: { name: true } },
+  directorApprovedByUser: { select: { name: true } },
+  assignedToUser:         { select: { name: true } },
+  categoryItems:          { orderBy: { createdAt: 'asc' as const } },
+  purchaseOrders:         { include: { supplier: true } },
 } as const;
 
 // ── RequisitionService ─────────────────────────────────────────────────────────
 
 class RequisitionService {
-  async create(data: CreateRequisitionInput, raisedBy: string): Promise<RequisitionResponse> {
-    const estimatedTotal = data.quantity * data.estimatedUnitCost;
+  async create(data: CreateRequisitionInput, requestedById: string): Promise<RequisitionResponse> {
+    const { categoryItems, ...reqData } = data;
 
     const requisition = await prisma.requisition.create({
       data: {
-        raisedBy,
-        categories:        data.categories,
-        category:          data.categories[0] ?? 'OTHER',
-        description:       data.description,
-        particulars:       data.particulars ?? null,
-        quantity:          data.quantity,
-        estimatedUnitCost: data.estimatedUnitCost,
-        estimatedTotal,
-        urgency:           data.urgency ?? 'NORMAL',
-        justification:     data.justification ?? null,
-        progress:          data.progress ?? null,
-        remarks:           data.remarks ?? null,
-        accountDetails:    data.accountDetails ?? null,
-        accountName:       data.accountName ?? null,
-        bankName:          data.bankName ?? null,
-        status:            'SUBMITTED',
+        requestedById,
+        date:           reqData.date ? new Date(reqData.date) : new Date(),
+        particulars:    reqData.particulars,
+        amount:         reqData.amount,
+        category:       categoryItems[0]?.category ?? 'Other',
+        description:    reqData.particulars,
+        quantity:       1,
+        estimatedUnitCost: reqData.amount,
+        estimatedTotal:    reqData.amount,
+        remarks:        reqData.remarks ?? null,
+        accountDetails: reqData.accountDetails ?? null,
+        accountName:    reqData.accountName ?? null,
+        bankName:       reqData.bankName ?? null,
+        status:         'PENDING',
+        categoryItems:  {
+          create: categoryItems.map((item) => ({
+            category: item.category,
+            quantity: item.quantity,
+            unit:     item.unit ?? null,
+          })),
+        },
       },
       include: INCLUDE,
     });
 
-    // Notify approvers (DIRECTOR + ASSISTANT_MANAGER)
     const approvers = await prisma.user.findMany({
-      where: { role: { in: ['DIRECTOR', 'ASSISTANT_MANAGER'] }, status: 'ACTIVE' },
+      where:  { role: { in: ['DIRECTOR', 'ASSISTANT_MANAGER'] }, status: 'ACTIVE' },
       select: { email: true },
     });
     for (const approver of approvers) {
       if (approver.email) {
         await QueueService.sendEmail({
           to:       approver.email,
-          subject:  `New Requisition: ${data.categories.join(', ')}`,
+          subject:  `New Requisition: ${categoryItems.map((c) => c.category).join(', ')}`,
           template: 'requisition-approval',
           data: {
-            description:    data.description,
-            estimatedTotal,
-            urgency:        data.urgency ?? 'NORMAL',
+            description:    reqData.particulars,
+            estimatedTotal: reqData.amount,
+            urgency:        'NORMAL',
             raisedByName:   '',
           },
         });
@@ -123,33 +142,109 @@ class RequisitionService {
     }
 
     await QueueService.logAudit({
-      userId:   raisedBy,
+      userId:   requestedById,
       action:   'REQUISITION_SUBMITTED',
       entity:   'requisition',
       entityId: requisition.id,
-      newValue: { categories: data.categories, estimatedTotal },
+      newValue: { categories: categoryItems.map((c) => c.category), amount: reqData.amount },
     });
 
     return fmtRequisition(requisition);
   }
 
-  async approve(id: string, data: ApproveRequisitionInput, actionBy: string): Promise<RequisitionResponse> {
-    const requisition = await prisma.requisition.findUnique({
+  async hrApprove(id: string, by: string): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (req.hrApprovedAt) throw new AppError('Already HR approved', 400);
+
+    const updated = await prisma.requisition.update({
       where:   { id },
-      include: { ...INCLUDE, raisedByUser: { select: { email: true, name: true } } },
+      data:    { hrApprovedAt: new Date(), hrApprovedById: by },
+      include: INCLUDE,
     });
+
+    await QueueService.logAudit({
+      userId: by, action: 'REQUISITION_HR_APPROVED', entity: 'requisition', entityId: id,
+      newValue: { hrApprovedById: by },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  async directorApprove(id: string, by: string): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (!req.hrApprovedAt) throw new AppError('HR must approve before Director', 400);
+    if (req.directorApprovedAt) throw new AppError('Already Director approved', 400);
+
+    const updated = await prisma.requisition.update({
+      where:   { id },
+      data:    { directorApprovedAt: new Date(), directorApprovedById: by, status: 'APPROVED' },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId: by, action: 'REQUISITION_DIRECTOR_APPROVED', entity: 'requisition', entityId: id,
+      newValue: { status: 'APPROVED' },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  async assign(id: string, data: AssignRequisitionInput, by: string): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (req.status !== 'APPROVED') throw new AppError('Requisition must be APPROVED before assigning', 400);
+
+    const assignee = await prisma.user.findUnique({ where: { id: data.assignedToId } });
+    if (!assignee) throw new NotFoundError('Assignee not found');
+
+    const updated = await prisma.requisition.update({
+      where:   { id },
+      data:    { assignedToId: data.assignedToId, status: 'ASSIGNED' },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId: by, action: 'REQUISITION_ASSIGNED', entity: 'requisition', entityId: id,
+      newValue: { assignedToId: data.assignedToId },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  async updateProgress(id: string, data: UpdateProgressInput, by: string): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+
+    const updated = await prisma.requisition.update({
+      where:   { id },
+      data:    { progress: data.progress, status: 'IN_PROGRESS' },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId: by, action: 'REQUISITION_PROGRESS_UPDATED', entity: 'requisition', entityId: id,
+      newValue: { progress: data.progress },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  async approve(id: string, data: ApproveRequisitionInput, actionBy: string): Promise<RequisitionResponse> {
+    const requisition = await prisma.requisition.findUnique({ where: { id }, include: INCLUDE });
     if (!requisition) throw new NotFoundError('Requisition not found');
-    if (requisition.status !== 'SUBMITTED') {
-      throw new AppError('Only SUBMITTED requisitions can be actioned', 400);
+    if (!['PENDING', 'SUBMITTED'].includes(requisition.status)) {
+      throw new AppError('Only PENDING requisitions can be actioned', 400);
     }
 
     const now = new Date();
     const updateData: any = { comments: data.comments ?? null };
 
     if (data.action === 'APPROVE') {
-      updateData.status     = 'APPROVED';
-      updateData.approvedBy = actionBy;
-      updateData.approvedAt = now;
+      updateData.status               = 'APPROVED';
+      updateData.directorApprovedAt   = now;
+      updateData.directorApprovedById = actionBy;
     } else {
       updateData.status          = 'REJECTED';
       updateData.rejectedBy      = actionBy;
@@ -162,20 +257,6 @@ class RequisitionService {
       data:    updateData,
       include: INCLUDE,
     });
-
-    // Notify requester
-    const requesterEmail = (requisition as any).raisedByUser?.email;
-    if (requesterEmail) {
-      await QueueService.sendEmail({
-        to:       requesterEmail,
-        subject:  `Requisition ${data.action === 'APPROVE' ? 'Approved' : 'Rejected'}`,
-        template: data.action === 'APPROVE' ? 'requisition-approved' : 'requisition-rejected',
-        data: {
-          description:     requisition.description,
-          rejectionReason: data.rejectionReason ?? '',
-        },
-      });
-    }
 
     await QueueService.logAudit({
       userId:   actionBy,
@@ -190,31 +271,25 @@ class RequisitionService {
 
   async list(query: {
     status?: string;
-    category?: string;
-    raisedBy?: string;
     page: number;
     limit: number;
   }, viewerRole?: string, viewerId?: string): Promise<PaginatedResponse<RequisitionResponse>> {
-    const { page, limit, status, category, raisedBy } = query;
+    const { page, limit, status } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)   where.status   = status;
-    if (category) where.category = category;
+    if (status) where.status = status;
 
-    // Non-admin roles see only their own requisitions
     const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'];
     if (viewerRole && !adminRoles.includes(viewerRole) && viewerId) {
-      where.raisedBy = viewerId;
-    } else if (raisedBy) {
-      where.raisedBy = raisedBy;
+      where.requestedById = viewerId;
     }
 
     const [reqs, total] = await Promise.all([
       prisma.requisition.findMany({
         where,
         include: INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { date: 'desc' },
         skip,
         take: limit,
       }),
@@ -239,19 +314,16 @@ class RequisitionService {
 
     const po = await prisma.purchaseOrder.create({
       data: {
-        requisitionId:   data.requisitionId,
-        supplierId:      data.supplierId ?? null,
-        quantity:        data.quantity,
-        unitCost:        data.unitCost,
+        requisitionId:    data.requisitionId,
+        supplierId:       data.supplierId ?? null,
+        quantity:         data.quantity,
+        unitCost:         data.unitCost,
         totalCost,
         expectedDelivery: data.expectedDelivery ? new Date(data.expectedDelivery) : null,
         createdBy,
       },
       include: { supplier: true },
     });
-
-    // TODO: Generate PO PDF similar to invoice PDF using Puppeteer
-    // with PO number and supplier details
 
     await QueueService.logAudit({
       userId:   createdBy,
@@ -270,7 +342,7 @@ class RequisitionService {
     const year  = now.getFullYear();
 
     const [pendingApprovals, pos, spendByCategory] = await Promise.all([
-      prisma.requisition.count({ where: { status: 'SUBMITTED' } }),
+      prisma.requisition.count({ where: { status: { in: ['PENDING', 'SUBMITTED'] } } }),
       prisma.purchaseOrder.findMany({
         where: {
           status:           { not: 'CANCELLED' },
@@ -279,18 +351,18 @@ class RequisitionService {
         },
       }),
       prisma.requisition.groupBy({
-        by:     ['category'],
-        where:  { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
-        _sum:   { estimatedTotal: true },
+        by:    ['category'],
+        where: { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
+        _sum:  { estimatedTotal: true },
       }),
     ]);
 
     const totalSpendThisMonth = (
       await prisma.requisition.aggregate({
-        where:  { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
-        _sum:   { estimatedTotal: true },
+        where: { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
+        _sum:  { amount: true },
       })
-    )._sum.estimatedTotal ?? 0;
+    )._sum.amount ?? 0;
 
     return {
       pendingApprovals,

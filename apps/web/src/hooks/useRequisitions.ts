@@ -3,6 +3,8 @@ import { requisitionsApi, suppliersApi } from '../lib/requisitions.api';
 import type {
   CreateRequisitionInput,
   ApproveRequisitionInput,
+  AssignRequisitionInput,
+  UpdateProgressInput,
   CreatePurchaseOrderInput,
   CreateSupplierInput,
 } from '@stap/shared';
@@ -27,6 +29,40 @@ export function useApproveRequisition() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: ApproveRequisitionInput }) =>
       requisitionsApi.approve(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useHRApproveRequisition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => requisitionsApi.hrApprove(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useDirectorApproveRequisition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => requisitionsApi.directorApprove(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useAssignRequisition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: AssignRequisitionInput }) =>
+      requisitionsApi.assign(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useUpdateRequisitionProgress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateProgressInput }) =>
+      requisitionsApi.updateProgress(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
   });
 }

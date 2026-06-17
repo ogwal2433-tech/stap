@@ -64,6 +64,10 @@ import {
   INTERNAL_ROLES,
   CreateRequisitionSchema,
   ApproveRequisitionSchema,
+  HRApproveRequisitionSchema,
+  DirectorApproveRequisitionSchema,
+  AssignRequisitionSchema,
+  UpdateProgressSchema,
   CreatePurchaseOrderSchema,
   CreateSupplierSchema,
 } from '@stap/shared';
@@ -93,11 +97,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const result = await requisitionService.list(
       {
-        status:   req.query.status   as string | undefined,
-        category: req.query.category as string | undefined,
-        raisedBy: req.query.raisedBy as string | undefined,
-        page:     Number(req.query.page  ?? 1),
-        limit:    Number(req.query.limit ?? 20),
+        status: req.query.status as string | undefined,
+        page:   Number(req.query.page  ?? 1),
+        limit:  Number(req.query.limit ?? 20),
       },
       req.user!.role,
       req.user!.userId,
@@ -122,6 +124,46 @@ router.patch(
   validate(ApproveRequisitionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.approve(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+router.patch(
+  '/:id/hr-approve',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  validate(HRApproveRequisitionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.hrApprove(req.params.id, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+router.patch(
+  '/:id/director-approve',
+  requireRole(ROLES.DIRECTOR),
+  validate(DirectorApproveRequisitionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.directorApprove(req.params.id, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+router.patch(
+  '/:id/assign',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  validate(AssignRequisitionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.assign(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+router.patch(
+  '/:id/progress',
+  requireRole(...REQUISITION_SUBMITTER_ROLES),
+  validate(UpdateProgressSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.updateProgress(req.params.id, req.body, req.user!.userId);
     res.json({ success: true, data: requisition });
   }),
 );

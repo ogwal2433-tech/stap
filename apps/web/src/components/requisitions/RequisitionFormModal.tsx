@@ -1,61 +1,67 @@
 import { useState } from 'react';
-import { Modal, Form, Button, Row, Col, Badge } from 'react-bootstrap';
+import {
+  Modal, Form, Button, Row, Col, Badge, InputGroup,
+} from 'react-bootstrap';
 import { useCreateRequisition } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 
 interface Props { onClose: () => void }
 
-const CATEGORIES = [
-  { value: 'UNIFORM',             label: 'Uniform' },
-  { value: 'EQUIPMENT',           label: 'Equipment' },
-  { value: 'STATIONERY',          label: 'Stationery' },
-  { value: 'VEHICLE_MAINTENANCE', label: 'Vehicle Maintenance' },
-  { value: 'OTHER',               label: 'Other' },
-] as const;
-
-const URGENCY = [
-  { value: 'LOW',    label: 'Low' },
-  { value: 'NORMAL', label: 'Normal' },
-  { value: 'HIGH',   label: 'High' },
-  { value: 'URGENT', label: 'Urgent' },
+const REQUISITION_CATEGORIES = [
+  'Stationery', 'Equipment', 'Fuel', 'Maintenance',
+  'Uniform', 'Training', 'Medical', 'Transport', 'Other',
 ];
 
-type Category = typeof CATEGORIES[number]['value'];
+interface CategorySelection {
+  category: string;
+  quantity: number;
+  unit:     string;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function RequisitionFormModal({ onClose }: Props) {
   const { showToast } = useToast();
   const createReq = useCreateRequisition();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [description, setDescription] = useState('');
+  const [date, setDate]               = useState(today());
   const [particulars, setParticulars] = useState('');
-  const [quantity, setQuantity] = useState(1);
-  const [estimatedUnitCost, setEstimatedUnitCost] = useState('');
-  const [urgency, setUrgency] = useState<string>('NORMAL');
-  const [justification, setJustification] = useState('');
-  const [accountName, setAccountName] = useState('');
+  const [amountStr, setAmountStr]     = useState('');
+  const [categoryItems, setCategoryItems] = useState<CategorySelection[]>([]);
+  const [remarks, setRemarks]         = useState('');
   const [accountDetails, setAccountDetails] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [remarks, setRemarks] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [accountName, setAccountName] = useState('');
+  const [bankName, setBankName]       = useState('');
+  const [errors, setErrors]           = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const unitCost = parseInt(estimatedUnitCost.replace(/[^\d]/g, ''), 10) || 0;
-  const total = quantity * unitCost;
+  const amount = parseInt(amountStr.replace(/[^\d]/g, ''), 10) || 0;
 
-  function toggleCategory(cat: Category) {
-    setCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat],
+  const isSelected = (cat: string) => categoryItems.some((c) => c.category === cat);
+
+  function toggleCategory(cat: string) {
+    setCategoryItems((prev) =>
+      prev.some((c) => c.category === cat)
+        ? prev.filter((c) => c.category !== cat)
+        : [...prev, { category: cat, quantity: 1, unit: '' }],
     );
-    setErrors((e) => ({ ...e, categories: '' }));
+    setErrors((e) => ({ ...e, categoryItems: '' }));
+  }
+
+  function updateItem(cat: string, field: 'quantity' | 'unit', value: number | string) {
+    setCategoryItems((prev) =>
+      prev.map((c) => c.category === cat ? { ...c, [field]: value } : c),
+    );
   }
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (categories.length === 0) e.categories = 'Select at least one category';
-    if (description.trim().length < 10) e.description = 'Description must be at least 10 characters';
-    if (quantity < 1) e.quantity = 'Quantity must be at least 1';
-    if (unitCost <= 0) e.estimatedUnitCost = 'Unit cost must be positive';
+    if (!date) e.date = 'Date is required';
+    if (particulars.trim().length < 3) e.particulars = 'Particulars must be at least 3 characters';
+    if (amount <= 0) e.amount = 'Amount must be positive';
+    if (categoryItems.length === 0) e.categoryItems = 'Select at least one category and specify a quantity';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -66,17 +72,18 @@ export default function RequisitionFormModal({ onClose }: Props) {
     setIsSubmitting(true);
     try {
       await createReq.mutateAsync({
-        categories,
-        description: description.trim(),
-        particulars: particulars.trim() || undefined,
-        quantity,
-        estimatedUnitCost: unitCost,
-        urgency: urgency as any,
-        justification: justification.trim() || undefined,
-        accountName: accountName.trim() || undefined,
+        date:           `${date}T00:00:00.000Z`,
+        particulars:    particulars.trim(),
+        amount,
+        categoryItems:  categoryItems.map((c) => ({
+          category: c.category,
+          quantity: c.quantity,
+          unit:     c.unit.trim() || undefined,
+        })),
+        remarks:        remarks.trim() || undefined,
         accountDetails: accountDetails.trim() || undefined,
-        bankName: bankName.trim() || undefined,
-        remarks: remarks.trim() || undefined,
+        accountName:    accountName.trim() || undefined,
+        bankName:       bankName.trim() || undefined,
       });
       showToast('Requisition submitted', 'success');
       onClose();
@@ -89,125 +96,164 @@ export default function RequisitionFormModal({ onClose }: Props) {
 
   return (
     <Modal show onHide={onClose} size="lg">
-      <Modal.Header closeButton>
-        <Modal.Title>New Requisition</Modal.Title>
+      <Modal.Header closeButton style={{ backgroundColor: '#1B3A6B', color: '#fff' }}>
+        <Modal.Title className="fs-6 fw-semibold">New Requisition</Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
           <Row className="g-3">
-            {/* Categories — multi-select checkboxes */}
-            <Col md={12}>
-              <Form.Label className="fw-semibold">
-                Category <span className="text-danger">*</span>
-              </Form.Label>
-              <div className="d-flex flex-wrap gap-2">
-                {CATEGORIES.map((c) => (
-                  <Form.Check
-                    key={c.value}
-                    type="checkbox"
-                    id={`cat-${c.value}`}
-                    label={c.label}
-                    checked={categories.includes(c.value)}
-                    onChange={() => toggleCategory(c.value)}
-                    className="me-2"
-                  />
-                ))}
-              </div>
-              {categories.length > 0 && (
-                <div className="mt-2 d-flex gap-1 flex-wrap">
-                  {categories.map((c) => (
-                    <Badge key={c} bg="secondary" className="small">
-                      {CATEGORIES.find((x) => x.value === c)?.label}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {errors.categories && <div className="text-danger small mt-1">{errors.categories}</div>}
-            </Col>
-
-            {/* Urgency */}
+            {/* 1. Date */}
             <Col md={4}>
               <Form.Group>
-                <Form.Label>Urgency</Form.Label>
-                <Form.Select value={urgency} onChange={(e) => setUrgency(e.target.value)}>
-                  {URGENCY.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                </Form.Select>
-              </Form.Group>
-            </Col>
-
-            {/* Description */}
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Description <span className="text-danger">*</span></Form.Label>
+                <Form.Label className="fw-semibold">
+                  Date <span className="text-danger">*</span>
+                </Form.Label>
                 <Form.Control
-                  as="textarea" rows={2}
-                  value={description}
-                  onChange={(e) => { setDescription(e.target.value); setErrors((x) => ({ ...x, description: '' })); }}
-                  placeholder="Describe the item(s) needed…"
-                  isInvalid={!!errors.description}
+                  type="date"
+                  value={date}
+                  onChange={(e) => { setDate(e.target.value); setErrors((x) => ({ ...x, date: '' })); }}
+                  isInvalid={!!errors.date}
                 />
-                <Form.Control.Feedback type="invalid">{errors.description}</Form.Control.Feedback>
+                <Form.Control.Feedback type="invalid">{errors.date}</Form.Control.Feedback>
               </Form.Group>
             </Col>
 
-            {/* Particulars */}
+            {/* 2. Particulars */}
             <Col md={12}>
               <Form.Group>
-                <Form.Label>Particulars <span className="text-muted small">(optional)</span></Form.Label>
+                <Form.Label className="fw-semibold">
+                  Particulars <span className="text-danger">*</span>
+                </Form.Label>
                 <Form.Control
                   as="textarea" rows={2}
                   value={particulars}
-                  onChange={(e) => setParticulars(e.target.value)}
-                  placeholder="Specific details, sizes, specifications…"
+                  onChange={(e) => { setParticulars(e.target.value); setErrors((x) => ({ ...x, particulars: '' })); }}
+                  placeholder="Describe the items or services needed…"
+                  isInvalid={!!errors.particulars}
                 />
+                <Form.Control.Feedback type="invalid">{errors.particulars}</Form.Control.Feedback>
               </Form.Group>
             </Col>
 
-            {/* Qty / Cost / Total */}
-            <Col md={4}>
+            {/* 3. Requisition Amount */}
+            <Col md={5}>
               <Form.Group>
-                <Form.Label>Quantity <span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                  type="number" min={1}
-                  value={quantity}
-                  onChange={(e) => { setQuantity(parseInt(e.target.value, 10) || 1); setErrors((x) => ({ ...x, quantity: '' })); }}
-                  isInvalid={!!errors.quantity}
-                />
-                <Form.Control.Feedback type="invalid">{errors.quantity}</Form.Control.Feedback>
+                <Form.Label className="fw-semibold">
+                  Requisition Amount (UGX) <span className="text-danger">*</span>
+                </Form.Label>
+                <InputGroup>
+                  <InputGroup.Text>UGX</InputGroup.Text>
+                  <Form.Control
+                    type="text" inputMode="numeric"
+                    value={amountStr}
+                    onChange={(e) => {
+                      setAmountStr(e.target.value.replace(/[^\d]/g, ''));
+                      setErrors((x) => ({ ...x, amount: '' }));
+                    }}
+                    placeholder="0"
+                    isInvalid={!!errors.amount}
+                  />
+                  <Form.Control.Feedback type="invalid">{errors.amount}</Form.Control.Feedback>
+                </InputGroup>
               </Form.Group>
-            </Col>
-            <Col md={4}>
-              <Form.Group>
-                <Form.Label>Est. Unit Cost (UGX) <span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                  type="text" inputMode="numeric"
-                  value={estimatedUnitCost}
-                  onChange={(e) => { setEstimatedUnitCost(e.target.value.replace(/[^\d]/g, '')); setErrors((x) => ({ ...x, estimatedUnitCost: '' })); }}
-                  placeholder="0"
-                  isInvalid={!!errors.estimatedUnitCost}
-                />
-                <Form.Control.Feedback type="invalid">{errors.estimatedUnitCost}</Form.Control.Feedback>
-              </Form.Group>
-            </Col>
-            <Col md={4} className="d-flex align-items-end">
-              <div className="w-100 p-2 rounded bg-light text-center">
-                <div className="small text-muted">Est. Total</div>
-                <div className="fw-bold" style={{ color: '#1B3A6B' }}>UGX {total.toLocaleString()}</div>
-              </div>
             </Col>
 
-            {/* Justification */}
+            {/* 4. Category — checkbox list with inline quantity rows */}
             <Col md={12}>
               <Form.Group>
-                <Form.Label>Justification <span className="text-muted small">(optional)</span></Form.Label>
-                <Form.Control as="textarea" rows={2} value={justification} onChange={(e) => setJustification(e.target.value)} />
+                <Form.Label className="fw-semibold">
+                  Category <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Text className="text-muted d-block mb-2">
+                  Select one or more categories. For each selected category, specify the quantity required.
+                </Form.Text>
+
+                <div style={{ border: '1px solid #ced4da', borderRadius: '0.375rem', padding: '4px 0' }}>
+                  {REQUISITION_CATEGORIES.map((cat) => {
+                    const selected = categoryItems.find((c) => c.category === cat);
+                    return (
+                      <div key={cat} style={{ borderBottom: '1px solid #f0f0f0', padding: '6px 12px' }}>
+                        <Form.Check
+                          type="checkbox"
+                          id={`cat-${cat}`}
+                          label={cat}
+                          checked={!!selected}
+                          onChange={() => toggleCategory(cat)}
+                        />
+
+                        {selected && (
+                          <Row className="g-2 mt-1" style={{ marginLeft: 24, maxWidth: 340 }}>
+                            <Col xs={6}>
+                              <Form.Control
+                                size="sm"
+                                type="number"
+                                min={1}
+                                placeholder="Quantity *"
+                                value={selected.quantity}
+                                onChange={(e) =>
+                                  updateItem(cat, 'quantity', parseInt(e.target.value, 10) || 1)
+                                }
+                              />
+                            </Col>
+                            <Col xs={6}>
+                              <Form.Control
+                                size="sm"
+                                placeholder="Unit (e.g. litres, boxes)"
+                                value={selected.unit}
+                                onChange={(e) => updateItem(cat, 'unit', e.target.value)}
+                              />
+                            </Col>
+                          </Row>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {errors.categoryItems && (
+                  <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: 4 }}>
+                    {errors.categoryItems}
+                  </div>
+                )}
+
+                {categoryItems.length > 0 && (
+                  <div className="mt-2">
+                    <div className="small fw-semibold text-muted mb-1">Summary</div>
+                    <div className="d-flex flex-wrap gap-1">
+                      {categoryItems.map((c) => (
+                        <Badge key={c.category} bg="secondary" style={{ fontSize: '0.72rem' }}>
+                          {c.category}: {c.quantity}{c.unit ? ` ${c.unit}` : ''}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </Form.Group>
             </Col>
 
-            {/* Payment Details */}
+            {/* Optional section */}
             <Col md={12}>
               <hr className="my-1" />
-              <div className="small fw-semibold text-muted mb-2">Payment Details (optional)</div>
+              <div className="small fw-semibold text-muted mb-2">Optional Details</div>
+            </Col>
+
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Remarks</Form.Label>
+                <Form.Control
+                  as="textarea" rows={1}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Any additional notes…"
+                />
+              </Form.Group>
+            </Col>
+
+            <Col md={4}>
+              <Form.Group>
+                <Form.Label>Account Details</Form.Label>
+                <Form.Control value={accountDetails} onChange={(e) => setAccountDetails(e.target.value)} placeholder="Account number" />
+              </Form.Group>
             </Col>
             <Col md={4}>
               <Form.Group>
@@ -217,22 +263,8 @@ export default function RequisitionFormModal({ onClose }: Props) {
             </Col>
             <Col md={4}>
               <Form.Group>
-                <Form.Label>Account Number</Form.Label>
-                <Form.Control value={accountDetails} onChange={(e) => setAccountDetails(e.target.value)} placeholder="Account number" />
-              </Form.Group>
-            </Col>
-            <Col md={4}>
-              <Form.Group>
                 <Form.Label>Bank Name</Form.Label>
                 <Form.Control value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Stanbic Bank" />
-              </Form.Group>
-            </Col>
-
-            {/* Remarks */}
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Remarks <span className="text-muted small">(optional)</span></Form.Label>
-                <Form.Control as="textarea" rows={1} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any additional notes…" />
               </Form.Group>
             </Col>
           </Row>

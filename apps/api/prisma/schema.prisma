@@ -128,10 +128,12 @@ model User {
   checkins            SupervisorCheckin[]  @relation("CheckinSupervisor")
   complaintsAssigned  ClientComplaint[]    @relation("ComplaintAssignedTo")
   complaintsReceived  ClientComplaint[]    @relation("ComplaintReceivedBy")
-  assignedRequisitions Requisition[]       @relation("RequisitionAssignee")
+  requestedRequisitions    Requisition[]   @relation("RequisitionRequestedBy")
+  hrApprovedRequisitions   Requisition[]   @relation("RequisitionHRApprover")
+  dirApprovedRequisitions  Requisition[]   @relation("RequisitionDirectorApprover")
+  assignedRequisitions     Requisition[]   @relation("RequisitionAssignedTo")
   auditLogs           AuditLog[]
   reportedIncidents   Incident[]           @relation("IncidentReporter")
-  raisedRequisitions  Requisition[]        @relation("RaisedRequisitions")
   notifications       Notification[]
   clientOf            Client?              @relation("ClientUser")
   assignedApplicants  Applicant[]          @relation("ApplicantAssignee")
@@ -724,40 +726,54 @@ model CashbookEntry {
 // ─── Requisition Models ────────────────────────────────────────────────────────
 
 model Requisition {
-  id                String    @id @default(cuid())
-  raisedBy          String
-  raisedByUser      User      @relation("RaisedRequisitions", fields: [raisedBy], references: [id])
-  category          String
-  categories        String[]  @default([])
-  description       String
-  particulars       String?   @db.Text
-  quantity          Int       @default(1)
-  estimatedUnitCost Int
-  estimatedTotal    Int
-  urgency           String    @default("NORMAL")
-  justification     String?
-  progress          String?
-  remarks           String?
-  accountDetails    String?
-  accountName       String?
-  bankName          String?
-  assignedToId      String?
-  assignedToUser    User?     @relation("RequisitionAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  hrApprovedAt      DateTime?
-  hrApprovedBy      String?
-  dirApprovedAt     DateTime?
-  dirApprovedBy     String?
-  status            String    @default("DRAFT")
-  approvedBy        String?
-  approvedAt        DateTime?
-  rejectedBy        String?
-  rejectedAt        DateTime?
-  rejectionReason   String?
-  comments          String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  requestedById         String
+  requestedByUser       User      @relation("RequisitionRequestedBy", fields: [requestedById], references: [id])
+  date                  DateTime  @default(now())
+  particulars           String    @db.Text
+  amount                Int       @default(0)
+  // legacy field kept for dashboard groupBy
 
+  category              String
+  description           String
+  quantity              Int       @default(1)
+  estimatedUnitCost     Int
+  estimatedTotal        Int
+  urgency               String    @default("NORMAL")
+  justification         String?
+  progress              String?
+  remarks               String?
+  accountDetails        String?
+  accountName           String?
+  bankName              String?
+  assignedToId          String?
+  assignedToUser        User?     @relation("RequisitionAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  hrApprovedAt          DateTime?
+  hrApprovedById        String?
+  hrApprovedByUser      User?     @relation("RequisitionHRApprover", fields: [hrApprovedById], references: [id], onDelete: SetNull)
+  directorApprovedAt    DateTime?
+  directorApprovedById  String?
+  directorApprovedByUser User?    @relation("RequisitionDirectorApprover", fields: [directorApprovedById], references: [id], onDelete: SetNull)
+  status                String    @default("PENDING")
+  rejectedBy            String?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  comments              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  categoryItems  RequisitionCategoryItem[]
   purchaseOrders PurchaseOrder[]
+}
+
+model RequisitionCategoryItem {
+  id            String      @id @default(cuid())
+  requisitionId String
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  category      String
+  quantity      Int         @default(1)
+  unit          String?
+  createdAt     DateTime    @default(now())
 }
 
 model Supplier {
