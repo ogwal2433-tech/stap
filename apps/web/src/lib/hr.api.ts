@@ -75,7 +75,9 @@ export const hrApi = {
     const fd = new FormData();
     fd.append('file', file);
     return api
-      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/application-letter`, fd)
+      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/application-letter`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       .then((r) => r.data.data);
   },
 
@@ -83,7 +85,9 @@ export const hrApi = {
     const fd = new FormData();
     fd.append('file', file);
     return api
-      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/vetting-form`, fd)
+      .post<{ success: boolean; data: ApplicantResponse }>(`/hr/applicants/${id}/vetting-form`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       .then((r) => r.data.data);
   },
 
