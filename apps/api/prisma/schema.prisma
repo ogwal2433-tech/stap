@@ -643,8 +643,9 @@ model Invoice {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  payments  Payment[]
-  lineItems InvoiceLineItem[]
+  payments        Payment[]
+  invoicePayments InvoicePayment[]
+  lineItems       InvoiceLineItem[]
 }
 
 model Payment {
@@ -658,6 +659,23 @@ model Payment {
   reconciled      Boolean  @default(false)
   recordedBy      String
   createdAt       DateTime @default(now())
+}
+
+model InvoicePayment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  extReference    String   @unique               // unique per payment attempt
+  phone           String
+  network         String                         // MTN | AIRTEL
+  amountPaid      Int
+  status          String   @default("PENDING")  // PENDING | SUCCESS | FAILED | CANCELLED
+  xcelTransactionId String?
+  failureReason   String?
+  initiatedBy     String
+  initiatedAt     DateTime @default(now())
+  resolvedAt      DateTime?
+  updatedAt       DateTime @updatedAt
 }
 
 model GuardDeduction {

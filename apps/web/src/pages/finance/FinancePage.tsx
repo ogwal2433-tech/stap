@@ -15,7 +15,9 @@ import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
+import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
+import { useInvoicePayments } from '../../hooks/usePayments';
 import { ROLES } from '@stap/shared';
 import type { InvoiceResponse, PayslipResponse } from '@stap/shared';
 import { invoicesApi } from '../../lib/finance.api';
@@ -49,12 +51,72 @@ function isOverdue(dueDate: string) {
   return new Date(dueDate) < new Date();
 }
 
+// ── Invoice Payment History Modal ─────────────────────────────────────────────
+
+function InvoicePaymentHistoryModal({ invoice, onClose }: { invoice: InvoiceResponse; onClose: () => void }) {
+  const { data: payments, isLoading } = useInvoicePayments(invoice.id);
+
+  const statusColor: Record<string, string> = {
+    PENDING:   'warning',
+    SUCCESS:   'success',
+    FAILED:    'danger',
+    CANCELLED: 'secondary',
+  };
+
+  return (
+    <Modal show onHide={onClose} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="small fw-bold">
+          Mobile Money Payment History — {invoice.invoiceNumber}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {isLoading ? (
+          <div className="text-center py-4"><Spinner animation="border" /></div>
+        ) : !payments?.length ? (
+          <p className="text-muted text-center py-4 small">No mobile money payment attempts for this invoice.</p>
+        ) : (
+          <Table size="sm" bordered>
+            <thead className="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Phone</th>
+                <th>Network</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => (
+                <tr key={p.id}>
+                  <td className="small">{new Date(p.initiatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td className="small">{p.phone}</td>
+                  <td><Badge bg={p.network === 'MTN' ? 'warning' : 'danger'} text={p.network === 'MTN' ? 'dark' : 'white'}>{p.network}</Badge></td>
+                  <td className="small fw-semibold">UGX {p.amountPaid.toLocaleString()}</td>
+                  <td><Badge bg={statusColor[p.status] ?? 'secondary'}>{p.status}</Badge></td>
+                  <td className="small text-muted" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.extReference}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 // ── Invoices Tab ──────────────────────────────────────────────────────────────
 
 function InvoicesTab() {
   const [showCreate, setShowCreate]       = useState(false);
-  const [payInvoice, setPayInvoice]       = useState<InvoiceResponse | null>(null);
-  const [sendingId, setSendingId]         = useState<string | null>(null);
+  const [payInvoice,    setPayInvoice]    = useState<InvoiceResponse | null>(null);
+  const [payMoMo,       setPayMoMo]       = useState<InvoiceResponse | null>(null);
+  const [historyInvoice, setHistoryInvoice] = useState<InvoiceResponse | null>(null);
+  const [sendingId,     setSendingId]     = useState<string | null>(null);
   const { data, isLoading }               = useInvoices();
   const { showToast }                     = useToast();
   const queryClient                       = useQueryClient();
@@ -153,6 +215,9 @@ function InvoicesTab() {
                         PDF
                       </a>
                     )}
+                    <Button size="sm" variant="outline-secondary" onClick={() => setHistoryInvoice(inv)} title="View payment history">
+                      History
+                    </Button>
                     <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
                       <Button
                         size="sm"
@@ -173,7 +238,10 @@ function InvoicesTab() {
                     {['PENDING', 'OVERDUE'].includes(inv.status) && (
                       <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
                         <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
-                          Pay
+                          Record Payment
+                        </Button>
+                        <Button size="sm" variant="outline-primary" onClick={() => setPayMoMo(inv)} title="Pay via MTN/Airtel Mobile Money">
+                          💳 Mobile Money
                         </Button>
                       </RoleGuard>
                     )}
@@ -193,6 +261,18 @@ function InvoicesTab() {
             setPayInvoice(null);
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
           }}
+        />
+      )}
+      {payMoMo && (
+        <PayInvoiceModal
+          invoice={payMoMo}
+          onClose={() => setPayMoMo(null)}
+        />
+      )}
+      {historyInvoice && (
+        <InvoicePaymentHistoryModal
+          invoice={historyInvoice}
+          onClose={() => setHistoryInvoice(null)}
         />
       )}
     </>

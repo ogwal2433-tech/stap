@@ -17,6 +17,7 @@ import { settingsRouter } from './settings';
 import zonesRouter from './zones';
 import { lettersRouter } from './letters';
 import serviceRequestsRouter from './serviceRequests';
+import { paymentsRouter } from './payments';
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use('/settings', settingsRouter);
 router.use('/zones', zonesRouter);
 router.use('/letters', lettersRouter);
 router.use('/service-requests', serviceRequestsRouter);
+router.use('/payments', paymentsRouter);
 
 export default router;
