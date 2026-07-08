@@ -946,6 +946,34 @@ class GuardService {
       throw new AppError('Only ACTIVE guards can be transferred.', 400);
     }
 
+    // A transfer moves a guard FROM their current site TO a new one — they
+    // must have an open (endDate: null) deployment history record to transfer from.
+    const currentDeployment = await prisma.deploymentHistory.findFirst({
+      where:   { guardId, endDate: null },
+      orderBy: { startDate: 'desc' },
+      include: { site: { select: { id: true, siteName: true, client: { select: { clientName: true } } } } },
+    });
+    if (!currentDeployment) {
+      throw new AppError(
+        `${guard.firstName} ${guard.lastName} is not currently deployed to any site. ` +
+          'A transfer can only be made when a guard is actively deployed somewhere. ' +
+          'Please deploy this guard to a site first, then transfer them from there.',
+        400,
+      );
+    }
+    if (data.fromSiteId && data.fromSiteId !== currentDeployment.siteId) {
+      throw new AppError(
+        `${guard.firstName} ${guard.lastName} is not currently deployed at the specified site. ` +
+          `They are deployed at ${currentDeployment.site.siteName} (${currentDeployment.site.client.clientName}). ` +
+          'Transfer must be from their current site.',
+        400,
+      );
+    }
+    const resolvedFromSiteId = data.fromSiteId ?? currentDeployment.siteId;
+    if (data.toSiteId === resolvedFromSiteId) {
+      throw new AppError('Cannot transfer a guard to the same site they are currently deployed at.', 400);
+    }
+
     const toSite = await prisma.site.findUnique({
       where: { id: data.toSiteId },
       include: { client: { select: { clientName: true } } },
@@ -955,7 +983,7 @@ class GuardService {
     const transfer = await prisma.guardTransfer.create({
       data: {
         guardId,
-        fromSiteId:   data.fromSiteId ?? null,
+        fromSiteId:   resolvedFromSiteId,
         toSiteId:     data.toSiteId,
         reason:       data.reason,
         transferDate: new Date(data.transferDate),
@@ -967,6 +995,13 @@ class GuardService {
         toSite:           { include: { client: { select: { clientName: true } } } },
         authorisedByUser: { select: { name: true } },
       },
+    });
+
+    // Close out the old deployment record so `endDate: null` keeps meaning
+    // "currently deployed here" (relied on by invoiceService and this check).
+    await prisma.deploymentHistory.update({
+      where: { id: currentDeployment.id },
+      data:  { endDate: new Date(data.transferDate) },
     });
 
     await prisma.deploymentHistory.create({

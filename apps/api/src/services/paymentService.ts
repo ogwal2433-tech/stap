@@ -15,7 +15,10 @@ export async function initiateInvoicePayment(params: {
   phone:       string;
   initiatedBy: string;
 }): Promise<{ extReference: string; network: string; status: string }> {
-  const invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: params.invoiceId } });
+  const invoice = await prisma.invoice.findUniqueOrThrow({
+    where:   { id: params.invoiceId },
+    include: { client: { select: { contactPerson: true } } },
+  });
 
   if (!['PENDING', 'OVERDUE'].includes(invoice.status)) {
     throw new Error(`Invoice is already ${invoice.status}`);
@@ -44,11 +47,12 @@ export async function initiateInvoicePayment(params: {
       phone:        normPhone,
       amount:       invoice.totalAmount,
       network,
+      accountName:  invoice.client.contactPerson,
       extReference,
       description:  `Payment for invoice ${invoice.invoiceNumber}`,
       webhookUrl:   WEBHOOK_URL,
     });
-    xcelTransactionId = result.transactionId ?? null;
+    xcelTransactionId = result.data?.reference ?? null;
   } catch (err) {
     await prisma.invoicePayment.update({
       where: { extReference },
@@ -135,24 +139,24 @@ export async function pollPaymentStatus(extReference: string): Promise<{
   }
 
   const xcelResult = await checkPaymentStatus(extReference);
-  const xcelStatus = xcelResult.status?.toUpperCase();
+  const xcelStatus = xcelResult.data.description?.toUpperCase();
 
   if (xcelStatus === 'SUCCESS' || xcelStatus === 'SUCCESSFUL') {
     await handleWebhook({
       ext_reference:    extReference,
       status:           'SUCCESS',
-      transaction_id:   xcelResult.transactionId ?? undefined,
+      transaction_id:   xcelResult.data.reference ?? undefined,
     });
-    return { status: 'SUCCESS', xcelTransactionId: xcelResult.transactionId ?? null, failureReason: null };
+    return { status: 'SUCCESS', xcelTransactionId: xcelResult.data.reference ?? null, failureReason: null };
   }
 
   if (xcelStatus === 'FAILED' || xcelStatus === 'CANCELLED') {
     await handleWebhook({
       ext_reference:  extReference,
       status:         xcelStatus,
-      failure_reason: xcelResult.message,
+      failure_reason: xcelResult.data.reason ?? undefined,
     });
-    return { status: xcelStatus, xcelTransactionId: xcelResult.transactionId ?? null, failureReason: xcelResult.message };
+    return { status: xcelStatus, xcelTransactionId: xcelResult.data.reference ?? null, failureReason: xcelResult.data.reason };
   }
 
   return {

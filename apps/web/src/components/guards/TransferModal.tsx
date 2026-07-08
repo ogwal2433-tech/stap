@@ -35,6 +35,7 @@ export default function TransferModal({
 
   const transfer = useTransferGuard(guardId);
   const sites = sitesPage?.data ?? [];
+  const notDeployed = !currentSiteId;
 
   const handleSubmit = () => {
     if (!toSiteId) {
@@ -75,81 +76,93 @@ export default function TransferModal({
           <div className="fw-medium">{guardName}</div>
         </Form.Group>
 
-        <Form.Group className="mb-3">
-          <Form.Label className="fw-semibold small text-muted text-uppercase">From Site</Form.Label>
-          <div className="fw-medium text-muted">
-            {currentSiteName ?? 'Not currently deployed'}
-          </div>
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>
-            To Site <span className="text-danger">*</span>
-          </Form.Label>
-          {sitesLoading ? (
-            <div className="d-flex align-items-center gap-2 text-muted small">
-              <Spinner size="sm" /> Loading sites…
-            </div>
-          ) : (
-            <Form.Select
-              value={toSiteId}
-              onChange={(e) => setToSiteId(e.target.value)}
-            >
-              <option value="">— Select destination site —</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.siteName} — {s.clientName}
-                </option>
-              ))}
-            </Form.Select>
-          )}
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>
-            Transfer Date <span className="text-danger">*</span>
-          </Form.Label>
-          <Form.Control
-            type="date"
-            value={transferDate}
-            onChange={(e) => setTransferDate(e.target.value)}
-          />
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>
-            Reason <span className="text-danger">*</span>
-          </Form.Label>
-          <Form.Control
-            as="textarea"
-            rows={4}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="State the reason for this transfer, e.g. client request, performance issue, roster balancing, etc."
-          />
-        </Form.Group>
-
-        {error && (
-          <Alert variant="danger" className="mb-0 py-2 small">
-            {error}
+        {notDeployed ? (
+          <Alert variant="warning" className="mb-0">
+            <strong>{guardName} is not currently deployed to any site.</strong> A transfer can
+            only be made when a guard is actively deployed somewhere. Please deploy this guard
+            to a site first, then transfer them from there.
           </Alert>
+        ) : (
+          <>
+            <Form.Group className="mb-3">
+              <Form.Label className="fw-semibold small text-muted text-uppercase">From Site</Form.Label>
+              <div className="fw-medium text-muted">
+                {currentSiteName}
+              </div>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>
+                To Site <span className="text-danger">*</span>
+              </Form.Label>
+              {sitesLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted small">
+                  <Spinner size="sm" /> Loading sites…
+                </div>
+              ) : (
+                <Form.Select
+                  value={toSiteId}
+                  onChange={(e) => setToSiteId(e.target.value)}
+                >
+                  <option value="">— Select destination site —</option>
+                  {sites.filter((s) => s.id !== currentSiteId).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.siteName} — {s.clientName}
+                    </option>
+                  ))}
+                </Form.Select>
+              )}
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>
+                Transfer Date <span className="text-danger">*</span>
+              </Form.Label>
+              <Form.Control
+                type="date"
+                value={transferDate}
+                onChange={(e) => setTransferDate(e.target.value)}
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>
+                Reason <span className="text-danger">*</span>
+              </Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={4}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="State the reason for this transfer, e.g. client request, performance issue, roster balancing, etc."
+              />
+            </Form.Group>
+
+            {error && (
+              <Alert variant="danger" className="mb-0 py-2 small">
+                {error}
+              </Alert>
+            )}
+          </>
         )}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onClose} disabled={transfer.isPending}>
-          Cancel
+          {notDeployed ? 'Close' : 'Cancel'}
         </Button>
-        <Button
-          variant="primary"
-          style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-          onClick={handleSubmit}
-          disabled={transfer.isPending || sitesLoading}
-        >
-          {transfer.isPending && (
-            <Spinner as="span" size="sm" className="me-2" animation="border" />
-          )}
-          Transfer Guard
-        </Button>
+        {!notDeployed && (
+          <Button
+            variant="primary"
+            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+            onClick={handleSubmit}
+            disabled={transfer.isPending || sitesLoading}
+          >
+            {transfer.isPending && (
+              <Spinner as="span" size="sm" className="me-2" animation="border" />
+            )}
+            Transfer Guard
+          </Button>
+        )}
       </Modal.Footer>
     </Modal>
   );

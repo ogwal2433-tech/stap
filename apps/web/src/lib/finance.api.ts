@@ -16,6 +16,7 @@ import type {
   CreateDeductionInput,
   RunPayrollInput,
   CashbookEntryInput,
+  FlagPayslipInput,
 } from '@stap/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -138,8 +139,26 @@ export const payrollApi = {
       .then((r) => r.data.data);
   },
 
+  hrApprove(id: string, notes?: string): Promise<PayrollRunResponse> {
+    return api
+      .post<{ success: boolean; data: PayrollRunResponse }>(`/finance/payroll/${id}/hr-approve`, { notes })
+      .then((r) => r.data.data);
+  },
+
   disburse(id: string): Promise<void> {
     return api.post(`/finance/payroll/${id}/disburse`).then(() => undefined);
+  },
+
+  flagPayslip(payslipId: string, data: FlagPayslipInput): Promise<PayslipResponse> {
+    return api
+      .patch<{ success: boolean; data: PayslipResponse }>(`/finance/payroll/payslips/${payslipId}/flag`, data)
+      .then((r) => r.data.data);
+  },
+
+  unflagPayslip(payslipId: string): Promise<PayslipResponse> {
+    return api
+      .patch<{ success: boolean; data: PayslipResponse }>(`/finance/payroll/payslips/${payslipId}/unflag`)
+      .then((r) => r.data.data);
   },
 
   getDetail(id: string): Promise<PayrollRunResponse & { payslips: PayslipResponse[] }> {

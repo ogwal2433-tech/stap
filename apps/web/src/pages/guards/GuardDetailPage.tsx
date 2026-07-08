@@ -244,6 +244,10 @@ export default function GuardDetailPage() {
     id ?? '',
     deployPage,
   );
+  // Always page 1 (most recent first) so the active deployment is found
+  // regardless of which page the deployment history table is scrolled to.
+  const { data: currentDeploymentPage } = useGuardDeploymentHistory(id ?? '', 1);
+  const activeDeployment = currentDeploymentPage?.data.find((d) => !d.endDate) ?? null;
   const { data: disciplinaryRecords = [], refetch: refetchDisciplinary } = useDisciplinaryRecords(id ?? '');
   const { data: guardLetters = [], refetch: refetchLetters } = useGuardLetters(id ?? '');
   const { data: letterRecordsRes, refetch: refetchLetterRecords } = useLettersBySubject(id ?? '');
@@ -381,8 +385,13 @@ export default function GuardDetailPage() {
           </RoleGuard>
           {guard.employmentStatus === 'ACTIVE' && (
             <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
-              <Button variant="outline-info" onClick={() => setShowTransferModal(true)}>
-                Transfer
+              <Button
+                variant="outline-info"
+                disabled={!activeDeployment}
+                title={activeDeployment ? undefined : 'Guard must be deployed to a site before they can be transferred'}
+                onClick={() => setShowTransferModal(true)}
+              >
+                Transfer{!activeDeployment && ' (not deployed)'}
               </Button>
             </RoleGuard>
           )}
@@ -1382,9 +1391,8 @@ export default function GuardDetailPage() {
         <TransferModal
           guardId={id!}
           guardName={guard.fullName}
-          currentSiteName={
-            deployHistory?.data.find((d) => !d.endDate)?.site.siteName ?? null
-          }
+          currentSiteId={activeDeployment?.site.id ?? null}
+          currentSiteName={activeDeployment?.site.siteName ?? null}
           onClose={() => setShowTransferModal(false)}
           onSuccess={() => refetch()}
         />

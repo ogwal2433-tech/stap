@@ -16,7 +16,9 @@ vi.mock('../../db/prisma', () => ({
       findMany: vi.fn(),
     },
     deploymentHistory: {
-      create: vi.fn(),
+      create:    vi.fn(),
+      findFirst: vi.fn(),
+      update:    vi.fn(),
     },
     auditLog: { create: vi.fn() },
   },
@@ -59,6 +61,19 @@ const toSite = {
   client:   { clientName: 'Mall Corp' },
 };
 
+const currentDeployment = {
+  id:        'dh-1',
+  guardId:   'g1',
+  siteId:    'site-1',
+  endDate:   null,
+  startDate: new Date('2026-01-01'),
+  site: {
+    id:       'site-1',
+    siteName: 'Warehouse A',
+    client:   { clientName: 'Storage Ltd' },
+  },
+};
+
 const transferRecord = {
   id:          'tr-1',
   guardId:     'g1',
@@ -83,6 +98,8 @@ const transferInput = {
 beforeEach(() => {
   vi.clearAllMocks();
   mp.deploymentHistory.create.mockResolvedValue({});
+  mp.deploymentHistory.findFirst.mockResolvedValue(currentDeployment);
+  mp.deploymentHistory.update.mockResolvedValue({});
   mp.auditLog.create.mockResolvedValue({});
   mockNotif.sendToRole.mockResolvedValue(undefined);
 });
@@ -170,6 +187,85 @@ describe('guardService.transferGuard() — error cases', () => {
     await expect(
       guardService.transferGuard('g1', transferInput, 'user1'),
     ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws 400 when guard has no active deployment', async () => {
+    mp.guard.findUnique.mockResolvedValue(activeGuard);
+    mp.deploymentHistory.findFirst.mockResolvedValue(null);
+
+    await expect(
+      guardService.transferGuard('g1', transferInput, 'user1'),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining('not currently deployed'),
+    });
+  });
+
+  it('throws 400 when guard is SUSPENDED regardless of deployment status', async () => {
+    mp.guard.findUnique.mockResolvedValue({ ...activeGuard, employmentStatus: 'SUSPENDED' });
+    mp.deploymentHistory.findFirst.mockResolvedValue(currentDeployment);
+
+    await expect(
+      guardService.transferGuard('g1', transferInput, 'user1'),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    // the deployment status was never even queried — employment status is checked first
+    expect(mp.deploymentHistory.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('throws 400 when fromSiteId does not match the guard\'s actual current deployment site', async () => {
+    mp.guard.findUnique.mockResolvedValue(activeGuard);
+    mp.deploymentHistory.findFirst.mockResolvedValue(currentDeployment);
+
+    await expect(
+      guardService.transferGuard('g1', { ...transferInput, fromSiteId: 'wrong-site' }, 'user1'),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining('Warehouse A'),
+    });
+  });
+
+  it('throws 400 when toSiteId is the same as the resolved fromSiteId', async () => {
+    mp.guard.findUnique.mockResolvedValue(activeGuard);
+    mp.deploymentHistory.findFirst.mockResolvedValue(currentDeployment);
+
+    await expect(
+      guardService.transferGuard('g1', { ...transferInput, toSiteId: 'site-1' }, 'user1'),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+// ── transferGuard(): deployment auto-detection ────────────────────────────────
+
+describe('guardService.transferGuard() — deployment auto-detection', () => {
+  beforeEach(() => {
+    mp.guard.findUnique.mockResolvedValue(activeGuard);
+    mp.site.findUnique.mockResolvedValue(toSite);
+    mp.deploymentHistory.findFirst.mockResolvedValue(currentDeployment);
+    mp.guardTransfer.create.mockResolvedValue(transferRecord);
+  });
+
+  it('succeeds when guard has an active deployment and toSiteId is a different valid site', async () => {
+    const result = await guardService.transferGuard('g1', transferInput, 'user1');
+    expect(result).toMatchObject({ id: 'tr-1' });
+  });
+
+  it('auto-populates fromSiteId from the guard\'s most recent deployment when not provided', async () => {
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.guardTransfer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ fromSiteId: 'site-1' }),
+      }),
+    );
+  });
+
+  it('closes the previous deployment history entry (sets endDate)', async () => {
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.deploymentHistory.update).toHaveBeenCalledWith({
+      where: { id: 'dh-1' },
+      data:  { endDate: new Date(transferInput.transferDate) },
+    });
   });
 });
 

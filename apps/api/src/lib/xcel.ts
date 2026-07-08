@@ -22,13 +22,14 @@ export function generateExtReference(): string {
 }
 
 function baseUrl(): string {
-  return (process.env.XCEL_BASE_URL ?? 'https://sandbox.xcelpay.io/api/v1').replace(/\/$/, '');
+  return (process.env.XCEL_BASE_URL ?? 'https://sandbox-api.xcelapp.com').replace(/\/$/, '');
 }
 
 function authHeaders(): Record<string, string> {
   return {
-    Authorization:  `Bearer ${process.env.XCEL_API_KEY ?? ''}`,
-    'Content-Type': 'application/json',
+    'x-api-key':     process.env.XCEL_API_KEY ?? '',
+    'x-merchant-id': process.env.XCEL_MERCHANT_ID ?? '',
+    'Content-Type':  'application/json',
   };
 }
 
@@ -62,35 +63,107 @@ export interface CollectionRequest {
   phone:        string;
   amount:       number;
   network:      string;
+  accountName:  string;
   extReference: string;
   description:  string;
   webhookUrl:   string;
 }
 
 export interface CollectionResponse {
-  status:        string;
-  transactionId: string;
+  success:       boolean;
   message:       string;
+  data: {
+    reference: string;
+    status:    string;
+  };
 }
 
 export async function initiateCollection(req: CollectionRequest): Promise<CollectionResponse> {
   return xcelPost<CollectionResponse>('/partners/momo/collection', {
-    merchant_id:   process.env.XCEL_MERCHANT_ID,
-    phone:         req.phone,
-    amount:        req.amount,
-    network:       req.network,
+    currency:      'UGX',
+    phone_number:  req.phone,
+    amount:        String(req.amount),
+    country:       'UG',
+    bank_code:     req.network,
     ext_reference: req.extReference,
     description:   req.description,
-    webhook_utl:   req.webhookUrl, // field typo is in the XCEL API spec
+    account_name:  req.accountName,
+    webhook_url:   req.webhookUrl, // docs say `webhook_utl`; the live API actually requires `webhook_url`
+    product_id:    'MOMO_COLLECTION',
   });
 }
 
 export interface StatusResponse {
-  status:        string;
-  transactionId: string | null;
-  message:       string;
+  success: boolean;
+  message: string;
+  data: {
+    status:          string; // numeric code, e.g. "06"
+    description:     string; // human-readable state, e.g. "failed" | "success" | "pending"
+    reference:       string;
+    reason:          string | null;
+    clientReference: string;
+    transDate:       string;
+  };
 }
 
 export async function checkPaymentStatus(extReference: string): Promise<StatusResponse> {
-  return xcelGet<StatusResponse>(`/partners/momo/status/${extReference}`);
+  return xcelGet<StatusResponse>(`/partners/momo/payment/status/${extReference}`);
+}
+
+// ── Disbursements (payouts to guard mobile money accounts) ─────────────────────
+
+export interface DlCodeRequest {
+  amount:          string;
+  receiverAccount: string;
+  bankCode:        string;
+}
+
+interface DlCodeResponse {
+  success: boolean;
+  message: string;
+  data: { dl_code: string };
+}
+
+export async function generateDlCode(req: DlCodeRequest): Promise<string> {
+  const res = await xcelPost<DlCodeResponse>('/partners/momo/dl-code', {
+    amount:           req.amount,
+    receiver_account: req.receiverAccount,
+    bank_code:        req.bankCode,
+    // `config_preset` / `utility` are documented fields, but sending either one
+    // (even the merchant's real config_preset value) makes the sandbox 404 on
+    // an internal upstream call. Omit them entirely.
+  });
+  if (!res.data?.dl_code) throw new Error(`Failed to generate DL code: ${res.message}`);
+  return res.data.dl_code;
+}
+
+export interface DisbursementRequest {
+  amount:      number;
+  reference:   string;
+  dlCode:      string;
+  network:     string;
+  accountNum:  string;
+  accountName: string;
+  description: string;
+  webhookUrl:  string;
+}
+
+export async function initiateDisbursement(req: DisbursementRequest): Promise<CollectionResponse> {
+  return xcelPost<CollectionResponse>('/partners/momo/payment', {
+    country:      'UG',
+    currency:     'UGX',
+    amount:       String(req.amount),
+    reference:    req.reference,
+    dl_code:      req.dlCode,
+    bank_code:    req.network,
+    account_num:  req.accountNum,
+    account_name: req.accountName,
+    description:  req.description,
+    webhook_url:  req.webhookUrl,
+    product_id:   process.env.XCEL_PRODUCT_ID ?? 'EG8O0h_52',
+  });
+}
+
+export function generateDisbursementRef(guardId: string, period: string): string {
+  return `STAP-SAL-${guardId.slice(0, 6).toUpperCase()}-${period.replace('-', '')}-${Date.now()}`;
 }

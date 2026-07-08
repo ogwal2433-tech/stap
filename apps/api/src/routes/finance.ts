@@ -152,6 +152,8 @@ import {
   CreateDeductionSchema,
   RunPayrollSchema,
   CashbookEntrySchema,
+  FlagPayslipSchema,
+  HrApprovePayrollSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -344,6 +346,39 @@ router.post(
   requireRole(ROLES.DIRECTOR),
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.approve(req.params.id, req.user!.userId);
+    res.json({ success: true, data: run });
+  }),
+);
+
+router.patch(
+  '/payroll/payslips/:id/flag',
+  requireRole(...HR_ROLES),
+  validate(FlagPayslipSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const payslip = await payrollService.flagPayslip({
+      payslipId:      req.params.id,
+      flagReason:     req.body.flagReason,
+      adjustedAmount: req.body.adjustedAmount,
+    });
+    res.json({ success: true, data: payslip });
+  }),
+);
+
+router.patch(
+  '/payroll/payslips/:id/unflag',
+  requireRole(...HR_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const payslip = await payrollService.unflagPayslip(req.params.id);
+    res.json({ success: true, data: payslip });
+  }),
+);
+
+router.post(
+  '/payroll/:id/hr-approve',
+  requireRole(...HR_ROLES),
+  validate(HrApprovePayrollSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const run = await payrollService.hrApprove(req.params.id, req.user!.userId, req.body.notes);
     res.json({ success: true, data: run });
   }),
 );

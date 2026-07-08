@@ -7,6 +7,7 @@ import type {
   CreateDeductionInput,
   RunPayrollInput,
   CashbookEntryInput,
+  FlagPayslipInput,
 } from '@stap/shared';
 
 // ── Invoice hooks ──────────────────────────────────────────────────────────────
@@ -121,10 +122,35 @@ export function useApprovePayroll() {
   });
 }
 
+export function useHrApprovePayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes?: string }) => payrollApi.hrApprove(id, notes),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
 export function useDisbursePayroll() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => payrollApi.disburse(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
+export function useFlagPayslip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payslipId, data }: { payslipId: string; data: FlagPayslipInput }) =>
+      payrollApi.flagPayslip(payslipId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
+export function useUnflagPayslip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payslipId: string) => payrollApi.unflagPayslip(payslipId),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
   });
 }

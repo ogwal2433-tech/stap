@@ -8,6 +8,7 @@ import {
   handleWebhook,
   getInvoicePayments,
 } from '../services/paymentService';
+import { payrollService } from '../services/payrollService';
 import { ROLES } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -62,6 +63,19 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       await handleWebhook(req.body as Record<string, unknown>);
+    } catch {
+      // webhook errors must not block XCEL retry — log only
+    }
+    res.status(200).json({ received: true });
+  }),
+);
+
+// POST /payments/webhook/xcel-disbursement — XCEL salary disbursement webhook (no auth)
+router.post(
+  '/webhook/xcel-disbursement',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      await payrollService.handleDisbursementWebhook(req.body as Record<string, unknown>);
     } catch {
       // webhook errors must not block XCEL retry — log only
     }

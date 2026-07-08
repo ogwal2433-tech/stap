@@ -58,14 +58,25 @@ export const CashbookEntrySchema = z.object({
   type:        z.enum(['IN', 'OUT']),
 });
 
+export const FlagPayslipSchema = z.object({
+  flagReason:     z.string().min(5),
+  adjustedAmount: z.number().int().positive().optional(),
+});
+
+export const HrApprovePayrollSchema = z.object({
+  notes: z.string().optional(),
+});
+
 // ── Inferred input types ───────────────────────────────────────────────────────
 
-export type CreateInvoiceInput   = z.infer<typeof CreateInvoiceSchema>;
-export type GenerateInvoiceInput = z.infer<typeof GenerateInvoiceSchema>;
-export type RecordPaymentInput   = z.infer<typeof RecordPaymentSchema>;
-export type CreateDeductionInput = z.infer<typeof CreateDeductionSchema>;
-export type RunPayrollInput      = z.infer<typeof RunPayrollSchema>;
-export type CashbookEntryInput   = z.infer<typeof CashbookEntrySchema>;
+export type CreateInvoiceInput      = z.infer<typeof CreateInvoiceSchema>;
+export type GenerateInvoiceInput    = z.infer<typeof GenerateInvoiceSchema>;
+export type RecordPaymentInput      = z.infer<typeof RecordPaymentSchema>;
+export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
+export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
+export type CashbookEntryInput      = z.infer<typeof CashbookEntrySchema>;
+export type FlagPayslipInput        = z.infer<typeof FlagPayslipSchema>;
+export type HrApprovePayrollInput   = z.infer<typeof HrApprovePayrollSchema>;
 
 // ── Response interfaces ────────────────────────────────────────────────────────
 
@@ -148,9 +159,16 @@ export interface PayrollRunResponse {
   totalGross:     number;
   totalDeductions:number;
   totalNet:       number;
-  status:         string;
+  status:         string; // DRAFT | APPROVED | HR_APPROVED | DISBURSING | DISBURSED
   approvedBy:     string | null;
   approvedAt:     string | null;
+  hrApprovedBy:   string | null;
+  hrApprovedAt:   string | null;
+  hrNotes:        string | null;
+  disbursedBy:    string | null;
+  disbursedAt:    string | null;
+  successCount:   number;
+  failedCount:    number;
   createdBy:      string;
   createdAt:      string;
   payslipCount:   number;
@@ -174,8 +192,12 @@ export interface PayslipResponse {
   daysWorked:          number;
   totalDays:           number;
   payslipPdfPath:      string | null;
-  disbursementStatus:  string;
+  disbursementStatus:  string; // PENDING | SENT | SUCCESS | FAILED
   disbursementRef:     string | null;
+  disbursementFailureReason: string | null;
+  hrFlagged:           boolean;
+  hrFlagReason:        string | null;
+  hrAdjustedAmount:    number | null;
   createdAt:           string;
 }
 

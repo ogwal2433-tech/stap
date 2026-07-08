@@ -2,7 +2,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
-import { yoPayments } from '../lib/yoPayments';
+import * as xcel from '../lib/xcel';
 import type {
   PayrollRunResponse,
   PayslipResponse,
@@ -28,6 +28,13 @@ function fmtRun(r: any): PayrollRunResponse {
     status:          r.status,
     approvedBy:      r.approvedBy,
     approvedAt:      r.approvedAt?.toISOString() ?? null,
+    hrApprovedBy:    r.hrApprovedBy ?? null,
+    hrApprovedAt:    r.hrApprovedAt?.toISOString() ?? null,
+    hrNotes:         r.hrNotes ?? null,
+    disbursedBy:     r.disbursedBy ?? null,
+    disbursedAt:     r.disbursedAt?.toISOString() ?? null,
+    successCount:    r.successCount ?? 0,
+    failedCount:     r.failedCount ?? 0,
     createdBy:       r.createdBy,
     createdAt:       r.createdAt.toISOString(),
     payslipCount:    r._count?.payslips ?? r.payslips?.length ?? 0,
@@ -49,6 +56,10 @@ function fmtPayslip(p: any): PayslipResponse {
     payslipPdfPath:      p.payslipPdfPath,
     disbursementStatus:  p.disbursementStatus,
     disbursementRef:     p.disbursementRef,
+    disbursementFailureReason: p.disbursementFailureReason ?? null,
+    hrFlagged:           p.hrFlagged ?? false,
+    hrFlagReason:        p.hrFlagReason ?? null,
+    hrAdjustedAmount:    p.hrAdjustedAmount ?? null,
     createdAt:           p.createdAt.toISOString(),
   };
 }
@@ -214,41 +225,158 @@ class PayrollService {
     return fmtRun(updated);
   }
 
+  // ── HR: flag or unflag an individual guard's payslip ────────────────────────
+
+  async flagPayslip(data: {
+    payslipId:      string;
+    flagReason:     string;
+    adjustedAmount?: number;
+  }): Promise<PayslipResponse> {
+    const payslip = await prisma.payslip.update({
+      where: { id: data.payslipId },
+      data: {
+        hrFlagged:        true,
+        hrFlagReason:     data.flagReason,
+        hrAdjustedAmount: data.adjustedAmount ?? null,
+      },
+      include: { guard: true },
+    });
+    return fmtPayslip(payslip);
+  }
+
+  async unflagPayslip(payslipId: string): Promise<PayslipResponse> {
+    const payslip = await prisma.payslip.update({
+      where: { id: payslipId },
+      data:  { hrFlagged: false, hrFlagReason: null, hrAdjustedAmount: null },
+      include: { guard: true },
+    });
+    return fmtPayslip(payslip);
+  }
+
+  // ── HR: approve the full run — required before Finance can disburse ────────
+
+  async hrApprove(payrollRunId: string, reviewedBy: string, notes?: string): Promise<PayrollRunResponse> {
+    const run = await prisma.payrollRun.findUnique({
+      where:   { id: payrollRunId },
+      include: { _count: { select: { payslips: true } } },
+    });
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (run.status !== 'APPROVED') {
+      throw new AppError(
+        `Run is ${run.status} — only APPROVED runs can be reviewed by HR. It must first be financially approved.`,
+        400,
+      );
+    }
+
+    const updated = await prisma.payrollRun.update({
+      where: { id: payrollRunId },
+      data:  { status: 'HR_APPROVED', hrApprovedBy: reviewedBy, hrApprovedAt: new Date(), hrNotes: notes ?? null },
+      include: { _count: { select: { payslips: true } } },
+    });
+
+    await QueueService.logAudit({
+      userId:   reviewedBy,
+      action:   'PAYROLL_HR_APPROVED',
+      entity:   'payrollRun',
+      entityId: payrollRunId,
+      newValue: { notes: notes ?? null },
+    });
+
+    return fmtRun(updated);
+  }
+
+  // ── Finance: disburse an HR-approved run via XCEL mobile money ──────────────
+
   async disburse(payrollRunId: string, disbursedBy: string): Promise<void> {
     const run = await prisma.payrollRun.findUnique({ where: { id: payrollRunId } });
     if (!run) throw new NotFoundError('Payroll run not found');
-    if (run.status !== 'APPROVED') throw new AppError('Only APPROVED payrolls can be disbursed', 400);
+    if (run.status !== 'HR_APPROVED') {
+      throw new AppError(
+        `This run is ${run.status}. Only HR_APPROVED runs can be disbursed — HR must approve the run before Finance can pay.`,
+        400,
+      );
+    }
+
+    await prisma.payrollRun.update({
+      where: { id: payrollRunId },
+      data:  { status: 'DISBURSING', disbursedBy, disbursedAt: new Date() },
+    });
 
     const payslips = await prisma.payslip.findMany({
       where:   { payrollRunId, disbursementStatus: 'PENDING' },
       include: { guard: true },
     });
 
-    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'STAP';
+    const period = `${run.year}-${String(run.month).padStart(2, '0')}`;
+    let successCount = 0;
+    let failedCount  = 0;
+
     for (const payslip of payslips) {
+      // A guard flagged by HR without an adjusted amount is excluded from this run
+      if (payslip.hrFlagged && !payslip.hrAdjustedAmount) {
+        await prisma.payslip.update({
+          where: { id: payslip.id },
+          data: {
+            disbursementStatus:        'FAILED',
+            disbursementFailureReason: 'Skipped — flagged by HR for exclusion',
+          },
+        });
+        failedCount++;
+        continue;
+      }
+
+      const payAmount = payslip.hrAdjustedAmount ?? payslip.netSalary;
+
       try {
-        const resp = await yoPayments.requestPayment({
-          amount:            payslip.netSalary,
-          msisdn:            payslip.guard.phone,
-          narrative:         `STAP Salary ${run.month}/${run.year} — ${payslip.guard.firstName} ${payslip.guard.lastName}`,
-          internalReference: `${prefix}-SAL-${payslip.id}`,
+        const phone   = xcel.normalisePhone(payslip.guard.preferredPaymentContact ?? payslip.guard.phone);
+        const network = xcel.detectNetwork(phone);
+
+        const dlCode = await xcel.generateDlCode({
+          amount:          payAmount.toFixed(2),
+          receiverAccount: process.env.XCEL_MERCHANT_ACCOUNT ?? '',
+          bankCode:        process.env.XCEL_BANK_CODE ?? '044',
+        });
+
+        const reference = xcel.generateDisbursementRef(payslip.guardId, period);
+
+        const result = await xcel.initiateDisbursement({
+          amount:      payAmount,
+          reference,
+          dlCode,
+          network,
+          accountNum:  phone,
+          accountName: `${payslip.guard.firstName} ${payslip.guard.lastName}`,
+          description: `STAP Security - Salary ${run.month}/${run.year}`,
+          webhookUrl:  process.env.XCEL_DISBURSEMENT_WEBHOOK_URL ?? '',
         });
 
         await prisma.payslip.update({
           where: { id: payslip.id },
-          data:  { disbursementStatus: 'SENT', disbursementRef: resp.transactionRef },
+          data: {
+            xcelDlCode:         dlCode,
+            disbursementRef:    result.data.reference,
+            disbursementStatus: 'SENT',
+          },
         });
-      } catch {
+        successCount++;
+      } catch (err: any) {
         await prisma.payslip.update({
           where: { id: payslip.id },
-          data:  { disbursementStatus: 'FAILED' },
+          data: {
+            disbursementStatus:        'FAILED',
+            disbursementFailureReason: err?.message ?? 'XCEL API error',
+          },
         });
+        failedCount++;
       }
+
+      // Small delay between requests to avoid rate limiting
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     await prisma.payrollRun.update({
       where: { id: payrollRunId },
-      data:  { status: 'DISBURSED' },
+      data:  { status: 'DISBURSED', successCount, failedCount },
     });
 
     await QueueService.logAudit({
@@ -256,6 +384,48 @@ class PayrollService {
       action:   'PAYROLL_DISBURSED',
       entity:   'payrollRun',
       entityId: payrollRunId,
+      newValue: { successCount, failedCount },
+    });
+  }
+
+  // ── XCEL webhook: disbursement status updates ───────────────────────────────
+
+  async handleDisbursementWebhook(payload: Record<string, any>): Promise<void> {
+    const reference: string | undefined =
+      payload.reference ?? payload.data?.reference ?? payload.clientReference ?? payload.data?.clientReference;
+    if (!reference) return;
+
+    const payslip = await prisma.payslip.findFirst({ where: { disbursementRef: reference } });
+    if (!payslip || payslip.disbursementStatus !== 'SENT') return;
+
+    const rawStatus = (
+      payload.status ?? payload.data?.status ?? payload.description ?? payload.data?.description ?? ''
+    ).toString().toUpperCase();
+
+    const ourStatus =
+      rawStatus === 'SUCCESS' || rawStatus === 'SUCCESSFUL' ? 'SUCCESS'
+      : rawStatus === 'FAILED' || rawStatus === 'CANCELLED'  ? 'FAILED'
+      : null; // still pending/unknown — leave as SENT
+
+    if (!ourStatus) return;
+
+    await prisma.payslip.update({
+      where: { id: payslip.id },
+      data: {
+        disbursementStatus:        ourStatus,
+        disbursementFailureReason: payload.reason ?? payload.data?.reason ?? payload.status_reason ?? undefined,
+        webhookReceivedAt:         new Date(),
+        webhookPayload:            payload,
+      },
+    });
+
+    const siblings = await prisma.payslip.findMany({ where: { payrollRunId: payslip.payrollRunId } });
+    await prisma.payrollRun.update({
+      where: { id: payslip.payrollRunId },
+      data: {
+        successCount: siblings.filter((p) => p.disbursementStatus === 'SUCCESS').length,
+        failedCount:  siblings.filter((p) => p.disbursementStatus === 'FAILED').length,
+      },
     });
   }
 

@@ -11,6 +11,7 @@ const MAIN_NID     = 'GTRANSFER-NID-001';
 const FRESH_NID    = 'GTRANSFER-NID-002';
 const CLIENT_NAME  = 'GTransfer Test Corp';
 const SITE_NAME    = 'GTransfer Test Site';
+const SITE_NAME_2  = 'GTransfer Test Site 2';
 
 const ROLES_UNDER_TEST = [
   'DIRECTOR',
@@ -23,6 +24,7 @@ const ROLES_UNDER_TEST = [
 const tokens: Record<string, string> = {};
 let guardId: string;
 let siteId:  string;
+let siteId2: string;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ async function nukeTestData() {
     await prisma.deploymentHistory.deleteMany({ where: { guardId: { in: ids } } });
     await prisma.guard.deleteMany({ where: { id: { in: ids } } });
   }
-  await prisma.site.deleteMany({ where: { siteName: SITE_NAME } });
+  await prisma.site.deleteMany({ where: { siteName: { in: [SITE_NAME, SITE_NAME_2] } } });
   await prisma.client.deleteMany({ where: { clientName: CLIENT_NAME } });
   await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' } } });
 }
@@ -80,15 +82,26 @@ beforeAll(async () => {
     },
   });
 
-  const site = await prisma.site.create({
-    data: {
-      clientId:       client.id,
-      siteName:       SITE_NAME,
-      location:       'Kampala',
-      guardsRequired: 2,
-    },
-  });
-  siteId = site.id;
+  const [site, site2] = await Promise.all([
+    prisma.site.create({
+      data: {
+        clientId:       client.id,
+        siteName:       SITE_NAME,
+        location:       'Kampala',
+        guardsRequired: 2,
+      },
+    }),
+    prisma.site.create({
+      data: {
+        clientId:       client.id,
+        siteName:       SITE_NAME_2,
+        location:       'Entebbe',
+        guardsRequired: 2,
+      },
+    }),
+  ]);
+  siteId  = site.id;
+  siteId2 = site2.id;
 
   const res = await request(app)
     .post('/api/v1/guards')
@@ -109,6 +122,18 @@ beforeAll(async () => {
   if (!guardId) {
     throw new Error(`Guard creation failed in beforeAll: ${JSON.stringify(res.body)}`);
   }
+
+  // A transfer moves a guard FROM a site — seed an active deployment
+  // so the guard is transferable in the tests below.
+  await prisma.deploymentHistory.create({
+    data: {
+      guardId,
+      siteId:       siteId,
+      startDate:    new Date('2025-01-02'),
+      shiftType:    'DAY',
+      supervisorId: 'gtransfer-director',
+    },
+  });
 });
 
 // ── Teardown ───────────────────────────────────────────────────────────────────
@@ -120,8 +145,10 @@ afterAll(async () => {
 // ── POST /guards/:id/transfer — RBAC ──────────────────────────────────────────
 
 describe('POST /guards/:id/transfer — RBAC', () => {
-  const payload = () => ({
-    toSiteId:     siteId,
+  // Each successive transfer must target a site different from the guard's
+  // current one, so RBAC checks that succeed alternate the destination site.
+  const payload = (toSiteId: string) => ({
+    toSiteId,
     reason:       'Operational redeployment for integration test',
     transferDate: new Date().toISOString(),
   });
@@ -130,18 +157,18 @@ describe('POST /guards/:id/transfer — RBAC', () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.DIRECTOR}`)
-      .send(payload());
+      .send(payload(siteId2));
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.guard.id).toBe(guardId);
-    expect(res.body.data.toSite.siteName).toBe(SITE_NAME);
+    expect(res.body.data.toSite.siteName).toBe(SITE_NAME_2);
   });
 
   it('ASSISTANT_MANAGER returns 201', async () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.ASSISTANT_MANAGER}`)
-      .send(payload());
+      .send(payload(siteId));
     expect(res.status).toBe(201);
   });
 
@@ -149,7 +176,7 @@ describe('POST /guards/:id/transfer — RBAC', () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.OPERATIONS_SUPERVISOR}`)
-      .send(payload());
+      .send(payload(siteId2));
     expect(res.status).toBe(201);
   });
 
@@ -157,7 +184,7 @@ describe('POST /guards/:id/transfer — RBAC', () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.ACCOUNTS_OFFICER}`)
-      .send(payload());
+      .send(payload(siteId));
     expect(res.status).toBe(403);
   });
 
@@ -165,7 +192,7 @@ describe('POST /guards/:id/transfer — RBAC', () => {
     const res = await request(app)
       .post(`/api/v1/guards/${guardId}/transfer`)
       .set('Authorization', `Bearer ${tokens.GUARD}`)
-      .send(payload());
+      .send(payload(siteId));
     expect(res.status).toBe(403);
   });
 });

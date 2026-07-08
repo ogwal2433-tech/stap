@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
   useRunPayroll, useApprovePayroll, useDisbursePayroll,
+  useHrApprovePayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
 } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
@@ -18,7 +19,7 @@ import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
-import { ROLES } from '@stap/shared';
+import { ROLES, HR_ROLES } from '@stap/shared';
 import type { InvoiceResponse, PayslipResponse } from '@stap/shared';
 import { invoicesApi } from '../../lib/finance.api';
 
@@ -375,17 +376,33 @@ function PayslipDetailModal({
 
 // ── Payroll Tab ───────────────────────────────────────────────────────────────
 
+function payrollStatusColor(status: string): { bg: string; dark?: boolean } {
+  switch (status) {
+    case 'DRAFT':       return { bg: 'warning', dark: true };
+    case 'APPROVED':    return { bg: 'info', dark: true };
+    case 'HR_APPROVED': return { bg: 'primary' };
+    case 'DISBURSING':  return { bg: 'info', dark: true };
+    case 'DISBURSED':   return { bg: 'success' };
+    default:             return { bg: 'secondary' };
+  }
+}
+
 function PayrollTab() {
   const now   = new Date();
   const [month, setMonth]         = useState(now.getMonth() + 1);
   const [year,  setYear]          = useState(now.getFullYear());
   const [confirming, setConfirming] = useState(false);
+  const [hrApproving, setHrApproving] = useState(false);
+  const [hrNotes, setHrNotes] = useState('');
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
+  const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
 
   const { data, isLoading }   = usePayrollRuns();
   const runPayroll             = useRunPayroll();
   const approvePayroll         = useApprovePayroll();
+  const hrApprovePayroll       = useHrApprovePayroll();
   const disbursePayroll        = useDisbursePayroll();
+  const unflagPayslip          = useUnflagPayslip();
   const { showToast }          = useToast();
   const { user }               = useAuth();
 
@@ -394,6 +411,8 @@ function PayrollTab() {
 
   const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
   const payslips = runDetail?.payslips ?? [];
+
+  const isHR = !!user && HR_ROLES.includes(user.role as any);
 
   const handleCalculate = async () => {
     try {
@@ -406,7 +425,20 @@ function PayrollTab() {
     }
   };
 
+  const handleHrApprove = async () => {
+    if (!thisRun) return;
+    try {
+      await hrApprovePayroll.mutateAsync({ id: thisRun.id, notes: hrNotes.trim() || undefined });
+      showToast('Salary run approved by HR — Finance may now disburse', 'success');
+      setHrApproving(false);
+      setHrNotes('');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to approve', 'danger');
+    }
+  };
+
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const flaggedCount = payslips.filter((p) => p.hrFlagged).length;
 
   return (
     <>
@@ -451,19 +483,30 @@ function PayrollTab() {
         <>
           <Card className="mb-3 border-0 shadow-sm">
             <Card.Body>
-              <div className="d-flex justify-content-between align-items-start">
+              <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
                 <div>
-                  <Badge bg={thisRun.status === 'DRAFT' ? 'warning' : thisRun.status === 'APPROVED' ? 'success' : 'primary'}
-                    text={thisRun.status === 'DRAFT' ? 'dark' : undefined}
-                    className="mb-2">
-                    {thisRun.status}
-                  </Badge>
+                  {(() => {
+                    const c = payrollStatusColor(thisRun.status);
+                    return (
+                      <Badge bg={c.bg} text={c.dark ? 'dark' : undefined} className="mb-2">
+                        {thisRun.status.replace('_', ' ')}
+                      </Badge>
+                    );
+                  })()}
                   <div className="small">
                     <strong>{thisRun.totalGuards}</strong> guards &nbsp;|&nbsp;
                     Gross: <strong>{fmtUGX(thisRun.totalGross)}</strong> &nbsp;|&nbsp;
                     Deductions: <strong>{fmtUGX(thisRun.totalDeductions)}</strong> &nbsp;|&nbsp;
                     Net: <strong>{fmtUGX(thisRun.totalNet)}</strong>
                   </div>
+                  {thisRun.status === 'DISBURSED' && (
+                    <div className="small mt-1">
+                      <span className="text-success">✅ {thisRun.successCount} paid</span>
+                      {thisRun.failedCount > 0 && (
+                        <span className="text-danger ms-2">❌ {thisRun.failedCount} failed</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="d-flex gap-2">
                   {thisRun.status === 'DRAFT' && user?.role === ROLES.DIRECTOR && (
@@ -472,14 +515,60 @@ function PayrollTab() {
                       Approve
                     </Button>
                   )}
-                  {thisRun.status === 'APPROVED' && user?.role === ROLES.DIRECTOR && (
-                    <Button size="sm" variant="primary"
-                      onClick={() => disbursePayroll.mutateAsync(thisRun.id).then(() => showToast('Disbursement initiated', 'success')).catch(() => showToast('Failed', 'danger'))}>
-                      Disburse
+                  {thisRun.status === 'APPROVED' && isHR && (
+                    <Button size="sm" variant="success" onClick={() => setHrApproving(true)}>
+                      ✅ HR Approve
                     </Button>
+                  )}
+                  {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.DIRECTOR && (
+                    <Button size="sm" variant="primary"
+                      onClick={() => disbursePayroll.mutateAsync(thisRun.id).then(() => showToast('Disbursement initiated', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                      💸 Disburse via Mobile Money
+                    </Button>
+                  )}
+                  {thisRun.status === 'DISBURSING' && (
+                    <Badge bg="info" text="dark"><Spinner animation="border" size="sm" className="me-1" />Disbursing…</Badge>
                   )}
                 </div>
               </div>
+
+              {thisRun.status === 'APPROVED' && isHR && (
+                <Alert variant="info" className="mt-3 mb-0 small">
+                  <div className="fw-bold mb-1">⚠️ HR Review Required</div>
+                  Review each guard's salary below. Flag any that need adjustment before approving.
+                  Once approved, Finance will process the payments via mobile money.
+                  {flaggedCount > 0 && <div className="mt-1">{flaggedCount} guard(s) currently flagged.</div>}
+                </Alert>
+              )}
+              {thisRun.status === 'HR_APPROVED' && (
+                <Alert variant="success" className="mt-3 mb-0 small">
+                  <div className="fw-bold mb-1">✅ HR Approved</div>
+                  This run has been reviewed and approved by HR
+                  {thisRun.hrNotes ? `: "${thisRun.hrNotes}"` : '.'} You may now disburse salaries via mobile money.
+                </Alert>
+              )}
+
+              {hrApproving && (
+                <div className="mt-3 border-top pt-3">
+                  <Form.Group className="mb-2">
+                    <Form.Label className="small fw-bold">Notes (optional)</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      size="sm"
+                      value={hrNotes}
+                      onChange={(e) => setHrNotes(e.target.value)}
+                      placeholder="e.g. All salaries verified, no adjustments needed."
+                    />
+                  </Form.Group>
+                  <div className="d-flex gap-2">
+                    <Button size="sm" variant="success" onClick={handleHrApprove} disabled={hrApprovePayroll.isPending}>
+                      {hrApprovePayroll.isPending ? 'Approving…' : 'Confirm HR Approval'}
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setHrApproving(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
             </Card.Body>
           </Card>
 
@@ -495,20 +584,54 @@ function PayrollTab() {
                     <th className="text-end">Gross (UGX)</th>
                     <th className="text-end">Deductions (UGX)</th>
                     <th className="text-end">Net (UGX)</th>
+                    <th>HR Flag</th>
+                    {thisRun.status !== 'DRAFT' && thisRun.status !== 'APPROVED' && <th>Payment</th>}
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {payslips.map((p) => (
-                    <tr key={p.id}>
+                    <tr key={p.id} style={{ background: p.hrFlagged ? '#fff3cd' : undefined }}>
                       <td>{p.guardName}</td>
                       <td className="text-center">{p.daysWorked}/{p.totalDays}</td>
                       <td className="text-end">{p.grossSalary.toLocaleString()}</td>
                       <td className="text-end text-danger">
                         {p.totalDeductions > 0 ? p.totalDeductions.toLocaleString() : '—'}
                       </td>
-                      <td className="text-end fw-semibold">{p.netSalary.toLocaleString()}</td>
+                      <td className="text-end fw-semibold">
+                        {(p.hrAdjustedAmount ?? p.netSalary).toLocaleString()}
+                        {p.hrAdjustedAmount != null && p.hrAdjustedAmount !== p.netSalary && (
+                          <div className="text-muted fw-normal" style={{ fontSize: '0.68rem' }}>
+                            was {p.netSalary.toLocaleString()}
+                          </div>
+                        )}
+                      </td>
                       <td>
+                        {p.hrFlagged ? (
+                          <div>
+                            <Badge bg="warning" text="dark">⚠️ Flagged</Badge>
+                            <div style={{ fontSize: '0.68rem', color: '#856404' }}>{p.hrFlagReason}</div>
+                          </div>
+                        ) : (
+                          <Badge bg="success">✓ Clear</Badge>
+                        )}
+                      </td>
+                      {thisRun.status !== 'DRAFT' && thisRun.status !== 'APPROVED' && (
+                        <td>
+                          <Badge bg={
+                            p.disbursementStatus === 'SUCCESS' ? 'success'
+                            : p.disbursementStatus === 'FAILED' ? 'danger'
+                            : p.disbursementStatus === 'SENT' ? 'info'
+                            : 'secondary'
+                          } text={p.disbursementStatus === 'SENT' ? 'dark' : undefined}>
+                            {p.disbursementStatus}
+                          </Badge>
+                          {p.disbursementFailureReason && (
+                            <div style={{ fontSize: '0.68rem', color: '#6c757d' }}>{p.disbursementFailureReason}</div>
+                          )}
+                        </td>
+                      )}
+                      <td className="d-flex gap-1">
                         <Button
                           size="sm"
                           variant="outline-secondary"
@@ -517,6 +640,19 @@ function PayrollTab() {
                         >
                           View
                         </Button>
+                        {thisRun.status === 'APPROVED' && isHR && (
+                          p.hrFlagged ? (
+                            <Button size="sm" variant="outline-success" style={{ fontSize: '0.7rem' }}
+                              onClick={() => unflagPayslip.mutateAsync(p.id)}>
+                              Unflag
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline-warning" style={{ fontSize: '0.7rem' }}
+                              onClick={() => setFlagTarget(p)}>
+                              ⚠️ Flag
+                            </Button>
+                          )
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -541,6 +677,14 @@ function PayrollTab() {
         />
       )}
 
+      {/* HR flag modal */}
+      {flagTarget && (
+        <FlagPayslipModal
+          payslip={flagTarget}
+          onClose={() => setFlagTarget(null)}
+        />
+      )}
+
       {/* Run history */}
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
@@ -548,24 +692,98 @@ function PayrollTab() {
             <tr><th>Period</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
           </thead>
           <tbody>
-            {runs.map((r) => (
-              <tr key={r.id}>
-                <td>{MONTHS[r.month - 1]} {r.year}</td>
-                <td>{r.totalGuards}</td>
-                <td>{fmtUGX(r.totalGross)}</td>
-                <td>{fmtUGX(r.totalNet)}</td>
-                <td>
-                  <Badge bg={r.status === 'DRAFT' ? 'warning' : r.status === 'APPROVED' ? 'success' : 'primary'}
-                    text={r.status === 'DRAFT' ? 'dark' : undefined}>
-                    {r.status}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
+            {runs.map((r) => {
+              const c = payrollStatusColor(r.status);
+              return (
+                <tr key={r.id}>
+                  <td>{MONTHS[r.month - 1]} {r.year}</td>
+                  <td>{r.totalGuards}</td>
+                  <td>{fmtUGX(r.totalGross)}</td>
+                  <td>{fmtUGX(r.totalNet)}</td>
+                  <td>
+                    <Badge bg={c.bg} text={c.dark ? 'dark' : undefined}>
+                      {r.status.replace('_', ' ')}
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}
     </>
+  );
+}
+
+// ── Flag Payslip Modal (HR use) ─────────────────────────────────────────────────
+
+function FlagPayslipModal({ payslip, onClose }: { payslip: PayslipResponse; onClose: () => void }) {
+  const [flagReason, setFlagReason] = useState('');
+  const [adjustedAmount, setAdjustedAmount] = useState('');
+  const { showToast } = useToast();
+  const flagPayslip = useFlagPayslip();
+
+  const handleSubmit = async () => {
+    if (flagReason.trim().length < 5) {
+      showToast('Flag reason must be at least 5 characters', 'danger');
+      return;
+    }
+    try {
+      await flagPayslip.mutateAsync({
+        payslipId: payslip.id,
+        data: {
+          flagReason: flagReason.trim(),
+          adjustedAmount: adjustedAmount ? Number(adjustedAmount) : undefined,
+        },
+      });
+      showToast(`${payslip.guardName} flagged`, 'success');
+      onClose();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to flag guard', 'danger');
+    }
+  };
+
+  return (
+    <Modal show onHide={onClose} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Flag Guard Salary</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-semibold small text-muted text-uppercase">Guard</Form.Label>
+          <div className="fw-medium">{payslip.guardName}</div>
+          <div className="text-muted small">Net pay: UGX {payslip.netSalary.toLocaleString()}</div>
+        </Form.Group>
+        <Form.Group className="mb-3">
+          <Form.Label>Flag Reason <span className="text-danger">*</span></Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={3}
+            value={flagReason}
+            onChange={(e) => setFlagReason(e.target.value)}
+            placeholder="e.g. Amount looks incorrect, pending disciplinary review..."
+          />
+        </Form.Group>
+        <Form.Group className="mb-3">
+          <Form.Label>Adjusted Amount (optional)</Form.Label>
+          <Form.Control
+            type="number"
+            value={adjustedAmount}
+            onChange={(e) => setAdjustedAmount(e.target.value)}
+            placeholder="Leave blank to exclude guard from this disbursement"
+          />
+          <Form.Text className="text-muted">
+            Leave blank to exclude this guard from the disbursement entirely.
+          </Form.Text>
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={flagPayslip.isPending}>Cancel</Button>
+        <Button variant="warning" onClick={handleSubmit} disabled={flagPayslip.isPending}>
+          {flagPayslip.isPending ? 'Flagging…' : '⚠️ Flag Guard'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
   );
 }
 
