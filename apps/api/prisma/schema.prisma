@@ -145,6 +145,7 @@ model User {
   alternateZones          Zone[]                 @relation("ZoneAlternate")
   generatedLetters        GeneratedLetter[]      @relation("LetterGenerator")
   approvedLetters         GeneratedLetter[]      @relation("LetterApprover")
+  resolvedErrors          SystemError[]          @relation("ErrorResolver")
 }
 
 model Guard {
@@ -613,6 +614,52 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model SystemError {
+  id String @id @default(cuid())
+
+  // Error classification
+  errorCode String? // short machine-readable code, e.g. "DATABASE_ERROR"
+  severity  String  @default("ERROR") // DEBUG | INFO | WARN | ERROR | CRITICAL
+  category  String  @default("SYSTEM") // SYSTEM | API | DATABASE | PAYMENT | AUTH | EXTERNAL_API | UNKNOWN
+
+  // Error content
+  message String  @db.Text
+  stack   String? @db.Text
+  context Json? // userId, guardId, route, sanitised request body, etc.
+
+  // Request context (if from an HTTP request)
+  route      String? // e.g. "POST /api/v1/guards"
+  method     String? // GET | POST | PATCH | DELETE
+  statusCode Int?
+  userId     String?
+  userRole   String?
+  ipAddress  String?
+  userAgent  String?
+
+  // Resolution workflow
+  status          String    @default("OPEN") // OPEN | INVESTIGATING | RESOLVED | IGNORED
+  resolvedById    String?
+  resolvedByUser  User?     @relation("ErrorResolver", fields: [resolvedById], references: [id])
+  resolvedAt      DateTime?
+  resolutionNotes String?
+
+  // Occurrence tracking — repeated identical errors increment this instead of
+  // creating duplicate rows
+  occurrenceCount Int      @default(1)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+
+  // Environment
+  environment String  @default("production")
+  appVersion  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, severity, lastSeenAt])
+  @@index([message, route, status])
 }
 
 // ─── Finance Models ────────────────────────────────────────────────────────────

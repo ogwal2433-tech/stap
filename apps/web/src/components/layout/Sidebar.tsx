@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Badge, Nav, Offcanvas } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
+import { useSystemErrorStats } from '../../hooks/useSystemErrors';
 import RoleGuard from '../RoleGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import {
@@ -17,6 +18,7 @@ import {
 } from '@stap/shared';
 
 const ADMIN_ONLY       = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
+const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 
 // ── Nav structure ──────────────────────────────────────────────────────────────
@@ -90,7 +92,8 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-gear-fill',
     label: 'System',
     items: [
-      { icon: 'bi-gear-fill', label: 'Settings', to: '/settings', roles: [ROLES.DIRECTOR] as UserRole[] },
+      { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] },
+      { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] },
     ],
   },
 ];
@@ -110,7 +113,7 @@ const ALL_NAV_PATHS = new Set([
   '/finance', '/inventory', '/requisitions',
   '/hr', '/reports', '/settings', '/notifications',
   '/guards/dashboard', '/guards/import',
-  '/attendance/dashboard',
+  '/attendance/dashboard', '/admin/errors',
 ]);
 
 const ROLE_BADGE: Record<string, string> = {
@@ -225,12 +228,14 @@ function NavGroupPanel({
   onNavigate,
   pathname,
   unreadCount,
+  openErrorCount,
 }: {
   group:       NavGroup;
   defaultOpen: boolean;
   onNavigate?: () => void;
   pathname:    string;
   unreadCount: number;
+  openErrorCount: number;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const hasActiveItem = group.items.some(
@@ -275,7 +280,11 @@ function NavGroupPanel({
               <NavItemLink
                 item={item}
                 onNavigate={onNavigate}
-                unreadBadge={item.to === '/notifications' ? unreadCount : undefined}
+                unreadBadge={
+                  item.to === '/notifications' ? unreadCount
+                  : item.to === '/admin/errors' ? openErrorCount
+                  : undefined
+                }
               />
             </RoleGuard>
           ))}
@@ -333,6 +342,10 @@ function NavContent({ onNavigate }: NavContentProps) {
   const { data: unreadData } = useUnreadCount();
   const unreadCount = unreadData?.count ?? 0;
 
+  const isErrorAdmin = !!user && (ERROR_ADMIN_ROLES as string[]).includes(user.role);
+  const { data: errorStats } = useSystemErrorStats(isErrorAdmin);
+  const openErrorCount = (errorStats?.openCritical ?? 0) + (errorStats?.openError ?? 0);
+
   // A group starts open if the current path falls inside it
   function isGroupActive(group: NavGroup) {
     return group.items.some(item => pathname === item.to || pathname.startsWith(item.to + '/'));
@@ -375,6 +388,7 @@ function NavContent({ onNavigate }: NavContentProps) {
             onNavigate={onNavigate}
             pathname={pathname}
             unreadCount={unreadCount}
+            openErrorCount={openErrorCount}
           />
         ))}
 

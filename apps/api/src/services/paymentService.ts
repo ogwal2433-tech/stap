@@ -7,6 +7,7 @@ import {
   detectNetwork,
 } from '../lib/xcel';
 import { notificationService } from './notificationService';
+import { errorLogger } from './errorLogger';
 
 const WEBHOOK_URL = process.env.XCEL_WEBHOOK_URL ?? '';
 
@@ -57,6 +58,14 @@ export async function initiateInvoicePayment(params: {
     await prisma.invoicePayment.update({
       where: { extReference },
       data:  { status: 'FAILED', failureReason: (err as Error).message, resolvedAt: new Date() },
+    });
+    await errorLogger.log({
+      message:   (err as Error).message ?? 'XCEL collection error',
+      stack:     (err as Error).stack,
+      severity:  'ERROR',
+      category:  'PAYMENT',
+      errorCode: 'XCEL_API_ERROR',
+      context:   { invoiceId: params.invoiceId, extReference, network },
     });
     throw err;
   }

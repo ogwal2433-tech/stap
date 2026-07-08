@@ -47,6 +47,7 @@ import { runInvoiceEmailJob } from './jobs/invoiceCron';
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
 import { authenticate } from './middleware/authenticate';
+import { errorLogger } from './services/errorLogger';
 
 const app: Express = express();
 // Trust the first proxy (Nginx) — required when running behind a reverse proxy
@@ -186,5 +187,28 @@ async function gracefulShutdown(signal: string) {
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (reason: any) => {
+  void errorLogger.log({
+    message:   reason?.message ?? String(reason),
+    stack:     reason?.stack,
+    severity:  'CRITICAL',
+    category:  'SYSTEM',
+    errorCode: 'UNHANDLED_REJECTION',
+  });
+});
+
+process.on('uncaughtException', (err: Error) => {
+  void errorLogger.log({
+    message:   err.message,
+    stack:     err.stack,
+    severity:  'CRITICAL',
+    category:  'SYSTEM',
+    errorCode: 'UNCAUGHT_EXCEPTION',
+  });
+  // Give the logger a moment to persist before crashing — an uncaught
+  // exception leaves the process in an undefined state, so we must exit.
+  setTimeout(() => process.exit(1), 1000);
+});
 
 export default app;

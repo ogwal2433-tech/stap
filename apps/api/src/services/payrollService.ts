@@ -3,6 +3,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
 import * as xcel from '../lib/xcel';
+import { errorLogger } from './errorLogger';
 import type {
   PayrollRunResponse,
   PayslipResponse,
@@ -366,6 +367,14 @@ class PayrollService {
             disbursementStatus:        'FAILED',
             disbursementFailureReason: err?.message ?? 'XCEL API error',
           },
+        });
+        await errorLogger.log({
+          message:   err?.message ?? 'XCEL disbursement error',
+          stack:     err?.stack,
+          severity:  'ERROR',
+          category:  'PAYMENT',
+          errorCode: 'XCEL_API_ERROR',
+          context:   { payrollRunId, payslipId: payslip.id, guardId: payslip.guardId, amount: payAmount },
         });
         failedCount++;
       }
