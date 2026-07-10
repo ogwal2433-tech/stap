@@ -17,15 +17,16 @@ import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
 import DisciplinaryRecordModal from '../../components/guards/DisciplinaryRecordModal';
-import LetterGenerationModal from '../../components/guards/LetterGenerationModal';
-import GenerateLetterModal from '../../components/letters/GenerateLetterModal';
+import DisciplinaryLetterModal from '../../components/letters/DisciplinaryLetterModal';
+import HRLetterModal from '../../components/letters/HRLetterModal';
+import ApproveLetterModal from '../../components/letters/ApproveLetterModal';
 import LetterStatusBadge from '../../components/letters/LetterStatusBadge';
 import TransferModal from '../../components/guards/TransferModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
-  type GuardDocumentResponse, type GuardTransferResponse,
+  type GuardDocumentResponse, type GuardTransferResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
 } from '@stap/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
@@ -228,12 +229,74 @@ function IssuedItemsTab({ guardId }: { guardId: string }) {
   );
 }
 
+const LETTER_TYPE_LABEL: Record<string, string> = {
+  WARNING: 'Warning Letter', SUSPENSION: 'Suspension Letter', TERMINATION: 'Termination Letter',
+  COMMENDATION: 'Commendation Letter', REINSTATEMENT: 'Reinstatement Letter', GENERAL: 'General Letter',
+  COMMITMENT_AGREEMENT: 'Commitment Agreement',
+};
+
+function LetterCard({ letter, canReview, onReview }: {
+  letter: GeneratedLetterResponse;
+  canReview: boolean;
+  onReview: () => void;
+}) {
+  return (
+    <div style={{
+      padding: '10px 14px', border: '1px solid #e9ecef', borderRadius: '0.5rem',
+      borderLeft: `4px solid ${
+        letter.approvalStatus === 'APPROVED' ? '#1E8449'
+        : letter.approvalStatus === 'REJECTED' ? '#dc3545'
+        : '#E8701A'
+      }`,
+    }}>
+      <div className="d-flex align-items-start justify-content-between gap-2">
+        <div style={{ flex: 1 }}>
+          <div className="fw-bold" style={{ fontSize: '0.88rem' }}>{letter.title}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: 2 }}>
+            {LETTER_TYPE_LABEL[letter.letterType] ?? letter.letterType.replace(/_/g, ' ')} · By {letter.generatedBy.name} ·{' '}
+            {new Date(letter.generatedAt).toLocaleDateString('en-GB')}
+          </div>
+          {letter.approvalStatus === 'APPROVED' && letter.approvedBy && (
+            <div style={{ fontSize: '0.72rem', color: '#1E8449', marginTop: 2 }}>
+              Approved by {letter.approvedBy.name} on {new Date(letter.approvedAt!).toLocaleDateString('en-GB')}
+            </div>
+          )}
+          {letter.approvalStatus === 'REJECTED' && letter.approvalNotes && (
+            <div style={{ fontSize: '0.72rem', color: '#842029', marginTop: 2, fontStyle: 'italic' }}>
+              Rejected: {letter.approvalNotes}
+            </div>
+          )}
+        </div>
+        <div className="d-flex flex-column align-items-end gap-1">
+          <LetterStatusBadge status={letter.approvalStatus} />
+          {letter.approvalStatus === 'PENDING' && canReview && (
+            <Button size="sm" variant="outline-primary" style={{ fontSize: '0.72rem', padding: '2px 8px' }} onClick={onReview}>
+              Review
+            </Button>
+          )}
+          {letter.approvalStatus === 'APPROVED' && letter.letterType === 'COMMITMENT_AGREEMENT' && (
+            <Button
+              size="sm"
+              variant="outline-secondary"
+              style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+              onClick={() => lettersApi.downloadPdf(letter.id, `${letter.letterType}-${letter.subjectName}.pdf`)}
+            >
+              ↓ PDF
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GuardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { user } = useAuth();
   const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
+  const canReviewLetters = !!user && (HR_ROLES as string[]).includes(user.role);
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
@@ -249,13 +312,15 @@ export default function GuardDetailPage() {
   const { data: currentDeploymentPage } = useGuardDeploymentHistory(id ?? '', 1);
   const activeDeployment = currentDeploymentPage?.data.find((d) => !d.endDate) ?? null;
   const { data: disciplinaryRecords = [], refetch: refetchDisciplinary } = useDisciplinaryRecords(id ?? '');
-  const { data: guardLetters = [], refetch: refetchLetters } = useGuardLetters(id ?? '');
+  const { data: guardLetters = [] } = useGuardLetters(id ?? '');
   const { data: letterRecordsRes, refetch: refetchLetterRecords } = useLettersBySubject(id ?? '');
   const letterRecords = letterRecordsRes?.data ?? [];
+  const hrLetters = letterRecords.filter((l) => !l.disciplinaryRecordId);
 
   const [showDisciplinaryModal, setShowDisciplinaryModal] = useState(false);
-  const [showLetterModal, setShowLetterModal] = useState(false);
-  const [showGenerateLetterModal, setShowGenerateLetterModal] = useState(false);
+  const [disciplinaryLetterRecord, setDisciplinaryLetterRecord] = useState<DisciplinaryResponse | null>(null);
+  const [showHRLetterModal, setShowHRLetterModal] = useState(false);
+  const [reviewLetter, setReviewLetter] = useState<GeneratedLetterResponse | null>(null);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -1063,170 +1128,136 @@ export default function GuardDetailPage() {
           <div className="d-flex justify-content-between align-items-center mb-3">
             <span className="text-muted small">{disciplinaryRecords.length} record(s)</span>
             <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
-              <ButtonGroup size="sm">
-                <Button
-                  variant="outline-primary"
-                  onClick={() => setShowDisciplinaryModal(true)}
-                >
-                  <i className="bi bi-plus-lg me-1" />Add Record
-                </Button>
-                <Button
-                  style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
-                  onClick={() => setShowLetterModal(true)}
-                >
-                  <i className="bi bi-file-earmark-pdf me-1" />Generate Letter
-                </Button>
-              </ButtonGroup>
+              <Button variant="outline-primary" size="sm" onClick={() => setShowDisciplinaryModal(true)}>
+                <i className="bi bi-plus-lg me-1" />Add Record
+              </Button>
             </RoleGuard>
           </div>
 
-          {/* Disciplinary records table */}
+          {/* Disciplinary records — card list, each with its own linked letters */}
           {disciplinaryRecords.length === 0 ? (
             <Alert variant="light">No disciplinary records.</Alert>
           ) : (
-            <Table size="sm" hover responsive className="align-middle small">
-              <thead className="table-light">
-                <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Officer</th>
-                  <th>Reason</th>
-                  <th>Outcome</th>
-                  <th>Letter</th>
-                </tr>
-              </thead>
-              <tbody>
-                {disciplinaryRecords.map((d) => {
-                  const badgeInfo = DISCIPLINARY_BADGE[d.type] ?? { bg: 'secondary' };
-                  return (
-                    <tr key={d.id}>
-                      <td>{new Date(d.incidentDate).toLocaleDateString()}</td>
-                      <td>
-                        <Badge bg={badgeInfo.bg} text={badgeInfo.text} style={badgeInfo.style}>
-                          {d.type.replace(/_/g, ' ')}
-                        </Badge>
-                      </td>
-                      <td>{d.officer?.name}</td>
-                      <td title={d.reason}>
-                        {d.reason.length > 60 ? d.reason.substring(0, 60) + '…' : d.reason}
-                      </td>
-                      <td title={d.outcome}>
-                        {d.outcome.length > 60 ? d.outcome.substring(0, 60) + '…' : d.outcome}
-                      </td>
-                      <td>
-                        {d.letterPath ? (
-                          <Button
-                            size="sm"
-                            variant="outline-primary"
-                            href={d.letterPath}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            as="a"
-                          >
-                            <i className="bi bi-download" />
-                          </Button>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-          )}
-
-          {/* Generated Letters section — visible to all internal roles */}
-          <div className="mt-4">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <h6 className="text-uppercase text-muted fw-semibold mb-0" style={{ fontSize: '0.75rem', letterSpacing: '0.06em' }}>
-                HR Letters
-              </h6>
-              <Button size="sm" variant="outline-primary" onClick={() => setShowGenerateLetterModal(true)}>
-                + Generate Letter
-              </Button>
-            </div>
-
-            {letterRecords.length === 0 ? (
-              <Alert variant="light" className="small py-2">No letters generated for this guard yet.</Alert>
-            ) : (
-              <div className="d-flex flex-column gap-2">
-                {letterRecords.map(l => (
-                  <div key={l.id} style={{
-                    padding: '10px 14px', border: '1px solid #e9ecef', borderRadius: '0.5rem',
-                    borderLeft: `4px solid ${
-                      l.approvalStatus === 'APPROVED' ? '#1E8449'
-                      : l.approvalStatus === 'REJECTED' ? '#dc3545'
-                      : '#E8701A'
-                    }`,
-                  }}>
-                    <div className="d-flex align-items-start justify-content-between gap-2">
-                      <div style={{ flex: 1 }}>
-                        <div className="fw-bold" style={{ fontSize: '0.88rem' }}>{l.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: 2 }}>
-                          {l.letterType.replace(/_/g, ' ')} · By {l.generatedBy.name} ·{' '}
-                          {new Date(l.generatedAt).toLocaleDateString('en-GB')}
+            <div className="d-flex flex-column gap-3">
+              {disciplinaryRecords.map((d) => {
+                const badgeInfo = DISCIPLINARY_BADGE[d.type] ?? { bg: 'secondary' };
+                const recordLetters = letterRecords.filter((l) => l.disciplinaryRecordId === d.id);
+                return (
+                  <div key={d.id} className="card border-0 shadow-sm">
+                    <div className="card-body">
+                      <div className="d-flex align-items-start justify-content-between gap-2">
+                        <div>
+                          <Badge bg={badgeInfo.bg} text={badgeInfo.text} style={badgeInfo.style}>
+                            {d.type.replace(/_/g, ' ')}
+                          </Badge>
+                          <span className="text-muted small ms-2">{new Date(d.incidentDate).toLocaleDateString('en-GB')}</span>
+                          {d.officer?.name && <span className="text-muted small ms-2">· Officer: {d.officer.name}</span>}
                         </div>
-                        {l.approvalStatus === 'APPROVED' && l.approvedBy && (
-                          <div style={{ fontSize: '0.72rem', color: '#1E8449', marginTop: 2 }}>
-                            Approved by {l.approvedBy.name} on {new Date(l.approvedAt!).toLocaleDateString('en-GB')}
-                          </div>
-                        )}
-                        {l.approvalStatus === 'REJECTED' && l.approvalNotes && (
-                          <div style={{ fontSize: '0.72rem', color: '#842029', marginTop: 2, fontStyle: 'italic' }}>
-                            Rejected: {l.approvalNotes}
-                          </div>
-                        )}
-                      </div>
-                      <div className="d-flex flex-column align-items-end gap-1">
-                        <LetterStatusBadge status={l.approvalStatus} />
-                        {l.approvalStatus === 'APPROVED' && l.letterType === 'COMMITMENT_AGREEMENT' && (
+                        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
                           <Button
                             size="sm"
-                            variant="outline-secondary"
-                            style={{ fontSize: '0.72rem', padding: '2px 8px' }}
-                            onClick={() => lettersApi.downloadPdf(l.id, `${l.letterType}-${l.subjectName}.pdf`)}
+                            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
+                            onClick={() => setDisciplinaryLetterRecord(d)}
                           >
-                            ↓ PDF
+                            <i className="bi bi-file-earmark-pdf me-1" />
+                            {recordLetters.length === 0 ? 'Generate Letter' : '+ Another Letter'}
                           </Button>
-                        )}
+                        </RoleGuard>
                       </div>
+                      <div className="small mt-2"><strong>Reason:</strong> {d.reason}</div>
+                      <div className="small"><strong>Outcome:</strong> {d.outcome}</div>
+                      {d.letterPath && (
+                        <div className="mt-2">
+                          <Button size="sm" variant="outline-secondary" href={d.letterPath} target="_blank" rel="noopener noreferrer" as="a">
+                            <i className="bi bi-download me-1" />Legacy Letter PDF
+                          </Button>
+                        </div>
+                      )}
+
+                      {recordLetters.length > 0 && (
+                        <div className="mt-3 pt-2 border-top">
+                          <div className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.7rem', letterSpacing: '0.06em' }}>
+                            Letters for this incident
+                          </div>
+                          <div className="d-flex flex-column gap-2">
+                            {recordLetters.map((l) => (
+                              <LetterCard
+                                key={l.id}
+                                letter={l}
+                                canReview={canReviewLetters}
+                                onReview={() => setReviewLetter(l)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                );
+              })}
+            </div>
+          )}
+
+          {/* PDF letters (legacy fire-and-forget system) */}
+          <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+            {guardLetters.length > 0 && (
+              <div className="mt-4">
+                <div className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.7rem', letterSpacing: '0.06em' }}>
+                  PDF Letters (Legacy)
+                </div>
+                <Table size="sm" hover responsive className="align-middle small">
+                  <thead className="table-light">
+                    <tr><th>Letter Type</th><th>Date</th><th>Version</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {guardLetters.map(l => (
+                      <tr key={l.id}>
+                        <td><Badge bg="secondary">{l.documentType.replace(/_/g, ' ')}</Badge></td>
+                        <td>{new Date(l.uploadedAt).toLocaleDateString()}</td>
+                        <td>v{l.version}</td>
+                        <td>
+                          <Button size="sm" variant="outline-primary" href={l.filePath} target="_blank" rel="noopener noreferrer" as="a">
+                            <i className="bi bi-download" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
               </div>
             )}
+          </RoleGuard>
+        </Tab>
 
-            {/* PDF letters (HR-generated) */}
-            <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
-              {guardLetters.length > 0 && (
-                <div className="mt-3">
-                  <div className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.7rem', letterSpacing: '0.06em' }}>
-                    PDF Letters (Legacy)
-                  </div>
-                  <Table size="sm" hover responsive className="align-middle small">
-                    <thead className="table-light">
-                      <tr><th>Letter Type</th><th>Date</th><th>Version</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                      {guardLetters.map(l => (
-                        <tr key={l.id}>
-                          <td><Badge bg="secondary">{l.documentType.replace(/_/g, ' ')}</Badge></td>
-                          <td>{new Date(l.uploadedAt).toLocaleDateString()}</td>
-                          <td>v{l.version}</td>
-                          <td>
-                            <Button size="sm" variant="outline-primary" href={l.filePath} target="_blank" rel="noopener noreferrer" as="a">
-                              <i className="bi bi-download" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              )}
+        {/* ── Tab 6: Letters (HR letters — never disciplinary) ──────────────── */}
+        <Tab eventKey="letters" title="Letters">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="text-muted small">{hrLetters.length} letter(s)</span>
+            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+              <Button
+                size="sm"
+                style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
+                onClick={() => setShowHRLetterModal(true)}
+              >
+                + Generate Letter
+              </Button>
             </RoleGuard>
           </div>
+
+          {hrLetters.length === 0 ? (
+            <Alert variant="light" className="small py-2">No letters generated for this guard yet.</Alert>
+          ) : (
+            <div className="d-flex flex-column gap-2">
+              {hrLetters.map((l) => (
+                <LetterCard
+                  key={l.id}
+                  letter={l}
+                  canReview={canReviewLetters}
+                  onReview={() => setReviewLetter(l)}
+                />
+              ))}
+            </div>
+          )}
         </Tab>
 
         {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
@@ -1349,23 +1380,30 @@ export default function GuardDetailPage() {
           onSuccess={() => refetchDisciplinary()}
         />
       )}
-      {showLetterModal && (
-        <LetterGenerationModal
+      {disciplinaryLetterRecord && (
+        <DisciplinaryLetterModal
+          show
           guardId={id!}
           guardName={guard.fullName}
-          disciplinaryRecords={disciplinaryRecords}
-          onClose={() => setShowLetterModal(false)}
-          onSuccess={() => refetchLetters()}
+          disciplinaryRecord={disciplinaryLetterRecord}
+          onClose={() => setDisciplinaryLetterRecord(null)}
+          onSuccess={() => refetchLetterRecords()}
         />
       )}
-      {showGenerateLetterModal && (
-        <GenerateLetterModal
-          show={showGenerateLetterModal}
-          subjectType="GUARD"
-          subjectId={id!}
-          subjectName={guard.fullName}
-          onClose={() => setShowGenerateLetterModal(false)}
+      {showHRLetterModal && (
+        <HRLetterModal
+          show={showHRLetterModal}
+          guardId={id!}
+          guardName={guard.fullName}
+          onClose={() => setShowHRLetterModal(false)}
           onSuccess={() => refetchLetterRecords()}
+        />
+      )}
+      {reviewLetter && (
+        <ApproveLetterModal
+          show
+          letter={reviewLetter}
+          onClose={() => { setReviewLetter(null); refetchLetterRecords(); }}
         />
       )}
       {showDeductionModal && (

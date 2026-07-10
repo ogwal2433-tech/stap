@@ -14,11 +14,13 @@ export const lettersApi = {
   },
 
   list(params?: {
-    subjectId?:     string;
-    approvalStatus?:string;
-    letterType?:    string;
-    page?:          number;
-    limit?:         number;
+    subjectId?:           string;
+    approvalStatus?:      string;
+    letterType?:          string;
+    disciplinaryRecordId?:string;
+    isDisciplinary?:      boolean;
+    page?:                number;
+    limit?:               number;
   }): Promise<{ data: GeneratedLetterResponse[]; pagination: PaginatedResponse<GeneratedLetterResponse>['pagination'] }> {
     return api
       .get<{ success: boolean } & PaginatedResponse<GeneratedLetterResponse>>('/letters', { params })

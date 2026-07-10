@@ -200,10 +200,9 @@ router.get(
   '/invoices/preview',
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
   asyncHandler(async (req: Request, res: Response) => {
-    const { contractId, sourceMode, billingDays } = req.query;
+    const { contractId, billingDays } = req.query;
     const preview = await invoiceService.getInvoicePreview(
       contractId as string,
-      (sourceMode as 'ACTUAL_GUARDS' | 'CONTRACT_RATES') ?? 'ACTUAL_GUARDS',
       parseInt(billingDays as string) || 30,
     );
     res.json({ success: true, data: preview });

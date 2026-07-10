@@ -80,8 +80,7 @@ export const invoicesApi = {
   },
 
   getInvoicePreview(params: {
-    contractId: string;
-    sourceMode: 'ACTUAL_GUARDS' | 'CONTRACT_RATES';
+    contractId:  string;
     billingDays?: number;
   }): Promise<InvoicePreviewResponse> {
     return api

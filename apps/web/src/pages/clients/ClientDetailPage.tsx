@@ -520,7 +520,7 @@ export default function ClientDetailPage() {
                 <tr>
                   <th>Period</th>
                   <th>Guards</th>
-                  <th>Rate/Guard</th>
+                  <th>Rate Breakdown</th>
                   <th>Monthly Value</th>
                   <th>Shift Pattern</th>
                   <th>Weapons</th>
@@ -551,9 +551,20 @@ export default function ClientDetailPage() {
                           {computeDisplayDuration(c.contractStart, c.contractEnd)}
                         </div>
                       </td>
-                      <td>{c.guardsRequired}</td>
-                      <td>UGX {c.billingPerGuard.toLocaleString()}</td>
-                      <td className="fw-semibold">UGX {c.monthlyValue.toLocaleString()}</td>
+                      <td>
+                        <div className="fw-bold">{c.guardsRequired} total</div>
+                        <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
+                          {c.guardRates.map((r) => `${r.guardsCount} ${r.guardType}`).join(', ')}
+                        </div>
+                      </td>
+                      <td>
+                        {c.guardRates.map((r) => (
+                          <div key={r.id} style={{ fontSize: '0.72rem', color: '#4A5568' }}>
+                            {r.guardType}: {r.guardsCount} × UGX {r.ratePerGuard.toLocaleString()}
+                          </div>
+                        ))}
+                      </td>
+                      <td className="fw-semibold">UGX {c.totalMonthlyValue.toLocaleString()}</td>
                       <td className="text-muted">
                         {c.shiftPattern
                           ? SHIFT_PATTERNS[c.shiftPattern as keyof typeof SHIFT_PATTERNS] ?? c.shiftPattern

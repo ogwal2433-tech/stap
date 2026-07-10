@@ -465,15 +465,15 @@ model Zone {
 }
 
 model Contract {
-  id              String         @id @default(cuid())
-  clientId        String
-  contractStart   DateTime
-  contractEnd     DateTime
-  guardsRequired  Int
-  billingPerGuard Int
-  billingDay      Int            @default(1) // Day of month to auto-generate invoice
-  contractFile    String?
-  status          ContractStatus @default(DRAFT)
+  id                String         @id @default(cuid())
+  clientId          String
+  contractStart     DateTime
+  contractEnd       DateTime
+  guardsRequired    Int // derived: sum of guardRates[].guardsCount
+  totalMonthlyValue Int            @default(0) // derived: sum of guardRates[].monthlyTotal
+  billingDay        Int            @default(1) // Day of month to auto-generate invoice
+  contractFile      String?
+  status            ContractStatus @default(DRAFT)
 
   // Security deployment details
   weaponsAllocation Int? // Number of weapons allocated under this contract
@@ -1059,24 +1059,30 @@ model LetterTemplate {
 }
 
 model GeneratedLetter {
-  id              String    @id @default(cuid())
-  subjectType     String
-  subjectId       String
-  subjectName     String
-  title           String
-  body            String    @db.Text
-  letterType      String    @default("GENERAL")
-  generatedBy     String
-  generatedByUser User      @relation("LetterGenerator", fields: [generatedBy], references: [id])
-  generatedAt     DateTime  @default(now())
-  approvalStatus  String    @default("PENDING")
-  approvedBy      String?
-  approvedByUser  User?     @relation("LetterApprover", fields: [approvedBy], references: [id])
-  approvedAt      DateTime?
-  approvalNotes   String?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  subjectType          String
+  subjectId            String
+  subjectName          String
+  title                String
+  body                 String    @db.Text
+  letterType           String    @default("GENERAL")
+  // Links a disciplinary-type letter (WARNING/SUSPENSION/TERMINATION) to the
+  // specific DisciplinaryRecord it was generated from. Null for HR letters.
+  // Loose reference (no FK), matching subjectId's polymorphic-style convention.
+  disciplinaryRecordId String?
+  generatedBy          String
+  generatedByUser      User      @relation("LetterGenerator", fields: [generatedBy], references: [id])
+  generatedAt          DateTime  @default(now())
+  approvalStatus       String    @default("PENDING")
+  approvedBy           String?
+  approvedByUser       User?     @relation("LetterApprover", fields: [approvedBy], references: [id])
+  approvedAt           DateTime?
+  approvalNotes        String?
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([disciplinaryRecordId])
 }
 
 // ─── Inventory Models ──────────────────────────────────────────────────────────
@@ -1147,9 +1153,10 @@ model ContractGuardRate {
   id           String   @id @default(cuid())
   contractId   String
   contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  guardType    String   @default("UNARMED") // UNARMED | ARMED | SUPERVISOR | OTHER
+  guardType    String // free text, e.g. "Armed Guard", "Supervisor"
   guardsCount  Int      @default(1)
-  ratePerGuard Int
+  ratePerGuard Int // monthly rate per guard, UGX
+  monthlyTotal Int      @default(0) // stored: guardsCount * ratePerGuard
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

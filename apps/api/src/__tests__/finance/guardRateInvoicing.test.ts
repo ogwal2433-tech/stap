@@ -6,7 +6,6 @@ vi.mock('../../db/prisma', () => ({
   default: {
     invoice:   { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     contract:  { findUnique: vi.fn() },
-    guard:     { findMany: vi.fn() },
     payment:   { create: vi.fn() },
     client:    { findUnique: vi.fn() },
   },
@@ -31,13 +30,15 @@ const mp = prisma as any;
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
+// ratePerGuard is a MONTHLY rate per guard; chosen so ÷30 gives clean daily
+// figures (450000/30=15000, 300000/30=10000).
 const CONTRACT_WITH_RATES = {
   id:         'contract-1',
   clientId:   'client-1',
   client:     { clientName: 'KCCA Ltd' },
   guardRates: [
-    { id: 'gr-1', guardType: 'ARMED',   guardsCount: 2, ratePerGuard: 15000 },
-    { id: 'gr-2', guardType: 'UNARMED', guardsCount: 4, ratePerGuard: 10000 },
+    { id: 'gr-1', guardType: 'Armed Guard',   guardsCount: 2, ratePerGuard: 450000 },
+    { id: 'gr-2', guardType: 'Unarmed Guard', guardsCount: 4, ratePerGuard: 300000 },
   ],
 };
 
@@ -47,10 +48,6 @@ const CONTRACT_NO_RATES = {
   client:     { clientName: 'KCCA Ltd' },
   guardRates: [],
 };
-
-const GUARD_HIGH_RATE  = { id: 'g-1', firstName: 'John',  lastName: 'Doe',  rank: 'CORPORAL', billingRatePerDay: 20000, salaryRate: 550000 };
-const GUARD_LOW_RATE   = { id: 'g-2', firstName: 'Jane',  lastName: 'Roe',  rank: 'GUARD',    billingRatePerDay: 12000, salaryRate: 450000 };
-const GUARD_NO_BILLING = { id: 'g-3', firstName: 'Alice', lastName: 'Apio', rank: 'GUARD',    billingRatePerDay: null,  salaryRate: 480000 };
 
 function makeInvoice(lineItems: any[] = []) {
   return {
@@ -83,89 +80,69 @@ beforeEach(() => {
   mp.invoice.count.mockResolvedValue(0);
 });
 
-// ── ACTUAL_GUARDS preview ─────────────────────────────────────────────────────
+// ── getInvoicePreview() ────────────────────────────────────────────────────────
 
-describe('getInvoicePreview() — ACTUAL_GUARDS mode', () => {
-  it('returns one line item per deployed active guard', async () => {
-    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([GUARD_HIGH_RATE, GUARD_LOW_RATE]);
-
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30);
-
-    expect(preview.lineItems).toHaveLength(2);
-    expect(preview.lineItems[0].guardId).toBe('g-1');
-    expect(preview.lineItems[1].guardId).toBe('g-2');
-  });
-
-  it('uses billingRatePerDay when set', async () => {
-    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([GUARD_HIGH_RATE]);
-
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30);
-
-    expect(preview.lineItems[0].ratePerDay).toBe(20000);
-    expect(preview.lineItems[0].lineTotal).toBe(20000 * 30);
-  });
-
-  it('falls back to salaryRate÷30 when billingRatePerDay is null', async () => {
-    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([GUARD_NO_BILLING]);
-
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30);
-
-    const expectedRate = Math.round(480000 / 30);
-    expect(preview.lineItems[0].ratePerDay).toBe(expectedRate);
-  });
-
-  it('throws 400 when no guards deployed for client', async () => {
-    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([]);
-
-    await expect(
-      invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30),
-    ).rejects.toThrow(/No active guards/i);
-  });
-
-  it('two guards with different rates produce different line totals', async () => {
-    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([GUARD_HIGH_RATE, GUARD_LOW_RATE]);
-
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30);
-
-    expect(preview.lineItems[0].lineTotal).not.toBe(preview.lineItems[1].lineTotal);
-    expect(preview.lineItems[0].lineTotal).toBe(20000 * 30); // high rate
-    expect(preview.lineItems[1].lineTotal).toBe(12000 * 30); // low rate
-  });
-});
-
-// ── CONTRACT_RATES preview ────────────────────────────────────────────────────
-
-describe('getInvoicePreview() — CONTRACT_RATES mode', () => {
+describe('getInvoicePreview()', () => {
   it('returns one line item per ContractGuardRate row', async () => {
     mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
 
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'CONTRACT_RATES', 30);
+    const preview = await invoiceService.getInvoicePreview('contract-1', 30);
 
     expect(preview.lineItems).toHaveLength(2);
-    expect(preview.lineItems[0].description).toBe('ARMED');
-    expect(preview.lineItems[1].description).toBe('UNARMED');
+    expect(preview.lineItems[0].guardType).toBe('Armed Guard');
+    expect(preview.lineItems[1].guardType).toBe('Unarmed Guard');
   });
 
-  it('computes lineTotal as count × ratePerGuard × days', async () => {
+  it('converts the monthly ratePerGuard to a daily rate for the invoice line', async () => {
     mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
 
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'CONTRACT_RATES', 30);
+    const preview = await invoiceService.getInvoicePreview('contract-1', 30);
 
-    expect(preview.lineItems[0].lineTotal).toBe(2 * 15000 * 30); // 2 ARMED × 15000 × 30
-    expect(preview.lineItems[1].lineTotal).toBe(4 * 10000 * 30); // 4 UNARMED × 10000 × 30
+    expect(preview.lineItems[0].ratePerGuard).toBe(15000); // 450000 / 30
+    expect(preview.lineItems[1].ratePerGuard).toBe(10000); // 300000 / 30
+  });
+
+  it('computes lineTotal as count × dailyRate × billingDays', async () => {
+    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
+
+    const preview = await invoiceService.getInvoicePreview('contract-1', 30);
+
+    expect(preview.lineItems[0].lineTotal).toBe(2 * 15000 * 30); // 2 Armed × 15000/day × 30
+    expect(preview.lineItems[1].lineTotal).toBe(4 * 10000 * 30); // 4 Unarmed × 10000/day × 30
+  });
+
+  it('recomputes line totals for a different billingDays value', async () => {
+    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
+
+    const preview = await invoiceService.getInvoicePreview('contract-1', 31);
+
+    expect(preview.lineItems[0].billingDays).toBe(31);
+    expect(preview.lineItems[0].lineTotal).toBe(2 * 15000 * 31);
+  });
+
+  it('totalAmount and guardsRequired are derived from the line items', async () => {
+    mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
+
+    const preview = await invoiceService.getInvoicePreview('contract-1', 30);
+
+    expect(preview.guardsRequired).toBe(6); // 2 + 4
+    expect(preview.totalAmount).toBe(2 * 15000 * 30 + 4 * 10000 * 30);
   });
 
   it('throws 400 when contract has no guardRates', async () => {
     mp.contract.findUnique.mockResolvedValue(CONTRACT_NO_RATES);
 
     await expect(
-      invoiceService.getInvoicePreview('contract-2', 'CONTRACT_RATES', 30),
-    ).rejects.toThrow(/no guard rate breakdown/i);
+      invoiceService.getInvoicePreview('contract-2', 30),
+    ).rejects.toThrow(/no guard rate lines/i);
+  });
+
+  it('throws NotFoundError when contract does not exist', async () => {
+    mp.contract.findUnique.mockResolvedValue(null);
+
+    await expect(
+      invoiceService.getInvoicePreview('missing', 30),
+    ).rejects.toThrow(/not found/i);
   });
 });
 
@@ -176,10 +153,10 @@ describe('generateInvoice() — line item handling', () => {
     mp.contract.findUnique.mockResolvedValue({ id: 'contract-1', clientId: 'client-1' });
 
     const overrides = [
-      { guardId: 'g-1', description: 'John Doe (CORPORAL)', quantity: 1, ratePerDay: 25000, days: 30 },
+      { guardType: 'Armed Guard', count: 1, ratePerGuard: 25000, billingDays: 30 },
     ];
 
-    const createdLineItems = [{ id: 'li-1', guardId: 'g-1', description: 'John Doe (CORPORAL)', guardsCount: 1, ratePerGuard: 25000, days: 30, amount: 750000, createdAt: new Date() }];
+    const createdLineItems = [{ id: 'li-1', guardId: null, description: 'Armed Guard', guardsCount: 1, ratePerGuard: 25000, days: 30, amount: 750000, createdAt: new Date() }];
     mp.invoice.create.mockResolvedValue(makeInvoice(createdLineItems));
 
     await invoiceService.generateInvoice(
@@ -187,7 +164,7 @@ describe('generateInvoice() — line item handling', () => {
         contractId: 'contract-1',
         billingPeriodStart: '2026-06-01T00:00:00.000Z',
         billingPeriodEnd:   '2026-06-30T00:00:00.000Z',
-        sourceMode: 'ACTUAL_GUARDS',
+        billingDays: 30,
         lineItemOverrides: overrides,
       },
       'user-1',
@@ -196,23 +173,24 @@ describe('generateInvoice() — line item handling', () => {
     const createCall = mp.invoice.create.mock.calls[0][0];
     expect(createCall.data.lineItems.create).toHaveLength(1);
     expect(createCall.data.lineItems.create[0].ratePerGuard).toBe(25000);
-    // guard.findMany should NOT be called — overrides bypass the preview
-    expect(mp.guard.findMany).not.toHaveBeenCalled();
+    expect(createCall.data.lineItems.create[0].description).toBe('Armed Guard');
+    // Overrides bypass the preview entirely — contract is only looked up for clientId
+    expect(mp.contract.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it('totalAmount equals sum of all lineTotal values', async () => {
     mp.contract.findUnique.mockResolvedValue({ id: 'contract-1', clientId: 'client-1' });
 
     const overrides = [
-      { guardId: 'g-1', description: 'Guard A', quantity: 1, ratePerDay: 20000, days: 30 },
-      { guardId: 'g-2', description: 'Guard B', quantity: 1, ratePerDay: 12000, days: 30 },
+      { guardType: 'Guard A', count: 1, ratePerGuard: 20000, billingDays: 30 },
+      { guardType: 'Guard B', count: 1, ratePerGuard: 12000, billingDays: 30 },
     ];
     const expectedTotal = (20000 + 12000) * 30;
 
     const createdLineItems = overrides.map((o, i) => ({
-      id: `li-${i}`, guardId: o.guardId, description: o.description,
-      guardsCount: 1, ratePerGuard: o.ratePerDay, days: 30,
-      amount: o.ratePerDay * 30, createdAt: new Date(),
+      id: `li-${i}`, guardId: null, description: o.guardType,
+      guardsCount: o.count, ratePerGuard: o.ratePerGuard, days: o.billingDays,
+      amount: o.ratePerGuard * o.billingDays, createdAt: new Date(),
     }));
     mp.invoice.create.mockResolvedValue(makeInvoice(createdLineItems));
 
@@ -221,7 +199,7 @@ describe('generateInvoice() — line item handling', () => {
         contractId: 'contract-1',
         billingPeriodStart: '2026-06-01T00:00:00.000Z',
         billingPeriodEnd:   '2026-06-30T00:00:00.000Z',
-        sourceMode: 'ACTUAL_GUARDS',
+        billingDays: 30,
         lineItemOverrides: overrides,
       },
       'user-1',
@@ -232,13 +210,39 @@ describe('generateInvoice() — line item handling', () => {
     expect(result.lineItems).toHaveLength(2);
   });
 
-  it('generates fresh from source when no overrides provided', async () => {
-    mp.contract.findUnique
-      .mockResolvedValueOnce({ id: 'contract-1', clientId: 'client-1' })  // generateInvoice check
-      .mockResolvedValueOnce(CONTRACT_WITH_RATES);                          // getInvoicePreview check
+  it('respects a different billingDays per line item override', async () => {
+    mp.contract.findUnique.mockResolvedValue({ id: 'contract-1', clientId: 'client-1' });
 
-    mp.guard.findMany.mockResolvedValue([GUARD_HIGH_RATE]);
-    const lineItem = { id: 'li-1', guardId: 'g-1', description: 'John Doe (CORPORAL)', guardsCount: 1, ratePerGuard: 20000, days: 30, amount: 600000, createdAt: new Date() };
+    const overrides = [
+      { guardType: 'Armed Guard', count: 2, ratePerGuard: 15000, billingDays: 30 },
+      { guardType: 'Supervisor',  count: 1, ratePerGuard: 20000, billingDays: 15 }, // e.g. mid-period start
+    ];
+    mp.invoice.create.mockResolvedValue(makeInvoice([]));
+
+    await invoiceService.generateInvoice(
+      {
+        contractId: 'contract-1',
+        billingPeriodStart: '2026-06-01T00:00:00.000Z',
+        billingPeriodEnd:   '2026-06-30T00:00:00.000Z',
+        billingDays: 30,
+        lineItemOverrides: overrides,
+      },
+      'user-1',
+    );
+
+    const createCall = mp.invoice.create.mock.calls[0][0];
+    const [line1, line2] = createCall.data.lineItems.create;
+    expect(line1.amount).toBe(2 * 15000 * 30);
+    expect(line2.amount).toBe(1 * 20000 * 15);
+    expect(createCall.data.totalAmount).toBe(2 * 15000 * 30 + 1 * 20000 * 15);
+  });
+
+  it('generates fresh from the contract rate lines when no overrides provided', async () => {
+    mp.contract.findUnique
+      .mockResolvedValueOnce({ id: 'contract-1', clientId: 'client-1' }) // generateInvoiceFromContract check
+      .mockResolvedValueOnce(CONTRACT_WITH_RATES);                       // getInvoicePreview check
+
+    const lineItem = { id: 'li-1', guardId: null, description: 'Armed Guard', guardsCount: 2, ratePerGuard: 15000, days: 30, amount: 900000, createdAt: new Date() };
     mp.invoice.create.mockResolvedValue(makeInvoice([lineItem]));
 
     await invoiceService.generateInvoice(
@@ -246,15 +250,15 @@ describe('generateInvoice() — line item handling', () => {
         contractId: 'contract-1',
         billingPeriodStart: '2026-06-01T00:00:00.000Z',
         billingPeriodEnd:   '2026-06-30T00:00:00.000Z',
-        sourceMode: 'ACTUAL_GUARDS',
+        billingDays: 30,
       },
       'user-1',
     );
 
-    expect(mp.guard.findMany).toHaveBeenCalledTimes(1);
     const createCall = mp.invoice.create.mock.calls[0][0];
-    expect(createCall.data.lineItems.create).toHaveLength(1);
-    expect(createCall.data.lineItems.create[0].ratePerGuard).toBe(20000);
+    expect(createCall.data.lineItems.create).toHaveLength(2);
+    expect(createCall.data.lineItems.create[0].description).toBe('Armed Guard');
+    expect(createCall.data.lineItems.create[0].ratePerGuard).toBe(15000);
   });
 });
 
@@ -263,9 +267,8 @@ describe('generateInvoice() — line item handling', () => {
 describe('preview totalAmount consistency', () => {
   it('totalAmount equals sum of all lineTotal values in preview', async () => {
     mp.contract.findUnique.mockResolvedValue(CONTRACT_WITH_RATES);
-    mp.guard.findMany.mockResolvedValue([GUARD_HIGH_RATE, GUARD_LOW_RATE]);
 
-    const preview = await invoiceService.getInvoicePreview('contract-1', 'ACTUAL_GUARDS', 30);
+    const preview = await invoiceService.getInvoicePreview('contract-1', 30);
 
     const expectedTotal = preview.lineItems.reduce((s, li) => s + li.lineTotal, 0);
     expect(preview.totalAmount).toBe(expectedTotal);

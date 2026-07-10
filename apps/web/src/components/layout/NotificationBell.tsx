@@ -19,9 +19,15 @@ const TYPE_ICON: Record<string, string> = {
 const ENTITY_ROUTE: Record<string, string> = {
   complaint: '/complaints',
   invoice:   '/finance',
-  guard:     '/guards',
   payroll:   '/finance',
 };
+
+// Guard notifications (e.g. a letter awaiting approval) link to that specific
+// guard's profile rather than the generic list.
+function entityRoute(entityType: string | null, entityId: string | null): string | null {
+  if (entityType === 'guard' && entityId) return `/guards/${entityId}`;
+  return entityType ? ENTITY_ROUTE[entityType] ?? null : null;
+}
 
 export default function NotificationBell() {
   const navigate   = useNavigate();
@@ -39,9 +45,8 @@ export default function NotificationBell() {
   function handleItemClick(n: NotificationResponse) {
     markRead.mutate(n.id);
     setShow(false);
-    if (n.entityType && ENTITY_ROUTE[n.entityType]) {
-      navigate(ENTITY_ROUTE[n.entityType]);
-    }
+    const route = entityRoute(n.entityType, n.entityId);
+    if (route) navigate(route);
   }
 
   return (

@@ -120,6 +120,25 @@ export const GENERATED_LETTER_TYPES = {
 
 export type GeneratedLetterType = keyof typeof GENERATED_LETTER_TYPES;
 
+// Disciplinary letters are generated from a specific DisciplinaryRecord and can
+// only be created when one exists. HR letters are not tied to any disciplinary
+// record and are generated from the guard profile's dedicated Letters tab.
+export const DISCIPLINARY_LETTER_TYPES = ['WARNING', 'SUSPENSION', 'TERMINATION'] as const;
+export const HR_LETTER_TYPES = ['COMMENDATION', 'REINSTATEMENT', 'GENERAL', 'COMMITMENT_AGREEMENT'] as const;
+
+export const DISCIPLINARY_LETTER_LABELS = {
+  WARNING:     '⚠️ Warning Letter',
+  SUSPENSION:  '🔴 Suspension Letter',
+  TERMINATION: '❌ Termination Letter',
+} as const;
+
+export const HR_LETTER_LABELS = {
+  COMMENDATION:          '🌟 Commendation Letter',
+  REINSTATEMENT:         '✅ Reinstatement Letter',
+  GENERAL:               '📄 General Letter',
+  COMMITMENT_AGREEMENT:  '📋 Commitment Agreement',
+} as const;
+
 export const LETTER_APPROVAL_STATUS = {
   PENDING:  'Pending Approval',
   APPROVED: 'Approved',
@@ -133,6 +152,9 @@ export const GenerateLetterSchema = z.object({
   title:       z.string().min(1).max(200),
   body:        z.string().min(10),
   letterType:  z.enum(['WARNING', 'SUSPENSION', 'COMMENDATION', 'TERMINATION', 'REINSTATEMENT', 'GENERAL', 'COMMITMENT_AGREEMENT']).default('GENERAL'),
+  // Links a disciplinary-type letter to the specific incident it was generated
+  // from. Left unset (null) for HR letters, which are never linked.
+  disciplinaryRecordId: z.string().optional().nullable(),
 });
 export type GenerateLetterInput = z.infer<typeof GenerateLetterSchema>;
 
@@ -153,6 +175,7 @@ export interface GeneratedLetterResponse {
   title:          string;
   body:           string;
   letterType:     string;
+  disciplinaryRecordId: string | null;
   generatedBy:    { id: string; name: string; role: string };
   generatedAt:    string;
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';

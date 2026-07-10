@@ -20,14 +20,21 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [clientId, guardsRequired, billingPerGuard, startDate]
+ *             required: [clientId, contractStart, contractEnd, guardRates]
  *             properties:
  *               clientId: { type: string, format: uuid }
- *               guardsRequired: { type: integer }
- *               billingPerGuard: { type: integer }
- *               startDate: { type: string, format: date-time }
- *               endDate: { type: string, format: date-time }
- *               billingDay: { type: integer, minimum: 1, maximum: 28 }
+ *               contractStart: { type: string, format: date-time }
+ *               contractEnd: { type: string, format: date-time }
+ *               guardRates:
+ *                 type: array
+ *                 description: The only billing mechanism — at least one line required
+ *                 items:
+ *                   type: object
+ *                   required: [guardType, guardsCount, ratePerGuard]
+ *                   properties:
+ *                     guardType: { type: string }
+ *                     guardsCount: { type: integer }
+ *                     ratePerGuard: { type: integer, description: Monthly rate per guard in UGX }
  *     responses:
  *       201:
  *         description: Contract created

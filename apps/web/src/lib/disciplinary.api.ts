@@ -3,7 +3,6 @@ import type {
   DisciplinaryResponse,
   GuardDocumentResponse,
   CreateDisciplinaryInput,
-  LetterGenerationInput,
 } from '@stap/shared';
 
 export const disciplinaryApi = {
@@ -19,18 +18,6 @@ export const disciplinaryApi = {
   list(guardId: string): Promise<DisciplinaryResponse[]> {
     return api
       .get<{ success: boolean; data: DisciplinaryResponse[] }>(`/guards/${guardId}/disciplinary`)
-      .then((r) => r.data.data);
-  },
-
-  generateLetter(
-    guardId: string,
-    data: Omit<LetterGenerationInput, 'guardId'>,
-  ): Promise<{ filePath: string; fileName: string; documentId: string }> {
-    return api
-      .post<{ success: boolean; data: { filePath: string; fileName: string; documentId: string } }>(
-        `/guards/${guardId}/letters`,
-        { ...data, guardId },
-      )
       .then((r) => r.data.data);
   },
 

@@ -17,13 +17,14 @@ export const GenerateInvoiceSchema = z.object({
   contractId:         z.string().min(1),
   billingPeriodStart: z.string().datetime(),
   billingPeriodEnd:   z.string().datetime(),
-  sourceMode:         z.enum(['ACTUAL_GUARDS', 'CONTRACT_RATES']).default('ACTUAL_GUARDS'),
+  billingDays:        z.coerce.number().int().min(1).default(30),
+  // The contract's guard rate lines are the only source — these are the
+  // (possibly user-edited) lines from the preview, always sent on generate.
   lineItemOverrides:  z.array(z.object({
-    guardId:     z.string().optional(),
-    description: z.string().min(1),
-    quantity:    z.coerce.number().int().min(1),
-    ratePerDay:  z.coerce.number().int().min(0),
-    days:        z.coerce.number().int().min(1).default(30),
+    guardType:    z.string().min(1),
+    count:        z.coerce.number().int().min(1),
+    ratePerGuard: z.coerce.number().int().min(0),
+    billingDays:  z.coerce.number().int().min(1),
   })).optional(),
 });
 
@@ -90,11 +91,24 @@ export interface InvoiceLineItemResponse {
   lineTotal:   number;    // mapped from amount
 }
 
+export interface InvoicePreviewLineItem {
+  guardType:    string;
+  count:        number;
+  // Daily rate per guard, UGX — converted from the contract's monthly
+  // ContractGuardRate.ratePerGuard (÷30) so lineTotal = count * ratePerGuard * billingDays
+  // gives the correct amount for the actual billing period, not 30x too much.
+  ratePerGuard: number;
+  billingDays:  number;
+  lineTotal:    number;
+}
+
 export interface InvoicePreviewResponse {
-  contractId:  string;
-  clientName:  string;
-  lineItems:   InvoiceLineItemResponse[];
-  totalAmount: number;
+  contractId:     string;
+  clientName:     string;
+  period:         string;
+  lineItems:      InvoicePreviewLineItem[];
+  totalAmount:    number;
+  guardsRequired: number;
 }
 
 export interface InvoiceResponse {

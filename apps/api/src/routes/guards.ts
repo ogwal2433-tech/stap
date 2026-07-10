@@ -172,7 +172,6 @@ import multer from 'multer';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
 import { bulkImportService } from '../services/bulkImportService';
-import { letterService } from '../services/letterService';
 import { renderToPdf } from '../lib/pdfBase';
 import { uploadService } from '../services/uploadService';
 import { guardDocumentUpload } from '../config/multer';
@@ -195,7 +194,6 @@ import {
   GuardListQuerySchema,
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
-  LetterGenerationSchema,
 } from '@stap/shared';
 
 // Memory-based upload for Excel imports (not saved to disk)
@@ -654,21 +652,10 @@ router.get(
   }),
 );
 
-// ── POST /:id/letters — generate a PDF letter for a guard ─────────────────────
-router.post(
-  '/:id/letters',
-  requireRole(...INTERNAL_ROLES),
-  validate(LetterGenerationSchema),
-  asyncHandler(async (req, res) => {
-    const result = await letterService.generateLetter(
-      { ...req.body, guardId: req.params.id },
-      req.user!.userId,
-    );
-    res.status(201).json({ success: true, data: result });
-  }),
-);
-
-// ── GET /:id/letters — list generated letters for a guard ─────────────────────
+// ── GET /:id/letters — list legacy PDF letters generated for a guard ──────────
+// Read-only: new letters are generated via the GeneratedLetter approval
+// workflow (see routes/letters.ts). This only serves historical GuardDocument
+// records from the retired fire-and-forget PDF system.
 router.get(
   '/:id/letters',
   requireRole(...INTERNAL_ROLES),

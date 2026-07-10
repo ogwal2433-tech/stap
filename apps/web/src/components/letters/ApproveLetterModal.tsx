@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useApproveLetter } from '../../hooks/useLetters';
 import LetterStatusBadge from './LetterStatusBadge';
+import { DISCIPLINARY_LETTER_LABELS, HR_LETTER_LABELS } from '@stap/shared';
 import type { GeneratedLetterResponse } from '@stap/shared';
 
 interface Props {
@@ -11,15 +12,8 @@ interface Props {
 }
 
 const LETTER_TYPE_LABELS: Record<string, string> = {
-  WARNING:               'Warning Letter',
-  SUSPENSION:            'Suspension Letter',
-  TERMINATION:           'Termination Letter',
-  REINSTATEMENT:         'Reinstatement Letter',
-  COMMITMENT_AGREEMENT:  'Commitment Agreement',
-  CLEARANCE_FORM:        'Clearance Form',
-  SICK_LEAVE:            'Sick Leave Approval',
-  RESIGNATION_ACCEPTANCE: 'Resignation Acceptance',
-  EXPULSION:             'Expulsion Letter',
+  ...DISCIPLINARY_LETTER_LABELS,
+  ...HR_LETTER_LABELS,
 };
 
 export default function ApproveLetterModal({ letter, show, onClose }: Props) {

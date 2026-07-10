@@ -53,7 +53,11 @@ expiringEnd.setDate(expiringEnd.getDate() + 15); // ends in 15 days
 const pastEnd = new Date(now);
 pastEnd.setDate(pastEnd.getDate() - 5); // ended 5 days ago
 
-function makeContract(overrides = {}) {
+const defaultGuardRates = [
+  { id: 'gr1', guardType: 'Guard', guardsCount: 3, ratePerGuard: 800000, monthlyTotal: 2400000 },
+];
+
+function makeContract(overrides: Record<string, any> = {}) {
   return {
     id: 'con1',
     clientId: 'c1',
@@ -61,8 +65,9 @@ function makeContract(overrides = {}) {
     contractStart: futureStart,
     contractEnd: futureEnd,
     guardsRequired: 3,
-    billingPerGuard: 800000,
+    totalMonthlyValue: 2400000,
     status: 'ACTIVE',
+    guardRates: defaultGuardRates,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -76,6 +81,8 @@ beforeEach(() => {
 
 // ── create() ───────────────────────────────────────────────────────────────────
 
+const oneGuardRate = [{ guardType: 'Guard', guardsCount: 1, ratePerGuard: 400000 }];
+
 describe('contractService.create()', () => {
   it('status auto-computed as ACTIVE for current date range (>30 days remaining)', async () => {
     mockPrisma.contract.create.mockResolvedValue(makeContract({ status: 'ACTIVE' }));
@@ -85,9 +92,7 @@ describe('contractService.create()', () => {
         clientId: 'c1',
         contractStart: futureStart.toISOString(),
         contractEnd: futureEnd.toISOString(),
-        guardsRequired: 3,
-        billingPerGuard: 800000,
-        status: 'ACTIVE',
+        guardRates: [{ guardType: 'Guard', guardsCount: 3, ratePerGuard: 800000 }],
       },
       'user1',
     );
@@ -109,9 +114,7 @@ describe('contractService.create()', () => {
         clientId: 'c1',
         contractStart: futureStart.toISOString(),
         contractEnd: expiringEnd.toISOString(),
-        guardsRequired: 2,
-        billingPerGuard: 500000,
-        status: 'ACTIVE',
+        guardRates: [{ guardType: 'Guard', guardsCount: 2, ratePerGuard: 500000 }],
       },
       'user1',
     );
@@ -130,9 +133,7 @@ describe('contractService.create()', () => {
         clientId: 'c1',
         contractStart: new Date(now.getTime() - 60 * 86400000).toISOString(),
         contractEnd: pastEnd.toISOString(),
-        guardsRequired: 1,
-        billingPerGuard: 400000,
-        status: 'ACTIVE',
+        guardRates: oneGuardRate,
       },
       'user1',
     );
@@ -147,9 +148,7 @@ describe('contractService.create()', () => {
           clientId: 'c1',
           contractStart: '2026-12-31T00:00:00.000Z',
           contractEnd: '2026-01-01T00:00:00.000Z',
-          guardsRequired: 1,
-          billingPerGuard: 400000,
-          status: 'ACTIVE',
+          guardRates: oneGuardRate,
         },
         'user1',
       ),
@@ -165,19 +164,45 @@ describe('contractService.create()', () => {
           clientId: 'nonexistent',
           contractStart: futureStart.toISOString(),
           contractEnd: futureEnd.toISOString(),
-          guardsRequired: 1,
-          billingPerGuard: 400000,
-          status: 'ACTIVE',
+          guardRates: oneGuardRate,
         },
         'user1',
       ),
     ).rejects.toThrow(NotFoundError);
   });
 
-  it('computes monthlyValue correctly', async () => {
+  it('derives guardsRequired and totalMonthlyValue from guard rate lines', async () => {
+    mockPrisma.contract.create.mockResolvedValue(makeContract({
+      guardsRequired: 6,
+      totalMonthlyValue: 2400000 + 500000,
+    }));
+
+    await contractService.create(
+      {
+        clientId: 'c1',
+        contractStart: futureStart.toISOString(),
+        contractEnd: futureEnd.toISOString(),
+        guardRates: [
+          { guardType: 'Armed Guard', guardsCount: 3, ratePerGuard: 800000 },
+          { guardType: 'Supervisor', guardsCount: 1, ratePerGuard: 500000 },
+        ],
+      },
+      'user1',
+    );
+
+    const createCall = mockPrisma.contract.create.mock.calls[0][0];
+    expect(createCall.data.guardsRequired).toBe(4);
+    expect(createCall.data.totalMonthlyValue).toBe(3 * 800000 + 1 * 500000);
+    expect(createCall.data.guardRates.create).toEqual([
+      { guardType: 'Armed Guard', guardsCount: 3, ratePerGuard: 800000, monthlyTotal: 2400000 },
+      { guardType: 'Supervisor', guardsCount: 1, ratePerGuard: 500000, monthlyTotal: 500000 },
+    ]);
+  });
+
+  it('response reflects the stored totalMonthlyValue', async () => {
     mockPrisma.contract.create.mockResolvedValue(makeContract({
       guardsRequired: 3,
-      billingPerGuard: 800000,
+      totalMonthlyValue: 2400000,
     }));
 
     const result = await contractService.create(
@@ -185,14 +210,12 @@ describe('contractService.create()', () => {
         clientId: 'c1',
         contractStart: futureStart.toISOString(),
         contractEnd: futureEnd.toISOString(),
-        guardsRequired: 3,
-        billingPerGuard: 800000,
-        status: 'ACTIVE',
+        guardRates: [{ guardType: 'Guard', guardsCount: 3, ratePerGuard: 800000 }],
       },
       'user1',
     );
 
-    expect(result.monthlyValue).toBe(2400000);
+    expect(result.totalMonthlyValue).toBe(2400000);
   });
 });
 

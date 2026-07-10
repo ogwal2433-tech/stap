@@ -29,13 +29,22 @@ router.get(
   requireRole(...GENERATE_ROLES),
   asyncHandler(async (req, res) => {
     const isHR = (HR_ROLES as string[]).includes(req.user!.role);
+    const subjectId = req.query.subjectId as string | undefined;
+    // A subjectId-scoped query (e.g. a guard's profile) is its own access
+    // boundary — anyone who can view that subject sees all its letters,
+    // regardless of who generated them. The generatedBy restriction only
+    // applies to an unscoped listing (which non-HR users can't broadly browse).
     const result = await letterService.listRecords({
-      subjectId:      req.query.subjectId      as string | undefined,
-      approvalStatus: req.query.approvalStatus as string | undefined,
-      letterType:     req.query.letterType     as string | undefined,
-      generatedBy:    isHR ? undefined : req.user!.userId,
-      page:           Number(req.query.page)   || 1,
-      limit:          Number(req.query.limit)  || 20,
+      subjectId,
+      approvalStatus:       req.query.approvalStatus       as string | undefined,
+      letterType:           req.query.letterType           as string | undefined,
+      disciplinaryRecordId: req.query.disciplinaryRecordId as string | undefined,
+      isDisciplinary:       req.query.isDisciplinary === undefined
+                               ? undefined
+                               : req.query.isDisciplinary === 'true',
+      generatedBy:          (!isHR && !subjectId) ? req.user!.userId : undefined,
+      page:                 Number(req.query.page)  || 1,
+      limit:                Number(req.query.limit) || 20,
     });
     res.json({ success: true, ...result });
   }),

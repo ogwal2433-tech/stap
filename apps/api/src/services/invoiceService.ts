@@ -85,132 +85,126 @@ class InvoiceService {
     return `STAP/INV/${year}/${seq}`;
   }
 
-  async getInvoicePreview(
-    contractId: string,
-    sourceMode: 'ACTUAL_GUARDS' | 'CONTRACT_RATES',
-    billingDays: number = 30,
-  ): Promise<InvoicePreviewResponse> {
+  /**
+   * The contract's guard rate lines are the only invoice source. ratePerGuard
+   * on ContractGuardRate is a MONTHLY figure — convert to a daily rate here so
+   * lineTotal = count * ratePerGuard * billingDays gives the correct amount
+   * for the actual billing period instead of inflating it ~30x.
+   */
+  async getInvoicePreview(contractId: string, billingDays: number = 30): Promise<InvoicePreviewResponse> {
     const contract = await prisma.contract.findUnique({
       where:   { id: contractId },
-      include: { client: { select: { clientName: true } }, guardRates: true },
+      include: {
+        client:     { select: { clientName: true } },
+        guardRates: { orderBy: { createdAt: 'asc' } },
+      },
     });
     if (!contract) throw new NotFoundError('Contract not found');
 
-    let lineItems: InvoiceLineItemResponse[];
-
-    if (sourceMode === 'ACTUAL_GUARDS') {
-      const deployedGuards = await prisma.guard.findMany({
-        where: {
-          employmentStatus: 'ACTIVE',
-          deploymentHistory: {
-            some: { endDate: null, site: { clientId: contract.clientId } },
-          },
-        },
-        select: {
-          id: true, firstName: true, lastName: true, rank: true,
-          billingRatePerDay: true, salaryRate: true,
-        },
-        distinct: ['id'],
-      });
-
-      if (deployedGuards.length === 0) {
-        throw new AppError(
-          `No active guards currently deployed for ${contract.client.clientName}. ` +
-          `Use Contract Rates mode instead, or check the roster.`,
-          400,
-        );
-      }
-
-      lineItems = deployedGuards.map((g) => {
-        const rate = g.billingRatePerDay ?? Math.round((g.salaryRate ?? 0) / 30);
-        const lineTotal = rate * billingDays;
-        return {
-          id:          '',
-          guardId:     g.id,
-          description: `${g.firstName} ${g.lastName} (${g.rank?.replace(/_/g, ' ') ?? 'Guard'})`,
-          quantity:    1,
-          ratePerDay:  rate,
-          days:        billingDays,
-          lineTotal,
-        };
-      });
-    } else {
-      if (!contract.guardRates.length) {
-        throw new AppError(
-          `This contract has no guard rate breakdown configured. ` +
-          `Use Actual Guards mode instead, or add guard rates to the contract first.`,
-          400,
-        );
-      }
-      lineItems = contract.guardRates.map((r) => {
-        const lineTotal = r.guardsCount * r.ratePerGuard * billingDays;
-        return {
-          id:          '',
-          guardId:     null,
-          description: r.guardType,
-          quantity:    r.guardsCount,
-          ratePerDay:  r.ratePerGuard,
-          days:        billingDays,
-          lineTotal,
-        };
-      });
+    if (!contract.guardRates.length) {
+      throw new AppError(
+        `This contract has no guard rate lines configured. ` +
+        `Please edit the contract and add guard rate lines before generating an invoice.`,
+        400,
+      );
     }
 
-    const totalAmount = lineItems.reduce((sum, li) => sum + li.lineTotal, 0);
-    return { contractId, clientName: contract.client.clientName, lineItems, totalAmount };
+    const lineItems = contract.guardRates.map((r) => {
+      const ratePerDay = Math.round(r.ratePerGuard / 30);
+      return {
+        guardType:    r.guardType,
+        count:        r.guardsCount,
+        ratePerGuard: ratePerDay,
+        billingDays,
+        lineTotal:    r.guardsCount * ratePerDay * billingDays,
+      };
+    });
+
+    const totalAmount    = lineItems.reduce((sum, li) => sum + li.lineTotal, 0);
+    const guardsRequired = lineItems.reduce((sum, li) => sum + li.count, 0);
+
+    return {
+      contractId,
+      clientName: contract.client.clientName,
+      period:     `${billingDays} days`,
+      lineItems,
+      totalAmount,
+      guardsRequired,
+    };
   }
 
   async generateInvoice(data: GenerateInvoiceInput, generatedBy: string): Promise<InvoiceResponse> {
+    const periodEnd = new Date(data.billingPeriodEnd);
+    return this.generateInvoiceFromContract({
+      contractId:  data.contractId,
+      periodStart: new Date(data.billingPeriodStart),
+      periodEnd,
+      dueDate:     periodEnd,
+      billingDays: data.billingDays,
+      lineItemOverrides: data.lineItemOverrides,
+      generatedBy,
+    });
+  }
+
+  /** Shared by the manual "Generate Invoice" flow and the billing-day cron — the
+   * contract's guard rate lines (via getInvoicePreview) are the only source of
+   * line items either way; lineItemOverrides carries the user-edited preview rows. */
+  private async generateInvoiceFromContract(params: {
+    contractId:  string;
+    periodStart: Date;
+    periodEnd:   Date;
+    dueDate:     Date;
+    billingDays: number;
+    lineItemOverrides?: GenerateInvoiceInput['lineItemOverrides'];
+    generatedBy: string;
+  }): Promise<InvoiceResponse> {
     const contract = await prisma.contract.findUnique({
-      where:  { id: data.contractId },
+      where:  { id: params.contractId },
       select: { clientId: true },
     });
     if (!contract) throw new NotFoundError('Contract not found');
 
-    const rawItems = data.lineItemOverrides?.length
-      ? data.lineItemOverrides
-      : (await this.getInvoicePreview(data.contractId, data.sourceMode)).lineItems;
+    const rawItems = params.lineItemOverrides?.length
+      ? params.lineItemOverrides
+      : (await this.getInvoicePreview(params.contractId, params.billingDays)).lineItems;
 
     const lineItems = rawItems.map((li) => ({
-      guardId:     (li as any).guardId ?? null,
-      description: li.description,
-      guardsCount: li.quantity,
-      ratePerGuard: li.ratePerDay,
-      days:        li.days ?? 30,
-      amount:      li.quantity * li.ratePerDay * (li.days ?? 30),
+      guardId:      null,
+      description:  li.guardType,
+      guardsCount:  li.count,
+      ratePerGuard: li.ratePerGuard,
+      days:         li.billingDays,
+      amount:       li.count * li.ratePerGuard * li.billingDays,
     }));
 
     const totalAmount  = lineItems.reduce((sum, li) => sum + li.amount, 0);
     const invoiceNumber = await this.generateInvoiceNumber();
 
-    const periodStart = new Date(data.billingPeriodStart);
-    const periodEnd   = new Date(data.billingPeriodEnd);
-
     const invoice = await prisma.invoice.create({
       data: {
         clientId:       contract.clientId,
-        contractId:     data.contractId,
+        contractId:     params.contractId,
         invoiceNumber,
-        periodStart,
-        periodEnd,
+        periodStart:    params.periodStart,
+        periodEnd:      params.periodEnd,
         guardsDeployed: lineItems.reduce((sum, li) => sum + li.guardsCount, 0),
         ratePerGuard:   0,
         subtotal:       totalAmount,
         taxAmount:      0,
         totalAmount,
-        dueDate:        periodEnd,
-        createdBy:      generatedBy,
+        dueDate:        params.dueDate,
+        createdBy:      params.generatedBy,
         lineItems: { create: lineItems },
       },
       include: { client: true, contract: true, payments: true, lineItems: true },
     });
 
     await QueueService.logAudit({
-      userId:   generatedBy,
+      userId:   params.generatedBy,
       action:   'INVOICE_GENERATED',
       entity:   'invoice',
       entityId: invoice.id,
-      newValue: { contractId: data.contractId, sourceMode: data.sourceMode, lineItemCount: lineItems.length, totalAmount },
+      newValue: { contractId: params.contractId, lineItemCount: lineItems.length, totalAmount },
     });
 
     return formatInvoice(invoice);
@@ -311,20 +305,21 @@ class InvoiceService {
       const dueDate = new Date(today);
       dueDate.setDate(dueDate.getDate() + billingTerms);
 
-      await this.create(
-        {
-          clientId:       contract.clientId,
-          contractId:     contract.id,
-          periodStart:    periodStart.toISOString(),
-          periodEnd:      periodEnd.toISOString(),
-          guardsDeployed: contract.guardsRequired,
-          ratePerGuard:   contract.billingPerGuard,
-          taxAmount:      0,
-          dueDate:        dueDate.toISOString(),
-        },
-        'system',
-      );
-      generated++;
+      try {
+        await this.generateInvoiceFromContract({
+          contractId: contract.id,
+          periodStart,
+          periodEnd,
+          dueDate,
+          billingDays: daysInMonth,
+          generatedBy: 'system',
+        });
+        generated++;
+      } catch (err) {
+        // A contract with no guard rate lines (or other per-contract issue) shouldn't
+        // block auto-invoicing for the rest of the batch.
+        console.error(`[AutoInvoice] Failed for contract ${contract.id}:`, (err as Error).message);
+      }
     }
 
     console.log(`Auto-generated ${generated} invoices for ${today.toDateString()}`);

@@ -166,13 +166,16 @@ async function main() {
     where: { id: 'contract-kcca-2026' },
     update: {},
     create: {
-      id:              'contract-kcca-2026',
-      clientId:        kcca.id,
-      contractStart:   new Date('2026-01-01'),
-      contractEnd:     new Date('2026-12-31'),
-      guardsRequired:  4,
-      billingPerGuard: 850000, // UGX 850,000 per guard per month
-      status:          ContractStatus.ACTIVE,
+      id:                'contract-kcca-2026',
+      clientId:          kcca.id,
+      contractStart:     new Date('2026-01-01'),
+      contractEnd:       new Date('2026-12-31'),
+      guardsRequired:    4,
+      totalMonthlyValue: 4 * 850000, // UGX 850,000 per guard per month
+      status:            ContractStatus.ACTIVE,
+      guardRates: {
+        create: [{ guardType: 'Guard', guardsCount: 4, ratePerGuard: 850000, monthlyTotal: 4 * 850000 }],
+      },
     },
   });
   console.log(`✅ Contract created for ${kcca.clientName}`);
@@ -181,13 +184,16 @@ async function main() {
     where: { id: 'contract-ura-2026' },
     update: {},
     create: {
-      id:              'contract-ura-2026',
-      clientId:        ura.id,
-      contractStart:   new Date('2026-01-01'),
-      contractEnd:     new Date('2026-12-31'),
-      guardsRequired:  6,
-      billingPerGuard: 900000, // UGX 900,000 per guard per month
-      status:          ContractStatus.ACTIVE,
+      id:                'contract-ura-2026',
+      clientId:          ura.id,
+      contractStart:     new Date('2026-01-01'),
+      contractEnd:       new Date('2026-12-31'),
+      guardsRequired:    6,
+      totalMonthlyValue: 6 * 900000, // UGX 900,000 per guard per month
+      status:            ContractStatus.ACTIVE,
+      guardRates: {
+        create: [{ guardType: 'Guard', guardsCount: 6, ratePerGuard: 900000, monthlyTotal: 6 * 900000 }],
+      },
     },
   });
   console.log(`✅ Contract created for ${ura.clientName}`);

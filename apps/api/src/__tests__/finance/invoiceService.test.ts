@@ -7,7 +7,7 @@ vi.mock('../../db/prisma', () => ({
     invoice:  { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     payment:  { create: vi.fn() },
     client:   { findUnique: vi.fn() },
-    contract: { findMany: vi.fn() },
+    contract: { findMany: vi.fn(), findUnique: vi.fn() },
   },
 }));
 
@@ -106,12 +106,19 @@ describe('invoiceService.create()', () => {
 });
 
 describe('invoiceService.generateAutoInvoices()', () => {
+  const contractWithRates = {
+    id: 'c-1', clientId: 'client-1',
+    client: { clientName: 'KCCA' },
+    guardRates: [{ guardType: 'Guard', guardsCount: 5, ratePerGuard: 500000 }],
+  };
+
   it('creates invoice for contract with matching billing day', async () => {
     const today = new Date();
     mp.contract.findMany.mockResolvedValue([
-      { id: 'c-1', clientId: 'client-1', guardsRequired: 5, billingPerGuard: 500000,
+      { id: 'c-1', clientId: 'client-1', guardsRequired: 5,
         billingDay: today.getDate(), client: { ...MOCK_CLIENT } },
     ]);
+    mp.contract.findUnique.mockResolvedValue(contractWithRates);
 
     await invoiceService.generateAutoInvoices();
     expect(mp.invoice.create).toHaveBeenCalledTimes(1);
@@ -120,12 +127,25 @@ describe('invoiceService.generateAutoInvoices()', () => {
   it('skips contract that already has invoice for current period', async () => {
     const today = new Date();
     mp.contract.findMany.mockResolvedValue([
-      { id: 'c-1', clientId: 'client-1', guardsRequired: 5, billingPerGuard: 500000,
+      { id: 'c-1', clientId: 'client-1', guardsRequired: 5,
         billingDay: today.getDate(), client: { ...MOCK_CLIENT } },
     ]);
+    mp.contract.findUnique.mockResolvedValue(contractWithRates);
     mp.invoice.findFirst.mockResolvedValue({ id: 'existing-inv' });
 
     await invoiceService.generateAutoInvoices();
+    expect(mp.invoice.create).not.toHaveBeenCalled();
+  });
+
+  it('does not throw the whole batch when one contract has no guard rate lines', async () => {
+    const today = new Date();
+    mp.contract.findMany.mockResolvedValue([
+      { id: 'c-1', clientId: 'client-1', guardsRequired: 5,
+        billingDay: today.getDate(), client: { ...MOCK_CLIENT } },
+    ]);
+    mp.contract.findUnique.mockResolvedValue({ ...contractWithRates, guardRates: [] });
+
+    await expect(invoiceService.generateAutoInvoices()).resolves.not.toThrow();
     expect(mp.invoice.create).not.toHaveBeenCalled();
   });
 });

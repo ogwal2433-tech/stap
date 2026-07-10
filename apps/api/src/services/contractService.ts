@@ -15,6 +15,17 @@ const CONTRACT_INCLUDE = {
   guardRates: true,
 } as const;
 
+/** Rate lines are the single source of billing truth — derive totals from them. */
+function deriveTotals(guardRates: { guardsCount: number; ratePerGuard: number }[]) {
+  const guardsRequired    = guardRates.reduce((sum, r) => sum + r.guardsCount, 0);
+  const totalMonthlyValue = guardRates.reduce((sum, r) => sum + r.guardsCount * r.ratePerGuard, 0);
+  return { guardsRequired, totalMonthlyValue };
+}
+
+function withMonthlyTotal(rates: { guardType: string; guardsCount: number; ratePerGuard: number }[]) {
+  return rates.map((r) => ({ ...r, monthlyTotal: r.guardsCount * r.ratePerGuard }));
+}
+
 class ContractService {
   // ── Create ─────────────────────────────────────────────────────────────────
 
@@ -32,20 +43,20 @@ class ContractService {
       throw new AppError('Contract end date must be after start date', 400);
     }
 
+    const { guardsRequired, totalMonthlyValue } = deriveTotals(data.guardRates);
+
     const contract = await prisma.contract.create({
       data: {
         clientId:          data.clientId,
         contractStart:     start,
         contractEnd:       end,
-        guardsRequired:    data.guardsRequired,
-        billingPerGuard:   data.billingPerGuard,
+        guardsRequired,
+        totalMonthlyValue,
         status:            'ACTIVE',
         weaponsAllocation: data.weaponsAllocation ?? null,
         shiftPattern:      data.shiftPattern ?? null,
         billingNote:       data.billingNote ?? null,
-        ...(data.guardRates?.length && {
-          guardRates: { create: data.guardRates },
-        }),
+        guardRates: { create: withMonthlyTotal(data.guardRates) },
       },
       include: CONTRACT_INCLUDE,
     });
@@ -55,7 +66,7 @@ class ContractService {
       action:   'CONTRACT_CREATED',
       entity:   'contract',
       entityId: contract.id,
-      newValue: { clientId: data.clientId, status: 'ACTIVE', guardsRequired: data.guardsRequired },
+      newValue: { clientId: data.clientId, status: 'ACTIVE', guardsRequired },
     });
 
     return this.formatContract(contract);
@@ -78,22 +89,23 @@ class ContractService {
     }
 
     const newStatus = data.status === 'DRAFT' ? 'DRAFT' : this.computeStatus(start, end);
+    const derived = data.guardRates !== undefined ? deriveTotals(data.guardRates) : null;
 
     const updated = await prisma.contract.update({
       where: { id },
       data: {
         ...(data.contractStart     !== undefined && { contractStart:     start }),
         ...(data.contractEnd       !== undefined && { contractEnd:       end }),
-        ...(data.guardsRequired    !== undefined && { guardsRequired:    data.guardsRequired }),
-        ...(data.billingPerGuard   !== undefined && { billingPerGuard:   data.billingPerGuard }),
         ...(data.weaponsAllocation !== undefined && { weaponsAllocation: data.weaponsAllocation ?? null }),
         ...(data.shiftPattern      !== undefined && { shiftPattern:      data.shiftPattern ?? null }),
         ...(data.billingNote       !== undefined && { billingNote:       data.billingNote ?? null }),
         status: newStatus,
-        ...(data.guardRates !== undefined && {
+        ...(derived && {
+          guardsRequired:    derived.guardsRequired,
+          totalMonthlyValue: derived.totalMonthlyValue,
           guardRates: {
             deleteMany: {},
-            create: data.guardRates,
+            create: withMonthlyTotal(data.guardRates!),
           },
         }),
       },
@@ -254,17 +266,15 @@ class ContractService {
     const now = new Date();
     const end = c.contractEnd instanceof Date ? c.contractEnd : new Date(c.contractEnd);
     const daysRemaining = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-    const monthlyValue = c.guardsRequired * c.billingPerGuard;
 
     return {
-      id:              c.id,
-      client:          { id: c.client.id, clientName: c.client.clientName },
-      contractStart:   c.contractStart instanceof Date ? c.contractStart.toISOString() : c.contractStart,
-      contractEnd:     end.toISOString(),
-      guardsRequired:  c.guardsRequired,
-      billingPerGuard: c.billingPerGuard,
-      monthlyValue,
-      status:          c.status,
+      id:                c.id,
+      client:            { id: c.client.id, clientName: c.client.clientName },
+      contractStart:     c.contractStart instanceof Date ? c.contractStart.toISOString() : c.contractStart,
+      contractEnd:       end.toISOString(),
+      guardsRequired:    c.guardsRequired,
+      totalMonthlyValue: c.totalMonthlyValue ?? 0,
+      status:            c.status,
       daysRemaining,
       weaponsAllocation: c.weaponsAllocation ?? null,
       shiftPattern:      (c.shiftPattern as ShiftPattern | null) ?? null,
@@ -273,6 +283,7 @@ class ContractService {
         guardType:    r.guardType,
         guardsCount:  r.guardsCount,
         ratePerGuard: r.ratePerGuard,
+        monthlyTotal: r.monthlyTotal ?? r.guardsCount * r.ratePerGuard,
       })),
       billingNote: c.billingNote ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
