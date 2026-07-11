@@ -3,7 +3,7 @@
 ## Server Details
 | Item | Value |
 |------|-------|
-| IP | 173.249.13.229 |
+| IP | 185.194.218.245 |
 | OS | AlmaLinux 9 |
 | Deploy user | deploy |
 | App directory | /var/www/stap-security |
@@ -12,7 +12,7 @@
 ## Accessing the Server
 
 ```bash
-ssh -i ~/.ssh/stap_deploy_key deploy@173.249.13.229
+ssh -i ~/.ssh/stap_deploy_key deploy@185.194.218.245
 ```
 
 ---
@@ -155,7 +155,7 @@ docker compose exec postgres psql -U stap_user \
 
 ### Health endpoint
 ```bash
-curl http://173.249.13.229/api/v1/health
+curl http://185.194.218.245/api/v1/health
 # Expected: {"status":"ok","timestamp":"..."}
 ```
 

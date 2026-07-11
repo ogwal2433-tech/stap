@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Sprint:** 5 (Testing & Documentation)  
-**Environment:** Staging — http://173.249.13.229  
+**Environment:** Staging — http://185.194.218.245  
 **Test Credentials:** See seed users (password: `12345678`)
 
 ---
