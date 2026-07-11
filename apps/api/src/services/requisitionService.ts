@@ -303,7 +303,10 @@ class RequisitionService {
     };
   }
 
-  async createPurchaseOrder(data: CreatePurchaseOrderInput, createdBy: string): Promise<PurchaseOrderResponse> {
+  async createPurchaseOrder(
+    data: CreatePurchaseOrderInput & { requisitionId: string },
+    createdBy: string,
+  ): Promise<PurchaseOrderResponse> {
     const requisition = await prisma.requisition.findUnique({ where: { id: data.requisitionId } });
     if (!requisition) throw new NotFoundError('Requisition not found');
     if (requisition.status !== 'APPROVED') {

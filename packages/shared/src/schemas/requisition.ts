@@ -62,7 +62,10 @@ export const ApproveRequisitionSchema = z.object({
 );
 
 export const CreatePurchaseOrderSchema = z.object({
-  requisitionId:    z.string().min(1),
+  // Supplied via the :id URL param on POST /requisitions/:id/purchase-order,
+  // not the request body — optional here so body validation doesn't reject
+  // requests before the route handler merges it in from req.params.
+  requisitionId:    z.string().min(1).optional(),
   supplierId:       z.string().min(1).optional(),
   quantity:         z.number().int().min(1),
   unitCost:         z.number().int().positive(),
