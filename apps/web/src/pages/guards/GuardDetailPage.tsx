@@ -274,7 +274,7 @@ function LetterCard({ letter, canReview, onReview }: {
               Review
             </Button>
           )}
-          {letter.approvalStatus === 'APPROVED' && letter.letterType === 'COMMITMENT_AGREEMENT' && (
+          {letter.approvalStatus === 'APPROVED' && (
             <Button
               size="sm"
               variant="outline-secondary"

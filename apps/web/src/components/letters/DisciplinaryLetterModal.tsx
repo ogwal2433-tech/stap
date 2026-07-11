@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
+import { LetterEditor } from './LetterEditor';
 import { DISCIPLINARY_LETTER_LABELS } from '@stap/shared';
 import type { DisciplinaryResponse } from '@stap/shared';
 
@@ -85,7 +86,8 @@ export default function DisciplinaryLetterModal({
       if (!title.trim()) { setError('Letter title is required.'); return; }
     } else {
       if (!title.trim()) { setError('Letter title is required.'); return; }
-      if (body.trim().length < 20) { setError('Letter body must be at least 20 characters.'); return; }
+      const plainTextLength = body.replace(/<[^>]*>/g, '').trim().length;
+      if (plainTextLength < 20) { setError('Letter body must be at least 20 characters.'); return; }
     }
 
     try {
@@ -200,18 +202,15 @@ export default function DisciplinaryLetterModal({
                 </Alert>
               </>
             ) : (
-              <Form.Group className="mb-3">
-                <Form.Label className="small fw-bold">Letter Body <span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={10}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder={`Dear ${guardName},\n\nThis letter is to formally notify you...\n\nSigned,\nManagement`}
-                  style={{ fontFamily: 'Georgia, serif', fontSize: '0.9rem' }}
+              <div className="mb-3">
+                <Form.Label className="small fw-bold">Letter Content <span className="text-danger">*</span></Form.Label>
+                <LetterEditor
+                  content={body}
+                  onChange={setBody}
+                  minHeight="240px"
+                  placeholder={`Dear ${guardName}, this letter is to formally notify you...`}
                 />
-                <Form.Text className="text-muted">{body.length} characters</Form.Text>
-              </Form.Group>
+              </div>
             )}
 
             <Alert variant="info" className="mb-0 small py-2">

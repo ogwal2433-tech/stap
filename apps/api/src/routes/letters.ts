@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ROLES, INTERNAL_ROLES, HR_ROLES, GenerateLetterSchema, ApproveLetterSchema } from '@stap/shared';
+import { ROLES, INTERNAL_ROLES, HR_ROLES, GenerateLetterSchema, ApproveLetterSchema, UpdateLetterBodySchema } from '@stap/shared';
 
 const router: IRouter = Router();
 
@@ -67,6 +67,17 @@ router.get(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(buffer);
+  }),
+);
+
+// Only HR (Director / Assistant Manager) can edit a pending letter's body.
+router.patch(
+  '/:id/body',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(UpdateLetterBodySchema),
+  asyncHandler(async (req, res) => {
+    const data = await letterService.updateBody(req.params.id, req.body.body);
+    res.json({ success: true, data });
   }),
 );
 

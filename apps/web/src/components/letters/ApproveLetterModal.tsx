@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
-import { useApproveLetter } from '../../hooks/useLetters';
+import { useApproveLetter, useSaveLetterEdits } from '../../hooks/useLetters';
+import { LetterEditor } from './LetterEditor';
 import LetterStatusBadge from './LetterStatusBadge';
-import { DISCIPLINARY_LETTER_LABELS, HR_LETTER_LABELS } from '@stap/shared';
+import { DISCIPLINARY_LETTER_LABELS, HR_LETTER_LABELS, STRUCTURED_LETTER_TYPES } from '@stap/shared';
 import type { GeneratedLetterResponse } from '@stap/shared';
 
 interface Props {
@@ -17,9 +18,16 @@ const LETTER_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function ApproveLetterModal({ letter, show, onClose }: Props) {
-  const mutation = useApproveLetter();
+  const mutation     = useApproveLetter();
+  const saveEdits     = useSaveLetterEdits();
   const [decision, setDecision]         = useState<'APPROVED' | 'REJECTED' | ''>('');
   const [approvalNotes, setApprovalNotes] = useState('');
+  const [isEditing, setIsEditing]       = useState(false);
+  const [editedBody, setEditedBody]     = useState(letter.body);
+
+  const canEdit =
+    letter.approvalStatus === 'PENDING' &&
+    !(STRUCTURED_LETTER_TYPES as readonly string[]).includes(letter.letterType);
 
   const canSubmit =
     decision !== '' &&
@@ -29,7 +37,18 @@ export default function ApproveLetterModal({ letter, show, onClose }: Props) {
   function handleClose() {
     setDecision('');
     setApprovalNotes('');
+    setIsEditing(false);
     onClose();
+  }
+
+  function toggleEdit() {
+    if (isEditing) setEditedBody(letter.body); // cancel — discard unsaved changes
+    setIsEditing(!isEditing);
+  }
+
+  async function handleSaveEdits() {
+    await saveEdits.mutateAsync({ id: letter.id, body: editedBody });
+    setIsEditing(false);
   }
 
   async function handleSubmit() {
@@ -60,14 +79,41 @@ export default function ApproveLetterModal({ letter, show, onClose }: Props) {
           </div>
         </div>
 
-        {/* Letter body preview */}
-        <div style={{
-          border: '1px solid #ced4da', borderRadius: '0.5rem', padding: '16px 20px',
-          background: '#fff', maxHeight: 280, overflowY: 'auto',
-          fontFamily: 'Georgia, serif', fontSize: '0.9rem', lineHeight: 1.7,
-          whiteSpace: 'pre-wrap', marginBottom: 16,
-        }}>
-          {letter.body}
+        {/* Letter body preview / edit */}
+        <div className="mb-3">
+          <div className="d-flex align-items-center justify-content-between mb-1">
+            <Form.Label className="fw-bold small mb-0">Letter Content</Form.Label>
+            {canEdit && (
+              <Button
+                size="sm"
+                variant={isEditing ? 'outline-secondary' : 'outline-primary'}
+                style={{ fontSize: '0.75rem' }}
+                onClick={toggleEdit}
+              >
+                {isEditing ? '✕ Cancel Edit' : '✏️ Edit Letter'}
+              </Button>
+            )}
+          </div>
+          <LetterEditor
+            key={isEditing ? 'edit' : 'view'}
+            content={editedBody}
+            onChange={isEditing ? setEditedBody : undefined}
+            readOnly={!isEditing}
+            minHeight="240px"
+          />
+          {isEditing && editedBody !== letter.body && (
+            <div className="mt-2">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={handleSaveEdits}
+                disabled={saveEdits.isPending}
+              >
+                {saveEdits.isPending ? 'Saving…' : '💾 Save Letter Edits'}
+              </Button>
+              <span className="text-muted small ms-2">Save your edits, then approve below.</span>
+            </div>
+          )}
         </div>
 
         {/* Decision buttons */}

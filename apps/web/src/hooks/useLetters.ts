@@ -31,6 +31,19 @@ export function useGenerateLetterRecord() {
   });
 }
 
+export function useSaveLetterEdits() {
+  const qc = useQueryClient();
+  const { showToast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => lettersApi.updateBody(id, body),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['letters'] });
+      qc.invalidateQueries({ queryKey: ['letters', 'subject', result.subjectId] });
+      showToast('Letter updated', 'success');
+    },
+  });
+}
+
 export function useApproveLetter() {
   const qc = useQueryClient();
   const { showToast } = useToast();

@@ -126,6 +126,12 @@ export type GeneratedLetterType = keyof typeof GENERATED_LETTER_TYPES;
 export const DISCIPLINARY_LETTER_TYPES = ['WARNING', 'SUSPENSION', 'TERMINATION'] as const;
 export const HR_LETTER_TYPES = ['COMMENDATION', 'REINSTATEMENT', 'GENERAL', 'COMMITMENT_AGREEMENT'] as const;
 
+// These two types are assembled from dedicated structured form fields (dates,
+// periods, reasons) into HTML containing tables/inline styles. A rich-text
+// editor's schema can't round-trip that losslessly, so their body is never
+// free-text edited — fix them by regenerating with corrected fields instead.
+export const STRUCTURED_LETTER_TYPES = ['COMMITMENT_AGREEMENT', 'SUSPENSION'] as const;
+
 export const DISCIPLINARY_LETTER_LABELS = {
   WARNING:     '⚠️ Warning Letter',
   SUSPENSION:  '🔴 Suspension Letter',
@@ -166,6 +172,11 @@ export const ApproveLetterSchema = z.object({
   { message: 'A reason is required when rejecting a letter.', path: ['approvalNotes'] },
 );
 export type ApproveLetterInput = z.infer<typeof ApproveLetterSchema>;
+
+export const UpdateLetterBodySchema = z.object({
+  body: z.string().min(10),
+});
+export type UpdateLetterBodyInput = z.infer<typeof UpdateLetterBodySchema>;
 
 export interface GeneratedLetterResponse {
   id:             string;

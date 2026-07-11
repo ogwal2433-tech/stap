@@ -5,7 +5,7 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { sendEmail } from '../lib/mailer';
 import { buildLetterHtml } from '../lib/templates/letterBase';
-import { DISCIPLINARY_LETTER_TYPES, HR_LETTER_TYPES } from '@stap/shared';
+import { DISCIPLINARY_LETTER_TYPES, HR_LETTER_TYPES, STRUCTURED_LETTER_TYPES } from '@stap/shared';
 import type {
   GenerateLetterInput,
   ApproveLetterInput,
@@ -89,6 +89,31 @@ class LetterService {
     return this.sanitiseLetter(letter);
   }
 
+  async updateBody(letterId: string, body: string): Promise<GeneratedLetterResponse> {
+    const existing = await prisma.generatedLetter.findUnique({ where: { id: letterId } });
+    if (!existing) throw new NotFoundError('Letter not found');
+    if (existing.approvalStatus !== 'PENDING') {
+      throw new AppError('Only PENDING letters can be edited.', 400);
+    }
+    // Structured letters (COMMITMENT_AGREEMENT, SUSPENSION) are assembled from
+    // dedicated form fields into HTML with tables/inline styles that a rich-text
+    // editor's schema can't round-trip losslessly. Fix these by regenerating the
+    // letter with corrected fields, not by hand-editing the rendered body.
+    if ((STRUCTURED_LETTER_TYPES as readonly string[]).includes(existing.letterType)) {
+      throw new AppError(
+        'This letter type is generated from structured fields and must be regenerated, not edited directly.',
+        400,
+      );
+    }
+
+    const updated = await prisma.generatedLetter.update({
+      where: { id: letterId },
+      data:  { body },
+      include: this.LETTER_INCLUDE,
+    });
+    return this.sanitiseLetter(updated);
+  }
+
   async approveRecord(
     letterId:   string,
     decision:   'APPROVED' | 'REJECTED',
@@ -135,7 +160,7 @@ class LetterService {
     });
 
     // Auto-email PDF for structured letter types when approved
-    if (decision === 'APPROVED' && this.isStructuredType(existing.letterType)) {
+    if (decision === 'APPROVED' && (STRUCTURED_LETTER_TYPES as readonly string[]).includes(existing.letterType)) {
       this.sendLetterByEmail({
         id:          existing.id,
         letterType:  existing.letterType,
@@ -192,13 +217,19 @@ class LetterService {
     return this.sanitiseLetter(l);
   }
 
-  // ── Structured letter PDF (for COMMITMENT_AGREEMENT and future structured types) ─
+  // ── Letter PDF (any letter type) ─────────────────────────────────────────────
 
-  private isStructuredType(letterType: string): boolean {
-    return ['COMMITMENT_AGREEMENT', 'SUSPENSION', 'CLEARANCE_FORM', 'SICK_LEAVE', 'RESIGNATION_ACCEPTANCE', 'EXPULSION'].includes(letterType);
-  }
+  private readonly REF_CODE: Record<string, string> = {
+    WARNING:              'WN',
+    SUSPENSION:           'SU',
+    TERMINATION:          'TM',
+    COMMENDATION:         'CM',
+    REINSTATEMENT:        'RI',
+    GENERAL:              'GN',
+    COMMITMENT_AGREEMENT: 'CA',
+  };
 
-  private buildStructuredHtml(l: {
+  private buildPdfHtml(l: {
     letterType: string;
     body: string;
     subjectName: string;
@@ -209,7 +240,8 @@ class LetterService {
     const issueDate = l.generatedAt.toLocaleDateString('en-GB', {
       day: 'numeric', month: 'long', year: 'numeric',
     });
-    const refNumber = `STAP/${l.generatedAt.getFullYear()}/CA/${l.id.substring(0, 8).toUpperCase()}`;
+    const refCode = this.REF_CODE[l.letterType] ?? 'GN';
+    const refNumber = `STAP/${l.generatedAt.getFullYear()}/${refCode}/${l.id.substring(0, 8).toUpperCase()}`;
 
     return buildLetterHtml({
       refNumber,
@@ -217,7 +249,7 @@ class LetterService {
       body:         l.body,
       directorName: 'Director, STAP Security Ltd',
       employeeName: l.subjectName,
-      skipSigBlock: ['COMMITMENT_AGREEMENT', 'SUSPENSION', 'CLEARANCE_FORM', 'SICK_LEAVE', 'RESIGNATION_ACCEPTANCE', 'EXPULSION'].includes(l.letterType),
+      skipSigBlock: (STRUCTURED_LETTER_TYPES as readonly string[]).includes(l.letterType),
     });
   }
 
@@ -227,11 +259,8 @@ class LetterService {
       include: this.LETTER_INCLUDE,
     });
     if (!l) throw new NotFoundError('Letter not found');
-    if (!this.isStructuredType(l.letterType)) {
-      throw new AppError('PDF download is only available for structured letter types.', 400);
-    }
 
-    const html   = this.buildStructuredHtml(l);
+    const html   = this.buildPdfHtml(l);
     const buffer = await renderToPdf(html);
     const safeName = l.subjectName.replace(/\s+/g, '_');
     const fileName = `${l.letterType}-${safeName}-${l.id.substring(0, 8)}.pdf`;
@@ -247,7 +276,7 @@ class LetterService {
     body: string;
     generatedAt: Date;
   }): Promise<void> {
-    const pdfBuffer = await renderToPdf(this.buildStructuredHtml(l as any));
+    const pdfBuffer = await renderToPdf(this.buildPdfHtml(l as any));
     const hrEmail   = process.env.HR_EMAIL ?? 'hr@stapsecurity.co.ug';
 
     await sendEmail({

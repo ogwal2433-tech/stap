@@ -152,7 +152,7 @@ export async function initiateDisbursement(req: DisbursementRequest): Promise<Co
   return xcelPost<CollectionResponse>('/partners/momo/payment', {
     country:      'UG',
     currency:     'UGX',
-    amount:       String(req.amount),
+    amount:       req.amount.toFixed(2),
     reference:    req.reference,
     dl_code:      req.dlCode,
     bank_code:    req.network,
