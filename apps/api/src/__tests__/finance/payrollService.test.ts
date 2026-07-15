@@ -22,11 +22,14 @@ vi.mock('../../jobs/QueueService', () => ({
 vi.mock('../../lib/xcel', () => ({
   normalisePhone:  vi.fn((p: string) => p.replace(/\D/g, '').replace(/^0/, '256')),
   detectNetwork:   vi.fn(() => 'MTN'),
-  generateDlCode:  vi.fn().mockResolvedValue('DL-STUB'),
-  initiateDisbursement: vi.fn().mockResolvedValue({
+  generateDisbursementRef: vi.fn((guardId: string, period: string) => `STAP-SAL-${guardId}-${period}`),
+}));
+
+vi.mock('../../lib/xcelPartner', () => ({
+  generateDynamicLinkOtp: vi.fn().mockResolvedValue('DL-STUB'),
+  initiateWalletPayment: vi.fn().mockResolvedValue({
     success: true, message: 'ok', data: { reference: 'CUD-STUB', status: 'pending' },
   }),
-  generateDisbursementRef: vi.fn((guardId: string, period: string) => `STAP-SAL-${guardId}-${period}`),
 }));
 
 // Import deductionService so we can mock applyToPayroll
@@ -37,10 +40,12 @@ vi.mock('../../services/deductionService', () => ({
 import prisma from '../../db/prisma';
 import { QueueService } from '../../jobs/QueueService';
 import * as xcel from '../../lib/xcel';
+import * as xcelPartner from '../../lib/xcelPartner';
 import { payrollService } from '../../services/payrollService';
 
 const mp   = prisma as any;
 const mxcel = xcel as any;
+const mxcelPartner = xcelPartner as any;
 
 const MOCK_GUARD = {
   id: 'guard-1', firstName: 'David', lastName: 'Ochieng',
@@ -220,15 +225,15 @@ describe('payrollService.disburse()', () => {
   it('throws 400 if run is not HR_APPROVED', async () => {
     mp.payrollRun.findUnique.mockResolvedValue({ ...MOCK_RUN, status: 'APPROVED' });
     await expect(payrollService.disburse('run-1', 'director-1')).rejects.toMatchObject({ statusCode: 400 });
-    expect(mxcel.generateDlCode).not.toHaveBeenCalled();
+    expect(mxcelPartner.generateDynamicLinkOtp).not.toHaveBeenCalled();
   });
 
   it('generates a DL code and initiates disbursement for each pending payslip', async () => {
     await payrollService.disburse('run-1', 'director-1');
-    expect(mxcel.generateDlCode).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: '480000.00' }),
+    expect(mxcelPartner.generateDynamicLinkOtp).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 480000, bankCode: 'MTN', accountNum: '256772345678' }),
     );
-    expect(mxcel.initiateDisbursement).toHaveBeenCalledWith(
+    expect(mxcelPartner.initiateWalletPayment).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 480000, dlCode: 'DL-STUB', accountNum: '256772345678' }),
     );
   });
@@ -246,7 +251,7 @@ describe('payrollService.disburse()', () => {
   it('skips guards flagged by HR without an adjusted amount', async () => {
     mp.payslip.findMany.mockResolvedValue([{ ...MOCK_PAYSLIP, hrFlagged: true, hrAdjustedAmount: null }]);
     await payrollService.disburse('run-1', 'director-1');
-    expect(mxcel.initiateDisbursement).not.toHaveBeenCalled();
+    expect(mxcelPartner.initiateWalletPayment).not.toHaveBeenCalled();
     expect(mp.payslip.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -260,13 +265,13 @@ describe('payrollService.disburse()', () => {
   it('pays the HR-adjusted amount when a flagged guard has one', async () => {
     mp.payslip.findMany.mockResolvedValue([{ ...MOCK_PAYSLIP, hrFlagged: true, hrAdjustedAmount: 300000 }]);
     await payrollService.disburse('run-1', 'director-1');
-    expect(mxcel.initiateDisbursement).toHaveBeenCalledWith(
+    expect(mxcelPartner.initiateWalletPayment).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 300000 }),
     );
   });
 
   it('marks payslip FAILED when XCEL initiation throws', async () => {
-    mxcel.initiateDisbursement.mockRejectedValueOnce(new Error('XCEL API error 500: boom'));
+    mxcelPartner.initiateWalletPayment.mockRejectedValueOnce(new Error('XCEL API error 500: boom'));
     await payrollService.disburse('run-1', 'director-1');
     expect(mp.payslip.update).toHaveBeenCalledWith(
       expect.objectContaining({

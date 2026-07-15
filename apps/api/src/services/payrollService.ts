@@ -3,6 +3,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
 import * as xcel from '../lib/xcel';
+import * as xcelPartner from '../lib/xcelPartner';
 import { errorLogger } from './errorLogger';
 import type {
   PayrollRunResponse,
@@ -332,23 +333,20 @@ class PayrollService {
         const phone   = xcel.normalisePhone(payslip.guard.preferredPaymentContact ?? payslip.guard.phone);
         const network = xcel.detectNetwork(phone);
 
-        const dlCode = await xcel.generateDlCode({
-          amount:          payAmount.toFixed(2),
-          receiverAccount: process.env.XCEL_MERCHANT_ACCOUNT ?? '',
-          bankCode:        process.env.XCEL_BANK_CODE ?? '044',
+        const dlCode = await xcelPartner.generateDynamicLinkOtp({
+          amount:     payAmount,
+          bankCode:   network,
+          accountNum: phone,
         });
 
         const reference = xcel.generateDisbursementRef(payslip.guardId, period);
 
-        const result = await xcel.initiateDisbursement({
+        const result = await xcelPartner.initiateWalletPayment({
           amount:      payAmount,
           reference,
           dlCode,
-          network,
           accountNum:  phone,
-          accountName: `${payslip.guard.firstName} ${payslip.guard.lastName}`,
           description: `STAP Security - Salary ${run.month}/${run.year}`,
-          webhookUrl:  process.env.XCEL_DISBURSEMENT_WEBHOOK_URL ?? '',
         });
 
         await prisma.payslip.update({

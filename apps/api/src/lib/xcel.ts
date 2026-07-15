@@ -111,58 +111,8 @@ export async function checkPaymentStatus(extReference: string): Promise<StatusRe
 }
 
 // ── Disbursements (payouts to guard mobile money accounts) ─────────────────────
-
-export interface DlCodeRequest {
-  amount:          string;
-  receiverAccount: string;
-  bankCode:        string;
-}
-
-interface DlCodeResponse {
-  success: boolean;
-  message: string;
-  data: { dl_code: string };
-}
-
-export async function generateDlCode(req: DlCodeRequest): Promise<string> {
-  const res = await xcelPost<DlCodeResponse>('/partners/momo/dl-code', {
-    amount:           req.amount,
-    receiver_account: req.receiverAccount,
-    bank_code:        req.bankCode,
-    // `config_preset` / `utility` are documented fields, but sending either one
-    // (even the merchant's real config_preset value) makes the sandbox 404 on
-    // an internal upstream call. Omit them entirely.
-  });
-  if (!res.data?.dl_code) throw new Error(`Failed to generate DL code: ${res.message}`);
-  return res.data.dl_code;
-}
-
-export interface DisbursementRequest {
-  amount:      number;
-  reference:   string;
-  dlCode:      string;
-  network:     string;
-  accountNum:  string;
-  accountName: string;
-  description: string;
-  webhookUrl:  string;
-}
-
-export async function initiateDisbursement(req: DisbursementRequest): Promise<CollectionResponse> {
-  return xcelPost<CollectionResponse>('/partners/momo/payment', {
-    country:      'UG',
-    currency:     'UGX',
-    amount:       req.amount.toFixed(2),
-    reference:    req.reference,
-    dl_code:      req.dlCode,
-    bank_code:    req.network,
-    account_num:  req.accountNum,
-    account_name: req.accountName,
-    description:  req.description,
-    webhook_url:  req.webhookUrl,
-    product_id:   process.env.XCEL_PRODUCT_ID ?? 'EG8O0h_52',
-  });
-}
+// Salary disbursements use the separate Partner Transaction API — see
+// xcelPartner.ts (different auth model, different DL-code/payment flow).
 
 export function generateDisbursementRef(guardId: string, period: string): string {
   return `STAP-SAL-${guardId.slice(0, 6).toUpperCase()}-${period.replace('-', '')}-${Date.now()}`;
