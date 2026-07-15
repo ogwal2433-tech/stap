@@ -9,7 +9,6 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
-import cron from 'node-cron';
 
 // ── Ensure upload directories exist ───────────────────────────────────────────
 [
@@ -35,14 +34,6 @@ import apiRouter from './routes/index';
 // ── Swagger ────────────────────────────────────────────────────────────────────
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger';
-
-// ── Services ───────────────────────────────────────────────────────────────────
-import { contractService } from './services/contractService';
-import { invoiceService } from './services/invoiceService';
-import { reportService } from './services/reportService';
-import { inventoryService } from './services/inventoryService';
-import { guardService } from './services/guardService';
-import { runInvoiceEmailJob } from './jobs/invoiceCron';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
@@ -125,48 +116,10 @@ const server = app.listen(PORT, () => {
   console.log('⚙️  Queue workers initialised');
 });
 
-// ── Scheduled jobs ─────────────────────────────────────────────────────────────
-// Refresh contract statuses daily at 06:00 EAT (Africa/Kampala)
-cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
-  timezone: 'Africa/Kampala',
-});
-
-// Auto-generate invoices for active contracts on their billing day
-cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
-  timezone: 'Africa/Kampala',
-});
-
-// Email due/overdue invoices that haven't been sent yet — daily at 07:00 EAT
-cron.schedule('0 7 * * *', () => runInvoiceEmailJob(), {
-  timezone: 'Africa/Kampala',
-});
-// Also run on startup to catch any missed sends
-runInvoiceEmailJob().catch(console.error);
-
-// Initialise any persisted scheduled reports on startup
-reportService.initScheduledReports();
-
-// Daily low stock check at 07:00 EAT
-cron.schedule('0 7 * * *', () => inventoryService.runLowStockCheck(), {
-  timezone: 'Africa/Kampala',
-});
-
-// Daily probation status check at 06:00 EAT
-cron.schedule('0 6 * * *', async () => {
-  console.log('⏰ Running probation check...');
-  await guardService.runProbationCheck();
-}, { timezone: 'Africa/Kampala' });
-
-// Annual salary increment check — runs every day at 07:00 EAT
-// Applies UGX 20,000 (year 1) or UGX 10,000 (subsequent years) on each guard's contract anniversary
-cron.schedule('0 7 * * *', async () => {
-  console.log('⏰ Running annual salary increments...');
-  try {
-    await guardService.runSalaryIncrements();
-  } catch (err) {
-    console.error('❌ Salary increment cron failed:', err);
-  }
-}, { timezone: 'Africa/Kampala' });
+// Note: scheduled cron jobs (auto-invoicing, contract refresh, probation
+// checks, etc.) run in the separate worker process (worker.ts), not here —
+// stap-api runs as multiple PM2 cluster instances, so cron jobs registered
+// in this file would fire once per instance.
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];
