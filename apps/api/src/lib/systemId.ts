@@ -6,11 +6,11 @@ export function formatSystemId(prefix: IdPrefix, number: number): string {
   return `${prefix}${number.toString().padStart(3, '0')}`;
 }
 
-async function getNextSystemId(prefix: IdPrefix): Promise<string> {
-  let maxNumber = 0;
+async function getMaxSystemIdNumber(prefix: IdPrefix): Promise<number> {
+  let result: { max_num: number | null }[];
 
   if (prefix === 'SSLG') {
-    const result = await prisma.$queryRaw<{ max_num: number | null }[]>`
+    result = await prisma.$queryRaw<{ max_num: number | null }[]>`
       SELECT MAX(
         CAST(REGEXP_REPLACE("systemId", '[^0-9]', '', 'g') AS INTEGER)
       ) AS max_num
@@ -18,9 +18,8 @@ async function getNextSystemId(prefix: IdPrefix): Promise<string> {
       WHERE "systemId" LIKE 'SSLG%'
         AND "systemId" ~ '^SSLG[0-9]+$'
     `;
-    maxNumber = result[0]?.max_num ?? 0;
   } else if (prefix === 'SSLC') {
-    const result = await prisma.$queryRaw<{ max_num: number | null }[]>`
+    result = await prisma.$queryRaw<{ max_num: number | null }[]>`
       SELECT MAX(
         CAST(REGEXP_REPLACE("systemId", '[^0-9]', '', 'g') AS INTEGER)
       ) AS max_num
@@ -28,9 +27,8 @@ async function getNextSystemId(prefix: IdPrefix): Promise<string> {
       WHERE "systemId" LIKE 'SSLC%'
         AND "systemId" ~ '^SSLC[0-9]+$'
     `;
-    maxNumber = result[0]?.max_num ?? 0;
   } else {
-    const result = await prisma.$queryRaw<{ max_num: number | null }[]>`
+    result = await prisma.$queryRaw<{ max_num: number | null }[]>`
       SELECT MAX(
         CAST(REGEXP_REPLACE("systemId", '[^0-9]', '', 'g') AS INTEGER)
       ) AS max_num
@@ -38,12 +36,25 @@ async function getNextSystemId(prefix: IdPrefix): Promise<string> {
       WHERE "systemId" LIKE 'SSLS%'
         AND "systemId" ~ '^SSLS[0-9]+$'
     `;
-    maxNumber = result[0]?.max_num ?? 0;
   }
 
-  return formatSystemId(prefix, (maxNumber ?? 0) + 1);
+  return result[0]?.max_num ?? 0;
+}
+
+async function getNextSystemId(prefix: IdPrefix): Promise<string> {
+  const maxNumber = await getMaxSystemIdNumber(prefix);
+  return formatSystemId(prefix, maxNumber + 1);
+}
+
+// Reserves `count` sequential IDs in one round trip — for batch inserts
+// (e.g. bulk import) where generating one-at-a-time per row isn't practical.
+async function getNextSystemIds(prefix: IdPrefix, count: number): Promise<string[]> {
+  const maxNumber = await getMaxSystemIdNumber(prefix);
+  return Array.from({ length: count }, (_, i) => formatSystemId(prefix, maxNumber + 1 + i));
 }
 
 export const generateGuardId  = (): Promise<string> => getNextSystemId('SSLG');
 export const generateClientId = (): Promise<string> => getNextSystemId('SSLC');
 export const generateStaffId  = (): Promise<string> => getNextSystemId('SSLS');
+
+export const generateGuardIds = (count: number): Promise<string[]> => getNextSystemIds('SSLG', count);

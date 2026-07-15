@@ -8,8 +8,7 @@ export interface FrontCardData {
 }
 
 export function buildFrontCard(data: FrontCardData): string {
-  const displayNumber = data.systemId.replace(/^[A-Z]+/i, '').padStart(3, '0');
-  const displayId     = `STAP - ${displayNumber}`;
+  const displayId = data.systemId;
 
   const logoImg = data.logoBase64
     ? `<img src="${data.logoBase64}" style="width:100%;height:100%;object-fit:contain;filter:brightness(0) invert(1);"/>`

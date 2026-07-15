@@ -38,7 +38,7 @@ export function useCreateInvoice() {
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ invoiceId, ...data }: RecordPaymentInput) =>
+    mutationFn: ({ invoiceId, ...data }: RecordPaymentInput & { invoiceId: string }) =>
       invoicesApi.recordPayment(invoiceId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   });

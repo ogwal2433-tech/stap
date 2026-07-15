@@ -381,7 +381,10 @@ class InvoiceService {
     return formatInvoice(invoice);
   }
 
-  async recordManualPayment(data: RecordPaymentInput, recordedBy: string): Promise<PaymentResponse> {
+  async recordManualPayment(
+    data: RecordPaymentInput & { invoiceId: string },
+    recordedBy: string,
+  ): Promise<PaymentResponse> {
     const invoice = await prisma.invoice.findUnique({
       where: { id: data.invoiceId },
       select: { totalAmount: true },

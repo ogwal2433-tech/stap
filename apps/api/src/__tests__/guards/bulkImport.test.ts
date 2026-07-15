@@ -10,6 +10,7 @@ vi.mock('../../db/prisma', () => ({
       findMany:   vi.fn(),
       createMany: vi.fn(),
     },
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -32,6 +33,7 @@ const mockPrisma = prisma as unknown as {
     findMany:   ReturnType<typeof vi.fn>;
     createMany: ReturnType<typeof vi.fn>;
   };
+  $queryRaw: ReturnType<typeof vi.fn>;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockPrisma.guard.findMany.mockResolvedValue([]);
   mockPrisma.guard.createMany.mockResolvedValue({ count: 1 });
+  mockPrisma.$queryRaw.mockResolvedValue([{ max_num: 0 }]);
 });
 
 // ── generateTemplate() ─────────────────────────────────────────────────────────

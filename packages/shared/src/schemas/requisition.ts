@@ -113,7 +113,7 @@ export interface RequisitionResponse {
   requestedBy:      { id: string; name: string };
   hrApproved:       { by: { id: string; name: string } | null; at: string | null };
   directorApproved: { by: { id: string; name: string } | null; at: string | null };
-  assignedTo:       { id: string; name: string } | null;
+  assignedTo:       { id: string; name: string; role: string } | null;
   progress:         string | null;
   remarks:          string | null;
   accountDetails:   string | null;

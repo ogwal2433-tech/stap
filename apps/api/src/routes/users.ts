@@ -45,6 +45,7 @@ router.get(
         id: true,
         name: true,
         role: true,
+        systemId: true,
       },
       orderBy: { name: 'asc' },
     });

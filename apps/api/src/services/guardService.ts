@@ -1331,12 +1331,21 @@ class GuardService {
     });
     if (!guard) throw new NotFoundError('Guard not found');
 
+    // Guards should always have a systemId (assigned on creation), but self-heal
+    // for any that slipped through without one rather than printing a fake,
+    // never-persisted ID that wouldn't match what's shown on their profile.
+    let systemId = guard.systemId;
+    if (!systemId) {
+      systemId = await generateGuardId();
+      await prisma.guard.update({ where: { id: guardId }, data: { systemId } });
+    }
+
     const photoPath = guard.photoUrl
       ? path.join(process.cwd(), 'public', guard.photoUrl)
       : '';
 
     const pdfBuffer = await generateIdCardPdf({
-      systemId: guard.systemId ?? `SSLG${guardId.slice(0, 6).toUpperCase()}`,
+      systemId,
       fullName: `${guard.firstName} ${guard.lastName}`,
       position: guard.rank?.replace(/_/g, ' ') ?? 'Security Guard',
       photoPath,

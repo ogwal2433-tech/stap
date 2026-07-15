@@ -16,6 +16,8 @@ import RequisitionFormModal from '../../components/requisitions/RequisitionFormM
 import ApprovalModal from '../../components/requisitions/ApprovalModal';
 import PurchaseOrderModal from '../../components/requisitions/PurchaseOrderModal';
 import SupplierFormModal from '../../components/requisitions/SupplierFormModal';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES } from '@stap/shared';
 import type { RequisitionResponse } from '@stap/shared';
 
@@ -143,6 +145,14 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
 function AssignModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
   const [userId, setUserId] = useState('');
   const assign = useAssignRequisition();
+  const { data: staffUsers = [], isLoading: staffLoading } = useStaffUsers();
+
+  const staffOptions = staffUsers.map((u) => ({
+    value:    u.id,
+    label:    u.name,
+    sublabel: u.role.replace(/_/g, ' '),
+  }));
+  const selected = staffUsers.find((u) => u.id === userId);
 
   async function handleAssign() {
     if (!userId.trim()) return;
@@ -157,13 +167,36 @@ function AssignModal({ requisition, onClose }: { requisition: RequisitionRespons
       <Modal.Header closeButton><Modal.Title>Assign Requisition</Modal.Title></Modal.Header>
       <Modal.Body>
         <Form.Group>
-          <Form.Label>Assignee User ID</Form.Label>
-          <Form.Control
-            type="text"
-            placeholder="Paste user ID…"
+          <Form.Label className="fw-bold small">Assign To <span className="text-danger">*</span></Form.Label>
+          <SearchableSelect
+            options={staffOptions}
             value={userId}
-            onChange={(e) => setUserId(e.target.value)}
+            onChange={setUserId}
+            placeholder="— Search and select staff member —"
+            searchPlaceholder="Type name or role…"
+            isLoading={staffLoading}
           />
+          <Form.Text className="text-muted">
+            Select the staff member who will be responsible for this requisition.
+          </Form.Text>
+
+          {selected && (
+            <div style={{
+              background: '#D0EDE9', borderRadius: '0.375rem', padding: '8px 12px',
+              marginTop: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              <span style={{ fontSize: '1.1rem' }}>👤</span>
+              <div>
+                <div style={{ fontWeight: 600, color: '#1B3A6B' }}>{selected.name}</div>
+                <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
+                  {selected.role.replace(/_/g, ' ')}
+                  {selected.systemId && (
+                    <span style={{ fontFamily: 'monospace', marginLeft: '6px' }}>· {selected.systemId}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </Form.Group>
       </Modal.Body>
       <Modal.Footer>
@@ -278,7 +311,16 @@ function MyRequisitionsTab() {
                     : <Badge bg="warning" text="dark">Pending</Badge>
                   }
                 </td>
-                <td>{r.assignedTo?.name ?? '—'}</td>
+                <td>
+                  {r.assignedTo ? (
+                    <div>
+                      <div style={{ fontSize: '0.83rem', fontWeight: 500 }}>{r.assignedTo.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{r.assignedTo.role.replace(/_/g, ' ')}</div>
+                    </div>
+                  ) : (
+                    <span className="text-muted small">Not assigned</span>
+                  )}
+                </td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.progress ?? '—'}</td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.remarks ?? '—'}</td>
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.accountDetails ?? '—'}</td>
@@ -371,7 +413,16 @@ function ManageTab() {
                     : <Badge bg="warning" text="dark">Pending</Badge>
                   }
                 </td>
-                <td>{r.assignedTo?.name ?? '—'}</td>
+                <td>
+                  {r.assignedTo ? (
+                    <div>
+                      <div style={{ fontSize: '0.83rem', fontWeight: 500 }}>{r.assignedTo.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{r.assignedTo.role.replace(/_/g, ' ')}</div>
+                    </div>
+                  ) : (
+                    <span className="text-muted small">Not assigned</span>
+                  )}
+                </td>
                 <td>{statusBadge(r.status)}</td>
                 <td>
                   <div className="d-flex gap-1 flex-wrap">

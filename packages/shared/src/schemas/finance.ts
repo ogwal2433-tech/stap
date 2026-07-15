@@ -29,7 +29,10 @@ export const GenerateInvoiceSchema = z.object({
 });
 
 export const RecordPaymentSchema = z.object({
-  invoiceId:       z.string().min(1),
+  // Supplied via the :id URL param on POST /finance/invoices/:id/pay, not the
+  // request body — optional here so body validation doesn't reject requests
+  // before the route handler merges it in from req.params.
+  invoiceId:       z.string().min(1).optional(),
   amountPaid:      z.coerce.number().int().positive(),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),

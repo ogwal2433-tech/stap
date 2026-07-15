@@ -45,7 +45,7 @@ function fmtRequisition(r: any): RequisitionResponse {
       at: r.directorApprovedAt?.toISOString() ?? null,
     },
     assignedTo:       r.assignedToUser
-      ? { id: r.assignedToId, name: r.assignedToUser.name }
+      ? { id: r.assignedToId, name: r.assignedToUser.name, role: r.assignedToUser.role }
       : null,
     progress:         r.progress ?? null,
     remarks:          r.remarks ?? null,
@@ -83,7 +83,7 @@ const INCLUDE = {
   requestedByUser:        { select: { name: true } },
   hrApprovedByUser:       { select: { name: true } },
   directorApprovedByUser: { select: { name: true } },
-  assignedToUser:         { select: { name: true } },
+  assignedToUser:         { select: { name: true, role: true } },
   categoryItems:          { orderBy: { createdAt: 'asc' as const } },
   purchaseOrders:         { include: { supplier: true } },
 } as const;

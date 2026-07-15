@@ -4,6 +4,7 @@ export interface UserSummary {
   id: string;
   name: string;
   role: string;
+  systemId: string | null;
 }
 
 export const usersApi = {

@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 import prisma from '../db/prisma';
+import { generateGuardIds } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { BulkImportRowSchema } from '@stap/shared';
 import type { BulkImportResult, BulkImportResultRow, BulkImportRow } from '@stap/shared';
@@ -255,6 +256,10 @@ class BulkImportService {
     });
     const existingNids = new Set(existing.map((g) => g.nationalId));
 
+    // Reserve one system ID per row up front — some may go unused if a row
+    // is skipped/errored, which is fine (gaps in the sequence are expected).
+    const systemIds = await generateGuardIds(dataRows.length);
+
     // Validate each row
     const results: BulkImportResultRow[] = [];
     const validGuards: import('@prisma/client').Prisma.GuardCreateManyInput[] = [];
@@ -319,6 +324,7 @@ class BulkImportService {
       const maritalStatus   = String(raw.maritalStatus ?? '').trim().toUpperCase() || null;
 
       validGuards.push({
+        systemId:       systemIds[idx],
         firstName:      row.firstName,
         lastName:       row.lastName,
         otherNames:     row.otherNames ?? null,
