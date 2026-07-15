@@ -306,9 +306,14 @@ router.get(
   asyncHandler(async (req, res) => {
     const { guardId } = req.params;
 
-    // Guards can only see their own upcoming deployments
-    if (req.user!.role === ROLES.GUARD && req.user!.userId !== guardId) {
-      throw new AppError('Forbidden', 403);
+    // Guards can only see their own upcoming deployments. req.user!.userId is
+    // the User.id (login account) — Guard.id is a separate id space linked via
+    // Guard.userId, so it must be resolved, not compared directly.
+    if (req.user!.role === ROLES.GUARD) {
+      const guard = await prisma.guard.findUnique({ where: { userId: req.user!.userId }, select: { id: true } });
+      if (guard?.id !== guardId) {
+        throw new AppError('Forbidden', 403);
+      }
     }
 
     const days = parseInt(String(req.query.days ?? '7'), 10);

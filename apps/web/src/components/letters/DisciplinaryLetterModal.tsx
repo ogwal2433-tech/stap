@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
+import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
 import { LetterEditor } from './LetterEditor';
-import { DISCIPLINARY_LETTER_LABELS } from '@stap/shared';
+import { DISCIPLINARY_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
 import type { DisciplinaryResponse } from '@stap/shared';
 
 function buildSuspensionBody(guardName: string, fromDate: string, toDate: string, reason: string): string {
@@ -46,6 +47,8 @@ export default function DisciplinaryLetterModal({
   guardId, guardName, disciplinaryRecord, show, onClose, onSuccess,
 }: Props) {
   const mutation = useGenerateLetterRecord();
+  const { data: templates = [] } = useLetterTemplates();
+  const previewTemplate = usePreviewTemplate();
   const [letterType, setLetterType]           = useState('WARNING');
   const [title, setTitle]                     = useState('');
   const [body, setBody]                       = useState('');
@@ -54,8 +57,30 @@ export default function DisciplinaryLetterModal({
   const [suspensionReason, setSuspensionReason] = useState(disciplinaryRecord.reason ?? '');
   const [error, setError]                     = useState('');
   const [succeeded, setSucceeded]             = useState(false);
+  const [editorKey, setEditorKey]             = useState(0);
 
   const isSuspension = letterType === 'SUSPENSION';
+  const eligibleTemplateTypes = TEMPLATE_TYPES_BY_LETTER_TYPE[letterType] ?? [];
+  const eligibleTemplates = templates.filter((t) => eligibleTemplateTypes.includes(t.letterType));
+
+  async function handleLoadTemplate(templateType: string) {
+    if (!templateType) return;
+    const fmt = new Date(disciplinaryRecord.incidentDate).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+    const html = await previewTemplate.mutateAsync({
+      letterType: templateType,
+      sampleData: {
+        guard_name:    guardName,
+        date:          fmt,
+        reason:        disciplinaryRecord.reason,
+        outcome:       disciplinaryRecord.outcome,
+        company_name:  'STAP Security Ltd',
+      },
+    });
+    setBody(html);
+    setEditorKey((k) => k + 1);
+  }
 
   function handleClose() {
     setLetterType('WARNING');
@@ -66,6 +91,7 @@ export default function DisciplinaryLetterModal({
     setSuspensionReason(disciplinaryRecord.reason ?? '');
     setError('');
     setSucceeded(false);
+    setEditorKey(0);
     onClose();
   }
 
@@ -203,8 +229,25 @@ export default function DisciplinaryLetterModal({
               </>
             ) : (
               <div className="mb-3">
-                <Form.Label className="small fw-bold">Letter Content <span className="text-danger">*</span></Form.Label>
+                <div className="d-flex align-items-center justify-content-between mb-1">
+                  <Form.Label className="small fw-bold mb-0">Letter Content <span className="text-danger">*</span></Form.Label>
+                  {eligibleTemplates.length > 0 && (
+                    <Form.Select
+                      size="sm"
+                      style={{ width: 'auto', fontSize: '0.78rem' }}
+                      value=""
+                      disabled={previewTemplate.isPending}
+                      onChange={(e) => handleLoadTemplate(e.target.value)}
+                    >
+                      <option value="">📄 Load from template…</option>
+                      {eligibleTemplates.map((t) => (
+                        <option key={t.letterType} value={t.letterType}>{t.name}</option>
+                      ))}
+                    </Form.Select>
+                  )}
+                </div>
                 <LetterEditor
+                  key={editorKey}
                   content={body}
                   onChange={setBody}
                   minHeight="240px"

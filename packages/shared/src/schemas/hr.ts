@@ -132,6 +132,17 @@ export const HR_LETTER_TYPES = ['COMMENDATION', 'REINSTATEMENT', 'GENERAL', 'COM
 // free-text edited — fix them by regenerating with corrected fields instead.
 export const STRUCTURED_LETTER_TYPES = ['COMMITMENT_AGREEMENT', 'SUSPENSION'] as const;
 
+// LetterTemplate rows (see LETTER_TYPES above) predate the current 7-type
+// GeneratedLetter taxonomy and use their own, more granular type strings —
+// this maps a real letter type to the eligible template(s) HR can load from
+// when composing that type. Types with no entry (SUSPENSION, COMMENDATION,
+// REINSTATEMENT, COMMITMENT_AGREEMENT) have no matching template.
+export const TEMPLATE_TYPES_BY_LETTER_TYPE: Record<string, readonly string[]> = {
+  WARNING:     ['VERBAL_WARNING', 'FIRST_WARNING', 'FINAL_WARNING'],
+  TERMINATION: ['TERMINATION_NOTICE'],
+  GENERAL:     ['APPOINTMENT_LETTER', 'CONTRACT_EXTENSION', 'CONFIRMATION_OF_EMPLOYMENT', 'SALARY_REVIEW'],
+};
+
 export const DISCIPLINARY_LETTER_LABELS = {
   WARNING:     '⚠️ Warning Letter',
   SUSPENSION:  '🔴 Suspension Letter',

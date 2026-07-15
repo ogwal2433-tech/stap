@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
+import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
 import { LetterEditor } from './LetterEditor';
-import { HR_LETTER_LABELS } from '@stap/shared';
+import { HR_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
 
 function buildCommitmentAgreementBody(guardName: string, startDate: string, minimumPeriod: string): string {
   return `
@@ -89,6 +90,8 @@ interface Props {
  * termination) are generated from the specific incident on the Disciplinary Records tab. */
 export default function HRLetterModal({ guardId, guardName, show, onClose, onSuccess }: Props) {
   const mutation = useGenerateLetterRecord();
+  const { data: templates = [] } = useLetterTemplates();
+  const previewTemplate = usePreviewTemplate();
   const [letterType, setLetterType]       = useState('GENERAL');
   const [title, setTitle]                 = useState('');
   const [body, setBody]                   = useState('');
@@ -96,8 +99,25 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
   const [startDate, setStartDate]         = useState('');
   const [error, setError]                 = useState('');
   const [succeeded, setSucceeded]         = useState(false);
+  const [editorKey, setEditorKey]         = useState(0);
 
   const isCommitmentAgreement = letterType === 'COMMITMENT_AGREEMENT';
+  const eligibleTemplateTypes = TEMPLATE_TYPES_BY_LETTER_TYPE[letterType] ?? [];
+  const eligibleTemplates = templates.filter((t) => eligibleTemplateTypes.includes(t.letterType));
+
+  async function handleLoadTemplate(templateType: string) {
+    if (!templateType) return;
+    const html = await previewTemplate.mutateAsync({
+      letterType: templateType,
+      sampleData: {
+        guard_name:   guardName,
+        date:         new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        company_name: 'STAP Security Ltd',
+      },
+    });
+    setBody(html);
+    setEditorKey((k) => k + 1);
+  }
 
   function handleClose() {
     setLetterType('GENERAL');
@@ -107,6 +127,7 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
     setStartDate('');
     setError('');
     setSucceeded(false);
+    setEditorKey(0);
     onClose();
   }
 
@@ -234,8 +255,25 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
               </>
             ) : (
               <div className="mb-3">
-                <Form.Label className="small fw-bold">Letter Content <span className="text-danger">*</span></Form.Label>
+                <div className="d-flex align-items-center justify-content-between mb-1">
+                  <Form.Label className="small fw-bold mb-0">Letter Content <span className="text-danger">*</span></Form.Label>
+                  {eligibleTemplates.length > 0 && (
+                    <Form.Select
+                      size="sm"
+                      style={{ width: 'auto', fontSize: '0.78rem' }}
+                      value=""
+                      disabled={previewTemplate.isPending}
+                      onChange={(e) => handleLoadTemplate(e.target.value)}
+                    >
+                      <option value="">📄 Load from template…</option>
+                      {eligibleTemplates.map((t) => (
+                        <option key={t.letterType} value={t.letterType}>{t.name}</option>
+                      ))}
+                    </Form.Select>
+                  )}
+                </div>
                 <LetterEditor
+                  key={editorKey}
                   content={body}
                   onChange={setBody}
                   minHeight="240px"

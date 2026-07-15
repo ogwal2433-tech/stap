@@ -133,6 +133,7 @@
  *         description: Entry added
  */
 import { Router, type IRouter, type Request, type Response } from 'express';
+import prisma from '../db/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';
@@ -414,9 +415,14 @@ router.get(
   requireRole(...FINANCE_ROLES, ...HR_ROLES, ROLES.GUARD),
   asyncHandler(async (req: Request, res: Response) => {
     const payslip = await payrollService.getPayslip(req.params.id);
-    // Guards can only view their own payslip
-    if (req.user!.role === ROLES.GUARD && payslip.guardId !== req.user!.userId) {
-      return res.status(403).json({ success: false, error: 'Forbidden' });
+    // Guards can only view their own payslip. req.user!.userId is the User.id
+    // (login account) — Guard.id is a separate id space linked via
+    // Guard.userId, so it must be resolved, not compared directly.
+    if (req.user!.role === ROLES.GUARD) {
+      const guard = await prisma.guard.findUnique({ where: { userId: req.user!.userId }, select: { id: true } });
+      if (guard?.id !== payslip.guardId) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+      }
     }
     res.json({ success: true, data: payslip });
   }),
