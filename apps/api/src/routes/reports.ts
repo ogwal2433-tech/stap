@@ -46,6 +46,7 @@ import {
   FINANCE_ROLES,
   HR_ROLES,
   REPORT_ROLES,
+  INTERNAL_ROLES,
   ScheduledReportSchema,
 } from '@stap/shared';
 
@@ -62,9 +63,12 @@ function sendExcel(res: any, buffer: Buffer, filename: string) {
 router.use(authenticate);
 
 // GET /reports/dashboard/director
+// Backs the generic /dashboard landing page every internal-staff role hits
+// straight after login (see App.tsx / LoginPage.tsx) — must stay open to all
+// of them, not just Director/Assistant Manager.
 router.get(
   '/dashboard/director',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requireRole(...INTERNAL_ROLES),
   asyncHandler(async (_req, res) => {
     const data = await reportService.getDirectorDashboard();
     res.json({ success: true, data });

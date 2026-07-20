@@ -6,6 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
+import { ROLES } from '@stap/shared';
 import { reportsApi } from '../lib/reports.api';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/layout/NotificationBell';
@@ -67,9 +68,12 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const now           = useClock();
 
+  const isGuard = user?.role === ROLES.GUARD;
+
   const { data: stats, isLoading } = useQuery({
     queryKey:        ['director-dashboard'],
     queryFn:         reportsApi.getDirectorDashboard,
+    enabled:         !isGuard,
     staleTime:       5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
@@ -78,6 +82,31 @@ export default function DashboardPage() {
 
   const dateStr = now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' }) + ' EAT';
+
+  if (isGuard) {
+    return (
+      <div style={{ background: '#F2F4F7', minHeight: '100vh' }}>
+        <div className="d-flex align-items-center justify-content-between px-4 py-3 bg-white shadow-sm mb-4">
+          <div>
+            <h5 className="fw-bold mb-0" style={{ color: NAVY }}>{greeting(user.name)}</h5>
+            <div className="text-muted small">{dateStr}</div>
+          </div>
+          <div className="d-flex align-items-center gap-3">
+            <div className="fw-semibold small" style={{ color: NAVY }}>{timeStr}</div>
+            <NotificationBell />
+            <Badge bg="primary">{user.role.replace(/_/g, ' ')}</Badge>
+            <Button size="sm" variant="outline-secondary" onClick={logout}>Logout</Button>
+          </div>
+        </div>
+        <Container className="py-5">
+          <Alert variant="info" className="mb-0">
+            Self-service features for guards (viewing your own profile, attendance, and submitting leave
+            requests) aren&apos;t available yet. Please contact your supervisor or the office for now.
+          </Alert>
+        </Container>
+      </div>
+    );
+  }
 
   if (isLoading || !stats) {
     return (
