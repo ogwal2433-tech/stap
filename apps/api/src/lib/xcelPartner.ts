@@ -105,6 +105,49 @@ export async function initiateWalletPayment(req: WalletPaymentRequest): Promise<
   });
 }
 
+// ── Bank payment (mobile money disbursement via the bank-transfer surface) ──
+// The wallet endpoint above rejects every receiver with "Receiver information
+// not found" regardless of parameters; the bank endpoint accepts the same
+// mobile-money-as-bank-code shape (bank_code = network, account_num = phone).
+
+export interface BankPaymentRequest {
+  amount:         number;
+  reference:      string;
+  dlCode:         string;
+  bankCode:       string; // MTN | AIRTEL
+  accountNum:     string; // guard's mobile money number
+  accountName:    string;
+  description:    string;
+  receiverFirstName: string;
+  receiverLastName:  string;
+}
+
+export async function initiateBankPayment(req: BankPaymentRequest): Promise<PartnerPaymentResponse> {
+  return partnerPost<PartnerPaymentResponse>(partnerBaseUrl(), '/external/payment/bank', {
+    amount:       req.amount.toFixed(2),
+    currency:     'UGX',
+    country:      'UG',
+    reference:    req.reference,
+    description:  req.description,
+    bank_code:    req.bankCode,
+    account_num:  req.accountNum,
+    account_name: req.accountName,
+    dl_code:      req.dlCode,
+    initiator: {
+      first_name: 'STAP',
+      last_name:  'Security',
+      purpose:    'Salary Payment',
+    },
+    receiver: {
+      first_name:  req.receiverFirstName,
+      last_name:   req.receiverLastName,
+      account_num: req.accountNum,
+      bank_code:   req.bankCode,
+      currency:    'UGX',
+    },
+  });
+}
+
 // ── Status check ─────────────────────────────────────────────────────────────
 
 export interface PartnerStatusResponse {

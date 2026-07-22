@@ -27,7 +27,7 @@ vi.mock('../../lib/xcel', () => ({
 
 vi.mock('../../lib/xcelPartner', () => ({
   generateDynamicLinkOtp: vi.fn().mockResolvedValue('DL-STUB'),
-  initiateWalletPayment: vi.fn().mockResolvedValue({
+  initiateBankPayment: vi.fn().mockResolvedValue({
     success: true, message: 'ok', data: { reference: 'CUD-STUB', status: 'pending' },
   }),
 }));
@@ -233,8 +233,8 @@ describe('payrollService.disburse()', () => {
     expect(mxcelPartner.generateDynamicLinkOtp).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 480000, bankCode: 'MTN', accountNum: '256772345678' }),
     );
-    expect(mxcelPartner.initiateWalletPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 480000, dlCode: 'DL-STUB', accountNum: '256772345678' }),
+    expect(mxcelPartner.initiateBankPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 480000, dlCode: 'DL-STUB', accountNum: '256772345678', bankCode: 'MTN' }),
     );
   });
 
@@ -251,7 +251,7 @@ describe('payrollService.disburse()', () => {
   it('skips guards flagged by HR without an adjusted amount', async () => {
     mp.payslip.findMany.mockResolvedValue([{ ...MOCK_PAYSLIP, hrFlagged: true, hrAdjustedAmount: null }]);
     await payrollService.disburse('run-1', 'director-1');
-    expect(mxcelPartner.initiateWalletPayment).not.toHaveBeenCalled();
+    expect(mxcelPartner.initiateBankPayment).not.toHaveBeenCalled();
     expect(mp.payslip.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -265,13 +265,13 @@ describe('payrollService.disburse()', () => {
   it('pays the HR-adjusted amount when a flagged guard has one', async () => {
     mp.payslip.findMany.mockResolvedValue([{ ...MOCK_PAYSLIP, hrFlagged: true, hrAdjustedAmount: 300000 }]);
     await payrollService.disburse('run-1', 'director-1');
-    expect(mxcelPartner.initiateWalletPayment).toHaveBeenCalledWith(
+    expect(mxcelPartner.initiateBankPayment).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 300000 }),
     );
   });
 
   it('marks payslip FAILED when XCEL initiation throws', async () => {
-    mxcelPartner.initiateWalletPayment.mockRejectedValueOnce(new Error('XCEL API error 500: boom'));
+    mxcelPartner.initiateBankPayment.mockRejectedValueOnce(new Error('XCEL API error 500: boom'));
     await payrollService.disburse('run-1', 'director-1');
     expect(mp.payslip.update).toHaveBeenCalledWith(
       expect.objectContaining({

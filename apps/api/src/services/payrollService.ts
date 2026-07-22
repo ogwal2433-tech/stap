@@ -341,12 +341,16 @@ class PayrollService {
 
         const reference = xcel.generateDisbursementRef(payslip.guardId, period);
 
-        const result = await xcelPartner.initiateWalletPayment({
+        const result = await xcelPartner.initiateBankPayment({
           amount:      payAmount,
           reference,
           dlCode,
+          bankCode:    network,
           accountNum:  phone,
+          accountName: `${payslip.guard.firstName} ${payslip.guard.lastName}`,
           description: `STAP Security - Salary ${run.month}/${run.year}`,
+          receiverFirstName: payslip.guard.firstName,
+          receiverLastName:  payslip.guard.lastName,
         });
 
         await prisma.payslip.update({
