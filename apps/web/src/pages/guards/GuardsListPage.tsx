@@ -4,7 +4,7 @@ import {
   Alert, Badge, Button, ButtonGroup, Col, Dropdown, Form,
   Pagination, Row, Spinner, Table,
 } from 'react-bootstrap';
-import { useGuardList, useUpdateGuardStatus, useDownloadPaymentSlip } from '../../hooks/useGuards';
+import { useGuardList, useUpdateGuardStatus } from '../../hooks/useGuards';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
@@ -51,7 +51,6 @@ export default function GuardsListPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
-  const downloadPaymentSlip = useDownloadPaymentSlip();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -131,14 +130,6 @@ export default function GuardsListPage() {
       <div className="d-flex align-items-center justify-content-between mb-4">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Guards</h4>
         <div className="d-flex gap-2">
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={downloadPaymentSlip.isPending}
-            onClick={() => downloadPaymentSlip.mutate()}
-          >
-            {downloadPaymentSlip.isPending ? '…' : '🖨 Payment Slip'}
-          </Button>
           <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
             <Button
               variant="outline-secondary"

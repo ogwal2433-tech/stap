@@ -153,19 +153,6 @@ export const guardsApi = {
       });
   },
 
-  downloadPaymentSlip(): Promise<void> {
-    return api
-      .get('/guards/payment-slip', { responseType: 'blob' })
-      .then((r) => {
-        const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'STAP-Payment-Slip.pdf';
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-  },
-
   transferGuard(guardId: string, data: CreateGuardTransferInput): Promise<GuardTransferResponse> {
     return api
       .post<{ success: boolean; data: GuardTransferResponse }>(`/guards/${guardId}/transfer`, data)
