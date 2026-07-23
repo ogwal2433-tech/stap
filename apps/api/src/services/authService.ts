@@ -34,7 +34,7 @@ export class AuthService {
   ): Promise<LoginResult | null> {
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, name: true, email: true, passwordHash: true, role: true, status: true },
+      select: { id: true, name: true, email: true, passwordHash: true, role: true, status: true, clientId: true },
     });
 
     if (!user) {
@@ -88,6 +88,7 @@ export class AuthService {
       role: user.role as UserRole,
       name: user.name,
       email: user.email,
+      clientId: user.clientId,
     });
     const refreshToken = signRefreshToken(user.id);
 
@@ -129,7 +130,7 @@ export class AuthService {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true, status: true },
+      select: { id: true, name: true, email: true, role: true, status: true, clientId: true },
     });
 
     if (!user || user.status !== 'ACTIVE') {
@@ -141,6 +142,7 @@ export class AuthService {
       role: user.role as UserRole,
       name: user.name,
       email: user.email,
+      clientId: user.clientId,
     });
     const newRefreshToken = signRefreshToken(user.id);
 

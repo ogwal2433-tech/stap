@@ -24,16 +24,6 @@ export const CreateServiceRequestSchema = z.object({
 });
 export type CreateServiceRequestInput = z.infer<typeof CreateServiceRequestSchema>;
 
-export const UpdateServiceRequestSchema = z.object({
-  status:     z.enum(['PENDING', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED']).optional(),
-  resolution: z.string().min(10).optional(),
-  resolvedBy: z.string().optional(),
-}).refine(
-  data => data.status !== 'RESOLVED' || !!data.resolution,
-  { message: 'Resolution notes required when resolving a request' },
-);
-export type UpdateServiceRequestInput = z.infer<typeof UpdateServiceRequestSchema>;
-
 export interface ServiceRequestResponse {
   id:          string;
   clientId:    string;

@@ -19,6 +19,7 @@ export const authenticate: RequestHandler = (req, _res, next) => {
       role: payload.role as UserRole,
       name: payload.name,
       email: payload.email,
+      clientId: payload.clientId ?? null,
     };
     next();
   } catch {

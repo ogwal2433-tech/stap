@@ -1,5 +1,5 @@
 import api from './api';
-import type { InvoiceResponse, ComplaintResponse, CreateComplaintInput, PaginatedResponse } from '@stap/shared';
+import type { InvoiceResponse, ComplaintResponse, CreateComplaintInput, ServiceRequestResponse, CreateServiceRequestInput, PaginatedResponse } from '@stap/shared';
 
 export interface PortalOverview {
   client:              { id: string; clientName: string; email?: string; contactPhone: string };
@@ -47,5 +47,13 @@ export const portalApi = {
 
   getComplaints(): Promise<PaginatedResponse<ComplaintResponse>> {
     return api.get('/portal/complaints').then(r => r.data);
+  },
+
+  getServiceRequests(): Promise<PaginatedResponse<ServiceRequestResponse>> {
+    return api.get('/portal/service-requests').then(r => r.data);
+  },
+
+  submitServiceRequest(data: Omit<CreateServiceRequestInput, 'clientId'>): Promise<ServiceRequestResponse> {
+    return api.post('/portal/service-requests', data).then(r => r.data.data);
   },
 };

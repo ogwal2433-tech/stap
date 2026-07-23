@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@stap/shared';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 
@@ -59,6 +60,39 @@ export default function ClientPortalPage() {
   const { data: sites } = useQuery({
     queryKey: ['portal-sites'],
     queryFn:  portalApi.getSites,
+  });
+
+  const { data: srRes, isLoading: loadSR, isError: srIsError, error: srErr, refetch: refetchSR } = useQuery({
+    queryKey: ['portal-service-requests'],
+    queryFn:  portalApi.getServiceRequests,
+  });
+  const serviceRequests = srRes?.data ?? [];
+
+  const [srForm, setSrForm] = useState({ subject: '', type: 'OTHER', priority: 'NORMAL', description: '', quantity: '' });
+  const [srSubmitted, setSrSubmitted] = useState<string | null>(null);
+  const [srError, setSrError] = useState<string | null>(null);
+
+  const submitServiceRequest = useMutation({
+    mutationFn: () => portalApi.submitServiceRequest({
+      subject:     srForm.subject,
+      type:        srForm.type as any,
+      priority:    srForm.priority as any,
+      description: srForm.description,
+      ...(srForm.quantity ? { quantity: parseInt(srForm.quantity, 10) } : {}),
+    }),
+    onSuccess: (r) => {
+      setSrSubmitted(r.id);
+      setSrError(null);
+      refetchSR();
+      setSrForm({ subject: '', type: 'OTHER', priority: 'NORMAL', description: '', quantity: '' });
+    },
+    onError: (err: unknown) => {
+      if (is403(err)) {
+        setSrError(NOT_LINKED_MSG);
+      } else {
+        showToast('Failed to submit service request', 'danger');
+      }
+    },
   });
 
   const [compForm, setCompForm] = useState({ subject: '', category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
@@ -311,6 +345,106 @@ export default function ClientPortalPage() {
                     </Card>
                   ))}
                   {complaints.length === 0 && <div className="text-muted small">No complaints submitted yet</div>}
+                </div>
+              )}
+            </Col>
+          </Row>
+        </Tab>
+
+        {/* TAB 5: Service Requests */}
+        <Tab eventKey="service-requests" title="Service Requests">
+          <Row>
+            <Col md={6}>
+              <h6 className="fw-semibold mb-3">Submit a Service Request</h6>
+              {srSubmitted ? (
+                <Alert variant="success">
+                  <strong>Request submitted!</strong><br />
+                  Reference: <code>#{srSubmitted.slice(-8).toUpperCase()}</code><br />
+                  <small className="text-muted">STAP Security has been notified and will contact you directly.</small>
+                  <div className="mt-2">
+                    <Button size="sm" variant="outline-success" onClick={() => setSrSubmitted(null)}>Submit Another</Button>
+                  </div>
+                </Alert>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {srError && (
+                    <Alert variant="danger" className="small py-2" onClose={() => setSrError(null)} dismissible>
+                      {srError}
+                    </Alert>
+                  )}
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">Type</Form.Label>
+                    <Form.Select size="sm" value={srForm.type} onChange={e => setSrForm(f => ({ ...f, type: e.target.value }))}>
+                      {Object.entries(SERVICE_REQUEST_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </Form.Select>
+                  </Form.Group>
+                  {(srForm.type === 'MORE_GUARDS' || srForm.type === 'FEWER_GUARDS') && (
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold">Quantity <span className="text-danger">*</span></Form.Label>
+                      <Form.Control size="sm" type="number" min={1} value={srForm.quantity} onChange={e => setSrForm(f => ({ ...f, quantity: e.target.value }))} />
+                    </Form.Group>
+                  )}
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">Priority</Form.Label>
+                    <Form.Select size="sm" value={srForm.priority} onChange={e => setSrForm(f => ({ ...f, priority: e.target.value }))}>
+                      {['LOW', 'NORMAL', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
+                    </Form.Select>
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">Subject <span className="text-danger">*</span></Form.Label>
+                    <Form.Control size="sm" maxLength={200} value={srForm.subject} onChange={e => setSrForm(f => ({ ...f, subject: e.target.value }))} placeholder="Brief summary…" />
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">Description <span className="text-danger">*</span></Form.Label>
+                    <Form.Control as="textarea" rows={4} size="sm" value={srForm.description} onChange={e => setSrForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe your request in detail…" />
+                    <Form.Text className="text-muted">Minimum 10 characters</Form.Text>
+                  </Form.Group>
+                  <Button
+                    style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+                    size="sm"
+                    disabled={
+                      !srForm.subject.trim() ||
+                      srForm.description.trim().length < 10 ||
+                      ((srForm.type === 'MORE_GUARDS' || srForm.type === 'FEWER_GUARDS') && !srForm.quantity) ||
+                      submitServiceRequest.isPending
+                    }
+                    onClick={() => submitServiceRequest.mutate()}
+                  >
+                    {submitServiceRequest.isPending ? <Spinner size="sm" animation="border" /> : 'Submit Request'}
+                  </Button>
+                </div>
+              )}
+            </Col>
+            <Col md={6}>
+              <h6 className="fw-semibold mb-3">My Service Requests</h6>
+              {loadSR ? <TabSpinner /> : srIsError ? <TabError err={srErr} /> : (
+                <div className="d-flex flex-column gap-2">
+                  {serviceRequests.map(sr => (
+                    <Card key={sr.id} className="border-0 shadow-sm">
+                      <Card.Body className="py-2 px-3 small">
+                        <div className="d-flex justify-content-between">
+                          <span className="fw-semibold">{sr.subject}</span>
+                          <Badge bg={SERVICE_REQUEST_STATUS_COLORS[sr.status] ?? 'secondary'} text={sr.status === 'IN_PROGRESS' ? 'dark' : undefined}>
+                            {sr.status.replace(/_/g, ' ')}
+                          </Badge>
+                        </div>
+                        <div className="text-muted">
+                          {SERVICE_REQUEST_TYPES[sr.type as keyof typeof SERVICE_REQUEST_TYPES] ?? sr.type}
+                          {' · '}
+                          <Badge bg={SERVICE_REQUEST_PRIORITY_COLORS[sr.priority] ?? 'secondary'} text={sr.priority === 'HIGH' ? 'dark' : undefined}>{sr.priority}</Badge>
+                        </div>
+                        {sr.quantity != null && <div className="small mt-1">Quantity requested: {sr.quantity}</div>}
+                        <div className="text-muted">{sr.description.slice(0, 80)}{sr.description.length > 80 ? '…' : ''}</div>
+                        <div className="text-muted" style={{ fontSize: '0.7rem' }}>Submitted: {new Date(sr.createdAt).toLocaleDateString('en-UG')}</div>
+                        {sr.resolution && (
+                          <div className="mt-1 p-2 bg-success bg-opacity-10 rounded">
+                            <strong>Resolution:</strong> {sr.resolution}
+                          </div>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  ))}
+                  {serviceRequests.length === 0 && <div className="text-muted small">No service requests submitted yet</div>}
                 </div>
               )}
             </Col>

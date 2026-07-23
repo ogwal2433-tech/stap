@@ -135,7 +135,6 @@ model User {
   auditLogs               AuditLog[]
   reportedIncidents       Incident[]             @relation("IncidentReporter")
   notifications           Notification[]
-  clientOf                Client?                @relation("ClientUser")
   assignedApplicants      Applicant[]            @relation("ApplicantAssignee")
   trainerSessions         TrainingSession[]      @relation("TrainerSessions")
   approvedLeaves          LeaveRequest[]         @relation("LeaveApprover")
@@ -146,6 +145,12 @@ model User {
   generatedLetters        GeneratedLetter[]      @relation("LetterGenerator")
   approvedLetters         GeneratedLetter[]      @relation("LetterApprover")
   resolvedErrors          SystemError[]          @relation("ErrorResolver")
+
+  // ── Client portal linkage ─────────────────────────────────────────────────────
+  // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
+  // the same clientId belong to the same company (one company can have many logins).
+  clientId String?
+  client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
 }
 
 model Guard {
@@ -375,7 +380,6 @@ model Client {
   billingAddress  String?
   billingTerms    Int
   contractStatus  ClientContractStatus @default(ACTIVE)
-  clientUserId    String?              @unique
 
   // Tax & compliance
   tin           String? // Tax Identification Number
@@ -390,7 +394,7 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  clientUser      User?             @relation("ClientUser", fields: [clientUserId], references: [id])
+  users           User[]            @relation("ClientPortalUser")
   sites           Site[]
   contracts       Contract[]
   complaints      ClientComplaint[]

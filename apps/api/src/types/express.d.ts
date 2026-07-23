@@ -8,6 +8,7 @@ declare global {
         role: UserRole;
         name: string;
         email: string;
+        clientId: string | null;
       };
     }
   }

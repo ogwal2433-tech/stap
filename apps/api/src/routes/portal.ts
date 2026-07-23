@@ -50,27 +50,31 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { invoiceService } from '../services/invoiceService';
 import { complaintService } from '../services/complaintService';
+import { serviceRequestService } from '../services/serviceRequestService';
+import { notificationService } from '../services/notificationService';
 import { AppError } from '../errors/AppError';
-import { ROLES, CreateComplaintSchema } from '@stap/shared';
+import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema } from '@stap/shared';
 import prisma from '../db/prisma';
 
 const router = Router();
 
 // ── clientPortalGuard middleware ───────────────────────────────────────────────
+// clientId comes straight from the JWT (set at login from User.clientId) — no
+// per-request DB lookup needed, and it can never be a different company's ID
+// since it isn't accepted from anywhere in the request itself.
 
-async function clientPortalGuard(req: Request, res: Response, next: NextFunction) {
+function clientPortalGuard(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== ROLES.CLIENT) {
     return res.status(403).json({ success: false, message: 'Client access only' });
   }
-  const client = await prisma.client.findFirst({ where: { clientUserId: req.user.userId } });
-  if (!client) {
+  if (!req.user.clientId) {
     return res.status(403).json({ success: false, message: 'No client account linked to this user. Contact administrator.' });
   }
-  (req as any).clientId = client.id;
+  (req as any).clientId = req.user.clientId;
   next();
 }
 
-router.use(authenticate, asyncHandler(clientPortalGuard));
+router.use(authenticate, clientPortalGuard);
 
 // GET /portal/overview
 router.get(
@@ -187,6 +191,49 @@ router.get(
     const clientId = (req as any).clientId as string;
     const result   = await complaintService.list({ clientId, page: 1, limit: 50 });
     res.json({ success: true, ...result });
+  }),
+);
+
+// ── Service requests — client-facing only. This is a private channel from the
+// client to STAP; internal staff never read these through the API (see
+// routes/serviceRequests.ts, which is staff-locked-out entirely). Staff are
+// notified that a request came in and act through the normal deployment /
+// roster flow, without reading the client's request details here.
+
+// GET /portal/service-requests
+router.get(
+  '/service-requests',
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+    const result   = await serviceRequestService.listByClient(clientId);
+    res.json({ success: true, ...result });
+  }),
+);
+
+// POST /portal/service-requests
+router.post(
+  '/service-requests',
+  validate(CreateServiceRequestSchema.omit({ clientId: true })),
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+    const data = await serviceRequestService.create(
+      { ...req.body, clientId },
+      req.user!.userId,
+    );
+
+    // Staff are notified a request came in, but the notification deliberately
+    // omits the client name/details — staff must contact the client directly
+    // rather than reading their private request data through this channel.
+    await notificationService.sendToRoles(
+      ['DIRECTOR', 'ASSISTANT_MANAGER', 'OPERATIONS_SUPERVISOR'],
+      {
+        type:    'SYSTEM',
+        title:   'New Client Service Request',
+        message: `A client has submitted a new service request: ${data.type.replace(/_/g, ' ')}.`,
+      },
+    );
+
+    res.status(201).json({ success: true, data });
   }),
 );
 

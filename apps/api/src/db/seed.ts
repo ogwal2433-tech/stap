@@ -108,7 +108,7 @@ async function main() {
 
   const kakooza = await prisma.client.upsert({
     where: { id: 'seed-client-kakooza' },
-    update: { clientUserId: users[Role.CLIENT].id },
+    update: {},
     create: {
       id:              'seed-client-kakooza',
       clientName:      'Kakooza Enterprises Ltd',
@@ -117,8 +117,11 @@ async function main() {
       physicalAddress: 'Kampala, Uganda',
       billingTerms:    30,
       contractStatus:  ClientContractStatus.ACTIVE,
-      clientUserId:    users[Role.CLIENT].id,
     },
+  });
+  await prisma.user.update({
+    where: { id: users[Role.CLIENT].id },
+    data:  { clientId: kakooza.id },
   });
   console.log(`✅ Client created and linked: ${kakooza.clientName}`);
 

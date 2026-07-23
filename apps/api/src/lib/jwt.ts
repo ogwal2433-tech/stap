@@ -16,6 +16,7 @@ export interface AccessTokenPayload {
   role: UserRole;
   name: string;
   email: string;
+  clientId: string | null;
   type: 'access';
 }
 
