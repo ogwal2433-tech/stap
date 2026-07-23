@@ -44,15 +44,22 @@ function fmtSetting(s: any): SystemSettingResponse {
 
 function fmtUser(u: any): UserResponse {
   return {
-    id:        u.id,
-    systemId:  u.systemId ?? null,
-    name:      u.name,
-    email:     u.email,
-    role:      u.role,
-    status:    u.status,
-    createdAt: u.createdAt.toISOString(),
+    id:             u.id,
+    systemId:       u.systemId ?? null,
+    name:           u.name,
+    email:          u.email,
+    role:           u.role,
+    status:         u.status,
+    createdAt:      u.createdAt.toISOString(),
+    clientId:       u.clientId ?? null,
+    clientName:     u.client?.clientName ?? null,
+    clientSystemId: u.client?.systemId ?? null,
   };
 }
+
+const USER_CLIENT_INCLUDE = {
+  client: { select: { id: true, clientName: true, systemId: true } },
+} as const;
 
 function validateSettingValue(dataType: string, value: string): void {
   if (dataType === 'number') {
@@ -141,6 +148,7 @@ class SettingsService {
         skip,
         take:    limit,
         orderBy: { createdAt: 'desc' },
+        include: USER_CLIENT_INCLUDE,
       }),
       prisma.user.count({ where }),
     ]);
@@ -153,16 +161,31 @@ class SettingsService {
   }
 
   async createUser(
-    data: { name: string; email: string; password: string; role: UserRole },
+    data: { name: string; email: string; password: string; role: UserRole; clientId?: string | null },
     createdBy: string,
   ): Promise<UserResponse> {
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new AppError('A user with this email already exists', 409);
 
+    if (data.role === 'CLIENT') {
+      if (!data.clientId) {
+        throw new AppError('A client company must be selected when creating a Client user.', 400);
+      }
+      const client = await prisma.client.findUnique({ where: { id: data.clientId } });
+      if (!client) {
+        throw new AppError('The selected client company was not found. Please select a valid client.', 404);
+      }
+    }
+
     const passwordHash = await bcrypt.hash(data.password, 12);
     const systemId     = await generateStaffId();
     const user = await prisma.user.create({
-      data: { systemId, name: data.name, email: data.email, passwordHash, role: data.role as any },
+      data: {
+        systemId, name: data.name, email: data.email, passwordHash, role: data.role as any,
+        // Always null for non-client roles, even if a clientId was accidentally sent
+        clientId: data.role === 'CLIENT' ? data.clientId : null,
+      },
+      include: USER_CLIENT_INCLUDE,
     });
 
     await QueueService.sendEmail({
@@ -185,15 +208,34 @@ class SettingsService {
 
   async updateUser(
     id: string,
-    data: { name?: string; role?: UserRole; status?: string },
+    data: { name?: string; role?: UserRole; status?: string; clientId?: string | null },
     updatedBy: string,
   ): Promise<UserResponse> {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('User not found');
 
+    // Resolve the effective role/clientId this update settles on, whether or
+    // not the caller resent every field — e.g. a status-only update on an
+    // existing CLIENT user must not wipe out their existing clientId.
+    const nextRole     = (data.role as UserRole | undefined) ?? (existing.role as UserRole);
+    const nextClientId = nextRole === 'CLIENT'
+      ? (data.clientId !== undefined ? data.clientId : existing.clientId)
+      : null;
+
+    if (nextRole === 'CLIENT') {
+      if (!nextClientId) {
+        throw new AppError('A client company must be selected for a Client account.', 400);
+      }
+      const client = await prisma.client.findUnique({ where: { id: nextClientId } });
+      if (!client) {
+        throw new AppError('The selected client company was not found. Please select a valid client.', 404);
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id },
-      data:  { name: data.name, role: data.role as any, status: data.status as any },
+      data:  { name: data.name, role: data.role as any, status: data.status as any, clientId: nextClientId },
+      include: USER_CLIENT_INCLUDE,
     });
 
     await QueueService.logAudit({

@@ -43,7 +43,7 @@ export function useUsers(params?: Parameters<typeof settingsApi.listUsers>[0]) {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; email: string; password: string; role: UserRole }) =>
+    mutationFn: (data: { name: string; email: string; password: string; role: UserRole; clientId?: string | null }) =>
       settingsApi.createUser(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users-mgmt'] }),
   });
@@ -57,7 +57,7 @@ export function useUpdateUser() {
       data,
     }: {
       id: string;
-      data: { name?: string; role?: UserRole; status?: string };
+      data: { name?: string; role?: UserRole; status?: string; clientId?: string | null };
     }) => settingsApi.updateUser(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users-mgmt'] }),
   });

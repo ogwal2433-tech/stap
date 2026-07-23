@@ -45,6 +45,7 @@ export const settingsApi = {
     email: string;
     password: string;
     role: UserRole;
+    clientId?: string | null;
   }): Promise<UserResponse> {
     return api
       .post<{ success: boolean; data: UserResponse }>('/settings/users', data)
@@ -53,7 +54,7 @@ export const settingsApi = {
 
   updateUser(
     id: string,
-    data: { name?: string; role?: UserRole; status?: string },
+    data: { name?: string; role?: UserRole; status?: string; clientId?: string | null },
   ): Promise<UserResponse> {
     return api
       .patch<{ success: boolean; data: UserResponse }>(`/settings/users/${id}`, data)

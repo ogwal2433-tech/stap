@@ -178,6 +178,7 @@ import {
   UpdateShiftTypeSchema,
   ReorderShiftTypesSchema,
   CreateUserSchema,
+  UpdateUserSchema,
   ResetPasswordSchema,
 } from '@stap/shared';
 
@@ -246,6 +247,7 @@ router.post(
 router.patch(
   '/users/:id',
   requireRole(ROLES.DIRECTOR),
+  validate(UpdateUserSchema),
   asyncHandler(async (req, res) => {
     if (req.params.id === req.user!.userId && req.body.role !== undefined) {
       throw new ForbiddenError('Cannot change your own role');

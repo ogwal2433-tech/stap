@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
+import { useQuery } from '@tanstack/react-query';
 import { useToast } from '../../context/ToastContext';
 import {
   useSystemSettings, useUpdateSettings,
@@ -14,6 +15,8 @@ import {
 import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
 import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse } from '@stap/shared';
+import { clientsApi } from '../../lib/clients.api';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
 import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeModal';
@@ -102,28 +105,51 @@ function UserModal({
 
   const [form, setForm] = useState({
     name: '', email: '', password: '', role: ROLES.GUARD as UserRole,
-    status: 'ACTIVE',
+    status: 'ACTIVE', clientId: '',
+  });
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+    queryKey: ['clients-for-dropdown'],
+    queryFn:  () => clientsApi.list({ limit: 200, sortBy: 'clientName', sortOrder: 'asc' }).then(r => r.data),
+    enabled:  form.role === ROLES.CLIENT,
   });
 
   useEffect(() => {
     if (user && user !== 'new') {
       setForm(f => ({
         ...f,
-        name:   user.name,
-        email:  user.email,
-        role:   user.role as UserRole,
-        status: user.status,
+        name:     user.name,
+        email:    user.email,
+        role:     user.role as UserRole,
+        status:   user.status,
+        clientId: user.clientId ?? '',
       }));
     } else {
-      setForm({ name: '', email: '', password: '', role: ROLES.GUARD, status: 'ACTIVE' });
+      setForm({ name: '', email: '', password: '', role: ROLES.GUARD, status: 'ACTIVE', clientId: '' });
     }
+    setClientError(null);
   }, [user]);
+
+  const handleRoleChange = (newRole: UserRole) => {
+    setClientError(null);
+    setForm(f => ({ ...f, role: newRole, clientId: newRole === ROLES.CLIENT ? f.clientId : '' }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (form.role === ROLES.CLIENT && !form.clientId) {
+      setClientError('A client company must be selected when creating a Client account.');
+      return;
+    }
+    setClientError(null);
+
+    const clientId = form.role === ROLES.CLIENT ? form.clientId : null;
+
     if (isNew) {
       create.mutate(
-        { name: form.name, email: form.email, password: form.password, role: form.role },
+        { name: form.name, email: form.email, password: form.password, role: form.role, clientId },
         {
           onSuccess: () => { showToast('User created', 'success'); onHide(); },
           onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
@@ -131,7 +157,7 @@ function UserModal({
       );
     } else {
       update.mutate(
-        { id: (user as UserResponse).id, data: { name: form.name, role: form.role, status: form.status } },
+        { id: (user as UserResponse).id, data: { name: form.name, role: form.role, status: form.status, clientId } },
         {
           onSuccess: () => { showToast('User updated', 'success'); onHide(); },
           onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
@@ -141,6 +167,7 @@ function UserModal({
   };
 
   const isPending = create.isPending || update.isPending;
+  const selectedClient = clients.find(c => c.id === form.clientId);
 
   return (
     <Modal show={!!user} onHide={onHide} centered>
@@ -168,8 +195,8 @@ function UserModal({
           <Row className="mb-3">
             <Col>
               <Form.Label className="small fw-medium">Role *</Form.Label>
-              <Form.Select size="sm" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}>
-                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+              <Form.Select size="sm" value={form.role} onChange={e => handleRoleChange(e.target.value as UserRole)}>
+                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r === ROLES.CLIENT ? 'Client (Portal Access)' : r.replace(/_/g, ' ')}</option>)}
               </Form.Select>
             </Col>
             {!isNew && (
@@ -183,6 +210,79 @@ function UserModal({
               </Col>
             )}
           </Row>
+
+          {form.role === ROLES.CLIENT && (
+            <div
+              className="mb-3"
+              style={{
+                padding:      '16px',
+                background:   '#FEF9E7',
+                borderRadius: '0.5rem',
+                border:       '1px solid #F9E79F',
+                borderLeft:   '4px solid #E8701A',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1B3A6B', marginBottom: '4px' }}>
+                🏢 Link to Client Company
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#6c757d', marginBottom: '12px' }}>
+                This user will only be able to see data belonging to the selected company.
+              </div>
+
+              <Form.Group>
+                <Form.Label className="fw-bold small">
+                  Client Company <span className="text-danger">*</span>
+                </Form.Label>
+
+                {clientsLoading ? (
+                  <div className="text-muted small">
+                    <Spinner size="sm" className="me-2" />
+                    Loading clients...
+                  </div>
+                ) : (
+                  <SearchableSelect
+                    options={clients.map(c => ({ value: c.id, label: c.clientName, sublabel: c.systemId ?? '' }))}
+                    value={form.clientId}
+                    onChange={(id) => { setForm(f => ({ ...f, clientId: id })); setClientError(null); }}
+                    placeholder="— Search and select client company —"
+                    searchPlaceholder="Type company name..."
+                    isInvalid={!!clientError}
+                  />
+                )}
+
+                {clientError && (
+                  <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                    {clientError}
+                  </div>
+                )}
+
+                {selectedClient && (
+                  <div
+                    style={{
+                      background: '#D0EDE9', borderRadius: '0.375rem', padding: '8px 12px',
+                      marginTop: '8px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px',
+                    }}
+                  >
+                    <span>🏢</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#1B3A6B' }}>{selectedClient.clientName}</div>
+                      {selectedClient.systemId && (
+                        <div style={{ fontSize: '0.72rem', color: '#6c757d', fontFamily: 'monospace' }}>
+                          {selectedClient.systemId}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Form.Text className="text-muted">
+                  The user will only be able to log in and view data for this company. They cannot see any other
+                  client's information.
+                </Form.Text>
+              </Form.Group>
+            </div>
+          )}
+
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
             <Button type="submit" size="sm" disabled={isPending}>
@@ -959,6 +1059,11 @@ export default function SettingsPage() {
                     <td className="small text-muted">{u.email}</td>
                     <td>
                       <Badge bg="dark" style={{ fontSize: 10 }}>{u.role.replace(/_/g, ' ')}</Badge>
+                      {u.role === 'CLIENT' && (
+                        <div style={{ fontSize: '0.72rem', color: '#0F7B6C', marginTop: '2px', fontStyle: 'italic' }}>
+                          🏢 {u.clientName ?? 'No company linked'}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <Badge bg={STATUS_BADGES[u.status] ?? 'secondary'} text={u.status === 'SUSPENDED' ? 'dark' : undefined} style={{ fontSize: 10 }}>

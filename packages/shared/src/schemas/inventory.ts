@@ -170,11 +170,15 @@ export interface SystemSettingResponse {
 }
 
 export interface UserResponse {
-  id:        string;
-  systemId:  string | null;
-  name:      string;
-  email:     string;
-  role:      string;
-  status:    string;
-  createdAt: string;
+  id:             string;
+  systemId:       string | null;
+  name:           string;
+  email:          string;
+  role:           string;
+  status:         string;
+  createdAt:      string;
+  /** Set only for CLIENT-role users — the company this login is scoped to. */
+  clientId:       string | null;
+  clientName:     string | null;
+  clientSystemId: string | null;
 }
