@@ -188,20 +188,31 @@ class SettingsService {
       include: USER_CLIENT_INCLUDE,
     });
 
-    await QueueService.sendEmail({
-      to:       data.email,
-      subject:  'Welcome to STAP Security Management Platform',
-      template: 'welcome',
-      data:     { name: data.name, email: data.email, password: data.password },
-    });
+    // The account is already usable at this point — a queue outage must not
+    // fail the request, or the caller sees an error for a user that now exists
+    // and every retry comes back "email already exists".
+    try {
+      await QueueService.sendEmail({
+        to:       data.email,
+        subject:  'Welcome to STAP Security Management Platform',
+        template: 'welcome',
+        data:     { name: data.name, email: data.email, password: data.password },
+      });
+    } catch (err) {
+      console.error('⚠️  Failed to queue welcome email for', data.email, err);
+    }
 
-    await QueueService.logAudit({
-      userId:   createdBy,
-      action:   'USER_CREATED',
-      entity:   'User',
-      entityId: user.id,
-      newValue: { name: user.name, email: user.email, role: user.role },
-    });
+    try {
+      await QueueService.logAudit({
+        userId:   createdBy,
+        action:   'USER_CREATED',
+        entity:   'User',
+        entityId: user.id,
+        newValue: { name: user.name, email: user.email, role: user.role },
+      });
+    } catch (err) {
+      console.error('⚠️  Failed to queue USER_CREATED audit log for', user.id, err);
+    }
 
     return fmtUser(user);
   }

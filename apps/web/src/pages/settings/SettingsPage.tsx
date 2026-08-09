@@ -16,6 +16,7 @@ import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
 import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse } from '@stap/shared';
 import { clientsApi } from '../../lib/clients.api';
+import { getApiErrorMessage } from '../../lib/api';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
@@ -34,6 +35,22 @@ const GROUP_ICONS: Record<string, string> = {
   SECURITY:      'bi-shield-lock',
   NOTIFICATIONS: 'bi-bell',
 };
+
+/**
+ * Mirrors StrongPasswordSchema in @stap/shared so the admin sees what's wrong
+ * before submitting, instead of a round-trip "Validation failed" toast.
+ * Returns null when the password is acceptable.
+ */
+const PASSWORD_HINT = 'At least 8 characters, with an uppercase letter, a number, and a special character.';
+
+function validatePassword(password: string): string | null {
+  const problems: string[] = [];
+  if (password.length < 8)          problems.push('be at least 8 characters');
+  if (!/[A-Z]/.test(password))      problems.push('contain an uppercase letter');
+  if (!/[0-9]/.test(password))      problems.push('contain a number');
+  if (!/[^A-Za-z0-9]/.test(password)) problems.push('contain a special character');
+  return problems.length ? `Password must ${problems.join(', ')}.` : null;
+}
 
 const ROLE_OPTIONS: UserRole[] = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
@@ -108,6 +125,7 @@ function UserModal({
     status: 'ACTIVE', clientId: '',
   });
   const [clientError, setClientError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ['clients-for-dropdown'],
@@ -129,6 +147,7 @@ function UserModal({
       setForm({ name: '', email: '', password: '', role: ROLES.GUARD, status: 'ACTIVE', clientId: '' });
     }
     setClientError(null);
+    setPasswordError(null);
   }, [user]);
 
   const handleRoleChange = (newRole: UserRole) => {
@@ -145,6 +164,11 @@ function UserModal({
     }
     setClientError(null);
 
+    // Only new users set a password here; catch weak ones before the round-trip
+    const pwProblem = isNew ? validatePassword(form.password) : null;
+    setPasswordError(pwProblem);
+    if (pwProblem) return;
+
     const clientId = form.role === ROLES.CLIENT ? form.clientId : null;
 
     if (isNew) {
@@ -152,7 +176,7 @@ function UserModal({
         { name: form.name, email: form.email, password: form.password, role: form.role, clientId },
         {
           onSuccess: () => { showToast('User created', 'success'); onHide(); },
-          onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+          onError:   (err) => showToast(getApiErrorMessage(err, 'Failed to create user.'), 'danger'),
         },
       );
     } else {
@@ -160,7 +184,7 @@ function UserModal({
         { id: (user as UserResponse).id, data: { name: form.name, role: form.role, status: form.status, clientId } },
         {
           onSuccess: () => { showToast('User updated', 'success'); onHide(); },
-          onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+          onError:   (err) => showToast(getApiErrorMessage(err, 'Failed to update user.'), 'danger'),
         },
       );
     }
@@ -188,7 +212,18 @@ function UserModal({
               </Form.Group>
               <Form.Group className="mb-2">
                 <Form.Label className="small fw-medium">Password *</Form.Label>
-                <Form.Control size="sm" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required minLength={8} />
+                <Form.Control
+                  size="sm"
+                  type="password"
+                  value={form.password}
+                  onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setPasswordError(null); }}
+                  required
+                  minLength={8}
+                  isInvalid={!!passwordError}
+                />
+                {passwordError
+                  ? <Form.Control.Feedback type="invalid">{passwordError}</Form.Control.Feedback>
+                  : <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>{PASSWORD_HINT}</Form.Text>}
               </Form.Group>
             </>
           )}
@@ -301,15 +336,21 @@ function ResetPasswordModal({ userId, onHide }: { userId: string | null; onHide:
   const { showToast } = useToast();
   const reset = useResetPassword();
   const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
+
+    const pwProblem = validatePassword(newPassword);
+    setPasswordError(pwProblem);
+    if (pwProblem) return;
+
     reset.mutate(
       { id: userId, newPassword },
       {
         onSuccess: () => { showToast('Password reset successfully', 'success'); onHide(); setNewPassword(''); },
-        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed', 'danger'),
+        onError:   (err) => showToast(getApiErrorMessage(err, 'Failed to reset password.'), 'danger'),
       },
     );
   };
@@ -325,10 +366,14 @@ function ResetPasswordModal({ userId, onHide }: { userId: string | null; onHide:
               size="sm"
               type="password"
               value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
+              onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
               required
               minLength={8}
+              isInvalid={!!passwordError}
             />
+            {passwordError
+              ? <Form.Control.Feedback type="invalid">{passwordError}</Form.Control.Feedback>
+              : <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>{PASSWORD_HINT}</Form.Text>}
           </Form.Group>
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>

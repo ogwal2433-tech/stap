@@ -36,6 +36,19 @@ export function errorHandler(
     });
   }
 
+  // Prisma unique constraint — a pre-flight "does it exist?" check can still
+  // lose a race, and a 500 here reads as an unexplained failure to the user.
+  if (err?.code === 'P2002') {
+    const field = Array.isArray(err?.meta?.target) ? err.meta.target[0] : err?.meta?.target;
+    return res.status(409).json({
+      success: false,
+      error:   field
+        ? `A record with this ${field} already exists. Please use a different ${field}.`
+        : 'A record with these details already exists.',
+      code:    'DUPLICATE_ENTRY',
+    });
+  }
+
   if (err instanceof AppError) {
     const body: Record<string, unknown> = { success: false, error: err.message };
     if (err.statusCode === 409) body.code = 'DUPLICATE_ENTRY';

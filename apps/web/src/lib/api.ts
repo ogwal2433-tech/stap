@@ -65,4 +65,43 @@ api.interceptors.response.use(
   },
 );
 
+// ── Error message extraction ───────────────────────────────────────────────────
+
+/** Human labels for the field names Zod reports, so toasts don't say "clientId". */
+const FIELD_LABELS: Record<string, string> = {
+  name:        'Full name',
+  email:       'Email',
+  password:    'Password',
+  newPassword: 'New password',
+  role:        'Role',
+  clientId:    'Client company',
+  status:      'Status',
+};
+
+/**
+ * Pulls a readable message out of an API error.
+ *
+ * A 400 from `validate()` carries `error: 'Validation failed'` plus the real
+ * reasons in `details.fieldErrors` — surfacing only `error` tells the user
+ * nothing about what to change, so field errors are flattened into the message.
+ */
+export function getApiErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  const data = (err as { response?: { data?: unknown } })?.response?.data as
+    | { error?: string; message?: string; details?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> } }
+    | undefined;
+
+  const details = data?.details;
+  if (details) {
+    const messages = [
+      ...(details.formErrors ?? []),
+      ...Object.entries(details.fieldErrors ?? {}).flatMap(([field, errors]) =>
+        (errors ?? []).map(msg => `${FIELD_LABELS[field] ?? field}: ${msg}`),
+      ),
+    ];
+    if (messages.length) return messages.join(' • ');
+  }
+
+  return data?.error || data?.message || (err as Error)?.message || fallback;
+}
+
 export default api;
