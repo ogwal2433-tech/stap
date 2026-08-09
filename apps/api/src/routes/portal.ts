@@ -195,10 +195,11 @@ router.get(
 );
 
 // ── Service requests — client-facing only. This is a private channel from the
-// client to STAP; internal staff never read these through the API (see
-// routes/serviceRequests.ts, which is staff-locked-out entirely). Staff are
-// notified that a request came in and act through the normal deployment /
-// roster flow, without reading the client's request details here.
+// client to STAP: these two routes are the ONLY service-request endpoints that
+// exist, and clientPortalGuard above already 403s every non-CLIENT caller, so
+// staff cannot read requests through the API at all. Staff are notified that a
+// request came in and act through the normal deployment / roster flow, without
+// reading the client's request details here.
 
 // GET /portal/service-requests
 router.get(

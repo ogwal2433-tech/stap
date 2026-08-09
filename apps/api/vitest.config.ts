@@ -5,6 +5,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
+    // Integration suites each build the full Express app, which eagerly pulls
+    // puppeteer in via the guards router. Loading that many copies in worker
+    // threads exhausts memory — separate processes keep each one isolated.
+    pool: 'forks',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],

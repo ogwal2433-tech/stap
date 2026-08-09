@@ -9,6 +9,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
+import { buildPreviewHtml } from './lib/pdfBase';
 
 // ── Ensure upload directories exist ───────────────────────────────────────────
 [
@@ -80,8 +81,6 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'tru
 
 // ── Dev letter preview (non-production only) ──────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { buildPreviewHtml } = require('./lib/pdfBase') as typeof import('./lib/pdfBase');
   app.get('/dev/letter-preview', (_req, res) => {
     const sampleContent = `
       <div style="display:flex;justify-content:space-between;margin-bottom:24px;font-size:10pt;color:#444;">
