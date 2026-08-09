@@ -4,6 +4,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@stap/shared';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
+import { dashboardApi } from '../../lib/dashboard.api';
+import RoleDashboard from '../dashboard/RoleDashboard';
 
 const STA_BADGE: Record<string, string> = { PENDING: 'warning', OVERDUE: 'danger', PAID: 'success' };
 const COMP_BADGE: Record<string, string> = { OPEN: 'danger', IN_PROGRESS: 'warning', RESOLVED: 'success' };
@@ -37,6 +39,12 @@ export default function ClientPortalPage() {
   const { data: overview, isLoading: loadOverview, isError: overviewIsError, error: overviewErr } = useQuery({
     queryKey: ['portal-overview'],
     queryFn:  portalApi.getOverview,
+  });
+
+  const { data: dashboard, isLoading: dashLoading } = useQuery({
+    queryKey:  ['dashboard-stats', 'CLIENT'],
+    queryFn:   dashboardApi.getStats,
+    staleTime: 5 * 60_000,
   });
 
   const { data: invoicesRes, isLoading: loadInvoices, isError: invoicesIsError, error: invoicesErr } = useQuery({
@@ -153,22 +161,26 @@ export default function ClientPortalPage() {
               <p className="text-muted small mb-0">{overview?.client.email} · {overview?.client.contactPhone}</p>
             </Card.Body>
           </Card>
+          {/* Client-scoped figures from /dashboard/stats — the same role-aware
+              source the internal dashboards use, so the portal stays in step. */}
+          <div className="mb-4">
+            {dashLoading || !dashboard ? (
+              <TabSpinner />
+            ) : (
+              <RoleDashboard data={dashboard} />
+            )}
+          </div>
+
           <Row className="g-3 mb-4">
-            {[
-              { label: 'Outstanding Invoices',  value: overview?.outstandingInvoices ?? 0, bg: '#fef2f2', icon: '📄' },
-              { label: 'Open Complaints',        value: overview?.openComplaints ?? 0,      bg: '#fff7ed', icon: '📋' },
-              { label: 'Guards Deployed Today',  value: overview?.deployedToday ?? 0,       bg: '#f0fdf4', icon: '👮' },
-            ].map(({ label, value, bg, icon }) => (
-              <Col key={label} md={4}>
-                <Card className="border-0 shadow-sm h-100" style={{ background: bg }}>
-                  <Card.Body className="text-center">
-                    <div style={{ fontSize: '2rem' }}>{icon}</div>
-                    <div className="fw-bold" style={{ fontSize: '1.8rem' }}>{value}</div>
-                    <div className="text-muted small">{label}</div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
+            <Col md={4}>
+              <Card className="border-0 shadow-sm h-100" style={{ background: '#f0fdf4' }}>
+                <Card.Body className="text-center">
+                  <div style={{ fontSize: '2rem' }}>👮</div>
+                  <div className="fw-bold" style={{ fontSize: '1.8rem' }}>{overview?.deployedToday ?? 0}</div>
+                  <div className="text-muted small">Guards Deployed Today</div>
+                </Card.Body>
+              </Card>
+            </Col>
           </Row>
           <h6 className="fw-semibold mb-2 small text-uppercase text-muted">Recent Invoices</h6>
           {loadInvoices ? <TabSpinner /> : invoicesIsError ? <TabError err={invoicesErr} /> : (
