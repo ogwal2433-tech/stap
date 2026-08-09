@@ -145,6 +145,7 @@ model User {
   generatedLetters        GeneratedLetter[]      @relation("LetterGenerator")
   approvedLetters         GeneratedLetter[]      @relation("LetterApprover")
   resolvedErrors          SystemError[]          @relation("ErrorResolver")
+  guardPromotions         GuardPromotion[]       @relation("GuardPromotedBy")
 
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
@@ -269,6 +270,32 @@ model Guard {
   relatives          GuardRelative[]
   associates         GuardAssociate[]
   transfers          GuardTransfer[]
+  promotions         GuardPromotion[]
+}
+
+/// One row per rank change. Rank and salary names are snapshotted rather than
+/// referenced so the history stays truthful if a GuardRank is later renamed,
+/// deleted, or has its default salary changed.
+model GuardPromotion {
+  id       String @id @default(cuid())
+  guardId  String
+  guard    Guard  @relation(fields: [guardId], references: [id], onDelete: Cascade)
+
+  fromRank        String
+  toRank          String
+  fromSalary      Int
+  toSalary        Int
+  salaryIncrement Int
+
+  reason        String?
+  effectiveDate DateTime @default(now())
+
+  promotedById   String
+  promotedByUser User   @relation("GuardPromotedBy", fields: [promotedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([guardId, effectiveDate])
 }
 
 model GuardRelative {

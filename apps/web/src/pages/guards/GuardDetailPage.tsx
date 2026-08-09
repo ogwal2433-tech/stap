@@ -4,7 +4,7 @@ import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
   Form, Modal, Pagination, Row, Spinner, Tab, Table, Tabs,
 } from 'react-bootstrap';
-import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard } from '../../hooks/useGuards';
+import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard, usePromotionHistory } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useLettersBySubject } from '../../hooks/useLetters';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
@@ -22,11 +22,12 @@ import HRLetterModal from '../../components/letters/HRLetterModal';
 import ApproveLetterModal from '../../components/letters/ApproveLetterModal';
 import LetterStatusBadge from '../../components/letters/LetterStatusBadge';
 import TransferModal from '../../components/guards/TransferModal';
+import PromoteGuardModal from '../../components/guards/PromoteGuardModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
-  type GuardDocumentResponse, type GuardTransferResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
+  type GuardDocumentResponse, type GuardTransferResponse, type GuardPromotionResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
 } from '@stap/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
@@ -324,9 +325,11 @@ export default function GuardDetailPage() {
   const [showDeductionModal, setShowDeductionModal] = useState(false);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
   const [idCardError, setIdCardError] = useState('');
 
   const { data: transferHistory, isLoading: transfersLoading } = useTransferHistory(id ?? '');
+  const { data: promotionHistory = [] } = usePromotionHistory(id ?? '');
   const downloadIdCard = useDownloadIdCard();
 
   const { data: deductions = [], refetch: refetchDeductions } = useDeductions({ guardId: id });
@@ -448,6 +451,18 @@ export default function GuardDetailPage() {
               )}
             </Button>
           </RoleGuard>
+          {guard.employmentStatus === 'ACTIVE' && (
+            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER] as UserRole[]}>
+              <Button
+                variant="outline-primary"
+                disabled={!guard.rank}
+                title={guard.rank ? undefined : 'Assign a rank on this guard before promoting them'}
+                onClick={() => setShowPromoteModal(true)}
+              >
+                Promote
+              </Button>
+            </RoleGuard>
+          )}
           {guard.employmentStatus === 'ACTIVE' && (
             <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
               <Button
@@ -1122,7 +1137,47 @@ export default function GuardDetailPage() {
           )}
         </Tab>
 
-        {/* ── Tab 5: Disciplinary Records ───────────────────────────────────── */}
+        {/* ── Tab 5: Promotion History ──────────────────────────────────────── */}
+        <Tab eventKey="promotion-history" title="Promotion History">
+          {promotionHistory.length === 0 ? (
+            <Alert variant="light">No promotions on record for this guard.</Alert>
+          ) : (
+            <Table size="sm" hover responsive className="align-middle small">
+              <thead className="table-light">
+                <tr>
+                  <th>Effective</th>
+                  <th>Rank</th>
+                  <th>Salary</th>
+                  <th>Change</th>
+                  <th>Reason</th>
+                  <th>Promoted By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {promotionHistory.map((p: GuardPromotionResponse) => (
+                  <tr key={p.id}>
+                    <td>{new Date(p.effectiveDate).toLocaleDateString('en-GB')}</td>
+                    <td>
+                      {p.fromRank} → <span style={{ color: '#1E8449', fontWeight: 600 }}>{p.toRank}</span>
+                    </td>
+                    <td>
+                      UGX {p.fromSalary.toLocaleString()} → UGX {p.toSalary.toLocaleString()}
+                    </td>
+                    <td style={{ color: p.salaryIncrement > 0 ? '#1E8449' : p.salaryIncrement < 0 ? '#c0392b' : '#6c757d', fontWeight: 600 }}>
+                      {p.salaryIncrement > 0 ? '+' : ''}UGX {p.salaryIncrement.toLocaleString()}
+                    </td>
+                    <td title={p.reason ?? undefined}>
+                      {p.reason ? (p.reason.length > 60 ? p.reason.slice(0, 60) + '…' : p.reason) : '—'}
+                    </td>
+                    <td>{p.promotedBy.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Tab>
+
+        {/* ── Tab 6: Disciplinary Records ───────────────────────────────────── */}
         <Tab eventKey="disciplinary" title="Disciplinary Records">
           {/* Action bar */}
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -1433,6 +1488,16 @@ export default function GuardDetailPage() {
           currentSiteName={activeDeployment?.site.siteName ?? null}
           onClose={() => setShowTransferModal(false)}
           onSuccess={() => refetch()}
+        />
+      )}
+      {showPromoteModal && (
+        <PromoteGuardModal
+          guardId={id!}
+          guardName={guard.fullName}
+          currentRank={guard.rank}
+          currentSalary={guard.salaryRate}
+          onClose={() => setShowPromoteModal(false)}
+          onSuccess={() => { refetch(); showToast(`${guard.fullName} has been promoted.`, 'success'); }}
         />
       )}
     </div>

@@ -22,6 +22,8 @@ import type {
   GuardDashboardStats,
   CreateGuardTransferInput,
   GuardTransferResponse,
+  PromoteGuardInput,
+  GuardPromotionResponse,
 } from '@stap/shared';
 
 // Roles allowed to see the accountNumber field
@@ -1053,6 +1055,138 @@ class GuardService {
     });
 
     return transfers.map((t) => this.mapTransferResponse(t));
+  }
+
+  // ── Promotions ───────────────────────────────────────────────────────────────
+
+  /**
+   * Guard.rank stores GuardRank.name verbatim, but older records were seeded
+   * with upper-snake values ("SENIOR_GUARD") while the rank is named
+   * "Senior Guard". Comparing on a normalised form lets those guards be
+   * promoted without a data backfill, and the promotion writes back the
+   * canonical name.
+   */
+  private normaliseRank(rank: string): string {
+    return rank.replace(/[\s_]+/g, '').toLowerCase();
+  }
+
+  async promoteGuard(
+    guardId: string,
+    data: PromoteGuardInput,
+    promotedById: string,
+  ): Promise<GuardPromotionResponse> {
+    const guard = await prisma.guard.findUnique({
+      where:  { id: guardId },
+      select: { id: true, firstName: true, lastName: true, rank: true, salaryRate: true, employmentStatus: true },
+    });
+    if (!guard) throw new NotFoundError('Guard not found');
+
+    if (guard.employmentStatus !== 'ACTIVE') {
+      throw new AppError(
+        `Only active guards can be promoted. ${guard.firstName} ${guard.lastName} is ` +
+          `${guard.employmentStatus.replace(/_/g, ' ').toLowerCase()}.`,
+        400,
+      );
+    }
+    if (!guard.rank) {
+      throw new AppError(
+        'This guard has no current rank assigned. Set a rank on their profile before promoting them.',
+        400,
+      );
+    }
+    if (this.normaliseRank(guard.rank) === this.normaliseRank(data.toRank)) {
+      throw new AppError(
+        `${guard.firstName} ${guard.lastName} already holds the rank "${guard.rank}". Choose a different rank.`,
+        400,
+      );
+    }
+
+    // Resolve against the rank list so a promotion can't invent a rank that
+    // doesn't exist or point at one that has been retired.
+    const ranks     = await prisma.guardRank.findMany({ select: { name: true, isActive: true } });
+    const targetRank = ranks.find(r => this.normaliseRank(r.name) === this.normaliseRank(data.toRank));
+    if (!targetRank) {
+      throw new NotFoundError(`Rank "${data.toRank}" was not found. Choose a rank from the list.`);
+    }
+    if (!targetRank.isActive) {
+      throw new AppError(`Rank "${targetRank.name}" is inactive and cannot be assigned.`, 400);
+    }
+
+    const fromSalary = guard.salaryRate;
+    const toSalary   = data.newSalary;
+
+    const [, promotion] = await prisma.$transaction([
+      prisma.guard.update({
+        where: { id: guardId },
+        data:  { rank: targetRank.name, salaryRate: toSalary },
+      }),
+      prisma.guardPromotion.create({
+        data: {
+          guardId,
+          fromRank:        guard.rank,
+          toRank:          targetRank.name,
+          fromSalary,
+          toSalary,
+          salaryIncrement: toSalary - fromSalary,
+          reason:          data.reason ?? null,
+          effectiveDate:   data.effectiveDate ? new Date(data.effectiveDate) : new Date(),
+          promotedById,
+        },
+        include: { promotedByUser: { select: { id: true, name: true } } },
+      }),
+    ]);
+
+    await prisma.auditLog.create({
+      data: {
+        userId:   promotedById,
+        action:   'GUARD_PROMOTED',
+        entity:   'guard',
+        entityId: guardId,
+        oldValue: { rank: guard.rank, salaryRate: fromSalary },
+        newValue: { rank: targetRank.name, salaryRate: toSalary, increment: toSalary - fromSalary },
+      },
+    });
+
+    await notificationService.sendToRoles([ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER], {
+      type:       'SYSTEM',
+      title:      'Guard Promoted',
+      message:
+        `${guard.firstName} ${guard.lastName} has been promoted from ${guard.rank} to ` +
+        `${targetRank.name}. New salary: UGX ${toSalary.toLocaleString()}.`,
+      entityType: 'guard',
+      entityId:   guardId,
+    });
+
+    return this.mapPromotionResponse(promotion);
+  }
+
+  async getPromotionHistory(guardId: string): Promise<GuardPromotionResponse[]> {
+    const guard = await prisma.guard.findUnique({ where: { id: guardId }, select: { id: true } });
+    if (!guard) throw new NotFoundError('Guard not found');
+
+    const promotions = await prisma.guardPromotion.findMany({
+      where:   { guardId },
+      orderBy: { effectiveDate: 'desc' },
+      include: { promotedByUser: { select: { id: true, name: true } } },
+    });
+
+    return promotions.map(p => this.mapPromotionResponse(p));
+  }
+
+  private mapPromotionResponse(promotion: any): GuardPromotionResponse {
+    return {
+      id:              promotion.id,
+      guardId:         promotion.guardId,
+      fromRank:        promotion.fromRank,
+      toRank:          promotion.toRank,
+      fromSalary:      promotion.fromSalary,
+      toSalary:        promotion.toSalary,
+      salaryIncrement: promotion.salaryIncrement,
+      reason:          promotion.reason ?? null,
+      effectiveDate:   promotion.effectiveDate.toISOString(),
+      promotedBy:      { id: promotion.promotedByUser.id, name: promotion.promotedByUser.name },
+      createdAt:       promotion.createdAt.toISOString(),
+    };
   }
 
   private mapTransferResponse(transfer: any): GuardTransferResponse {

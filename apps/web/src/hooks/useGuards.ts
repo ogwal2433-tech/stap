@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardsApi } from '../lib/guards.api';
 import { useToast } from '../context/ToastContext';
-import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput, CreateGuardTransferInput } from '@stap/shared';
+import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput, CreateGuardTransferInput, PromoteGuardInput } from '@stap/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
   return useQuery({
@@ -143,6 +143,25 @@ export function useTransferHistory(guardId: string) {
   return useQuery({
     queryKey: ['transfers', guardId],
     queryFn:  () => guardsApi.getTransferHistory(guardId),
+    enabled:  Boolean(guardId),
+  });
+}
+
+export function usePromoteGuard(guardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: PromoteGuardInput) => guardsApi.promoteGuard(guardId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard', guardId] });
+      queryClient.invalidateQueries({ queryKey: ['promotions', guardId] });
+    },
+  });
+}
+
+export function usePromotionHistory(guardId: string) {
+  return useQuery({
+    queryKey: ['promotions', guardId],
+    queryFn:  () => guardsApi.getPromotionHistory(guardId),
     enabled:  Boolean(guardId),
   });
 }

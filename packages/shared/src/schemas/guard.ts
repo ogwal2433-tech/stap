@@ -136,6 +136,17 @@ export const CreateGuardTransferSchema = z.object({
   transferDate: z.string().datetime(),
 });
 
+/**
+ * Ranks are identified by GuardRank.name — there is no separate code column,
+ * and Guard.rank stores the name directly.
+ */
+export const PromoteGuardSchema = z.object({
+  toRank:        z.string().min(1, 'A new rank is required').max(100),
+  newSalary:     z.coerce.number().int().min(1, 'Salary must be greater than zero'),
+  reason:        z.string().max(500).optional(),
+  effectiveDate: z.string().datetime().optional(),
+});
+
 export const GuardListQuerySchema = z.object({
   page:      z.coerce.number().int().positive().default(1),
   limit:     z.coerce.number().int().min(1).max(500).default(20),
@@ -197,6 +208,7 @@ export type UpdateGuardInput       = z.infer<typeof UpdateGuardSchema>;
 export type GuardStatusInput       = z.infer<typeof GuardStatusSchema>;
 export type ReinstateGuardInput    = z.infer<typeof ReinstateGuardSchema>;
 export type CreateGuardTransferInput = z.infer<typeof CreateGuardTransferSchema>;
+export type PromoteGuardInput      = z.infer<typeof PromoteGuardSchema>;
 export type GuardListQuery         = z.infer<typeof GuardListQuerySchema>;
 export type GuardRelativeInput     = z.infer<typeof GuardRelativeSchema>;
 export type GuardAssociateInput    = z.infer<typeof GuardAssociateSchema>;
@@ -357,6 +369,21 @@ export interface GuardTransferResponse {
   transferDate: string;
   authorisedBy: { id: string; name: string };
   createdAt:    string;
+}
+
+export interface GuardPromotionResponse {
+  id:              string;
+  guardId:         string;
+  fromRank:        string;
+  toRank:          string;
+  fromSalary:      number;
+  toSalary:        number;
+  /** toSalary - fromSalary. Negative if the salary was reduced. */
+  salaryIncrement: number;
+  reason:          string | null;
+  effectiveDate:   string;
+  promotedBy:      { id: string; name: string };
+  createdAt:       string;
 }
 
 export interface GuardDocumentResponse {

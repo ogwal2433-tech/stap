@@ -12,6 +12,8 @@ import type {
   GuardAssociateInput,
   CreateGuardTransferInput,
   GuardTransferResponse,
+  PromoteGuardInput,
+  GuardPromotionResponse,
 } from '@stap/shared';
 
 export const guardsApi = {
@@ -162,6 +164,18 @@ export const guardsApi = {
   getTransferHistory(guardId: string): Promise<GuardTransferResponse[]> {
     return api
       .get<{ success: boolean; data: GuardTransferResponse[] }>(`/guards/${guardId}/transfers`)
+      .then((r) => r.data.data);
+  },
+
+  promoteGuard(guardId: string, data: PromoteGuardInput): Promise<GuardPromotionResponse> {
+    return api
+      .post<{ success: boolean; data: GuardPromotionResponse }>(`/guards/${guardId}/promote`, data)
+      .then((r) => r.data.data);
+  },
+
+  getPromotionHistory(guardId: string): Promise<GuardPromotionResponse[]> {
+    return api
+      .get<{ success: boolean; data: GuardPromotionResponse[] }>(`/guards/${guardId}/promotions`)
       .then((r) => r.data.data);
   },
 

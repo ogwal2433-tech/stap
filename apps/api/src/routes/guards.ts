@@ -191,6 +191,7 @@ import {
   GuardStatusSchema,
   ReinstateGuardSchema,
   CreateGuardTransferSchema,
+  PromoteGuardSchema,
   GuardListQuerySchema,
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
@@ -414,6 +415,31 @@ router.get(
   asyncHandler(async (req, res) => {
     const transfers = await guardService.getTransferHistory(req.params.id);
     res.status(200).json({ success: true, data: transfers });
+  }),
+);
+
+// ── POST /:id/promote — promote a guard to a new rank ─────────────────────────
+router.post(
+  '/:id/promote',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(PromoteGuardSchema),
+  asyncHandler(async (req, res) => {
+    const promotion = await guardService.promoteGuard(
+      req.params.id,
+      req.body,
+      req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: promotion });
+  }),
+);
+
+// ── GET /:id/promotions — list promotion history for a guard ──────────────────
+router.get(
+  '/:id/promotions',
+  requireRole(...INTERNAL_ROLES),
+  asyncHandler(async (req, res) => {
+    const promotions = await guardService.getPromotionHistory(req.params.id);
+    res.status(200).json({ success: true, data: promotions });
   }),
 );
 
