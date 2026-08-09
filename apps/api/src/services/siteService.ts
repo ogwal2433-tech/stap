@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
+import { DEFAULT_SITE_TYPE } from '@stap/shared';
 import type {
   CreateSiteInput,
   UpdateSiteInput,
@@ -33,7 +34,7 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
     specialInstructions: (site.specialInstructions as string | null) ?? null,
     guardsRequired:      site.guardsRequired as number,
 
-    siteType:            (site.siteType as string) ?? 'REGULAR',
+    siteType:            (site.siteType as string) ?? DEFAULT_SITE_TYPE,
 
     sitePeriodStart: (site.sitePeriodStart as Date | null)
       ? (site.sitePeriodStart as Date).toISOString() : null,
@@ -241,7 +242,7 @@ class SiteService {
         siteManagerContact:  siteData.siteManagerContact ?? null,
         specialInstructions: siteData.specialInstructions ?? null,
         guardsRequired:      siteData.guardsRequired,
-        siteType:            siteData.siteType ?? 'REGULAR',
+        siteType:            siteData.siteType ?? DEFAULT_SITE_TYPE,
         sitePeriodStart: siteData.sitePeriodStart
           ? new Date(siteData.sitePeriodStart) : null,
         sitePeriodEnd: siteData.sitePeriodEnd
@@ -311,7 +312,7 @@ class SiteService {
         }
       }
     } else if (data.siteType && !['TEMPORARY', 'SPECIAL_DUTIES'].includes(data.siteType)) {
-      // Switching to REGULAR or PERMANENT — clear period dates
+      // Switching to a type without a period (PERMANENT) — clear period dates
       data.sitePeriodStart = null;
       data.sitePeriodEnd   = null;
       data.sitePeriodNotes = null;

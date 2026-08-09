@@ -33,7 +33,7 @@ function makeSiteRow(overrides: Record<string, unknown> = {}) {
     id: 's1', clientId: 'c1', siteName: 'Test Site', location: 'Kampala',
     gpsLat: null, gpsLon: null, siteManagerName: null, siteManagerContact: null,
     specialInstructions: null, guardsRequired: 2,
-    siteType: 'REGULAR', sitePeriodStart: null, sitePeriodEnd: null, sitePeriodNotes: null,
+    siteType: 'PERMANENT', sitePeriodStart: null, sitePeriodEnd: null, sitePeriodNotes: null,
     armedGuardsRequired: 0, firearmsRequired: 0, batonRequired: 0, otherWeaponsNotes: null,
     equipmentDetails: null, allowedShiftTypes: [], defaultShiftType: null,
     equipmentItems: [], createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'),
@@ -95,14 +95,14 @@ describe('siteService.create() — site period', () => {
     expect(result.periodDays).toBe(3);
   });
 
-  it('REGULAR with period dates → dates cleared to null', async () => {
+  it('PERMANENT with period dates → dates cleared to null', async () => {
     const row = makeSiteRow();
     const captured: Record<string, unknown>[] = [];
     mock.site.create.mockImplementation((args: { data: Record<string, unknown> }) => { captured.push(args.data); return Promise.resolve(row); });
     mock.site.findUnique.mockResolvedValue({ ...row, deployments: [] });
 
     await siteService.create({
-      ...baseInput, siteType: 'REGULAR',
+      ...baseInput, siteType: 'PERMANENT',
       sitePeriodStart: '2026-07-01T00:00:00.000Z',
       sitePeriodEnd:   '2026-09-30T00:00:00.000Z',
     }, 'u1');
@@ -168,7 +168,7 @@ describe('siteService — hasPeriod and periodDays', () => {
     expect(result.periodDays).toBe(1);
   });
 
-  it('hasPeriod = false for REGULAR', async () => {
+  it('hasPeriod = false for PERMANENT', async () => {
     mock.site.findUnique.mockResolvedValue({ ...makeSiteRow(), deployments: [] });
     const result = await siteService.getById('s1');
     expect(result.hasPeriod).toBe(false);

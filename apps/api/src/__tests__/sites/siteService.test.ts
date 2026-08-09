@@ -56,7 +56,7 @@ const baseSiteRow = {
   siteManagerContact:  null,
   specialInstructions: null,
   guardsRequired:      4,
-  siteType:            'REGULAR',
+  siteType:            'PERMANENT',
   armedGuardsRequired: 0,
   firearmsRequired:    0,
   batonRequired:       0,
@@ -76,7 +76,7 @@ const baseCreateInput = {
   siteName:            'City Hall',
   location:            'Kampala CBD',
   guardsRequired:      4,
-  siteType:            'REGULAR' as const,
+  siteType:            'PERMANENT' as const,
   armedGuardsRequired: 0,
   firearmsRequired:    0,
   batonRequired:       0,
@@ -101,12 +101,12 @@ beforeEach(() => {
 // ── create() ──────────────────────────────────────────────────────────────────
 
 describe('siteService.create()', () => {
-  it('creates site with siteType = REGULAR by default', async () => {
+  it('creates site with siteType = PERMANENT by default', async () => {
     await siteService.create(baseCreateInput, 'user1');
 
     expect(mock.site.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ siteType: 'REGULAR' }),
+        data: expect.objectContaining({ siteType: 'PERMANENT' }),
       }),
     );
   });
@@ -233,7 +233,7 @@ describe('siteService.create()', () => {
 // ── update() ──────────────────────────────────────────────────────────────────
 
 describe('siteService.update()', () => {
-  it('updates siteType from REGULAR to TEMPORARY (with period dates)', async () => {
+  it('updates siteType from PERMANENT to TEMPORARY (with period dates)', async () => {
     const updated = { ...baseSiteRow, siteType: 'TEMPORARY', sitePeriodStart: new Date('2026-07-01'), sitePeriodEnd: new Date('2026-09-30') };
     mock.site.update.mockResolvedValue(updated);
     mock.site.findUnique.mockResolvedValueOnce(baseSiteRow).mockResolvedValue({ ...updated, deployments: [] });

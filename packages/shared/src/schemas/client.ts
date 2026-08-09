@@ -68,11 +68,24 @@ export const ClientListQuerySchema = z.object({
 // ── Site type constant ─────────────────────────────────────────────────────────
 
 export const SITE_TYPES = {
-  REGULAR:       'Regular',
   TEMPORARY:     'Temporary',
   SPECIAL_DUTIES:'Special Duties',
   PERMANENT:     'Permanent',
 } as const;
+
+/** Fallback for sites whose stored type is absent or no longer recognised. */
+export const DEFAULT_SITE_TYPE = 'PERMANENT';
+
+export const SITE_TYPE_VALUES = Object.keys(SITE_TYPES) as [SiteType, ...SiteType[]];
+
+export type SiteType = keyof typeof SITE_TYPES;
+
+/**
+ * Accepted site types. This is an enum rather than a free string so a retired
+ * value (such as the removed "REGULAR") cannot be written back through the API
+ * after being taken out of the UI.
+ */
+export const SiteTypeSchema = z.enum(SITE_TYPE_VALUES);
 
 // ── Site schemas ───────────────────────────────────────────────────────────────
 
@@ -87,7 +100,7 @@ const _BaseSiteSchema = z.object({
   specialInstructions:  z.string().max(1000).optional(),
   guardsRequired:       z.number().int().min(1).default(1),
   zoneId:               z.string().nullable().optional(),
-  siteType:             z.string().optional(),
+  siteType:             SiteTypeSchema.optional(),
   armedGuardsRequired:  z.coerce.number().int().min(0).default(0),
   firearmsRequired:     z.coerce.number().int().min(0).default(0),
   batonRequired:        z.coerce.number().int().min(0).default(0),

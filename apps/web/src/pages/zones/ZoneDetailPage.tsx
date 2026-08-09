@@ -13,7 +13,6 @@ import { ROLES, type UserRole } from '@stap/shared';
 const MGMT_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 
 const SITE_TYPE_BADGE: Record<string, string> = {
-  REGULAR:       'secondary',
   TEMPORARY:     'warning',
   SPECIAL_DUTIES:'info',
   PERMANENT:     'primary',

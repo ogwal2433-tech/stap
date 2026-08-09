@@ -47,7 +47,7 @@ function makeSiteRow(overrides: Record<string, unknown> = {}) {
     siteManagerContact:   null,
     specialInstructions:  null,
     guardsRequired:       4,
-    siteType:             'REGULAR',
+    siteType:             'PERMANENT',
     sitePeriodStart: null,
     sitePeriodEnd:   null,
     sitePeriodNotes:     null,
@@ -171,7 +171,7 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
     expect(result.periodDays).toBe(1);
   });
 
-  it('clears duty dates when siteType = REGULAR', async () => {
+  it('clears duty dates when siteType = PERMANENT', async () => {
     const created = makeSiteRow();
     mock.site.create.mockResolvedValue(created);
     mock.site.findUnique.mockResolvedValue({ ...created, deployments: [] });
@@ -187,7 +187,7 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
       siteName:             'City Hall',
       location:             'Kampala',
       guardsRequired:       2,
-      siteType:             'REGULAR',
+      siteType:             'PERMANENT',
       sitePeriodStart: '2026-07-10T00:00:00.000Z',
       sitePeriodEnd:   '2026-07-12T00:00:00.000Z',
     }, 'user1');
@@ -246,7 +246,7 @@ describe('siteService.create() — SPECIAL_DUTIES', () => {
 // ── update() ───────────────────────────────────────────────────────────────────
 
 describe('siteService.update() — SPECIAL_DUTIES', () => {
-  it('clearing duty dates when switching from SPECIAL_DUTIES to REGULAR', async () => {
+  it('clearing duty dates when switching from SPECIAL_DUTIES to PERMANENT', async () => {
     const existing = makeSiteRow({
       siteType:             'SPECIAL_DUTIES',
       sitePeriodStart: new Date('2026-07-10'),
@@ -262,7 +262,7 @@ describe('siteService.update() — SPECIAL_DUTIES', () => {
       return Promise.resolve(makeSiteRow());
     });
 
-    await siteService.update('s1', { siteType: 'REGULAR' }, 'user1');
+    await siteService.update('s1', { siteType: 'PERMANENT' }, 'user1');
 
     expect(captured[0]!['sitePeriodStart']).toBeNull();
     expect(captured[0]!['sitePeriodEnd']).toBeNull();
@@ -270,7 +270,7 @@ describe('siteService.update() — SPECIAL_DUTIES', () => {
   });
 
   it('requires duty dates when changing to SPECIAL_DUTIES without providing them', async () => {
-    // Existing site is REGULAR with no duty dates
+    // Existing site is PERMANENT with no duty dates
     mock.site.findUnique.mockResolvedValue(makeSiteRow());
 
     await expect(

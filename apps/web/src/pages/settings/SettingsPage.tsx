@@ -644,8 +644,6 @@ export default function SettingsPage() {
                       </div>
                       <div className="card-body pt-0">
                         <dl className="mb-0 small">
-                          <dt>Regular</dt>
-                          <dd className="text-muted mb-2">Standard ongoing site assignment with no special classification.</dd>
                           <dt>Temporary</dt>
                           <dd className="text-muted mb-2">Short-term assignment. Guards deployed for a defined period only.</dd>
                           <dt>Special Duties</dt>

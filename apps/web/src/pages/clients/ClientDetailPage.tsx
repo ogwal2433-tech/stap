@@ -15,7 +15,7 @@ import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
@@ -32,7 +32,6 @@ const LEAD_STATUS_BADGE: Record<string, { bg: string; text?: string }> = {
 };
 
 const SITE_TYPE_BADGE: Record<string, { bg: string; text?: string; label: string }> = {
-  REGULAR:       { bg: 'secondary',              label: 'Regular' },
   TEMPORARY:     { bg: 'warning',  text: 'dark', label: 'Temporary' },
   SPECIAL_DUTIES:{ bg: 'info',     text: 'dark', label: 'Special Duties' },
   PERMANENT:     { bg: 'success',                label: 'Permanent' },
@@ -328,7 +327,7 @@ export default function ClientDetailPage() {
               </thead>
               <tbody>
                 {sites.map((s) => {
-                  const typeDef = SITE_TYPE_BADGE[s.siteType] ?? SITE_TYPE_BADGE.REGULAR;
+                  const typeDef = SITE_TYPE_BADGE[s.siteType] ?? SITE_TYPE_BADGE[DEFAULT_SITE_TYPE];
                   const isExpanded = expandedSiteId === s.id;
                   return (
                     <React.Fragment key={s.id}>

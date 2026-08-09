@@ -414,7 +414,7 @@ model Site {
   siteManagerContact  String?
   specialInstructions String?
   guardsRequired      Int       @default(1)
-  siteType            String    @default("COMMERCIAL")
+  siteType            String    @default("PERMANENT")
   sitePeriodStart     DateTime?
   sitePeriodEnd       DateTime?
   sitePeriodNotes     String?

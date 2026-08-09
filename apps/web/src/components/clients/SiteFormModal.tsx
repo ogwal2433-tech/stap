@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useCreateSite, useUpdateSite } from '../../hooks/useClients';
 import { useShiftTypes } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
-import type { SiteResponse } from '@stap/shared';
+import { DEFAULT_SITE_TYPE, type SiteResponse } from '@stap/shared';
 import { z } from 'zod';
 import DateRangePicker from '../common/DateRangePicker';
 
@@ -22,7 +22,7 @@ const SiteFormSchema = z.object({
   siteManagerName:     z.string().max(100).optional().transform((v) => v || undefined),
   siteManagerContact:  z.string().optional().transform((v) => v || undefined),
   guardsRequired:      z.coerce.number().int().min(1).default(1),
-  siteType:             z.enum(['REGULAR', 'TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default('REGULAR'),
+  siteType:             z.enum(['TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default(DEFAULT_SITE_TYPE),
   sitePeriodStart: z.string().optional().nullable(),
   sitePeriodEnd:   z.string().optional().nullable(),
   sitePeriodNotes:     z.string().max(500).optional().nullable(),
@@ -36,6 +36,20 @@ const SiteFormSchema = z.object({
 
 type SiteFormValues = z.infer<typeof SiteFormSchema>;
 
+const SITE_TYPE_VALUES = SiteFormSchema.shape.siteType.removeDefault().options;
+
+/**
+ * Maps a stored siteType onto a currently-offered option. Sites saved before
+ * "Regular" was retired (and any row still carrying the old COMMERCIAL column
+ * default) would otherwise load with no type selected and fail validation on
+ * save — they open as the default instead and are corrected on the next save.
+ */
+function normaliseSiteType(stored: string | null | undefined): SiteFormValues['siteType'] {
+  return SITE_TYPE_VALUES.includes(stored as SiteFormValues['siteType'])
+    ? (stored as SiteFormValues['siteType'])
+    : DEFAULT_SITE_TYPE;
+}
+
 interface EquipmentItem {
   itemName: string;
   quantity: number;
@@ -48,13 +62,6 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const SITE_TYPE_OPTIONS = [
-  { value: 'REGULAR',       label: 'Regular' },
-  { value: 'TEMPORARY',     label: 'Temporary' },
-  { value: 'SPECIAL_DUTIES',label: 'Special Duties' },
-  { value: 'PERMANENT',     label: 'Permanent' },
-];
 
 export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Props) {
   const { showToast } = useToast();
@@ -95,7 +102,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       siteManagerName:     site?.siteManagerName ?? undefined,
       siteManagerContact:  site?.siteManagerContact ?? undefined,
       guardsRequired:      site?.guardsRequired ?? 1,
-      siteType:             (site?.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+      siteType:             normaliseSiteType(site?.siteType),
       sitePeriodStart: (site as any)?.sitePeriodStart ?? null,
       sitePeriodEnd:   (site as any)?.sitePeriodEnd   ?? null,
       sitePeriodNotes:     (site as any)?.sitePeriodNotes     ?? null,
@@ -118,7 +125,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         siteManagerName:     site.siteManagerName ?? undefined,
         siteManagerContact:  site.siteManagerContact ?? undefined,
         guardsRequired:      site.guardsRequired,
-        siteType:             (site.siteType as SiteFormValues['siteType']) ?? 'REGULAR',
+        siteType:             normaliseSiteType(site.siteType),
         sitePeriodStart: (site as any).sitePeriodStart ?? null,
         sitePeriodEnd:   (site as any).sitePeriodEnd   ?? null,
         sitePeriodNotes:     (site as any).sitePeriodNotes     ?? null,
@@ -225,7 +232,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
               <Form.Label className="small fw-semibold">Site Type <span className="text-danger">*</span></Form.Label>
               <div className="d-flex flex-wrap gap-2 mb-1">
                 {([
-                  { value: 'REGULAR',        label: '🏢 Regular',        description: 'Ongoing, no end date',         borderColor: '#6c757d', bg: '#F2F4F7',  textColor: '#1A1A1A', activeBg: '#e2e3e5' },
                   { value: 'PERMANENT',      label: '🔒 Permanent',      description: 'Long-term contracted site',    borderColor: '#0d6efd', bg: '#cfe2ff',  textColor: '#084298', activeBg: '#b6d4fe' },
                   { value: 'TEMPORARY',      label: '⏳ Temporary',      description: 'Short-term, has an end date', borderColor: '#ffc107', bg: '#fff3cd',  textColor: '#664d03', activeBg: '#ffe69c' },
                   { value: 'SPECIAL_DUTIES', label: '🎯 Special Duties', description: 'Event or one-off duty',       borderColor: '#dc3545', bg: '#f8d7da',  textColor: '#842029', activeBg: '#f1aeb5' },
@@ -342,13 +348,6 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
             )}
 
             {/* Confirmation notes for non-period types */}
-            {siteType === 'REGULAR' && (
-              <Col md={12}>
-                <div style={{ padding: '10px 14px', background: '#F2F4F7', borderRadius: '0.5rem', border: '1px solid #D0D5DD', borderLeft: '4px solid #6c757d', fontSize: '0.82rem', color: '#4A5568' }}>
-                  ✅ Regular sites are ongoing assignments with no defined end date. No period selection needed.
-                </div>
-              </Col>
-            )}
             {siteType === 'PERMANENT' && (
               <Col md={12}>
                 <div style={{ padding: '10px 14px', background: '#cfe2ff', borderRadius: '0.5rem', border: '1px solid #9ec5fe', borderLeft: '4px solid #0d6efd', fontSize: '0.82rem', color: '#084298' }}>
