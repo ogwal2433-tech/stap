@@ -1,3 +1,4 @@
+import { DEPLOYABLE_STATUSES } from '@stap/shared';
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
 import type {
@@ -193,8 +194,7 @@ class ZoneService {
       }),
       prisma.guard.findMany({
         where: {
-          employmentStatus: 'ACTIVE',
-          onLeave:          false,
+          employmentStatus: { in: DEPLOYABLE_STATUSES },
           isIncompleteNID:  false,
         },
         select: {

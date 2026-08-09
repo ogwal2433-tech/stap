@@ -2,6 +2,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
+import { DEPLOYABLE_STATUSES, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
 import { ROLES } from '@stap/shared';
 import type {
   CreateRosterInput,
@@ -64,10 +65,14 @@ class DeploymentService {
       throw new NotFoundError(`Guard(s) not found: ${notFound.join(', ')}`);
     }
 
-    const inactiveGuards = guards.filter((g) => g.employmentStatus !== 'ACTIVE');
+    const inactiveGuards = guards.filter(
+      (g) => !DEPLOYABLE_STATUSES.includes(g.employmentStatus as GuardEmploymentStatus),
+    );
     if (inactiveGuards.length) {
-      const names = inactiveGuards.map((g) => `${g.firstName} ${g.lastName} (${g.employmentStatus})`).join(', ');
-      throw new AppError(`The following guards are not active and cannot be deployed: ${names}`, 400);
+      const names = inactiveGuards
+        .map((g) => `${g.firstName} ${g.lastName} (${guardStatusLabel(g.employmentStatus)})`)
+        .join(', ');
+      throw new AppError(`The following guards cannot be deployed: ${names}`, 400);
     }
 
     const pendingNid = guards.filter((g) => g.isIncompleteNID);
@@ -689,7 +694,7 @@ class DeploymentService {
     const sourceDeployments = await prisma.deployment.findMany({
       where: sourceWhere,
       include: {
-        guard: { select: { id: true, firstName: true, lastName: true, employmentStatus: true, onLeave: true } },
+        guard: { select: { id: true, firstName: true, lastName: true, employmentStatus: true } },
         site:  { select: { id: true, siteName: true } },
       },
     });
@@ -728,14 +733,14 @@ class DeploymentService {
       const siteEntry = siteMap.get(dep.siteId)!;
       const guardName = `${dep.guard.firstName} ${dep.guard.lastName}`;
 
-      if (dep.guard.employmentStatus !== 'ACTIVE') {
-        skippedReasons.push({ guardId: dep.guardId, guardName, reason: 'INACTIVE' });
+      if (dep.guard.employmentStatus === 'ON_LEAVE') {
+        skippedReasons.push({ guardId: dep.guardId, guardName, reason: 'ON_LEAVE' });
         siteEntry.skipped++;
         continue;
       }
 
-      if (dep.guard.onLeave) {
-        skippedReasons.push({ guardId: dep.guardId, guardName, reason: 'ON_LEAVE' });
+      if (!DEPLOYABLE_STATUSES.includes(dep.guard.employmentStatus as GuardEmploymentStatus)) {
+        skippedReasons.push({ guardId: dep.guardId, guardName, reason: 'INACTIVE' });
         siteEntry.skipped++;
         continue;
       }
@@ -844,9 +849,8 @@ class DeploymentService {
 
     const allGuards = await prisma.guard.findMany({
       where: {
-        employmentStatus: 'ACTIVE',
-        onLeave:         false,
-        id:              { not: absentGuardId },
+        employmentStatus: { in: DEPLOYABLE_STATUSES },
+        id:               { not: absentGuardId },
       },
       select: {
         id: true, systemId: true, firstName: true, lastName: true,
@@ -887,15 +891,18 @@ class DeploymentService {
 
     const replacement = await prisma.guard.findUnique({
       where:  { id: data.replacementGuardId },
-      select: { id: true, systemId: true, firstName: true, lastName: true, employmentStatus: true, onLeave: true, isIncompleteNID: true },
+      select: { id: true, systemId: true, firstName: true, lastName: true, employmentStatus: true, isIncompleteNID: true },
     });
     if (!replacement) throw new NotFoundError('Replacement guard not found');
 
-    if (replacement.employmentStatus !== 'ACTIVE') {
-      throw new AppError(`${replacement.firstName} ${replacement.lastName} is not active and cannot be deployed.`, 400);
-    }
-    if (replacement.onLeave) {
-      throw new AppError(`${replacement.firstName} ${replacement.lastName} is currently on leave.`, 400);
+    if (!DEPLOYABLE_STATUSES.includes(replacement.employmentStatus as GuardEmploymentStatus)) {
+      throw new AppError(
+        replacement.employmentStatus === 'ON_LEAVE'
+          ? `${replacement.firstName} ${replacement.lastName} is on leave and is not available for deployment.`
+          : `${replacement.firstName} ${replacement.lastName} cannot be deployed — current status is ` +
+            `${guardStatusLabel(replacement.employmentStatus)}.`,
+        400,
+      );
     }
 
     const conflict = await prisma.deployment.findFirst({

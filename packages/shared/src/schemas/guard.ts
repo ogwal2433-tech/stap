@@ -8,6 +8,76 @@ export const SALARY_INCREMENT_RULES = {
   incrementIntervalMonths: 12,
 } as const;
 
+// ── Employment status ──────────────────────────────────────────────────────────
+
+/**
+ * Guard employment statuses, in lifecycle order. `deployable` is the single
+ * source of truth for whether a guard can be put on a roster — it replaced the
+ * `Guard.onLeave` boolean, which nothing ever wrote.
+ */
+export const GUARD_STATUS_CONFIG = {
+  ACTIVE: {
+    label:       'Active',
+    colour:      'success',
+    deployable:  true,
+    /** Still on the payroll run. */
+    paid:        true,
+    description: 'Guard is currently on duty and available for deployment.',
+  },
+  ON_LEAVE: {
+    label:       'On Leave',
+    colour:      'info',
+    deployable:  false,
+    paid:        true,
+    description: 'Guard is temporarily on leave and cannot be deployed until they return.',
+  },
+  SUSPENDED: {
+    label:       'Suspended',
+    colour:      'warning',
+    deployable:  false,
+    paid:        false,
+    description: 'Guard is under suspension and cannot be deployed.',
+  },
+  RESIGNED: {
+    label:       'Resigned',
+    colour:      'secondary',
+    deployable:  false,
+    paid:        false,
+    description: 'Guard has voluntarily resigned and is no longer employed.',
+  },
+  TERMINATED: {
+    label:       'Terminated',
+    colour:      'danger',
+    deployable:  false,
+    paid:        false,
+    description: 'Guard employment has been terminated.',
+  },
+} as const;
+
+export type GuardEmploymentStatus = keyof typeof GUARD_STATUS_CONFIG;
+
+export const GUARD_STATUS_VALUES = Object.keys(GUARD_STATUS_CONFIG) as [
+  GuardEmploymentStatus,
+  ...GuardEmploymentStatus[],
+];
+
+export const GuardEmploymentStatusSchema = z.enum(GUARD_STATUS_VALUES);
+
+/** Statuses a guard can be rostered or deployed under. */
+export const DEPLOYABLE_STATUSES = GUARD_STATUS_VALUES.filter(
+  s => GUARD_STATUS_CONFIG[s].deployable,
+);
+
+/** Statuses still drawing a salary — ON_LEAVE guards remain on the payroll run. */
+export const PAID_STATUSES = GUARD_STATUS_VALUES.filter(s => GUARD_STATUS_CONFIG[s].paid);
+
+/** Statuses that end employment. A guard here cannot be promoted or transferred. */
+export const EXITED_STATUSES: GuardEmploymentStatus[] = ['RESIGNED', 'TERMINATED'];
+
+export function guardStatusLabel(status: string): string {
+  return GUARD_STATUS_CONFIG[status as GuardEmploymentStatus]?.label ?? status;
+}
+
 // ── Input schemas (Zod) ────────────────────────────────────────────────────────
 
 export const CreateGuardSchema = z.object({
@@ -121,7 +191,7 @@ export const CreateGuardSchema = z.object({
 export const UpdateGuardSchema = CreateGuardSchema.partial();
 
 export const GuardStatusSchema = z.object({
-  status: z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']),
+  status: GuardEmploymentStatusSchema,
   reason: z.string().min(1).describe('Required reason for status change'),
 });
 
@@ -151,7 +221,7 @@ export const GuardListQuerySchema = z.object({
   page:      z.coerce.number().int().positive().default(1),
   limit:     z.coerce.number().int().min(1).max(500).default(20),
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
-  status:    z.enum(['ACTIVE', 'SUSPENDED', 'TERMINATED']).optional(),
+  status:    GuardEmploymentStatusSchema.optional(),
   rank:            z.string().optional(),
   contractType:    z.enum(['TEMPORARY', 'PERMANENT']).optional(),
   probationStatus: z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
@@ -258,7 +328,7 @@ export interface GuardResponse {
    */
   accountNumber?: string | null;
   salaryRate:      number;
-  employmentStatus:'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
+  employmentStatus:GuardEmploymentStatus;
   contractStart:   string;
   contractEnd:     string | null;
   psoCertNumber:   string | null;

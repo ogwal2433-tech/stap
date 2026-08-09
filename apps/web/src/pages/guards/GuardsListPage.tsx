@@ -12,14 +12,25 @@ import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
+import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
 import type { GuardResponse } from '@stap/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
 
-const STATUS_BADGE: Record<string, string> = {
-  ACTIVE: 'success',
-  SUSPENDED: 'warning',
-  TERMINATED: 'danger',
-};
+const STATUS_BADGE: Record<string, string> = Object.fromEntries(
+  Object.entries(GUARD_STATUS_CONFIG).map(([value, cfg]) => [value, cfg.colour]),
+);
+
+/** Bootstrap's warning/info fills are light — they need dark text to stay legible. */
+const DARK_TEXT_BADGES = ['warning', 'info'];
+
+/** Status transitions offered on the row menu, phrased as the action not the state. */
+const STATUS_ACTIONS: { value: GuardEmploymentStatus; action: string; icon: string; danger?: boolean }[] = [
+  { value: 'ACTIVE',     action: 'Activate',    icon: '✅' },
+  { value: 'ON_LEAVE',   action: 'Set on leave', icon: '🌴' },
+  { value: 'SUSPENDED',  action: 'Suspend',     icon: '⚠️' },
+  { value: 'RESIGNED',   action: 'Mark resigned', icon: '📄', danger: true },
+  { value: 'TERMINATED', action: 'Terminate',   icon: '⛔', danger: true },
+];
 
 const RANK_BADGE_COLORS = ['secondary', 'info', 'primary', 'warning', 'dark'];
 
@@ -31,7 +42,7 @@ function contractExpiringSoon(contractEnd: string | null): boolean {
 
 interface StatusModal {
   guard: GuardResponse;
-  targetStatus: 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
+  targetStatus: GuardEmploymentStatus;
 }
 
 export default function GuardsListPage() {
@@ -61,7 +72,7 @@ export default function GuardsListPage() {
     page,
     limit,
     search:          debouncedSearch || undefined,
-    status:          status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED' | undefined || undefined,
+    status:          (status as GuardEmploymentStatus | '') || undefined,
     rank:            rank || undefined,
     contractType:    contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
     probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
@@ -90,7 +101,7 @@ export default function GuardsListPage() {
   const hasAnyFilter = !!(debouncedSearch || status || rank || contractType || probationStatus || nidFilter || onLeave);
 
   const activeFilterBadges: { label: string; clear: () => void }[] = [
-    ...(status ? [{ label: status === 'ACTIVE' ? 'Active' : status === 'SUSPENDED' ? 'Suspended' : 'Terminated', clear: () => { setStatus(''); setPage(1); } }] : []),
+    ...(status ? [{ label: guardStatusLabel(status), clear: () => { setStatus(''); setPage(1); } }] : []),
     ...(rank ? [{ label: rank, clear: () => { setRank(''); setPage(1); } }] : []),
     ...(contractType ? [{ label: GUARD_CONTRACT_TYPES[contractType] ?? contractType, clear: () => { setContractType(''); setPage(1); } }] : []),
     ...(probationStatus ? [{ label: probationStatus === 'ON_PROBATION' ? 'On Probation' : 'Confirmed', clear: () => { setProbationStatus(''); setPage(1); } }] : []),
@@ -162,9 +173,9 @@ export default function GuardsListPage() {
         <Col md={2}>
           <Form.Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All Statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="SUSPENDED">Suspended</option>
-            <option value="TERMINATED">Terminated</option>
+            {Object.entries(GUARD_STATUS_CONFIG).map(([value, cfg]) => (
+              <option key={value} value={value}>{cfg.label}</option>
+            ))}
           </Form.Select>
         </Col>
         <Col md={2}>
@@ -375,10 +386,10 @@ export default function GuardsListPage() {
                     <td>{g.phone}</td>
                     <td>
                       <Badge
-                        bg={STATUS_BADGE[g.employmentStatus]}
-                        text={g.employmentStatus === 'SUSPENDED' ? 'dark' : undefined}
+                        bg={STATUS_BADGE[g.employmentStatus] ?? 'secondary'}
+                        text={DARK_TEXT_BADGES.includes(STATUS_BADGE[g.employmentStatus]) ? 'dark' : undefined}
                       >
-                        {g.employmentStatus}
+                        {guardStatusLabel(g.employmentStatus)}
                       </Badge>
                     </td>
                     <td>
@@ -420,34 +431,15 @@ export default function GuardsListPage() {
                               id={`status-${g.id}`}
                             />
                             <Dropdown.Menu>
-                              {g.employmentStatus !== 'ACTIVE' && (
+                              {STATUS_ACTIONS.filter(a => a.value !== g.employmentStatus).map(a => (
                                 <Dropdown.Item
-                                  onClick={() =>
-                                    setStatusModal({ guard: g, targetStatus: 'ACTIVE' })
-                                  }
+                                  key={a.value}
+                                  className={a.danger ? 'text-danger' : undefined}
+                                  onClick={() => setStatusModal({ guard: g, targetStatus: a.value })}
                                 >
-                                  ✅ Activate
+                                  {a.icon} {a.action}
                                 </Dropdown.Item>
-                              )}
-                              {g.employmentStatus !== 'SUSPENDED' && (
-                                <Dropdown.Item
-                                  onClick={() =>
-                                    setStatusModal({ guard: g, targetStatus: 'SUSPENDED' })
-                                  }
-                                >
-                                  ⚠️ Suspend
-                                </Dropdown.Item>
-                              )}
-                              {g.employmentStatus !== 'TERMINATED' && (
-                                <Dropdown.Item
-                                  className="text-danger"
-                                  onClick={() =>
-                                    setStatusModal({ guard: g, targetStatus: 'TERMINATED' })
-                                  }
-                                >
-                                  <i className="bi bi-x-circle-fill me-1" />Terminate
-                                </Dropdown.Item>
-                              )}
+                              ))}
                             </Dropdown.Menu>
                           </Dropdown>
                         </RoleGuard>

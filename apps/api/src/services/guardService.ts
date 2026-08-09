@@ -6,7 +6,7 @@ import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, guardStatusLabel, EXITED_STATUSES, type UserRole, type GuardEmploymentStatus } from '@stap/shared';
 import { generateGuardId } from '../lib/systemId';
 import type {
   CreateGuardInput,
@@ -505,13 +505,17 @@ class GuardService {
 
     const previousStatus = guard.employmentStatus;
 
+    // Resigning ends employment just as termination does, so close the contract
+    // for both. Suspension and leave are temporary and leave it open.
     const contractEnd =
-      status === 'TERMINATED' && !guard.contractEnd ? new Date() : guard.contractEnd;
+      EXITED_STATUSES.includes(status as GuardEmploymentStatus) && !guard.contractEnd
+        ? new Date()
+        : guard.contractEnd;
 
     const updated = await prisma.guard.update({
       where: { id },
       data: {
-        employmentStatus: status as 'ACTIVE' | 'SUSPENDED' | 'TERMINATED',
+        employmentStatus: status as GuardEmploymentStatus,
         ...(contractEnd !== guard.contractEnd && { contractEnd }),
       },
       include: {
@@ -855,8 +859,14 @@ class GuardService {
   ): Promise<GuardResponse> {
     const guard = await prisma.guard.findUnique({ where: { id: guardId } });
     if (!guard) throw new NotFoundError('Guard not found');
-    if (!['SUSPENDED', 'TERMINATED'].includes(guard.employmentStatus)) {
-      throw new AppError(`Guard is currently ${guard.employmentStatus}. Only Suspended or Terminated guards can be reinstated.`, 400);
+    // Reinstatement covers both lifting a suspension and rehiring someone who
+    // left. A guard on leave returns by being set back to Active, not reinstated.
+    if (!['SUSPENDED', 'RESIGNED', 'TERMINATED'].includes(guard.employmentStatus)) {
+      throw new AppError(
+        `${guard.firstName} ${guard.lastName} is currently ${guardStatusLabel(guard.employmentStatus)}. ` +
+          'Only suspended, resigned or terminated guards can be reinstated.',
+        400,
+      );
     }
 
     const reinstatedAt = new Date();
@@ -945,7 +955,12 @@ class GuardService {
     const guard = await prisma.guard.findUnique({ where: { id: guardId } });
     if (!guard) throw new NotFoundError('Guard not found');
     if (guard.employmentStatus !== 'ACTIVE') {
-      throw new AppError('Only ACTIVE guards can be transferred.', 400);
+      throw new AppError(
+        `${guard.firstName} ${guard.lastName} cannot be transferred — current status is ` +
+          `${guardStatusLabel(guard.employmentStatus)}. Only active guards can be transferred; ` +
+          'a guard on leave should be transferred once they return.',
+        400,
+      );
     }
 
     // A transfer moves a guard FROM their current site TO a new one — they
@@ -1081,10 +1096,12 @@ class GuardService {
     });
     if (!guard) throw new NotFoundError('Guard not found');
 
-    if (guard.employmentStatus !== 'ACTIVE') {
+    // A guard on leave can still be promoted — the new rank applies when they
+    // return. Suspended and exited guards cannot.
+    if (guard.employmentStatus !== 'ACTIVE' && guard.employmentStatus !== 'ON_LEAVE') {
       throw new AppError(
-        `Only active guards can be promoted. ${guard.firstName} ${guard.lastName} is ` +
-          `${guard.employmentStatus.replace(/_/g, ' ').toLowerCase()}.`,
+        `${guard.firstName} ${guard.lastName} cannot be promoted — current status is ` +
+          `${guardStatusLabel(guard.employmentStatus)}. Only active or on-leave guards can be promoted.`,
         400,
       );
     }

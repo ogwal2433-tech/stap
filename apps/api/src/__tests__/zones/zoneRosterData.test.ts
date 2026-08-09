@@ -104,14 +104,16 @@ describe('zoneService.getRosterData()', () => {
 
   it('TEST 4 — guards on leave excluded (DB filter responsibility)', async () => {
     mp.zone.findUnique.mockResolvedValue(makeZone());
-    // The service filters onLeave: false in the Prisma query; mock returns only non-leave guards
+    // Leave is now an employment status rather than the (never-written) onLeave
+    // boolean, so ON_LEAVE is excluded by the status filter below.
     mp.guard.findMany.mockResolvedValue([makeGuard('g-active')]);
 
     const result = await zoneService.getRosterData(ZONE_ID, DATE_STR);
 
     expect(result.guards).toHaveLength(1);
     const queryArg = mp.guard.findMany.mock.calls[0][0];
-    expect(queryArg.where.onLeave).toBe(false);
+    expect(queryArg.where.employmentStatus.in).not.toContain('ON_LEAVE');
+    expect(queryArg.where.onLeave).toBeUndefined();
   });
 
   it('TEST 5 — guards with incomplete NID excluded', async () => {
@@ -125,15 +127,18 @@ describe('zoneService.getRosterData()', () => {
     expect(result.guards).toHaveLength(1);
   });
 
-  it('TEST 6 — SUSPENDED/TERMINATED guards excluded', async () => {
+  it('TEST 6 — only deployable statuses included', async () => {
     mp.zone.findUnique.mockResolvedValue(makeZone());
-    // Service uses employmentStatus: 'ACTIVE' — mock returns only active guard
+    // Service filters on DEPLOYABLE_STATUSES — mock returns only an active guard
     mp.guard.findMany.mockResolvedValue([makeGuard('g-active')]);
 
     const result = await zoneService.getRosterData(ZONE_ID, DATE_STR);
 
     const queryArg = mp.guard.findMany.mock.calls[0][0];
-    expect(queryArg.where.employmentStatus).toBe('ACTIVE');
+    expect(queryArg.where.employmentStatus).toEqual({ in: ['ACTIVE'] });
+    for (const excluded of ['ON_LEAVE', 'SUSPENDED', 'RESIGNED', 'TERMINATED']) {
+      expect(queryArg.where.employmentStatus.in).not.toContain(excluded);
+    }
     expect(result.guards).toHaveLength(1);
   });
 

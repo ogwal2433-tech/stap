@@ -1,3 +1,4 @@
+import { guardStatusLabel } from '@stap/shared';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -243,7 +244,8 @@ class InventoryService {
     if (!guard) throw new NotFoundError('Guard not found');
     if (guard.employmentStatus !== 'ACTIVE') {
       throw new AppError(
-        `Guard ${guard.firstName} ${guard.lastName} is not active and cannot receive items.`,
+        `Guard ${guard.firstName} ${guard.lastName} cannot receive items — current status is ` +
+          `${guardStatusLabel(guard.employmentStatus)}.`,
         400,
       );
     }

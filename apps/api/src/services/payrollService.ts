@@ -1,3 +1,4 @@
+import { PAID_STATUSES } from '@stap/shared';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -79,8 +80,10 @@ class PayrollService {
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd   = new Date(year, month, 0, 23, 59, 59);
 
+    // Guards on leave stay on the payroll — they are still employed. Suspended,
+    // resigned and terminated guards are excluded.
     const guards = await prisma.guard.findMany({
-      where: { employmentStatus: 'ACTIVE' },
+      where: { employmentStatus: { in: PAID_STATUSES } },
     });
 
     let totalGross      = 0;

@@ -27,15 +27,25 @@ import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
+  GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus,
   type GuardDocumentResponse, type GuardTransferResponse, type GuardPromotionResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
 } from '@stap/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
-const STATUS_BADGE: Record<string, string> = {
-  ACTIVE: 'success',
-  SUSPENDED: 'warning',
-  TERMINATED: 'danger',
-};
+const STATUS_BADGE: Record<string, string> = Object.fromEntries(
+  Object.entries(GUARD_STATUS_CONFIG).map(([value, cfg]) => [value, cfg.colour]),
+);
+
+/** Bootstrap's warning/info fills are light — they need dark text to stay legible. */
+const DARK_TEXT_BADGES = ['warning', 'info'];
+
+const STATUS_ACTIONS: { value: GuardEmploymentStatus; action: string; icon: string; danger?: boolean }[] = [
+  { value: 'ACTIVE',     action: 'Activate',      icon: '✅' },
+  { value: 'ON_LEAVE',   action: 'Set on leave',  icon: '🌴' },
+  { value: 'SUSPENDED',  action: 'Suspend',       icon: '⚠️' },
+  { value: 'RESIGNED',   action: 'Mark resigned', icon: '📄', danger: true },
+  { value: 'TERMINATED', action: 'Terminate',     icon: '⛔', danger: true },
+];
 
 const RANK_BADGE: Record<string, string> = {
   GUARD:        'secondary',
@@ -59,7 +69,7 @@ const DISCIPLINARY_BADGE: Record<string, { bg: string; text?: string; style?: Re
 };
 
 interface StatusModal {
-  targetStatus: 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
+  targetStatus: GuardEmploymentStatus;
 }
 
 const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
@@ -108,9 +118,9 @@ function ReinstateModal({ guardId, guard, onClose, onSuccess }: ReinstateModalPr
           <div className="fw-bold">{guard.fullName}</div>
           <div className="text-muted small mt-1">
             Current status:{' '}
-            <Badge bg={guard.employmentStatus === 'SUSPENDED' ? 'warning' : 'danger'}
-              text={guard.employmentStatus === 'SUSPENDED' ? 'dark' : undefined}>
-              {guard.employmentStatus}
+            <Badge bg={STATUS_BADGE[guard.employmentStatus] ?? 'secondary'}
+              text={DARK_TEXT_BADGES.includes(STATUS_BADGE[guard.employmentStatus]) ? 'dark' : undefined}>
+              {guardStatusLabel(guard.employmentStatus)}
             </Badge>
           </div>
           {(guard as any).reinstatedCount > 0 && (
@@ -412,22 +422,15 @@ export default function GuardDetailPage() {
                   Change Status
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
-                  {guard.employmentStatus !== 'ACTIVE' && (
-                    <Dropdown.Item onClick={() => setStatusModal({ targetStatus: 'ACTIVE' })}>
-                      ✅ Activate
-                    </Dropdown.Item>
-                  )}
-                  <Dropdown.Item onClick={() => setStatusModal({ targetStatus: 'SUSPENDED' })}>
-                    ⚠️ Suspend
-                  </Dropdown.Item>
-                  {guard.employmentStatus !== 'TERMINATED' && (
+                  {STATUS_ACTIONS.filter(a => a.value !== guard.employmentStatus).map(a => (
                     <Dropdown.Item
-                      className="text-danger"
-                      onClick={() => setStatusModal({ targetStatus: 'TERMINATED' })}
+                      key={a.value}
+                      className={a.danger ? 'text-danger' : undefined}
+                      onClick={() => setStatusModal({ targetStatus: a.value })}
                     >
-                      <i className="bi bi-x-circle-fill me-1" />Terminate
+                      {a.icon} {a.action}
                     </Dropdown.Item>
-                  )}
+                  ))}
                 </Dropdown.Menu>
               </Dropdown>
             )}
@@ -518,11 +521,11 @@ export default function GuardDetailPage() {
             </Col>
             <Col xs="auto" className="text-end">
               <Badge
-                bg={STATUS_BADGE[guard.employmentStatus]}
-                text={guard.employmentStatus === 'SUSPENDED' ? 'dark' : undefined}
+                bg={STATUS_BADGE[guard.employmentStatus] ?? 'secondary'}
+                text={DARK_TEXT_BADGES.includes(STATUS_BADGE[guard.employmentStatus]) ? 'dark' : undefined}
                 className="fs-6 px-3 py-2 mb-2 d-block"
               >
-                {guard.employmentStatus}
+                {guardStatusLabel(guard.employmentStatus)}
               </Badge>
               <Badge
                 bg={RANK_BADGE[guard.rank] ?? 'secondary'}

@@ -6,17 +6,22 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts';
+import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
 import { useGuardDashboard, useRecentGuardActivity } from '../../hooks/useGuards';
 
 const NAVY = '#1B3A6B';
 
 const RANKS = ['🥇', '🥈', '🥉', '4', '5'];
 
-const PIE_COLORS: Record<string, string> = {
+const STATUS_HEX: Record<string, string> = {
   ACTIVE:     '#1E8449',
+  ON_LEAVE:   '#17A2B8',
   SUSPENDED:  '#E8701A',
+  RESIGNED:   '#6C757D',
   TERMINATED: '#C0392B',
 };
+
+const PIE_COLORS = STATUS_HEX;
 
 function formatDate(iso: string): string {
   const [, mm, dd] = iso.split('-');
@@ -33,11 +38,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-const STATUS_DOT: Record<string, string> = {
-  ACTIVE:     '#1E8449',
-  SUSPENDED:  '#E8701A',
-  TERMINATED: '#C0392B',
-};
+const STATUS_DOT = STATUS_HEX;
 
 interface StatCardProps {
   icon:     string;
@@ -326,11 +327,14 @@ export default function GuardDashboardPage() {
                     </span>
                     {' '}
                     <Badge
-                      bg={g.employmentStatus === 'ACTIVE' ? 'success' : g.employmentStatus === 'SUSPENDED' ? 'warning' : 'danger'}
+                      bg={GUARD_STATUS_CONFIG[g.employmentStatus as GuardEmploymentStatus]?.colour ?? 'secondary'}
+                      text={['warning', 'info'].includes(
+                        GUARD_STATUS_CONFIG[g.employmentStatus as GuardEmploymentStatus]?.colour ?? '',
+                      ) ? 'dark' : undefined}
                       className="ms-1"
                       style={{ fontSize: '0.65rem' }}
                     >
-                      {g.employmentStatus}
+                      {guardStatusLabel(g.employmentStatus)}
                     </Badge>
                   </div>
                   <div className="text-muted small">{timeAgo(g.updatedAt)}</div>

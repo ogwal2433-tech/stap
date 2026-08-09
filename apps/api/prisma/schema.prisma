@@ -31,7 +31,9 @@ enum UserStatus {
 
 enum EmploymentStatus {
   ACTIVE
+  ON_LEAVE
   SUSPENDED
+  RESIGNED
   TERMINATED
 }
 
@@ -162,6 +164,10 @@ model Guard {
   otherNames        String?
   nationalId        String?          @unique
   isIncompleteNID   Boolean          @default(false)
+  /// @deprecated Superseded by employmentStatus = ON_LEAVE, which is the single
+  /// source of truth for whether a guard is deployable. Nothing has ever written
+  /// this column — it is retained only so existing rows are not disturbed, and
+  /// should be dropped once no deployment is reading it.
   onLeave           Boolean          @default(false)
   phone             String
   photoUrl          String?

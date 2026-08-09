@@ -55,7 +55,7 @@ const options: swaggerJsdoc.Options = {
             nationalId: { type: 'string' },
             phone: { type: 'string' },
             salaryRate: { type: 'integer' },
-            employmentStatus: { type: 'string', enum: ['ACTIVE', 'SUSPENDED', 'TERMINATED'] },
+            employmentStatus: { type: 'string', enum: ['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'RESIGNED', 'TERMINATED'] },
             createdAt: { type: 'string', format: 'date-time' },
           },
         },
