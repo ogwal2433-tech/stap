@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table,
 } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { useCreateRoster } from '../../hooks/useAttendance';
 import { useMyZones, useZones, useZoneRosterData } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
@@ -235,6 +236,12 @@ export default function RosterBuilderTab() {
 
   return (
     <div>
+
+      <Alert variant="info" className="py-2 small mb-3">
+        Entering several sites at once? The{' '}
+        <Link to="/attendance/deployment-sheet">deployment sheet</Link> lets you fill in
+        site, guard, shift, status and date row by row and save them all together.
+      </Alert>
 
       {/* ── Progress indicator ────────────────────────────────────────────── */}
       <div className="d-flex align-items-center gap-0 mb-4">

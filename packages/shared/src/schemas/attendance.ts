@@ -1,5 +1,56 @@
 import { z } from 'zod';
 
+// ── Attendance status ──────────────────────────────────────────────────────────
+
+/**
+ * Ordered best-to-worst outcome. Only PRESENT and LATE count as days worked in
+ * the payroll run — SICK and ON_LEAVE record the reason for a missed day but,
+ * like ABSENT, are unpaid.
+ */
+export const ATTENDANCE_STATUS_CONFIG = {
+  PRESENT:  { label: 'Present',  icon: '✅', bg: '#d5f5e3', paid: true  },
+  LATE:     { label: 'Late',     icon: '⏰', bg: '#FEF9E7', paid: true  },
+  SICK:     { label: 'Sick',     icon: '🤒', bg: '#FEF9E7', paid: false },
+  ON_LEAVE: { label: 'On Leave', icon: '🌴', bg: '#D6E0F0', paid: false },
+  ABSENT:   { label: 'Absent',   icon: '❌', bg: '#fdecea', paid: false },
+  AWOL:     { label: 'AWOL',     icon: '🚫', bg: '#fdecea', paid: false },
+} as const;
+
+export type AttendanceStatusValue = keyof typeof ATTENDANCE_STATUS_CONFIG;
+
+export const ATTENDANCE_STATUS_VALUES = Object.keys(ATTENDANCE_STATUS_CONFIG) as [
+  AttendanceStatusValue,
+  ...AttendanceStatusValue[],
+];
+
+export const AttendanceStatusSchema = z.enum(ATTENDANCE_STATUS_VALUES);
+
+// ── Deployment sheet (batch) ───────────────────────────────────────────────────
+
+export const DeploymentSheetRowSchema = z.object({
+  siteId:   z.string().min(1),
+  guardId:  z.string().min(1),
+  date:     z.string().datetime(),
+  status:   AttendanceStatusSchema,
+  /** ShiftTypeConfig code. Falls back to the site's default when omitted. */
+  shift:    z.string().min(1).optional(),
+});
+
+export const DeploymentSheetBatchSchema = z.object({
+  rows: z.array(DeploymentSheetRowSchema).min(1, 'Add at least one row').max(200),
+});
+
+export type DeploymentSheetRow   = z.infer<typeof DeploymentSheetRowSchema>;
+export type DeploymentSheetBatch = z.infer<typeof DeploymentSheetBatchSchema>;
+
+export interface DeploymentSheetResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  /** 1-based row numbers, matching what the user sees in the sheet. */
+  errors:  { row: number; reason: string }[];
+}
+
 // ── Roster creation ────────────────────────────────────────────────────────────
 
 const GuardRosterEntry = z.union([

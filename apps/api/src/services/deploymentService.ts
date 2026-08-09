@@ -19,6 +19,8 @@ import type {
   DailySheetSite,
   PaginatedResponse,
   GuardBasicResponse,
+  DeploymentSheetRow,
+  DeploymentSheetResult,
 } from '@stap/shared';
 import { REPLACEMENT_REASONS, type ReplacementReason } from '@stap/shared';
 
@@ -990,6 +992,150 @@ class DeploymentService {
       reason: data.reason,
       note:   data.note ?? null,
     };
+  }
+
+  // ── Deployment sheet (batch upsert) ──────────────────────────────────────────
+
+  /**
+   * Resolves the shift code for a site: its configured default, else its first
+   * allowed shift, else the lowest-ordered active shift in the catalogue.
+   * Deployment.shiftType is required, so a row must always land on something.
+   */
+  private async resolveShift(site: { defaultShiftType: string | null; allowedShiftTypes: string[] }): Promise<string | null> {
+    if (site.defaultShiftType) return site.defaultShiftType;
+    if (site.allowedShiftTypes.length) return site.allowedShiftTypes[0];
+    const fallback = await prisma.shiftTypeConfig.findFirst({
+      where:   { isActive: true },
+      orderBy: { displayOrder: 'asc' },
+      select:  { code: true },
+    });
+    return fallback?.code ?? null;
+  }
+
+  /**
+   * Saves a whole deployment sheet in one call.
+   *
+   * Each row writes two records: a Deployment (who is posted where, on what
+   * shift) and an AttendanceRecord (how that posting turned out). A bad row is
+   * reported by its 1-based sheet position and skipped — the rest still save,
+   * which matters when someone is entering twenty rows at once.
+   */
+  async saveDeploymentSheet(
+    rows: DeploymentSheetRow[],
+    submittedBy: string,
+  ): Promise<DeploymentSheetResult> {
+    const result: DeploymentSheetResult = { created: 0, updated: 0, skipped: 0, errors: [] };
+
+    const activeShifts = await prisma.shiftTypeConfig.findMany({
+      where:  { isActive: true },
+      select: { code: true },
+    });
+    const validShiftCodes = new Set(activeShifts.map(s => s.code));
+
+    for (let i = 0; i < rows.length; i++) {
+      const row    = rows[i];
+      const rowNum = i + 1;
+
+      try {
+        const [guard, site] = await Promise.all([
+          prisma.guard.findUnique({
+            where:  { id: row.guardId },
+            select: { id: true, firstName: true, lastName: true, employmentStatus: true, isIncompleteNID: true },
+          }),
+          prisma.site.findUnique({
+            where:  { id: row.siteId },
+            select: { id: true, siteName: true, defaultShiftType: true, allowedShiftTypes: true, zone: { select: { supervisorId: true } } },
+          }),
+        ]);
+
+        if (!guard) { result.errors.push({ row: rowNum, reason: 'Guard not found.' }); result.skipped++; continue; }
+        if (!site)  { result.errors.push({ row: rowNum, reason: 'Site not found.' });  result.skipped++; continue; }
+
+        if (!DEPLOYABLE_STATUSES.includes(guard.employmentStatus as GuardEmploymentStatus)) {
+          result.errors.push({
+            row:    rowNum,
+            reason: `${guard.firstName} ${guard.lastName} cannot be deployed — ${guardStatusLabel(guard.employmentStatus)}.`,
+          });
+          result.skipped++;
+          continue;
+        }
+
+        const shiftCode = row.shift ?? (await this.resolveShift(site));
+        if (!shiftCode) {
+          result.errors.push({ row: rowNum, reason: 'No shift set for this site and no active shift types configured.' });
+          result.skipped++;
+          continue;
+        }
+        if (!validShiftCodes.has(shiftCode)) {
+          result.errors.push({ row: rowNum, reason: `Shift "${shiftCode}" is not an active shift type.` });
+          result.skipped++;
+          continue;
+        }
+
+        const date = new Date(row.date);
+        date.setUTCHours(0, 0, 0, 0);
+
+        // A guard holds at most one deployment per day across every site, so a
+        // clash here means the sheet lists them twice or they are already
+        // posted elsewhere. Say which site, rather than surfacing a P2002.
+        const sameDay = await prisma.deployment.findUnique({
+          where:   { guardId_date: { guardId: row.guardId, date } },
+          include: { site: { select: { id: true, siteName: true } } },
+        });
+
+        if (sameDay && sameDay.site.id !== row.siteId) {
+          result.errors.push({
+            row:    rowNum,
+            reason: `${guard.firstName} ${guard.lastName} is already deployed to ${sameDay.site.siteName} on this date.`,
+          });
+          result.skipped++;
+          continue;
+        }
+
+        // Supervisor is required on Deployment. Prefer the site's zone
+        // supervisor; fall back to whoever is filling in the sheet.
+        const supervisorId = site.zone?.supervisorId ?? submittedBy;
+
+        if (sameDay) {
+          await prisma.deployment.update({
+            where: { id: sameDay.id },
+            data:  { shiftType: shiftCode as 'DAY' | 'NIGHT' | 'FULL_24' },
+          });
+          result.updated++;
+        } else {
+          await prisma.deployment.create({
+            data: {
+              guardId:   row.guardId,
+              siteId:    row.siteId,
+              date,
+              shiftType: shiftCode as 'DAY' | 'NIGHT' | 'FULL_24',
+              supervisorId,
+            },
+          });
+          result.created++;
+        }
+
+        // Attendance carries the Status column.
+        await prisma.attendanceRecord.upsert({
+          where:  { guardId_siteId_date: { guardId: row.guardId, siteId: row.siteId, date } },
+          create: { guardId: row.guardId, siteId: row.siteId, date, status: row.status },
+          update: { status: row.status },
+        });
+      } catch (err) {
+        result.errors.push({ row: rowNum, reason: err instanceof Error ? err.message : 'Unexpected error saving this row.' });
+        result.skipped++;
+      }
+    }
+
+    await QueueService.logAudit({
+      userId:   submittedBy,
+      action:   'DEPLOYMENT_SHEET_SAVED',
+      entity:   'deployment',
+      entityId: submittedBy,
+      newValue: { created: result.created, updated: result.updated, skipped: result.skipped },
+    }).catch(() => { /* a queue outage must not fail a save that already happened */ });
+
+    return result;
   }
 
 }

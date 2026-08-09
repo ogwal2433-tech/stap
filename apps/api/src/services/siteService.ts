@@ -58,7 +58,7 @@ function toSiteResponse(site: Record<string, unknown>): SiteResponse {
           || ((site.batonRequired as number) ?? 0) > 0,
     equipmentDetails:    (site.equipmentDetails as string | null) ?? null,
     allowedShiftTypes:   (site.allowedShiftTypes as string[]) ?? [],
-    defaultShiftType:    null,
+    defaultShiftType:    (site.defaultShiftType as string | null) ?? null,
     equipmentItems:      items,
     zone: (site.zone as { id: string; name: string } | null) ?? null,
 
@@ -254,7 +254,7 @@ class SiteService {
         otherWeaponsNotes:   siteData.otherWeaponsNotes ?? null,
         equipmentDetails:    siteData.equipmentDetails ?? null,
         allowedShiftTypes:   siteData.allowedShiftTypes ?? [],
-        defaultShiftType:    null,
+        defaultShiftType:    siteData.defaultShiftType ?? null,
       },
       include: SITE_INCLUDE,
     });

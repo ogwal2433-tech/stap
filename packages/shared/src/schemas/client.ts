@@ -107,6 +107,8 @@ const _BaseSiteSchema = z.object({
   otherWeaponsNotes:    z.string().max(500).optional().nullable(),
   equipmentDetails:     z.string().max(1000).optional(),
   allowedShiftTypes:    z.array(z.string()).optional(),
+  /** Pre-selected shift for this site on the deployment sheet. */
+  defaultShiftType:     z.string().optional().nullable(),
   equipmentItems: z.array(z.object({
     itemName: z.string().min(1),
     quantity: z.number().int().min(1).default(1),

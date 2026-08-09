@@ -22,6 +22,7 @@ const ClientDetailPage             = lazy(() => import('@/pages/clients/ClientDe
 const AttendancePage               = lazy(() => import('@/pages/attendance/AttendancePage'));
 const AttendanceDashboardPage      = lazy(() => import('@/pages/attendance/AttendanceDashboardPage'));
 const CheckinPage                  = lazy(() => import('@/pages/attendance/CheckinPage'));
+const DeploymentSheetPage          = lazy(() => import('@/pages/roster/DeploymentSheetPage'));
 const BulkImportPage               = lazy(() => import('@/pages/guards/BulkImportPage'));
 const GuardDashboardPage           = lazy(() => import('@/pages/guards/GuardDashboardPage'));
 const FinancePage                  = lazy(() => import('@/pages/finance/FinancePage'));
@@ -94,6 +95,7 @@ function App() {
 
               {/* Attendance */}
               <Route path="/attendance"           element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
+              <Route path="/attendance/deployment-sheet" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><DeploymentSheetPage /></RoleGuard></L>} />
               <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
               <Route path="/checkin"              element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
 

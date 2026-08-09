@@ -326,6 +326,14 @@ function NavGroupPanel({
                 <i className="bi bi-bar-chart-fill" style={SUB_ICON_STYLE} />
                 <span>Dashboard</span>
               </NavLink>
+              <NavLink
+                to="/attendance/deployment-sheet"
+                onClick={onNavigate}
+                style={({ isActive }) => ({ ...SUB_ITEM_STYLE, color: isActive ? '#fff' : 'rgba(255,255,255,0.55)', background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent', fontWeight: isActive ? 600 : 400 })}
+              >
+                <i className="bi bi-table" style={SUB_ICON_STYLE} />
+                <span>Deployment Sheet</span>
+              </NavLink>
             </RoleGuard>
           )}
         </div>

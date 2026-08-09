@@ -88,11 +88,23 @@ import {
   DeploymentListQuerySchema,
   AttendanceQuerySchema,
   RequestReplacementSchema,
+  DeploymentSheetBatchSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
 
 router.use(authenticate);
+
+// ── POST /deployment-sheet — save a whole Excel-style sheet in one call ───────
+router.post(
+  '/deployment-sheet',
+  requireRole(...DEPLOYMENT_ROLES),
+  validate(DeploymentSheetBatchSchema),
+  asyncHandler(async (req, res) => {
+    const result = await deploymentService.saveDeploymentSheet(req.body.rows, req.user!.userId);
+    res.status(200).json({ success: true, data: result });
+  }),
+);
 
 // ── POST /roster — create deployment roster ────────────────────────────────────
 router.post(
