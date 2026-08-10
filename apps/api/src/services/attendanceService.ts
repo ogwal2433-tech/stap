@@ -1,10 +1,13 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
+import { AppError } from '../errors/AppError';
 import type {
   MarkAttendanceInput,
   AttendanceQuery,
   AttendanceRecord,
   AttendanceSummary,
+  GuardAttendanceSummary,
+  GuardAttendanceSummaryResponse,
   PaginatedResponse,
 } from '@stap/shared';
 
@@ -82,19 +85,28 @@ class AttendanceService {
   // ── Get attendance by date ─────────────────────────────────────────────────
 
   async getAttendanceByDate(query: AttendanceQuery): Promise<PaginatedResponse<AttendanceRecord>> {
-    const { page, limit, date, siteId, status } = query;
+    const { page, limit, date, dateFrom, dateTo, siteId, guardId, status } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.AttendanceRecordWhereInput = {};
 
-    if (date) {
-      const d = new Date(date.slice(0, 10) + 'T00:00:00.000Z');
-      const end = new Date(date.slice(0, 10) + 'T23:59:59.999Z');
-      where.date = { gte: d, lte: end };
+    // A range wins over the single-day param, so callers can move from one to
+    // the other without having to clear `date` first.
+    if (dateFrom || dateTo) {
+      where.date = {
+        ...(dateFrom ? { gte: new Date(dateFrom.slice(0, 10) + 'T00:00:00.000Z') } : {}),
+        ...(dateTo   ? { lte: new Date(dateTo.slice(0, 10) + 'T23:59:59.999Z') }   : {}),
+      };
+    } else if (date) {
+      where.date = {
+        gte: new Date(date.slice(0, 10) + 'T00:00:00.000Z'),
+        lte: new Date(date.slice(0, 10) + 'T23:59:59.999Z'),
+      };
     }
 
-    if (siteId) where.siteId = siteId;
-    if (status) where.status = status;
+    if (siteId)  where.siteId  = siteId;
+    if (guardId) where.guardId = guardId;
+    if (status)  where.status  = status;
 
     const [records, total] = await Promise.all([
       prisma.attendanceRecord.findMany({
@@ -148,7 +160,8 @@ class AttendanceService {
       orderBy: { date: 'asc' },
     });
 
-    // Group by date
+    // Group by date. SICK and ON_LEAVE are folded into `absent` here so the
+    // daily totals still add up — the per-guard summary breaks them out.
     const byDate = new Map<string, { present: number; absent: number; late: number; awol: number }>();
 
     for (const r of records) {
@@ -158,15 +171,109 @@ class AttendanceService {
       }
       const entry = byDate.get(dateKey)!;
       if (r.status === 'PRESENT') entry.present++;
-      else if (r.status === 'ABSENT') entry.absent++;
       else if (r.status === 'LATE') entry.late++;
       else if (r.status === 'AWOL') entry.awol++;
+      else entry.absent++; // ABSENT, SICK, ON_LEAVE
     }
 
     return Array.from(byDate.entries()).map(([date, counts]) => ({
       date,
       ...counts,
     }));
+  }
+
+  // ── Per-guard summary over a range (Excel export) ──────────────────────────
+
+  /**
+   * One row per guard for the period: how many days present, late, sick, on
+   * leave, absent and AWOL. `attendanceRate` counts PRESENT + LATE, matching
+   * what payrollService treats as a day worked.
+   */
+  async getGuardAttendanceSummary(
+    from: string,
+    to: string,
+    siteId?: string,
+  ): Promise<GuardAttendanceSummaryResponse> {
+    const fromDate = new Date(from.slice(0, 10) + 'T00:00:00.000Z');
+    const toDate   = new Date(to.slice(0, 10) + 'T23:59:59.999Z');
+
+    if (toDate < fromDate) {
+      throw new AppError('The end of the period cannot be before the start.', 400);
+    }
+
+    const where: import('@prisma/client').Prisma.AttendanceRecordWhereInput = {
+      date: { gte: fromDate, lte: toDate },
+    };
+    if (siteId) where.siteId = siteId;
+
+    const records = await prisma.attendanceRecord.findMany({
+      where,
+      select: {
+        status: true,
+        guard:  { select: { id: true, firstName: true, lastName: true, systemId: true, rank: true } },
+        site:   { select: { siteName: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    type Row = Omit<GuardAttendanceSummary, 'sites' | 'attendanceRate'> & { siteSet: Set<string> };
+    const byGuard = new Map<string, Row>();
+
+    for (const r of records) {
+      let row = byGuard.get(r.guard.id);
+      if (!row) {
+        row = {
+          guardId:      r.guard.id,
+          guardName:    `${r.guard.firstName} ${r.guard.lastName}`,
+          systemId:     r.guard.systemId ?? null,
+          rank:         r.guard.rank ?? null,
+          presentDays:  0,
+          lateDays:     0,
+          sickDays:     0,
+          onLeaveDays:  0,
+          absentDays:   0,
+          awolDays:     0,
+          totalRecords: 0,
+          siteSet:      new Set<string>(),
+        };
+        byGuard.set(r.guard.id, row);
+      }
+
+      row.totalRecords++;
+      row.siteSet.add(r.site.siteName);
+
+      switch (r.status) {
+        case 'PRESENT':  row.presentDays++; break;
+        case 'LATE':     row.lateDays++;    break;
+        case 'SICK':     row.sickDays++;    break;
+        case 'ON_LEAVE': row.onLeaveDays++; break;
+        case 'AWOL':     row.awolDays++;    break;
+        default:         row.absentDays++;  break;
+      }
+    }
+
+    const summary: GuardAttendanceSummary[] = Array.from(byGuard.values())
+      .map(({ siteSet, ...row }) => ({
+        ...row,
+        sites: Array.from(siteSet).sort().join(', '),
+        attendanceRate: row.totalRecords > 0
+          ? Math.round(((row.presentDays + row.lateDays) / row.totalRecords) * 100)
+          : 0,
+      }))
+      .sort((a, b) => a.guardName.localeCompare(b.guardName));
+
+    // Count whole calendar days inclusive. toDate is end-of-day, so measure
+    // midnight-to-midnight — using toDate directly would count one day too many.
+    const toMidnight = new Date(to.slice(0, 10) + 'T00:00:00.000Z');
+    const totalDays  = Math.round((toMidnight.getTime() - fromDate.getTime()) / 86_400_000) + 1;
+
+    return {
+      dateFrom:   fromDate.toISOString(),
+      dateTo:     toDate.toISOString(),
+      totalDays,
+      guardCount: summary.length,
+      summary,
+    };
   }
 
   // ── Get guard attendance rate ──────────────────────────────────────────────

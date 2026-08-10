@@ -112,7 +112,7 @@ export const MarkAttendanceSchema = z.object({
     guardId: z.string().min(1),
     siteId:  z.string().min(1),
     date:    z.string().datetime(),
-    status:  z.enum(['PRESENT', 'ABSENT', 'LATE', 'AWOL']),
+    status:  AttendanceStatusSchema,
     /** @deprecated Not collected from UI. Shift type defines working hours. */
     timeIn:  z.string().optional(),
     /** @deprecated Not collected from UI. Shift type defines working hours. */
@@ -148,12 +148,43 @@ export const DeploymentListQuerySchema = z.object({
 export type DeploymentListQuery = z.infer<typeof DeploymentListQuerySchema>;
 
 export const AttendanceQuerySchema = z.object({
-  date:   z.string().optional(),
-  siteId: z.string().min(1).optional(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'AWOL']).optional(),
-  page:   z.coerce.number().int().positive().default(1),
-  limit:  z.coerce.number().int().min(1).max(100).default(50),
+  /** Single day. Ignored when dateFrom/dateTo are supplied. */
+  date:     z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo:   z.string().optional(),
+  siteId:   z.string().min(1).optional(),
+  guardId:  z.string().min(1).optional(),
+  status:   AttendanceStatusSchema.optional(),
+  page:     z.coerce.number().int().positive().default(1),
+  limit:    z.coerce.number().int().min(1).max(200).default(50),
 });
+
+/** One row per guard, aggregated over a date range — powers the Excel export. */
+export interface GuardAttendanceSummary {
+  guardId:        string;
+  guardName:      string;
+  systemId:       string | null;
+  rank:           string | null;
+  presentDays:    number;
+  lateDays:       number;
+  sickDays:       number;
+  onLeaveDays:    number;
+  absentDays:     number;
+  awolDays:       number;
+  /** Days with any record — the denominator for attendanceRate. */
+  totalRecords:   number;
+  /** PRESENT + LATE as a percentage of totalRecords. Matches payroll's notion of a day worked. */
+  attendanceRate: number;
+  sites:          string;
+}
+
+export interface GuardAttendanceSummaryResponse {
+  dateFrom:   string;
+  dateTo:     string;
+  totalDays:  number;
+  guardCount: number;
+  summary:    GuardAttendanceSummary[];
+}
 
 export type AttendanceQuery = z.infer<typeof AttendanceQuerySchema>;
 
@@ -255,7 +286,7 @@ export interface AttendanceRecord {
   guard:     { id: string; fullName: string; photoUrl: string | null };
   site:      { id: string; siteName: string };
   date:      string;
-  status:    'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL';
+  status:    AttendanceStatusValue;
   timeIn:    string | null;
   timeOut:   string | null;
   notes:     string | null;

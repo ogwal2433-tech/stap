@@ -227,6 +227,24 @@ router.get(
   }),
 );
 
+// ── GET /attendance/guard-summary — per-guard totals for a period ─────────────
+router.get(
+  '/attendance/guard-summary',
+  requireRole(
+    ROLES.DIRECTOR,
+    ROLES.ASSISTANT_MANAGER,
+    ROLES.OPERATIONS_SUPERVISOR,
+    ROLES.FIELD_SUPERVISOR,
+    ROLES.ADMINISTRATOR,
+  ),
+  asyncHandler(async (req, res) => {
+    const { from, to, siteId } = req.query as Record<string, string | undefined>;
+    if (!from || !to) throw new AppError('from and to query params are required', 400);
+    const data = await attendanceService.getGuardAttendanceSummary(from, to, siteId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
 // ── POST /checkin — supervisor site check-in ──────────────────────────────────
 router.post(
   '/checkin',

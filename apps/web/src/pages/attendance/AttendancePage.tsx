@@ -15,6 +15,7 @@ import ReplacementModal from '../../components/attendance/ReplacementModal';
 import { ROLES, type UserRole } from '@stap/shared';
 import type { MarkAttendanceInput, DeploymentResponse } from '@stap/shared';
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
+import AttendanceRecordsTab from '../../components/attendance/AttendanceRecordsTab';
 import { exportAttendanceSheet } from '../../lib/exportToExcel';
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
@@ -677,6 +678,9 @@ export default function AttendancePage() {
       <Tabs defaultActiveKey="sheet" className="mb-3 d-print-none">
         <Tab eventKey="sheet" title="Today's Deployment Sheet">
           {deploymentSheet}
+        </Tab>
+        <Tab eventKey="records" title="Attendance Records">
+          <AttendanceRecordsTab />
         </Tab>
         <Tab eventKey="roster" title="Roster Builder">
           <RoleGuard

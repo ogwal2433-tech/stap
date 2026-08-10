@@ -71,6 +71,14 @@ export function useAttendance(params?: Partial<AttendanceQuery>) {
   });
 }
 
+export function useGuardAttendanceSummary(from: string, to: string, siteId?: string) {
+  return useQuery({
+    queryKey: ['guard-attendance-summary', from, to, siteId],
+    queryFn:  () => attendanceApi.getGuardAttendanceSummary(from, to, siteId),
+    enabled:  Boolean(from && to),
+  });
+}
+
 export function useAttendanceSummary(
   from: string,
   to: string,

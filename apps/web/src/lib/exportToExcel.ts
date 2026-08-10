@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { DailySheetResponse } from '@stap/shared';
+import type { DailySheetResponse, GuardAttendanceSummaryResponse } from '@stap/shared';
 
 // ── Company constants ──────────────────────────────────────────────────────────
 
@@ -268,4 +268,91 @@ export function exportRosterDraft(data: RosterExportData): void {
 
   const siteSlug = data.siteName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
   triggerBlob(wb, `STAP_Roster_${siteSlug}_${data.date.replace(/-/g, '')}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ATTENDANCE SUMMARY EXPORT (per guard, over a date range)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * One row per guard for the selected period — the "overall status of the
+ * guards attendance" report. Day counts are written as numbers, not text, so
+ * the sheet can be summed and sorted in Excel.
+ */
+export function exportAttendanceSummary(data: GuardAttendanceSummaryResponse): void {
+  const from = data.dateFrom.slice(0, 10);
+  const to   = data.dateTo.slice(0, 10);
+  const periodLabel = `${fmtDate(from)} to ${fmtDate(to)}`;
+
+  const header: CellValue[][] = [
+    [CO_NAME],
+    ['ATTENDANCE SUMMARY REPORT'],
+    [CO_ADDRESS],
+    [CO_LINE2],
+    [],
+    ['Period:', periodLabel, '', 'Calendar days:', data.totalDays],
+    ['Guards:', data.guardCount, '', 'Generated:', new Date().toLocaleString('en-GB')],
+    [],
+  ];
+
+  const columns = [
+    '#', 'Guard Name', 'Guard ID', 'Rank', 'Period',
+    'Present Days', 'Late Days', 'Sick Days', 'On Leave Days',
+    'Absent Days', 'AWOL Days', 'Days Recorded', 'Attendance Rate %', 'Sites',
+  ];
+
+  const body: CellValue[][] = data.summary.map((g, i) => [
+    i + 1,
+    g.guardName,
+    g.systemId ?? '—',
+    fmtRank(g.rank),
+    periodLabel,
+    g.presentDays,
+    g.lateDays,
+    g.sickDays,
+    g.onLeaveDays,
+    g.absentDays,
+    g.awolDays,
+    g.totalRecords,
+    g.attendanceRate,
+    g.sites,
+  ]);
+
+  // Column totals, so the sheet answers "how did the whole team do".
+  const sum = (pick: (g: GuardAttendanceSummaryResponse['summary'][number]) => number) =>
+    data.summary.reduce((acc, g) => acc + pick(g), 0);
+
+  const totalRecords = sum(g => g.totalRecords);
+  const totals: CellValue[] = [
+    '', 'TOTAL', '', '', '',
+    sum(g => g.presentDays),
+    sum(g => g.lateDays),
+    sum(g => g.sickDays),
+    sum(g => g.onLeaveDays),
+    sum(g => g.absentDays),
+    sum(g => g.awolDays),
+    totalRecords,
+    totalRecords > 0
+      ? Math.round(((sum(g => g.presentDays) + sum(g => g.lateDays)) / totalRecords) * 100)
+      : 0,
+    '',
+  ];
+
+  const rows: CellValue[][] = data.summary.length
+    ? [...header, columns, ...body, [], totals]
+    : [...header, columns, ['', 'No attendance recorded for this period.']];
+
+  const widths = [4, 26, 12, 18, 26, 13, 11, 11, 14, 12, 11, 14, 17, 40];
+  const merges: XLSX.Range[] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 13 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 13 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 13 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 13 } },
+  ];
+
+  const ws = buildSheet(rows, widths, merges, [22, 20, 14, 14, 8]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
+
+  triggerBlob(wb, `STAP_Attendance_${from.replace(/-/g, '')}_to_${to.replace(/-/g, '')}.xlsx`);
 }

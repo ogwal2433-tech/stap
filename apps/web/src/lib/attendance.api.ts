@@ -10,6 +10,7 @@ import type {
   DeploymentResponse,
   AttendanceRecord,
   AttendanceSummary,
+  GuardAttendanceSummaryResponse,
   CheckinResponse,
   DailySheetResponse,
   AttendanceDashboardData,
@@ -63,6 +64,19 @@ export const attendanceApi = {
         params,
       })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
+  },
+
+  getGuardAttendanceSummary(
+    from: string,
+    to: string,
+    siteId?: string,
+  ): Promise<GuardAttendanceSummaryResponse> {
+    return api
+      .get<{ success: boolean; data: GuardAttendanceSummaryResponse }>(
+        '/attendance/attendance/guard-summary',
+        { params: { from, to, ...(siteId ? { siteId } : {}) } },
+      )
+      .then((r) => r.data.data);
   },
 
   getAttendanceSummary(
