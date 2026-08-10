@@ -8,6 +8,8 @@ import type {
   UpdateInventoryItemInput,
   IssueItemInput,
   ReturnItemInput,
+  UpdateIssuedTransactionInput,
+  OutstandingHolder,
   StockAdjustmentInput,
   AdjustConditionInput,
   BatchIssueInput,
@@ -49,6 +51,20 @@ export const inventoryApi = {
   returnItem(data: ReturnItemInput): Promise<InventoryTransactionResponse> {
     return api
       .post<{ success: boolean; data: InventoryTransactionResponse }>('/inventory/items/return', data)
+      .then((r) => r.data.data);
+  },
+
+  updateIssuedTransaction(id: string, data: UpdateIssuedTransactionInput): Promise<InventoryTransactionResponse> {
+    return api
+      .patch<{ success: boolean; data: InventoryTransactionResponse }>(`/inventory/transactions/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  getOutstandingHolders(exGuardsOnly = false): Promise<OutstandingHolder[]> {
+    return api
+      .get<{ success: boolean; data: OutstandingHolder[] }>('/inventory/outstanding', {
+        params: exGuardsOnly ? { exGuardsOnly: 'true' } : {},
+      })
       .then((r) => r.data.data);
   },
 

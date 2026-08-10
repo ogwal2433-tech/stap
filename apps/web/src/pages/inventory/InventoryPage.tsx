@@ -5,14 +5,16 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import {
-  useInventoryItems, useLowStockItems, useInventoryTransactions,
+  useInventoryItems, useLowStockItems, useInventoryTransactions, useOutstandingHolders,
   useCreateInventoryItem, useUpdateInventoryItem,
   useReturnItem, useAdjustStock, useAdjustCondition, useBatchIssueItems,
 } from '../../hooks/useInventory';
 import { useGuardList } from '../../hooks/useGuards';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import EditIssuedItemModal from '../../components/inventory/EditIssuedItemModal';
 import type {
   InventoryItemResponse,
+  InventoryTransactionResponse,
   StockConditionBreakdown,
   ItemCondition,
   AdjustConditionInput,
@@ -21,6 +23,7 @@ import {
   ITEM_CONDITIONS,
   ITEM_CONDITION_COLORS,
   ITEM_CONDITION_BG,
+  guardStatusLabel,
 } from '@stap/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -754,6 +757,7 @@ function ReturnItemModal({
     quantity: '1',
     action: 'RETURNED',
     conditionNote: '',
+    chargedAmount: '' as string,
   });
 
   React.useEffect(() => {
@@ -766,12 +770,14 @@ function ReturnItemModal({
 
   const selectedItem = items.find(i => i.id === form.itemId);
   const isDamageOrLoss = form.action !== 'RETURNED';
-  const deductionAmt = selectedItem && isDamageOrLoss
-    ? selectedItem.unitCost * Number(form.quantity)
-    : 0;
+  const chargeEntered = form.chargedAmount === '' ? null : Math.max(0, Number(form.chargedAmount));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDamageOrLoss && chargeEntered === null) {
+      showToast('Enter the amount to charge for this item. Enter 0 to waive it.', 'danger');
+      return;
+    }
     ret.mutate(
       {
         itemId:       form.itemId,
@@ -779,6 +785,7 @@ function ReturnItemModal({
         quantity:     Number(form.quantity),
         action:       form.action as any,
         conditionNote: form.conditionNote || undefined,
+        ...(isDamageOrLoss ? { chargedAmount: chargeEntered ?? 0 } : {}),
       },
       {
         onSuccess: () => { showToast('Return recorded', 'success'); onHide(); },
@@ -838,10 +845,31 @@ function ReturnItemModal({
               required={isDamageOrLoss}
             />
           </Form.Group>
-          {isDamageOrLoss && deductionAmt > 0 && (
-            <Alert variant="warning" className="small py-2 mb-3">
-              A deduction of <strong>UGX {deductionAmt.toLocaleString()}</strong> will be automatically added to this guard's payroll deductions.
-            </Alert>
+          {isDamageOrLoss && (
+            <Form.Group className="mb-3">
+              <Form.Label className="small fw-medium">Charge Amount (UGX) *</Form.Label>
+              <Form.Control
+                size="sm"
+                type="number"
+                min={0}
+                value={form.chargedAmount}
+                placeholder={selectedItem ? `Item cost is UGX ${selectedItem.unitCost.toLocaleString()}` : 'e.g. 50000'}
+                onChange={e => setForm(f => ({ ...f, chargedAmount: e.target.value }))}
+              />
+              <Form.Text className="text-muted">
+                Enter what this guard should actually be charged. Enter <strong>0</strong> to waive it.
+              </Form.Text>
+              {chargeEntered !== null && chargeEntered > 0 && (
+                <Alert variant="warning" className="small py-2 mt-2 mb-0">
+                  A deduction of <strong>UGX {chargeEntered.toLocaleString()}</strong> will be added to this guard&apos;s payroll deductions.
+                </Alert>
+              )}
+              {chargeEntered === 0 && (
+                <Alert variant="success" className="small py-2 mt-2 mb-0">
+                  No charge — the loss is recorded without a deduction.
+                </Alert>
+              )}
+            </Form.Group>
           )}
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
@@ -925,6 +953,7 @@ function StockAdjustmentModal({ show, onHide }: { show: boolean; onHide: () => v
 
 export default function InventoryPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [typeFilter, setTypeFilter]       = useState('');
   const [lowStockOnly, setLowStockOnly]   = useState(false);
   const [search, setSearch]               = useState('');
@@ -942,6 +971,12 @@ export default function InventoryPage() {
     page: 1, limit: 100,
   });
   const { data: txnsData, isLoading: loadingTxns } = useInventoryTransactions({ page: 1, limit: 100 });
+
+  const [editTxn, setEditTxn]         = useState<InventoryTransactionResponse | null>(null);
+  const [exGuardsOnly, setExGuardsOnly] = useState(false);
+  const { data: holders = [], isLoading: loadingHolders, refetch: refetchHolders } =
+    useOutstandingHolders(exGuardsOnly);
+  const exGuardCount = holders.filter(h => h.hasLeft).length;
   const { data: lowStock, isLoading: loadingLow }  = useLowStockItems();
 
   const items = itemsData?.data ?? [];
@@ -1112,6 +1147,7 @@ export default function InventoryPage() {
                   <th>Condition</th>
                   <th>Charged (UGX)</th>
                   <th>Recorded By</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -1149,6 +1185,18 @@ export default function InventoryPage() {
                         {t.chargedAmount != null ? `UGX ${t.chargedAmount.toLocaleString()}` : '—'}
                       </td>
                       <td className="small">{t.recordedBy.name}</td>
+                      <td className="text-end">
+                        {t.action === 'ISSUED' && (
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            style={{ fontSize: 11, padding: '1px 8px' }}
+                            onClick={() => setEditTxn(t)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -1157,7 +1205,84 @@ export default function InventoryPage() {
           )}
         </Tab>
 
-        {/* ── TAB 3: Low Stock ─────────────────────────────────────────────────── */}
+        {/* ── TAB 3: Outstanding equipment ─────────────────────────────────────── */}
+        <Tab
+          eventKey="outstanding"
+          title={<>Outstanding Equipment {exGuardCount > 0 && <Badge bg="warning" text="dark" className="ms-1">{exGuardCount}</Badge>}</>}
+        >
+          <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <div className="text-muted small">
+              Guards still holding equipment. Those who have left the company are listed first —
+              their kit can still be collected and returned against their record.
+            </div>
+            <Form.Check
+              type="switch"
+              id="ex-guards-only"
+              label="Ex-guards only"
+              checked={exGuardsOnly}
+              onChange={e => setExGuardsOnly(e.target.checked)}
+            />
+          </div>
+
+          {loadingHolders ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : holders.length === 0 ? (
+            <Alert variant="success">
+              {exGuardsOnly
+                ? 'No equipment is outstanding with guards who have left.'
+                : 'No equipment is currently outstanding.'}
+            </Alert>
+          ) : (
+            <Table hover size="sm" responsive>
+              <thead className="table-light">
+                <tr>
+                  <th>Guard</th>
+                  <th>Status</th>
+                  <th className="text-center">Items</th>
+                  <th className="text-center">Units</th>
+                  <th>Outstanding</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {holders.map(h => (
+                  <tr key={h.guardId} style={h.hasLeft ? { background: '#FEF9E7' } : undefined}>
+                    <td>
+                      <div className="small fw-medium">{h.guardName}</div>
+                      <code style={{ fontSize: 10, color: '#666' }}>{h.systemId ?? '—'}</code>
+                    </td>
+                    <td>
+                      <Badge
+                        bg={h.hasLeft ? 'warning' : 'success'}
+                        text={h.hasLeft ? 'dark' : undefined}
+                        style={{ fontSize: 10 }}
+                      >
+                        {guardStatusLabel(h.employmentStatus)}
+                      </Badge>
+                    </td>
+                    <td className="text-center">{h.itemCount}</td>
+                    <td className="text-center fw-bold">{h.totalOutstanding}</td>
+                    <td className="small">
+                      {h.items.map(i => `${i.itemName} ×${i.outstanding}`).join(', ')}
+                    </td>
+                    <td className="text-end">
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        style={{ fontSize: 11, padding: '1px 8px' }}
+                        onClick={() => navigate(`/guards/${h.guardId}`)}
+                      >
+                        Open guard
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Tab>
+
+        {/* ── TAB 4: Low Stock ─────────────────────────────────────────────────── */}
         <Tab eventKey="low-stock" title={<>Low Stock Alerts {lowStock && lowStock.length > 0 && <Badge bg="danger" className="ms-1">{lowStock.length}</Badge>}</>}>
           {loadingLow ? (
             <div className="text-center py-5"><Spinner /></div>
@@ -1229,6 +1354,13 @@ export default function InventoryPage() {
       <StockAdjustmentModal show={showAdjust} onHide={() => setShowAdjust(false)} />
       {conditionItem && (
         <AdjustConditionModal item={conditionItem} onHide={() => setConditionItem(null)} />
+      )}
+      {editTxn && (
+        <EditIssuedItemModal
+          txn={editTxn}
+          onClose={() => setEditTxn(null)}
+          onSuccess={() => { refetchHolders(); showToast('Issue record updated', 'success'); }}
+        />
       )}
     </div>
   );

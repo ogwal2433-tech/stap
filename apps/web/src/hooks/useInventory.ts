@@ -5,6 +5,7 @@ import type {
   UpdateInventoryItemInput,
   IssueItemInput,
   ReturnItemInput,
+  UpdateIssuedTransactionInput,
   StockAdjustmentInput,
   AdjustConditionInput,
   BatchIssueInput,
@@ -85,7 +86,29 @@ export function useReturnItem() {
       qc.invalidateQueries({ queryKey: ['inventory-txns'] });
       qc.invalidateQueries({ queryKey: ['guard-inventory'] });
       qc.invalidateQueries({ queryKey: ['low-stock'] });
+      qc.invalidateQueries({ queryKey: ['inventory-outstanding'] });
     },
+  });
+}
+
+export function useUpdateIssuedTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateIssuedTransactionInput }) =>
+      inventoryApi.updateIssuedTransaction(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-items'] });
+      qc.invalidateQueries({ queryKey: ['inventory-txns'] });
+      qc.invalidateQueries({ queryKey: ['guard-inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-outstanding'] });
+    },
+  });
+}
+
+export function useOutstandingHolders(exGuardsOnly = false) {
+  return useQuery({
+    queryKey: ['inventory-outstanding', exGuardsOnly],
+    queryFn:  () => inventoryApi.getOutstandingHolders(exGuardsOnly),
   });
 }
 

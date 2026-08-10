@@ -8,7 +8,7 @@ import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHist
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useLettersBySubject } from '../../hooks/useLetters';
 import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
-import { useGuardInventory, useReturnItem } from '../../hooks/useInventory';
+import { useGuardInventory } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
 import { lettersApi } from '../../lib/letters.api';
 import { useAuth } from '../../context/AuthContext';
@@ -23,11 +23,12 @@ import ApproveLetterModal from '../../components/letters/ApproveLetterModal';
 import LetterStatusBadge from '../../components/letters/LetterStatusBadge';
 import TransferModal from '../../components/guards/TransferModal';
 import PromoteGuardModal from '../../components/guards/PromoteGuardModal';
+import ReturnItemModal from '../../components/inventory/ReturnItemModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
-  GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus,
+  GUARD_STATUS_CONFIG, guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus,
   type GuardDocumentResponse, type GuardTransferResponse, type GuardPromotionResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
 } from '@stap/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
@@ -183,22 +184,16 @@ function ReinstateModal({ guardId, guard, onClose, onSuccess }: ReinstateModalPr
   );
 }
 
-function IssuedItemsTab({ guardId }: { guardId: string }) {
-  const { data: items, isLoading } = useGuardInventory(guardId);
-  const ret = useReturnItem();
+function IssuedItemsTab({ guardId, guardName, guardStatus }: {
+  guardId: string; guardName: string; guardStatus: string;
+}) {
+  const { data: items, isLoading, refetch } = useGuardInventory(guardId);
   const { showToast } = useToast();
+  const [returnTarget, setReturnTarget] = useState<{
+    itemId: string; itemName: string; outstanding: number;
+  } | null>(null);
 
-  const handleReturn = (itemId: string, guardId: string) => {
-    const qty = Number(prompt('Quantity to return:') ?? '0');
-    if (!qty || qty <= 0) return;
-    ret.mutate(
-      { itemId, guardId, quantity: qty, action: 'RETURNED' },
-      {
-        onSuccess: () => showToast('Item returned successfully', 'success'),
-        onError:   (err: any) => showToast(err?.response?.data?.error || 'Failed to record return', 'danger'),
-      },
-    );
-  };
+  const hasLeft = EXITED_STATUSES.includes(guardStatus as GuardEmploymentStatus);
 
   if (isLoading) return <div className="text-center py-4"><Spinner /></div>;
   if (!items || items.length === 0) {
@@ -206,6 +201,7 @@ function IssuedItemsTab({ guardId }: { guardId: string }) {
   }
 
   return (
+    <>
     <Table hover size="sm" responsive className="mt-2">
       <thead className="table-light">
         <tr>
@@ -226,17 +222,33 @@ function IssuedItemsTab({ guardId }: { guardId: string }) {
             <td>
               <Button
                 size="sm"
-                variant="outline-warning"
+                variant={hasLeft ? 'warning' : 'outline-warning'}
                 style={{ fontSize: 11, padding: '1px 6px' }}
-                onClick={() => handleReturn(row.item.id, guardId)}
+                onClick={() => setReturnTarget({
+                  itemId: row.item.id, itemName: row.item.itemName, outstanding: row.outstanding,
+                })}
               >
-                Return
+                {hasLeft ? 'Collect return' : 'Return'}
               </Button>
             </td>
           </tr>
         ))}
       </tbody>
     </Table>
+
+      {returnTarget && (
+        <ReturnItemModal
+          itemId={returnTarget.itemId}
+          itemName={returnTarget.itemName}
+          guardId={guardId}
+          guardName={guardName}
+          guardStatus={guardStatus}
+          outstanding={returnTarget.outstanding}
+          onClose={() => setReturnTarget(null)}
+          onSuccess={() => { refetch(); showToast('Return recorded', 'success'); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -1320,7 +1332,7 @@ export default function GuardDetailPage() {
 
         {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
         {canViewDeductions && <Tab eventKey="issued-items" title="Issued Items">
-          <IssuedItemsTab guardId={id!} />
+          <IssuedItemsTab guardId={id!} guardName={guard.fullName} guardStatus={guard.employmentStatus} />
         </Tab>}
 
         {/* ── Deductions Tab ────────────────────────────────────────────────── */}

@@ -92,8 +92,47 @@ export const ReturnItemSchema = z.object({
   action:            z.enum(['RETURNED', 'LOST', 'DAMAGED']),
   conditionNote:     z.string().optional(),
   returnedCondition: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED']).optional(),
-});
+  /**
+   * What the guard is actually charged, in UGX. Entered by the user — it is not
+   * derived from the item's unit cost, because the real cost of a damaged or
+   * lost item is a management decision. 0 means the charge was waived.
+   */
+  chargedAmount:     z.coerce.number().int().min(0).optional(),
+}).refine(
+  d => d.action === 'RETURNED' || d.chargedAmount !== undefined,
+  {
+    message: 'Enter the amount to charge for a lost or damaged item. Enter 0 to waive the charge.',
+    path:    ['chargedAmount'],
+  },
+);
 export type ReturnItemInput = z.infer<typeof ReturnItemSchema>;
+
+/**
+ * Corrections to an already-recorded ISSUED transaction. Changing the quantity
+ * moves stock by the difference, so the ledger stays balanced.
+ */
+export const UpdateIssuedTransactionSchema = z.object({
+  quantity:      z.coerce.number().int().min(1).optional(),
+  conditionNote: z.string().min(3).max(500).optional(),
+  reference:     z.string().max(200).optional().nullable(),
+}).refine(
+  d => d.quantity !== undefined || d.conditionNote !== undefined || d.reference !== undefined,
+  { message: 'Nothing to update.' },
+);
+export type UpdateIssuedTransactionInput = z.infer<typeof UpdateIssuedTransactionSchema>;
+
+/** A guard still holding equipment, with the status flagging those who have left. */
+export interface OutstandingHolder {
+  guardId:          string;
+  guardName:        string;
+  systemId:         string | null;
+  employmentStatus: string;
+  /** True when the guard has left — these are the ones needing chasing. */
+  hasLeft:          boolean;
+  itemCount:        number;
+  totalOutstanding: number;
+  items:            { itemId: string; itemName: string; itemCode: string; outstanding: number }[];
+}
 
 export const StockAdjustmentSchema = z.object({
   itemId:    z.string().min(1),
@@ -154,7 +193,7 @@ export interface InventoryTransactionResponse {
 }
 
 export interface GuardInventoryItem {
-  item:        { id: string; itemName: string; itemCode: string; itemType: string };
+  item:        { id: string; itemName: string; itemCode: string; itemType: string; unitCost: number };
   issued:      number;
   returned:    number;
   outstanding: number;

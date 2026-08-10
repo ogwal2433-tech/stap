@@ -183,25 +183,46 @@ describe('inventoryService.returnItem', () => {
     expect(updateCall.data.stockQuantity).toEqual({ increment: 1 });
   });
 
-  it('charges unitCost × quantity for DAMAGED action and creates deduction', async () => {
+  it('charges the amount the user entered, not the item cost, and creates the deduction', async () => {
+    // unitCost is deliberately different from chargedAmount — the charge is a
+    // management decision, not a calculation.
     mp.inventoryItem.findUnique.mockResolvedValue(makeItem({ unitCost: 30000 }));
     mp.inventoryTransaction.aggregate
       .mockResolvedValueOnce({ _sum: { quantity: 2 } })
       .mockResolvedValueOnce({ _sum: { quantity: 0 } });
     mp.guard.findUnique.mockResolvedValue({ id: 'guard-1', firstName: 'John', lastName: 'Doe' });
 
-    mockTx.inventoryTransaction.create.mockResolvedValue(makeTxn({ action: 'DAMAGED', chargedAmount: 30000 }));
+    mockTx.inventoryTransaction.create.mockResolvedValue(makeTxn({ action: 'DAMAGED', chargedAmount: 12000 }));
 
     await inventoryService.returnItem(
-      { itemId: 'item-1', guardId: 'guard-1', quantity: 1, action: 'DAMAGED', conditionNote: 'Torn' },
+      { itemId: 'item-1', guardId: 'guard-1', quantity: 1, action: 'DAMAGED', conditionNote: 'Torn', chargedAmount: 12000 },
       'user-1',
     );
 
     const txnCreate = mockTx.inventoryTransaction.create.mock.calls[0][0];
-    expect(txnCreate.data.chargedAmount).toBe(30000);
+    expect(txnCreate.data.chargedAmount).toBe(12000);
     expect(mockTx.guardDeduction.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ type: 'DAMAGE_LOSS', amount: 30000 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ type: 'DAMAGE_LOSS', amount: 12000 }) }),
     );
+  });
+
+  it('records the loss without a deduction when the charge is waived', async () => {
+    mp.inventoryItem.findUnique.mockResolvedValue(makeItem({ unitCost: 30000 }));
+    mp.inventoryTransaction.aggregate
+      .mockResolvedValueOnce({ _sum: { quantity: 2 } })
+      .mockResolvedValueOnce({ _sum: { quantity: 0 } });
+    mp.guard.findUnique.mockResolvedValue({ id: 'guard-1', firstName: 'John', lastName: 'Doe' });
+
+    mockTx.inventoryTransaction.create.mockResolvedValue(makeTxn({ action: 'LOST', chargedAmount: 0 }));
+
+    await inventoryService.returnItem(
+      { itemId: 'item-1', guardId: 'guard-1', quantity: 1, action: 'LOST', conditionNote: 'Waived', chargedAmount: 0 },
+      'user-1',
+    );
+
+    const txnCreate = mockTx.inventoryTransaction.create.mock.calls[0][0];
+    expect(txnCreate.data.chargedAmount).toBe(0);
+    expect(mockTx.guardDeduction.create).not.toHaveBeenCalled();
   });
 
   it('sends ASSISTANT_MANAGER notification for LOST action', async () => {
@@ -214,7 +235,7 @@ describe('inventoryService.returnItem', () => {
     mockTx.inventoryTransaction.create.mockResolvedValue(makeTxn({ action: 'LOST', chargedAmount: 30000 }));
 
     await inventoryService.returnItem(
-      { itemId: 'item-1', guardId: 'guard-1', quantity: 1, action: 'LOST', conditionNote: 'Cannot be found' },
+      { itemId: 'item-1', guardId: 'guard-1', quantity: 1, action: 'LOST', conditionNote: 'Cannot be found', chargedAmount: 30000 },
       'user-1',
     );
 

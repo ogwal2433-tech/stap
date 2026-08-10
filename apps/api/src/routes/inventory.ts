@@ -158,6 +158,7 @@ import {
   StockAdjustmentSchema,
   AdjustConditionSchema,
   BatchIssueSchema,
+  UpdateIssuedTransactionSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -232,6 +233,32 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = await inventoryService.returnItem(req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
+  }),
+);
+
+// ── PATCH /transactions/:id — correct an already-recorded issue ───────────────
+router.patch(
+  '/transactions/:id',
+  requireRole(...MGMT_ROLES),
+  validate(UpdateIssuedTransactionSchema),
+  asyncHandler(async (req, res) => {
+    const data = await inventoryService.updateIssuedTransaction(
+      req.params.id,
+      req.body,
+      req.user!.userId,
+    );
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── GET /outstanding — who still holds equipment, ex-guards flagged ───────────
+router.get(
+  '/outstanding',
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const exGuardsOnly = req.query.exGuardsOnly === 'true';
+    const data = await inventoryService.getOutstandingHolders(!exGuardsOnly);
+    res.status(200).json({ success: true, data });
   }),
 );
 

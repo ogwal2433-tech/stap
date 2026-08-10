@@ -1,4 +1,4 @@
-import { guardStatusLabel } from '@stap/shared';
+import { guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus } from '@stap/shared';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -17,6 +17,8 @@ import type {
   BatchIssueResult,
   PaginatedResponse,
   ItemCondition,
+  UpdateIssuedTransactionInput,
+  OutstandingHolder,
 } from '@stap/shared';
 
 // Map ItemCondition enum → Prisma field name
@@ -372,8 +374,10 @@ class InventoryService {
     });
 
     const txn = await prisma.$transaction(async (tx) => {
-      const chargedAmount =
-        data.action !== 'RETURNED' ? item.unitCost * data.quantity : null;
+      // The charge is whatever the user entered — a damaged item is rarely worth
+      // its full unit cost, and management may waive it entirely, so this is not
+      // derived from item.unitCost.
+      const chargedAmount = data.action !== 'RETURNED' ? (data.chargedAmount ?? 0) : null;
 
       const t = await tx.inventoryTransaction.create({
         data: {
@@ -398,13 +402,14 @@ class InventoryService {
             [retField]:    { increment: data.quantity },
           },
         });
-      } else {
-        // LOST or DAMAGED — create deduction
+      } else if (chargedAmount && chargedAmount > 0) {
+        // LOST or DAMAGED with a charge — deduct it from the guard's pay.
+        // A waived charge (0) records the loss without creating a deduction.
         await tx.guardDeduction.create({
           data: {
             guardId:       data.guardId,
             type:          'DAMAGE_LOSS',
-            amount:        chargedAmount!,
+            amount:        chargedAmount,
             description:   `${data.action}: ${item.itemName} x${data.quantity}${data.conditionNote ? ` — ${data.conditionNote}` : ''}`,
             effectiveDate: new Date(),
             createdBy:     recordedBy,
@@ -416,12 +421,14 @@ class InventoryService {
     });
 
     if (data.action !== 'RETURNED' && guard) {
-      const amount = item.unitCost * data.quantity;
+      const amount = data.chargedAmount ?? 0;
       await notificationService.sendToRole({
         role:    'ASSISTANT_MANAGER',
         type:    'SYSTEM',
-        title:   'Inventory Deduction Created',
-        message: `Guard ${guard.firstName} ${guard.lastName} — ${data.action} item: ${item.itemName}. Deduction of UGX ${amount.toLocaleString()} created.`,
+        title:   amount > 0 ? 'Inventory Deduction Created' : 'Inventory Loss Recorded',
+        message: amount > 0
+          ? `Guard ${guard.firstName} ${guard.lastName} — ${data.action} item: ${item.itemName}. Deduction of UGX ${amount.toLocaleString()} created.`
+          : `Guard ${guard.firstName} ${guard.lastName} — ${data.action} item: ${item.itemName}. No charge applied.`,
       });
     }
 
@@ -433,6 +440,202 @@ class InventoryService {
     });
 
     return fmtTxn(txn);
+  }
+
+  /**
+   * Corrects an already-recorded ISSUED transaction.
+   *
+   * Issuing moved stock, so an edited quantity has to move it back by the
+   * difference — otherwise the ledger and the shelf disagree. The condition
+   * bucket is adjusted on the same waterfall the original issue used; buckets
+   * are already best-effort (issueItem only deducts what the bucket holds), so
+   * stockQuantity remains the number availability checks rely on.
+   */
+  async updateIssuedTransaction(
+    txnId: string,
+    data: UpdateIssuedTransactionInput,
+    updatedBy: string,
+  ): Promise<InventoryTransactionResponse> {
+    const existing = await prisma.inventoryTransaction.findUnique({
+      where:   { id: txnId },
+      include: { item: true },
+    });
+    if (!existing) throw new NotFoundError('Issue record not found');
+
+    if (existing.action !== 'ISSUED') {
+      throw new AppError(
+        `Only issue records can be edited. This is a ${existing.action.toLowerCase()} record — ` +
+          'correct it with a new transaction instead.',
+        400,
+      );
+    }
+
+    const newQuantity = data.quantity ?? existing.quantity;
+    const delta       = newQuantity - existing.quantity;
+
+    if (delta !== 0) {
+      if (!existing.guardId) {
+        throw new AppError('This issue record is not linked to a guard and its quantity cannot be changed.', 400);
+      }
+
+      // Issuing more needs stock on hand.
+      if (delta > 0 && existing.item.stockQuantity < delta) {
+        throw new AppError(
+          `Only ${existing.item.stockQuantity} of ${existing.item.itemName} left in stock — ` +
+            `cannot increase this issue by ${delta}.`,
+          400,
+        );
+      }
+
+      // Issuing less cannot take the guard below what they have already handed back.
+      const returnedAgg = await prisma.inventoryTransaction.aggregate({
+        where: {
+          itemId:  existing.itemId,
+          guardId: existing.guardId,
+          action:  { in: ['RETURNED', 'LOST', 'DAMAGED'] },
+        },
+        _sum: { quantity: true },
+      });
+      const otherIssuedAgg = await prisma.inventoryTransaction.aggregate({
+        where: {
+          itemId:  existing.itemId,
+          guardId: existing.guardId,
+          action:  'ISSUED',
+          id:      { not: txnId },
+        },
+        _sum: { quantity: true },
+      });
+
+      const returned    = returnedAgg._sum.quantity ?? 0;
+      const otherIssued = otherIssuedAgg._sum.quantity ?? 0;
+      if (otherIssued + newQuantity < returned) {
+        throw new AppError(
+          `${returned} of this item have already been returned by this guard — ` +
+            `the issued quantity cannot be reduced below that.`,
+          400,
+        );
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (delta !== 0) {
+        const bucket = WATERFALL.find(
+          c => ((existing.item as unknown as Record<string, number>)[CONDITION_FIELD[c]] ?? 0) > 0,
+        ) ?? 'GOOD';
+        await tx.inventoryItem.update({
+          where: { id: existing.itemId },
+          data:  {
+            stockQuantity: { decrement: delta },
+            [CONDITION_FIELD[bucket]]: { decrement: delta },
+          },
+        });
+      }
+
+      return tx.inventoryTransaction.update({
+        where: { id: txnId },
+        data:  {
+          ...(data.quantity      !== undefined ? { quantity:      newQuantity } : {}),
+          ...(data.conditionNote !== undefined ? { conditionNote: data.conditionNote.trim() } : {}),
+          ...(data.reference     !== undefined ? { reference:     data.reference } : {}),
+        },
+        include: TXN_INCLUDE,
+      });
+    });
+
+    await QueueService.logAudit({
+      userId:   updatedBy,
+      action:   'ITEM_ISSUE_EDITED',
+      entity:   'InventoryTransaction',
+      entityId: txnId,
+      oldValue: { quantity: existing.quantity, conditionNote: existing.conditionNote, reference: existing.reference },
+      newValue: { quantity: newQuantity, conditionNote: data.conditionNote, reference: data.reference, stockDelta: -delta },
+    });
+
+    return fmtTxn(updated);
+  }
+
+  /**
+   * Everyone still holding equipment, flagging those who have left the company.
+   *
+   * Returns are already allowed for any employment status — the gap was that
+   * once a guard resigned there was no way to see they still had kit out.
+   */
+  async getOutstandingHolders(includeActive = true): Promise<OutstandingHolder[]> {
+    const issued = await prisma.inventoryTransaction.groupBy({
+      by:    ['guardId', 'itemId'],
+      where: { action: 'ISSUED', guardId: { not: null } },
+      _sum:  { quantity: true },
+    });
+    const settled = await prisma.inventoryTransaction.groupBy({
+      by:    ['guardId', 'itemId'],
+      where: { action: { in: ['RETURNED', 'LOST', 'DAMAGED'] }, guardId: { not: null } },
+      _sum:  { quantity: true },
+    });
+
+    const settledMap = new Map(settled.map(r => [`${r.guardId}:${r.itemId}`, r._sum.quantity ?? 0]));
+
+    const outstandingRows = issued
+      .map(r => ({
+        guardId:     r.guardId as string,
+        itemId:      r.itemId,
+        outstanding: (r._sum.quantity ?? 0) - (settledMap.get(`${r.guardId}:${r.itemId}`) ?? 0),
+      }))
+      .filter(r => r.outstanding > 0);
+
+    if (outstandingRows.length === 0) return [];
+
+    const [guards, items] = await Promise.all([
+      prisma.guard.findMany({
+        where:  { id: { in: [...new Set(outstandingRows.map(r => r.guardId))] } },
+        select: { id: true, firstName: true, lastName: true, systemId: true, employmentStatus: true },
+      }),
+      prisma.inventoryItem.findMany({
+        where:  { id: { in: [...new Set(outstandingRows.map(r => r.itemId))] } },
+        select: { id: true, itemName: true, itemCode: true },
+      }),
+    ]);
+
+    const guardMap = new Map(guards.map(g => [g.id, g]));
+    const itemMap  = new Map(items.map(i => [i.id, i]));
+    const byGuard  = new Map<string, OutstandingHolder>();
+
+    for (const row of outstandingRows) {
+      const guard = guardMap.get(row.guardId);
+      const item  = itemMap.get(row.itemId);
+      if (!guard || !item) continue;
+
+      const hasLeft = EXITED_STATUSES.includes(guard.employmentStatus as GuardEmploymentStatus);
+      if (!includeActive && !hasLeft) continue;
+
+      let holder = byGuard.get(guard.id);
+      if (!holder) {
+        holder = {
+          guardId:          guard.id,
+          guardName:        `${guard.firstName} ${guard.lastName}`,
+          systemId:         guard.systemId ?? null,
+          employmentStatus: guard.employmentStatus,
+          hasLeft,
+          itemCount:        0,
+          totalOutstanding: 0,
+          items:            [],
+        };
+        byGuard.set(guard.id, holder);
+      }
+
+      holder.itemCount++;
+      holder.totalOutstanding += row.outstanding;
+      holder.items.push({
+        itemId:      item.id,
+        itemName:    item.itemName,
+        itemCode:    item.itemCode,
+        outstanding: row.outstanding,
+      });
+    }
+
+    // Ex-guards first — those are the ones needing to be chased.
+    return Array.from(byGuard.values()).sort((a, b) =>
+      a.hasLeft === b.hasLeft ? a.guardName.localeCompare(b.guardName) : a.hasLeft ? -1 : 1,
+    );
   }
 
   async adjustStock(data: StockAdjustmentInput, recordedBy: string): Promise<InventoryTransactionResponse> {
@@ -576,7 +779,7 @@ class InventoryService {
       if (outstanding > 0) {
         const item = await prisma.inventoryItem.findUnique({
           where:  { id: row.itemId },
-          select: { id: true, itemName: true, itemCode: true, itemType: true },
+          select: { id: true, itemName: true, itemCode: true, itemType: true, unitCost: true },
         });
         if (item) {
           results.push({ item, issued: issuedQty, returned: returnedQty, outstanding });
