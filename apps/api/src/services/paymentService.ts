@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { recomputeInvoiceBalance } from './invoiceService';
 import {
   initiateCollection,
   checkPaymentStatus,
@@ -94,20 +95,18 @@ export async function handleWebhook(body: Record<string, unknown>): Promise<void
   const resolvedAt = new Date();
 
   if (status === 'SUCCESS' || status === 'SUCCESSFUL') {
-    await prisma.$transaction([
-      prisma.invoicePayment.update({
-        where: { extReference: extRef },
-        data: {
-          status:           'SUCCESS',
-          xcelTransactionId: txId ?? payment.xcelTransactionId,
-          resolvedAt,
-        },
-      }),
-      prisma.invoice.update({
-        where: { id: payment.invoiceId },
-        data:  { status: 'PAID', paidAt: resolvedAt },
-      }),
-    ]);
+    await prisma.invoicePayment.update({
+      where: { extReference: extRef },
+      data: {
+        status:            'SUCCESS',
+        xcelTransactionId: txId ?? payment.xcelTransactionId,
+        resolvedAt,
+      },
+    });
+
+    // Derive the invoice status from what has actually been paid. Marking it
+    // PAID outright would settle the whole invoice off a part payment.
+    await recomputeInvoiceBalance(payment.invoiceId);
 
     await notificationService.sendToRoles(
       ['DIRECTOR', 'ASSISTANT_MANAGER', 'ACCOUNTS_OFFICER'],

@@ -440,6 +440,7 @@ model Client {
   complaints      ClientComplaint[]
   invoices        Invoice[]
   serviceRequests ServiceRequest[]
+  carryForwards   InvoiceCarryForward[]
 }
 
 model Site {
@@ -722,7 +723,12 @@ model Invoice {
   subtotal       Int
   taxAmount      Int       @default(0)
   totalAmount    Int
-  status         String    @default("PENDING")
+  /// Sum of every payment recorded against this invoice, kept in step whenever
+  /// one is recorded so a partial payment is visible without re-aggregating.
+  paidAmount     Int       @default(0)
+  /// totalAmount - paidAmount, floored at 0.
+  outstandingBalance Int   @default(0)
+  status         String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID
   pdfPath        String?
   yoPaymentRef   String?
   dueDate        DateTime
@@ -737,6 +743,32 @@ model Invoice {
   payments        Payment[]
   invoicePayments InvoicePayment[]
   lineItems       InvoiceLineItem[]
+  carriedFrom     InvoiceCarryForward[] @relation("CarryForwardSource")
+  carriedOnto     InvoiceCarryForward[] @relation("CarryForwardTarget")
+}
+
+/// An unpaid balance rolled from one invoice onto the client's next one.
+///
+/// Created when an invoice is left partly paid, and consumed by the next
+/// invoice generated for that client — which shows it as its own line so the
+/// client can see exactly what is being carried over.
+model InvoiceCarryForward {
+  id            String   @id @default(cuid())
+  fromInvoiceId String   @unique
+  fromInvoice   Invoice  @relation("CarryForwardSource", fields: [fromInvoiceId], references: [id], onDelete: Cascade)
+  /// Null until the balance appears on a later invoice.
+  toInvoiceId   String?
+  toInvoice     Invoice? @relation("CarryForwardTarget", fields: [toInvoiceId], references: [id], onDelete: SetNull)
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  carryAmount Int
+  note        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, toInvoiceId])
 }
 
 model Payment {

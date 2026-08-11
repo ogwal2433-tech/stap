@@ -128,6 +128,10 @@ export interface InvoiceResponse {
   subtotal:       number;
   taxAmount:      number;
   totalAmount:    number;
+  /** Total received across manual and mobile-money payments. */
+  paidAmount:     number;
+  /** totalAmount − paidAmount, floored at 0. */
+  outstandingBalance: number;
   status:         string;
   dueDate:        string;
   paidAt:         string | null;
@@ -250,3 +254,20 @@ export interface PayrollSummary {
   totalNet:       number;
   byGuard:        PayslipResponse[];
 }
+
+// ── Fee increment ──────────────────────────────────────────────────────────────
+
+/**
+ * An extra charge added to an unsettled invoice — usually a client asking for
+ * more guards partway through the billing period.
+ */
+export const AddFeeIncrementSchema = z.object({
+  description:  z.string().min(3, 'Describe what the extra charge is for').max(300),
+  guardType:    z.string().max(100).optional().nullable(),
+  guardCount:   z.coerce.number().int().min(1, 'At least one guard'),
+  ratePerGuard: z.coerce.number().int().min(0),
+  days:         z.coerce.number().int().min(1).default(30),
+  reason:       z.string().max(500).optional().nullable(),
+});
+
+export type AddFeeIncrementInput = z.infer<typeof AddFeeIncrementSchema>;

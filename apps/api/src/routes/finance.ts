@@ -150,6 +150,7 @@ import {
   CreateInvoiceSchema,
   GenerateInvoiceSchema,
   RecordPaymentSchema,
+  AddFeeIncrementSchema,
   CreateDeductionSchema,
   RunPayrollSchema,
   CashbookEntrySchema,
@@ -259,6 +260,29 @@ router.post(
       req.user!.userId,
     );
     res.json({ success: true, data: payment });
+  }),
+);
+
+// ── POST /invoices/:id/increment — extra charge on an unsettled invoice ───────
+router.post(
+  '/invoices/:id/increment',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(AddFeeIncrementSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.addFeeIncrement(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: invoice });
+  }),
+);
+
+// ── GET /invoices/:id/pdf — printable invoice ────────────────────────────────
+router.get(
+  '/invoices/:id/pdf',
+  requireRole(...FINANCE_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { pdf, filename } = await invoiceService.buildInvoicePdf(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(pdf);
   }),
 );
 

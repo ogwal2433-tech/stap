@@ -5,9 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../db/prisma', () => ({
   default: {
     invoice:  { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    payment:  { create: vi.fn() },
+    payment:  { create: vi.fn(), aggregate: vi.fn() },
     client:   { findUnique: vi.fn() },
     contract: { findMany: vi.fn(), findUnique: vi.fn() },
+    invoicePayment:      { aggregate: vi.fn() },
+    invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
 
@@ -51,6 +53,8 @@ beforeEach(() => {
   mp.invoice.findUnique.mockResolvedValue(MOCK_INVOICE);
   mp.invoice.findMany.mockResolvedValue([MOCK_INVOICE]);
   mp.invoice.findFirst.mockResolvedValue(null);
+  // No balances carried from earlier invoices unless a test says otherwise.
+  mp.invoiceCarryForward.findMany.mockResolvedValue([]);
   mp.payment.create.mockResolvedValue({
     id: 'pay-1', invoiceId: 'inv-1', amountPaid: 2400000, mode: 'BANK',
     referenceNumber: null, yoTransactionId: null, reconciled: false,
@@ -151,28 +155,54 @@ describe('invoiceService.generateAutoInvoices()', () => {
 });
 
 describe('invoiceService.recordManualPayment()', () => {
+  /** recomputeInvoiceBalance sums manual + mobile-money payments. */
+  const mockPaidTotals = (manual: number, momo = 0) => {
+    mp.payment.aggregate.mockResolvedValue({ _sum: { amountPaid: manual } });
+    mp.invoicePayment.aggregate.mockResolvedValue({ _sum: { amountPaid: momo } });
+  };
+
   it('updates invoice status to PAID when fully paid', async () => {
-    const inv = { ...MOCK_INVOICE, payments: [] };
-    mp.invoice.findUnique.mockResolvedValue(inv);
+    mp.invoice.findUnique.mockResolvedValue({ ...MOCK_INVOICE, payments: [] });
+    mockPaidTotals(2400000);
 
     await invoiceService.recordManualPayment(
       { invoiceId: 'inv-1', amountPaid: 2400000, mode: 'BANK' },
       'user-1',
     );
+
     expect(mp.invoice.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'PAID' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'PAID', paidAmount: 2400000, outstandingBalance: 0 }),
+      }),
     );
+    // Nothing left owing, so nothing is carried onto a later invoice.
+    expect(mp.invoiceCarryForward.upsert).not.toHaveBeenCalled();
   });
 
-  it('status stays PENDING when payment is partial', async () => {
-    const inv = { ...MOCK_INVOICE, payments: [] };
-    mp.invoice.findUnique.mockResolvedValue(inv);
+  it('marks the invoice PARTIALLY_PAID and records the balance when paid in part', async () => {
+    mp.invoice.findUnique.mockResolvedValue({ ...MOCK_INVOICE, payments: [] });
+    mockPaidTotals(1000000);
 
     await invoiceService.recordManualPayment(
       { invoiceId: 'inv-1', amountPaid: 1000000, mode: 'CASH' },
       'user-1',
     );
-    expect(mp.invoice.update).not.toHaveBeenCalled();
+
+    expect(mp.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status:             'PARTIALLY_PAID',
+          paidAmount:         1000000,
+          outstandingBalance: 1400000,
+        }),
+      }),
+    );
+    // The unpaid remainder is queued for the client's next invoice.
+    expect(mp.invoiceCarryForward.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ carryAmount: 1400000 }),
+      }),
+    );
   });
 });
 

@@ -16,6 +16,8 @@ import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
+import FeeIncrementModal from '../../components/finance/FeeIncrementModal';
+import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
@@ -115,6 +117,19 @@ function InvoicePaymentHistoryModal({ invoice, onClose }: { invoice: InvoiceResp
 function InvoicesTab() {
   const [showCreate, setShowCreate]       = useState(false);
   const [payInvoice,    setPayInvoice]    = useState<InvoiceResponse | null>(null);
+  const [incrementInvoice, setIncrementInvoice] = useState<InvoiceResponse | null>(null);
+  const [pdfId, setPdfId] = useState<string | null>(null);
+
+  const handleOpenPdf = async (inv: InvoiceResponse) => {
+    setPdfId(inv.id);
+    try {
+      await invoicesApi.openInvoicePdf(inv.id, inv.invoiceNumber);
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not build the invoice PDF.'), 'danger');
+    } finally {
+      setPdfId(null);
+    }
+  };
   const [payMoMo,       setPayMoMo]       = useState<InvoiceResponse | null>(null);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceResponse | null>(null);
   const [sendingId,     setSendingId]     = useState<string | null>(null);
@@ -204,18 +219,35 @@ function InvoicesTab() {
                 <td className="fw-medium">{inv.invoiceNumber}</td>
                 <td>{inv.clientName}</td>
                 <td>{fmtPeriod(inv.periodStart, inv.periodEnd)}</td>
-                <td>{fmtUGX(inv.totalAmount)}</td>
+                <td>
+                  {fmtUGX(inv.totalAmount)}
+                  {inv.paidAmount > 0 && inv.outstandingBalance > 0 && (
+                    <div style={{ fontSize: '0.72rem', lineHeight: 1.3 }}>
+                      <span style={{ color: '#1E8449' }}>paid {fmtUGX(inv.paidAmount)}</span>
+                      {' · '}
+                      <span style={{ color: '#C0392B', fontWeight: 600 }}>
+                        due {fmtUGX(inv.outstandingBalance)}
+                      </span>
+                    </div>
+                  )}
+                </td>
                 <td style={{ color: isOverdue(inv.dueDate) && inv.status !== 'PAID' ? '#C0392B' : undefined }}>
                   {new Date(inv.dueDate).toLocaleDateString('en-GB')}
                 </td>
                 <td>{statusBadge(inv.status)}</td>
                 <td>
                   <div className="d-flex gap-1 flex-wrap">
-                    {inv.pdfPath && (
-                      <a href={inv.pdfPath} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary">
-                        PDF
-                      </a>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      disabled={pdfId === inv.id}
+                      onClick={() => handleOpenPdf(inv)}
+                      title="Open a printable PDF of this invoice"
+                    >
+                      {pdfId === inv.id
+                        ? <><Spinner size="sm" animation="border" className="me-1" />Preparing…</>
+                        : '🖨️ Print / PDF'}
+                    </Button>
                     <Button size="sm" variant="outline-secondary" onClick={() => setHistoryInvoice(inv)} title="View payment history">
                       History
                     </Button>
@@ -236,7 +268,14 @@ function InvoicesTab() {
                         )}
                       </Button>
                     </RoleGuard>
-                    {['PENDING', 'OVERDUE'].includes(inv.status) && (
+                    {inv.status !== 'PAID' && (
+                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
+                        <Button size="sm" variant="outline-warning" onClick={() => setIncrementInvoice(inv)} title="Charge for extra guards on this invoice">
+                          ➕ Add Fees
+                        </Button>
+                      </RoleGuard>
+                    )}
+                    {['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(inv.status) && (
                       <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
                         <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
                           Record Payment
@@ -255,6 +294,13 @@ function InvoicesTab() {
       )}
 
       {showCreate && <InvoiceFormModal onClose={() => setShowCreate(false)} />}
+      {incrementInvoice && (
+        <FeeIncrementModal
+          invoice={incrementInvoice}
+          onClose={() => setIncrementInvoice(null)}
+          onSuccess={() => showToast('Charge added to the invoice', 'success')}
+        />
+      )}
       {payInvoice && (
         <RecordPaymentModal
           invoice={payInvoice}

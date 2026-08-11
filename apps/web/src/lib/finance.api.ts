@@ -13,6 +13,7 @@ import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
   RecordPaymentInput,
+  AddFeeIncrementInput,
   CreateDeductionInput,
   RunPayrollInput,
   CashbookEntryInput,
@@ -44,6 +45,34 @@ export const invoicesApi = {
   create(data: CreateInvoiceInput): Promise<InvoiceResponse> {
     return api
       .post<{ success: boolean; data: InvoiceResponse }>('/finance/invoices', data)
+      .then((r) => r.data.data);
+  },
+
+  /**
+   * Opens the invoice PDF in a new tab. Fetched through the API client rather
+   * than a plain link, because the access token is held in memory and would not
+   * be sent on a bare navigation.
+   */
+  openInvoicePdf(invoiceId: string, invoiceNumber: string): Promise<void> {
+    return api
+      .get(`/finance/invoices/${invoiceId}/pdf`, { responseType: 'blob' })
+      .then((r) => {
+        const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
+        const win = window.open(url, '_blank', 'noopener');
+        // Popup blocked — fall back to a download so the user still gets it.
+        if (!win) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf`;
+          a.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      });
+  },
+
+  addFeeIncrement(invoiceId: string, data: AddFeeIncrementInput): Promise<InvoiceResponse> {
+    return api
+      .post<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}/increment`, data)
       .then((r) => r.data.data);
   },
 

@@ -4,10 +4,13 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import { yoPayments } from '../lib/yoPayments';
 import { sendEmail } from '../lib/mailer';
 import { buildInvoiceEmail } from '../lib/templates/invoiceEmail';
+import { renderToPdf } from '../lib/pdfBase';
+import { buildInvoiceHtml } from '../lib/templates/invoicePdf';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
   RecordPaymentInput,
+  AddFeeIncrementInput,
   InvoiceResponse,
   InvoiceLineItemResponse,
   InvoicePreviewResponse,
@@ -45,6 +48,8 @@ function formatInvoice(inv: any, payments: any[] = []): InvoiceResponse {
     subtotal:       inv.subtotal,
     taxAmount:      inv.taxAmount,
     totalAmount:    inv.totalAmount,
+    paidAmount:         inv.paidAmount ?? 0,
+    outstandingBalance: inv.outstandingBalance ?? inv.totalAmount,
     status:         inv.status,
     dueDate:        inv.dueDate.toISOString(),
     paidAt:         inv.paidAt?.toISOString() ?? null,
@@ -74,6 +79,70 @@ function formatPayment(p: any): PaymentResponse {
 }
 
 // ── InvoiceService ─────────────────────────────────────────────────────────────
+
+
+/**
+ * Recomputes an invoice's paid/outstanding figures from its payment rows and
+ * moves the status with them.
+ *
+ * Both payment paths call this, so a partial payment is visible on the invoice
+ * the moment it lands rather than only once the total is settled. A leftover
+ * balance raises a carry-forward for the client's next invoice; clearing the
+ * balance removes it.
+ */
+export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
+  paidAmount: number;
+  outstandingBalance: number;
+  status: string;
+}> {
+  const invoice = await prisma.invoice.findUnique({
+    where:  { id: invoiceId },
+    select: { id: true, clientId: true, totalAmount: true, invoiceNumber: true, dueDate: true, status: true },
+  });
+  if (!invoice) throw new NotFoundError('Invoice not found');
+
+  // Manual payments and mobile-money payments both count towards the balance.
+  const [manual, momo] = await Promise.all([
+    prisma.payment.aggregate({ where: { invoiceId }, _sum: { amountPaid: true } }),
+    prisma.invoicePayment.aggregate({ where: { invoiceId, status: 'SUCCESS' }, _sum: { amountPaid: true } }),
+  ]);
+
+  const paidAmount = (manual._sum.amountPaid ?? 0) + (momo._sum.amountPaid ?? 0);
+  const outstandingBalance = Math.max(0, invoice.totalAmount - paidAmount);
+
+  const status =
+    outstandingBalance === 0 ? 'PAID'
+    : paidAmount > 0         ? 'PARTIALLY_PAID'
+    : invoice.dueDate < new Date() ? 'OVERDUE'
+    : 'PENDING';
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data:  {
+      paidAmount,
+      outstandingBalance,
+      status,
+      ...(outstandingBalance === 0 ? { paidAt: new Date() } : {}),
+    },
+  });
+
+  if (outstandingBalance > 0 && paidAmount > 0) {
+    const note =
+      `Unpaid balance of UGX ${outstandingBalance.toLocaleString()} from invoice ${invoice.invoiceNumber}`;
+    await prisma.invoiceCarryForward.upsert({
+      where:  { fromInvoiceId: invoiceId },
+      create: { fromInvoiceId: invoiceId, clientId: invoice.clientId, carryAmount: outstandingBalance, note },
+      update: { carryAmount: outstandingBalance, note },
+    });
+  } else {
+    // Settled, or never part-paid — nothing to carry.
+    await prisma.invoiceCarryForward.deleteMany({
+      where: { fromInvoiceId: invoiceId, toInvoiceId: null },
+    });
+  }
+
+  return { paidAmount, outstandingBalance, status };
+}
 
 class InvoiceService {
   private async generateInvoiceNumber(): Promise<string> {
@@ -177,7 +246,25 @@ class InvoiceService {
       amount:       li.count * li.ratePerGuard * li.billingDays,
     }));
 
-    const totalAmount  = lineItems.reduce((sum, li) => sum + li.amount, 0);
+    // Any balance left unpaid on an earlier invoice appears here as its own
+    // line, so the client sees exactly what is being carried over.
+    const carryForwards = await prisma.invoiceCarryForward.findMany({
+      where: { clientId: contract.clientId, toInvoiceId: null },
+    });
+
+    const allLineItems = [...lineItems];
+    for (const cf of carryForwards) {
+      allLineItems.push({
+        guardId:      null,
+        description:  cf.note ?? 'Outstanding balance from a previous invoice',
+        guardsCount:  1,
+        ratePerGuard: cf.carryAmount,
+        days:         1,
+        amount:       cf.carryAmount,
+      });
+    }
+
+    const totalAmount  = allLineItems.reduce((sum, li) => sum + li.amount, 0);
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = await prisma.invoice.create({
@@ -189,22 +276,36 @@ class InvoiceService {
         periodEnd:      params.periodEnd,
         guardsDeployed: lineItems.reduce((sum, li) => sum + li.guardsCount, 0),
         ratePerGuard:   0,
-        subtotal:       totalAmount,
-        taxAmount:      0,
+        subtotal:           totalAmount,
+        taxAmount:          0,
         totalAmount,
-        dueDate:        params.dueDate,
-        createdBy:      params.generatedBy,
-        lineItems: { create: lineItems },
+        outstandingBalance: totalAmount,
+        dueDate:            params.dueDate,
+        createdBy:          params.generatedBy,
+        lineItems: { create: allLineItems },
       },
       include: { client: true, contract: true, payments: true, lineItems: true },
     });
+
+    // Mark the balances as landed, so they are not carried a second time.
+    if (carryForwards.length > 0) {
+      await prisma.invoiceCarryForward.updateMany({
+        where: { id: { in: carryForwards.map(cf => cf.id) } },
+        data:  { toInvoiceId: invoice.id },
+      });
+    }
 
     await QueueService.logAudit({
       userId:   params.generatedBy,
       action:   'INVOICE_GENERATED',
       entity:   'invoice',
       entityId: invoice.id,
-      newValue: { contractId: params.contractId, lineItemCount: lineItems.length, totalAmount },
+      newValue: {
+        contractId:    params.contractId,
+        lineItemCount: allLineItems.length,
+        totalAmount,
+        carriedForward: carryForwards.reduce((sum, cf) => sum + cf.carryAmount, 0),
+      },
     });
 
     return formatInvoice(invoice);
@@ -401,29 +502,109 @@ class InvoiceService {
       },
     });
 
-    // Sum all payments including the one just created
-    const agg = await prisma.payment.aggregate({
-      where: { invoiceId: data.invoiceId },
-      _sum:  { amountPaid: true },
-    });
-    const sumPaid = agg._sum.amountPaid ?? 0;
-
-    if (sumPaid >= invoice.totalAmount) {
-      await prisma.invoice.update({
-        where: { id: data.invoiceId },
-        data:  { status: 'PAID', paidAt: new Date() },
-      });
-    }
+    // Recompute from every payment row, so a part payment shows as such
+    // instead of leaving the invoice looking untouched.
+    const balance = await recomputeInvoiceBalance(data.invoiceId);
 
     await QueueService.logAudit({
       userId:   recordedBy,
       action:   'PAYMENT_RECORDED',
       entity:   'payment',
       entityId: payment.id,
-      newValue: { invoiceId: data.invoiceId, amountPaid: data.amountPaid },
+      newValue: {
+        invoiceId:  data.invoiceId,
+        amountPaid: data.amountPaid,
+        paidToDate: balance.paidAmount,
+        outstanding: balance.outstandingBalance,
+        status:     balance.status,
+      },
     });
 
     return formatPayment(payment);
+  }
+
+
+  /**
+   * Adds an extra charge to an invoice that has not been settled — typically a
+   * client asking for more guards partway through the billing period. The line
+   * is appended and both the total and the outstanding balance move with it.
+   */
+  async addFeeIncrement(
+    invoiceId: string,
+    data: AddFeeIncrementInput,
+    addedBy: string,
+  ): Promise<InvoiceResponse> {
+    const invoice = await prisma.invoice.findUnique({
+      where:  { id: invoiceId },
+      select: { id: true, status: true, totalAmount: true, invoiceNumber: true },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+
+    if (invoice.status === 'PAID') {
+      throw new AppError(
+        `Invoice ${invoice.invoiceNumber} is already paid. Raise a new invoice for the extra guards instead.`,
+        400,
+      );
+    }
+
+    const amount = data.guardCount * data.ratePerGuard * data.days;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.invoiceLineItem.create({
+        data: {
+          invoiceId,
+          description:  data.description.trim(),
+          guardType:    data.guardType ?? null,
+          guardsCount:  data.guardCount,
+          ratePerGuard: data.ratePerGuard,
+          days:         data.days,
+          amount,
+        },
+      });
+
+      const newTotal = invoice.totalAmount + amount;
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data:  { totalAmount: newTotal, subtotal: newTotal },
+      });
+    });
+
+    // Total moved, so the balance and status follow from it.
+    await recomputeInvoiceBalance(invoiceId);
+
+    await QueueService.logAudit({
+      userId:   addedBy,
+      action:   'INVOICE_FEE_INCREMENTED',
+      entity:   'invoice',
+      entityId: invoiceId,
+      newValue: {
+        description: data.description,
+        guardCount:  data.guardCount,
+        ratePerGuard: data.ratePerGuard,
+        days:        data.days,
+        amount,
+        reason:      data.reason ?? null,
+        newTotal:    invoice.totalAmount + amount,
+      },
+    }).catch(() => { /* a queue outage must not undo a charge already applied */ });
+
+    return this.getById(invoiceId);
+  }
+
+  /** Invoice as a printable PDF, on the shared STAP letterhead. */
+  async buildInvoicePdf(invoiceId: string): Promise<{ pdf: Buffer; filename: string }> {
+    const invoice = await prisma.invoice.findUnique({
+      where:   { id: invoiceId },
+      include: {
+        client:    { select: { clientName: true, physicalAddress: true, email: true } },
+        lineItems: { orderBy: { createdAt: 'asc' } },
+        payments:  { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice));
+    return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
 
   async getARAgingReport(): Promise<ARAgingReport> {

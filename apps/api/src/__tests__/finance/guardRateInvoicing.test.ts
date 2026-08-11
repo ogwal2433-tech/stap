@@ -8,6 +8,8 @@ vi.mock('../../db/prisma', () => ({
     contract:  { findUnique: vi.fn() },
     payment:   { create: vi.fn() },
     client:    { findUnique: vi.fn() },
+    invoicePayment:      { aggregate: vi.fn() },
+    invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
 
@@ -78,6 +80,8 @@ function makeInvoice(lineItems: any[] = []) {
 beforeEach(() => {
   vi.clearAllMocks();
   mp.invoice.count.mockResolvedValue(0);
+  // No unpaid balances carried from earlier invoices unless a test says so.
+  mp.invoiceCarryForward.findMany.mockResolvedValue([]);
 });
 
 // ── getInvoicePreview() ────────────────────────────────────────────────────────
@@ -176,6 +180,40 @@ describe('generateInvoice() — line item handling', () => {
     expect(createCall.data.lineItems.create[0].description).toBe('Armed Guard');
     // Overrides bypass the preview entirely — contract is only looked up for clientId
     expect(mp.contract.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries an unpaid balance from a previous invoice onto the new one', async () => {
+    mp.contract.findUnique.mockResolvedValue({ id: 'contract-1', clientId: 'client-1' });
+    mp.invoiceCarryForward.findMany.mockResolvedValue([
+      { id: 'cf-1', clientId: 'client-1', carryAmount: 350010, note: 'Unpaid balance of UGX 350,010 from invoice STAP/INV/2026/0001', toInvoiceId: null },
+    ]);
+    mp.invoice.create.mockResolvedValue(makeInvoice([]));
+
+    await invoiceService.generateInvoice(
+      {
+        contractId: 'contract-1',
+        billingPeriodStart: '2026-06-01T00:00:00.000Z',
+        billingPeriodEnd:   '2026-06-30T00:00:00.000Z',
+        billingDays: 30,
+        lineItemOverrides: [{ guardType: 'Armed Guard', count: 1, ratePerGuard: 25000, billingDays: 30 }],
+      },
+      'user-1',
+    );
+
+    const createCall = mp.invoice.create.mock.calls[0][0];
+    const lines = createCall.data.lineItems.create;
+
+    // The carried balance appears as its own line, and lifts the total.
+    expect(lines).toHaveLength(2);
+    expect(lines[1].amount).toBe(350010);
+    expect(lines[1].description).toContain('Unpaid balance');
+    expect(createCall.data.totalAmount).toBe(750000 + 350010);
+    expect(createCall.data.outstandingBalance).toBe(750000 + 350010);
+
+    // And it is marked as landed so it cannot be carried twice.
+    expect(mp.invoiceCarryForward.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { toInvoiceId: expect.any(String) } }),
+    );
   });
 
   it('totalAmount equals sum of all lineTotal values', async () => {

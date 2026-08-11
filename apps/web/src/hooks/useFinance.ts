@@ -4,6 +4,7 @@ import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
   RecordPaymentInput,
+  AddFeeIncrementInput,
   CreateDeductionInput,
   RunPayrollInput,
   CashbookEntryInput,
@@ -41,6 +42,18 @@ export function useRecordPayment() {
     mutationFn: ({ invoiceId, ...data }: RecordPaymentInput & { invoiceId: string }) =>
       invoicesApi.recordPayment(invoiceId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+}
+
+export function useAddFeeIncrement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, ...data }: AddFeeIncrementInput & { invoiceId: string }) =>
+      invoicesApi.addFeeIncrement(invoiceId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['ar-aging'] });
+    },
   });
 }
 
