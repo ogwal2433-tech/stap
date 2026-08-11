@@ -1,8 +1,10 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
+import { canEditRequisition } from '@stap/shared';
 import type {
   CreateRequisitionInput,
+  UpdateRequisitionInput,
   ApproveRequisitionInput,
   AssignRequisitionInput,
   UpdateProgressInput,
@@ -152,6 +154,93 @@ class RequisitionService {
     });
 
     return fmtRequisition(requisition);
+  }
+
+  /**
+   * Amend a requisition that has not yet been signed off.
+   *
+   * Editable means HR has not approved it yet — not merely that the status is
+   * still PENDING, since `hrApprove` leaves the status alone.
+   */
+  async update(
+    id: string,
+    data: UpdateRequisitionInput,
+    by: string,
+    byRole: string,
+  ): Promise<RequisitionResponse> {
+    const requisition = await prisma.requisition.findUnique({ where: { id } });
+    if (!requisition) throw new NotFoundError('Requisition not found');
+
+    const isRequester = requisition.requestedById === by;
+    const isApprover  = ['DIRECTOR', 'ASSISTANT_MANAGER'].includes(byRole);
+    if (!isRequester && !isApprover) {
+      throw new AppError('You can only edit your own requisitions.', 403);
+    }
+
+    if (!canEditRequisition(requisition.status, requisition.hrApprovedAt)) {
+      throw new AppError(
+        requisition.hrApprovedAt
+          ? 'This requisition cannot be edited — HR has already approved it. ' +
+            'Ask HR to reverse the approval if it needs to change.'
+          : `This requisition cannot be edited. It is currently ` +
+            `${requisition.status.replace(/_/g, ' ')}. Only requisitions awaiting ` +
+            `HR approval can be edited.`,
+        400,
+      );
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Category items are replaced wholesale — the form submits the full set,
+      // and matching them up line by line would gain nothing.
+      if (data.categoryItems) {
+        await tx.requisitionCategoryItem.deleteMany({ where: { requisitionId: id } });
+      }
+
+      return tx.requisition.update({
+        where: { id },
+        data: {
+          ...(data.date           !== undefined ? { date: new Date(data.date) }        : {}),
+          ...(data.particulars    !== undefined ? { particulars: data.particulars, description: data.particulars } : {}),
+          ...(data.amount         !== undefined ? { amount: data.amount, estimatedUnitCost: data.amount, estimatedTotal: data.amount } : {}),
+          ...(data.remarks        !== undefined ? { remarks: data.remarks ?? null }               : {}),
+          ...(data.accountDetails !== undefined ? { accountDetails: data.accountDetails ?? null } : {}),
+          ...(data.accountName    !== undefined ? { accountName: data.accountName ?? null }       : {}),
+          ...(data.bankName       !== undefined ? { bankName: data.bankName ?? null }             : {}),
+          ...(data.categoryItems
+            ? {
+                // `category` mirrors the first selection — the dashboard groups by it.
+                category:      data.categoryItems[0]?.category ?? requisition.category,
+                categoryItems: {
+                  create: data.categoryItems.map((c) => ({
+                    category: c.category,
+                    quantity: c.quantity,
+                    unit:     c.unit ?? null,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: INCLUDE,
+      });
+    });
+
+    await QueueService.logAudit({
+      userId:   by,
+      action:   'REQUISITION_EDITED',
+      entity:   'requisition',
+      entityId: id,
+      oldValue: {
+        particulars: requisition.particulars,
+        amount:      requisition.amount,
+      },
+      newValue: {
+        fields:      Object.keys(data),
+        particulars: updated.particulars,
+        amount:      updated.amount,
+      },
+    });
+
+    return fmtRequisition(updated);
   }
 
   async hrApprove(id: string, by: string): Promise<RequisitionResponse> {

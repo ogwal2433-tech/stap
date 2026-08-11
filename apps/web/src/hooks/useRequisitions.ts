@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requisitionsApi, suppliersApi } from '../lib/requisitions.api';
 import type {
   CreateRequisitionInput,
+  UpdateRequisitionInput,
   ApproveRequisitionInput,
   AssignRequisitionInput,
   UpdateProgressInput,
@@ -24,6 +25,15 @@ export function useCreateRequisition() {
   return useMutation({
     mutationFn: (data: CreateRequisitionInput) => requisitionsApi.create(data),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useUpdateRequisition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateRequisitionInput }) =>
+      requisitionsApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
   });
 }
 

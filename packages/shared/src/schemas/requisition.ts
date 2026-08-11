@@ -35,6 +35,54 @@ export const CreateRequisitionSchema = z.object({
   },
 );
 
+export const UpdateRequisitionSchema = z.object({
+  date:           z.string().datetime().optional(),
+  particulars:    z.string().min(3, 'Particulars must be at least 3 characters').max(1000).optional(),
+  amount:         z.coerce.number().int().positive('Amount must be positive').optional(),
+  categoryItems:  z.array(CategoryItemSchema).min(1, 'Select at least one category and specify a quantity').optional(),
+  remarks:        z.string().max(1000).optional().nullable(),
+  accountDetails: z.string().max(200).optional().nullable(),
+  accountName:    z.string().max(200).optional().nullable(),
+  bankName:       z.string().max(200).optional().nullable(),
+}).refine(
+  (data) => {
+    if (!data.categoryItems) return true;
+    const cats = data.categoryItems.map((c) => c.category);
+    return new Set(cats).size === cats.length;
+  },
+  {
+    message: 'Each category can only be added once. Adjust the quantity instead of adding it twice.',
+    path: ['categoryItems'],
+  },
+);
+
+/**
+ * Statuses at which a requisition is still the requester's to change.
+ *
+ * Necessary but not sufficient — see {@link canEditRequisition}. HR approval
+ * does not move the status, so this list alone would leave an HR-approved
+ * requisition editable.
+ */
+export const EDITABLE_STATUSES = ['PENDING', 'SUBMITTED'] as const;
+
+/**
+ * Whether a requisition can still be edited.
+ *
+ * Locks on HR sign-off rather than on status alone: `hrApprove` records
+ * `hrApprovedAt` and deliberately leaves `status` at PENDING, so checking the
+ * status by itself would let a requester rewrite a requisition HR had already
+ * approved.
+ *
+ * @param hrApprovedAt When HR approved, or null/undefined if they have not.
+ */
+export function canEditRequisition(
+  status: string,
+  hrApprovedAt?: string | Date | null,
+): boolean {
+  if (hrApprovedAt) return false;
+  return (EDITABLE_STATUSES as readonly string[]).includes(status);
+}
+
 export const HRApproveRequisitionSchema = z.object({});
 
 export const DirectorApproveRequisitionSchema = z.object({});
@@ -86,6 +134,7 @@ export const CreateSupplierSchema = z.object({
 
 export type CategoryItemInput              = z.infer<typeof CategoryItemSchema>;
 export type CreateRequisitionInput         = z.infer<typeof CreateRequisitionSchema>;
+export type UpdateRequisitionInput         = z.infer<typeof UpdateRequisitionSchema>;
 export type HRApproveRequisitionInput      = z.infer<typeof HRApproveRequisitionSchema>;
 export type DirectorApproveRequisitionInput = z.infer<typeof DirectorApproveRequisitionSchema>;
 export type AssignRequisitionInput         = z.infer<typeof AssignRequisitionSchema>;

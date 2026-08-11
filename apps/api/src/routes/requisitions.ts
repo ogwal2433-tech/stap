@@ -63,6 +63,7 @@ import {
   ROLES,
   INTERNAL_ROLES,
   CreateRequisitionSchema,
+  UpdateRequisitionSchema,
   ApproveRequisitionSchema,
   HRApproveRequisitionSchema,
   DirectorApproveRequisitionSchema,
@@ -120,6 +121,20 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.create(req.body, req.user!.userId);
     res.status(201).json({ success: true, data: requisition });
+  }),
+);
+
+// Amending a requisition before HR signs off. Open to every submitter role —
+// the service decides whether this particular user may touch this record.
+router.patch(
+  '/:id',
+  requireRole(...REQUISITION_SUBMITTER_ROLES),
+  validate(UpdateRequisitionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.update(
+      req.params.id, req.body, req.user!.userId, req.user!.role,
+    );
+    res.json({ success: true, data: requisition });
   }),
 );
 

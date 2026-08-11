@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import {
-  Modal, Form, Button, Row, Col, Badge, InputGroup,
+  Modal, Form, Button, Row, Col, Badge, InputGroup, Alert,
 } from 'react-bootstrap';
-import { useCreateRequisition } from '../../hooks/useRequisitions';
+import type { RequisitionResponse } from '@stap/shared';
+import { useCreateRequisition, useUpdateRequisition } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
+import { getApiErrorMessage } from '../../lib/api';
 
-interface Props { onClose: () => void }
+interface Props {
+  onClose: () => void;
+  /**
+   * Supplied to amend an existing requisition instead of raising a new one.
+   * The fields are identical either way, so the same form serves both.
+   */
+  requisition?: RequisitionResponse;
+}
 
 const REQUISITION_CATEGORIES = [
   'Stationery', 'Equipment', 'Fuel', 'Maintenance',
@@ -22,18 +31,27 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function RequisitionFormModal({ onClose }: Props) {
+export default function RequisitionFormModal({ onClose, requisition }: Props) {
   const { showToast } = useToast();
   const createReq = useCreateRequisition();
+  const updateReq = useUpdateRequisition();
 
-  const [date, setDate]               = useState(today());
-  const [particulars, setParticulars] = useState('');
-  const [amountStr, setAmountStr]     = useState('');
-  const [categoryItems, setCategoryItems] = useState<CategorySelection[]>([]);
-  const [remarks, setRemarks]         = useState('');
-  const [accountDetails, setAccountDetails] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [bankName, setBankName]       = useState('');
+  const isEdit = !!requisition;
+
+  const [date, setDate]               = useState(requisition ? requisition.date.slice(0, 10) : today());
+  const [particulars, setParticulars] = useState(requisition?.particulars ?? '');
+  const [amountStr, setAmountStr]     = useState(requisition ? String(requisition.amount) : '');
+  const [categoryItems, setCategoryItems] = useState<CategorySelection[]>(
+    requisition?.categoryItems.map((c) => ({
+      category: c.category,
+      quantity: c.quantity,
+      unit:     c.unit ?? '',
+    })) ?? [],
+  );
+  const [remarks, setRemarks]         = useState(requisition?.remarks ?? '');
+  const [accountDetails, setAccountDetails] = useState(requisition?.accountDetails ?? '');
+  const [accountName, setAccountName] = useState(requisition?.accountName ?? '');
+  const [bankName, setBankName]       = useState(requisition?.bankName ?? '');
   const [errors, setErrors]           = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,25 +88,49 @@ export default function RequisitionFormModal({ onClose }: Props) {
     e.preventDefault();
     if (!validate()) return;
     setIsSubmitting(true);
+
+    const payload = {
+      date:          `${date}T00:00:00.000Z`,
+      particulars:   particulars.trim(),
+      amount,
+      categoryItems: categoryItems.map((c) => ({
+        category: c.category,
+        quantity: c.quantity,
+        unit:     c.unit.trim() || undefined,
+      })),
+    };
+
     try {
-      await createReq.mutateAsync({
-        date:           `${date}T00:00:00.000Z`,
-        particulars:    particulars.trim(),
-        amount,
-        categoryItems:  categoryItems.map((c) => ({
-          category: c.category,
-          quantity: c.quantity,
-          unit:     c.unit.trim() || undefined,
-        })),
-        remarks:        remarks.trim() || undefined,
-        accountDetails: accountDetails.trim() || undefined,
-        accountName:    accountName.trim() || undefined,
-        bankName:       bankName.trim() || undefined,
-      });
-      showToast('Requisition submitted', 'success');
+      if (requisition) {
+        // Cleared optional fields go as null so the API blanks them, rather
+        // than as undefined, which it reads as "leave this one alone".
+        await updateReq.mutateAsync({
+          id:   requisition.id,
+          data: {
+            ...payload,
+            remarks:        remarks.trim() || null,
+            accountDetails: accountDetails.trim() || null,
+            accountName:    accountName.trim() || null,
+            bankName:       bankName.trim() || null,
+          },
+        });
+        showToast('Requisition updated', 'success');
+      } else {
+        await createReq.mutateAsync({
+          ...payload,
+          remarks:        remarks.trim() || undefined,
+          accountDetails: accountDetails.trim() || undefined,
+          accountName:    accountName.trim() || undefined,
+          bankName:       bankName.trim() || undefined,
+        });
+        showToast('Requisition submitted', 'success');
+      }
       onClose();
-    } catch {
-      showToast('Failed to submit requisition', 'danger');
+    } catch (err) {
+      showToast(
+        getApiErrorMessage(err, isEdit ? 'Failed to update requisition' : 'Failed to submit requisition'),
+        'danger',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -97,10 +139,18 @@ export default function RequisitionFormModal({ onClose }: Props) {
   return (
     <Modal show onHide={onClose} size="lg">
       <Modal.Header closeButton style={{ backgroundColor: '#1B3A6B', color: '#fff' }}>
-        <Modal.Title className="fs-6 fw-semibold">New Requisition</Modal.Title>
+        <Modal.Title className="fs-6 fw-semibold">
+          {isEdit ? '✏️ Edit Requisition' : 'New Requisition'}
+        </Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
+          {isEdit && (
+            <Alert variant="info" className="py-2 small mb-3">
+              This requisition is still awaiting HR approval, so it can be changed.
+              Saving leaves it pending — once HR approves it, it locks.
+            </Alert>
+          )}
           <Row className="g-3">
             {/* 1. Date */}
             <Col md={4}>
@@ -272,7 +322,9 @@ export default function RequisitionFormModal({ onClose }: Props) {
         <Modal.Footer>
           <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
           <Button type="submit" style={{ background: '#1B3A6B', borderColor: '#1B3A6B' }} disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting…' : 'Submit Requisition'}
+            {isEdit
+              ? (isSubmitting ? 'Saving…' : '💾 Save Changes')
+              : (isSubmitting ? 'Submitting…' : 'Submit Requisition')}
           </Button>
         </Modal.Footer>
       </Form>

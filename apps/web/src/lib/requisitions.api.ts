@@ -5,6 +5,7 @@ import type {
   SupplierResponse,
   PaginatedResponse,
   CreateRequisitionInput,
+  UpdateRequisitionInput,
   ApproveRequisitionInput,
   AssignRequisitionInput,
   UpdateProgressInput,
@@ -31,6 +32,12 @@ export const requisitionsApi = {
   create(data: CreateRequisitionInput): Promise<RequisitionResponse> {
     return api
       .post<{ success: boolean; data: RequisitionResponse }>('/requisitions', data)
+      .then((r) => r.data.data);
+  },
+
+  update(id: string, data: UpdateRequisitionInput): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}`, data)
       .then((r) => r.data.data);
   },
 

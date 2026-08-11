@@ -22,7 +22,7 @@ import AccountabilityFormModal from '../../components/requisitions/Accountabilit
 import FundDispatchSection from '../../components/requisitions/FundDispatchSection';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { useStaffUsers } from '../../hooks/useUsers';
-import { ROLES } from '@stap/shared';
+import { ROLES, canEditRequisition } from '@stap/shared';
 import type { RequisitionResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
@@ -72,6 +72,19 @@ function StatusCell({ req }: { req: RequisitionResponse }) {
       )}
     </td>
   );
+}
+
+/** Why a requisition can no longer be changed, in the requester's terms. */
+function lockReason(req: RequisitionResponse): string {
+  if (req.hrApproved.at) return 'HR approved';
+  const map: Record<string, string> = {
+    APPROVED:    'Director approved',
+    ASSIGNED:    'Assigned',
+    IN_PROGRESS: 'In progress',
+    REJECTED:    'Rejected',
+    CANCELLED:   'Cancelled',
+  };
+  return map[req.status] ?? req.status.replace(/_/g, ' ');
 }
 
 // ── Category badges helper ────────────────────────────────────────────────────
@@ -338,9 +351,19 @@ function ProgressModal({ requisition, onClose }: { requisition: RequisitionRespo
 
 function MyRequisitionsTab() {
   const [showCreate, setShowCreate] = useState(false);
+  const [editReq, setEditReq]       = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]   = useState<RequisitionResponse | null>(null);
   const { data, isLoading }         = useRequisitions();
+  const { user }                    = useAuth();
   const reqs = data?.data ?? [];
+
+  // Mirrors the API's ownership rule, so the button never appears where the
+  // request would come back 403. Approvers see rows raised by other people
+  // here because the list endpoint does not scope admin roles to their own.
+  const mayEdit = (r: RequisitionResponse) =>
+    canEditRequisition(r.status, r.hrApproved.at) &&
+    (r.requestedBy.id === user?.id ||
+      [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any));
 
   return (
     <>
@@ -369,11 +392,12 @@ function MyRequisitionsTab() {
               <th>Account Name</th>
               <th>Bank Name</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {reqs.length === 0 ? (
-              <tr><td colSpan={12} className="text-center text-muted py-4">No requisitions yet</td></tr>
+              <tr><td colSpan={13} className="text-center text-muted py-4">No requisitions yet</td></tr>
             ) : reqs.map((r) => (
               <tr
                 key={r.id}
@@ -414,6 +438,38 @@ function MyRequisitionsTab() {
                 <td>{r.accountName ?? '—'}</td>
                 <td>{r.bankName ?? '—'}</td>
                 <StatusCell req={r} />
+                <td onClick={(e) => e.stopPropagation()} style={{ cursor: 'default' }}>
+                  <div className="d-flex align-items-center gap-2">
+                    {mayEdit(r) ? (
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        style={{ fontSize: '0.75rem', padding: '3px 10px', whiteSpace: 'nowrap' }}
+                        onClick={() => setEditReq(r)}
+                      >
+                        ✏️ Edit
+                      </Button>
+                    ) : (
+                      <span
+                        title="Only requisitions still awaiting HR approval can be edited"
+                        style={{
+                          fontSize: '0.72rem', color: '#6c757d',
+                          display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        🔒 {lockReason(r)}
+                      </span>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      style={{ fontSize: '0.75rem', padding: '3px 10px' }}
+                      onClick={() => setDetailReq(r)}
+                    >
+                      View
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -421,6 +477,7 @@ function MyRequisitionsTab() {
       )}
 
       {showCreate && <RequisitionFormModal onClose={() => setShowCreate(false)} />}
+      {editReq && <RequisitionFormModal requisition={editReq} onClose={() => setEditReq(null)} />}
       {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
     </>
   );
