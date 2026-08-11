@@ -57,6 +57,8 @@ function fmtRequisition(r: any): RequisitionResponse {
     rejectedAt:       r.rejectedAt?.toISOString() ?? null,
     rejectionReason:  r.rejectionReason ?? null,
     purchaseOrders:   (r.purchaseOrders ?? []).map(fmtPO),
+    totalDispatched:  r.totalDispatched ?? 0,
+    dispatchStatus:   r.dispatchStatus ?? 'PENDING',
     createdAt:        r.createdAt.toISOString(),
     updatedAt:        r.updatedAt.toISOString(),
   };

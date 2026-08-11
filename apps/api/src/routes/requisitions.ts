@@ -72,8 +72,10 @@ import {
   CreateSupplierSchema,
   CreateAccountabilitySchema,
   ReviewAccountabilitySchema,
+  CreateFundDispatchSchema,
 } from '@stap/shared';
 import { accountabilityService } from '../services/accountabilityService';
+import { fundDispatchService } from '../services/fundDispatchService';
 
 const router: IRouter = Router();
 router.use(authenticate);
@@ -211,6 +213,33 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const supplier = await supplierService.update(req.params.id, req.body);
     res.json({ success: true, data: supplier });
+  }),
+);
+
+// ── Fund dispatch ─────────────────────────────────────────────────────────────
+// How approved money actually left the business — E-Transact, cash, bank
+// transfer, mobile money or cheque, one row per payment.
+
+router.get(
+  '/:id/dispatches',
+  requireRole(
+    ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.ADMINISTRATOR,
+  ),
+  asyncHandler(async (req: Request, res: Response) => {
+    const dispatches = await fundDispatchService.getDispatches(req.params.id);
+    res.json({ success: true, data: dispatches });
+  }),
+);
+
+router.post(
+  '/:id/dispatch',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(CreateFundDispatchSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const dispatch = await fundDispatchService.recordDispatch(
+      req.params.id, req.body, req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: dispatch });
   }),
 );
 

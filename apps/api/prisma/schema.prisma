@@ -155,6 +155,7 @@ model User {
   adminAccountability     RequisitionAccountability[] @relation("AccountabilityAdmin")
   hrAccountability        RequisitionAccountability[] @relation("AccountabilityHR")
   directorAccountability  RequisitionAccountability[] @relation("AccountabilityDirector")
+  fundDispatches          FundDispatch[]             @relation("FundDispatchedBy")
 
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
@@ -932,9 +933,50 @@ model Requisition {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
+  /// Sum of every FundDispatch raised against this requisition, kept in step as
+  /// each one is recorded so a partial dispatch is visible without re-aggregating.
+  totalDispatched Int    @default(0)
+  /// PENDING | PARTIAL | FULLY_DISPATCHED. Deliberately a separate axis from
+  /// `status`, which tracks approval and the work itself (APPROVED → ASSIGNED →
+  /// IN_PROGRESS) — money can go out at any of those points.
+  dispatchStatus  String @default("PENDING")
+
   categoryItems  RequisitionCategoryItem[]
   purchaseOrders PurchaseOrder[]
   accountability RequisitionAccountability?
+  dispatches     FundDispatch[]
+}
+
+/// How approved funds actually left the business — one row per payment, so a
+/// requisition settled in instalments keeps a full trail rather than a single
+/// "paid" flag.
+model FundDispatch {
+  id            String      @id @default(cuid())
+  requisitionId String
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+
+  /// E_TRANSACT | CASH | BANK_TRANSFER | MOBILE_MONEY | CHEQUE | OTHER
+  channel String
+  /// UGX.
+  amount  Int
+
+  /// E-Transact/bank transaction ID or cheque number. Required by the API for
+  /// the electronic channels and cheques, optional for cash.
+  reference        String?
+  recipientName    String?
+  /// Bank account, phone number or wallet the money went to.
+  recipientAccount String?
+
+  dispatchDate DateTime @default(now())
+  notes        String?
+
+  dispatchedById   String
+  dispatchedByUser User   @relation("FundDispatchedBy", fields: [dispatchedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requisitionId, dispatchDate])
 }
 
 /// What was actually spent against an approved requisition.

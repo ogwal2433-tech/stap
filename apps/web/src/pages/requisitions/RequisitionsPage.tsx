@@ -19,6 +19,7 @@ import PurchaseOrderModal from '../../components/requisitions/PurchaseOrderModal
 import SupplierFormModal from '../../components/requisitions/SupplierFormModal';
 import AccountabilityTable from '../../components/requisitions/AccountabilityTable';
 import AccountabilityFormModal from '../../components/requisitions/AccountabilityFormModal';
+import FundDispatchSection from '../../components/requisitions/FundDispatchSection';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES } from '@stap/shared';
@@ -43,6 +44,34 @@ function statusBadge(status: string) {
   };
   const cfg = map[status] ?? { bg: 'secondary' };
   return <Badge bg={cfg.bg} text={cfg.text as any}>{status.replace('_', ' ')}</Badge>;
+}
+
+/**
+ * Approval status with the money side underneath it — the two track separately,
+ * so an APPROVED requisition can still be half paid out.
+ */
+function StatusCell({ req }: { req: RequisitionResponse }) {
+  return (
+    <td>
+      <div>{statusBadge(req.status)}</div>
+      {req.dispatchStatus !== 'PENDING' && (
+        <div className="mt-1">
+          <Badge
+            bg={req.dispatchStatus === 'FULLY_DISPATCHED' ? 'success' : 'warning'}
+            text={req.dispatchStatus === 'PARTIAL' ? 'dark' : undefined}
+            style={{ fontSize: '0.65rem' }}
+          >
+            💵 {req.dispatchStatus.replace(/_/g, ' ')}
+          </Badge>
+        </div>
+      )}
+      {req.totalDispatched > 0 && (
+        <div style={{ fontSize: '0.68rem', color: '#6c757d', marginTop: '2px' }}>
+          UGX {req.totalDispatched.toLocaleString()} sent
+        </div>
+      )}
+    </td>
+  );
 }
 
 // ── Category badges helper ────────────────────────────────────────────────────
@@ -142,6 +171,12 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
               </Alert>
             </Col>
           )}
+
+          {/* ── Fund dispatch ─────────────────────────────────────────────── */}
+          <Col md={12}>
+            <hr className="my-2" />
+            <FundDispatchSection requisition={req} userRole={user?.role as UserRole | undefined} />
+          </Col>
 
           {/* ── Accountability ─────────────────────────────────────────────── */}
           <Col md={12}>
@@ -378,7 +413,7 @@ function MyRequisitionsTab() {
                 <td className="text-truncate" style={{ maxWidth: 120 }}>{r.accountDetails ?? '—'}</td>
                 <td>{r.accountName ?? '—'}</td>
                 <td>{r.bankName ?? '—'}</td>
-                <td>{statusBadge(r.status)}</td>
+                <StatusCell req={r} />
               </tr>
             ))}
           </tbody>
@@ -475,7 +510,7 @@ function ManageTab() {
                     <span className="text-muted small">Not assigned</span>
                   )}
                 </td>
-                <td>{statusBadge(r.status)}</td>
+                <StatusCell req={r} />
                 <td>
                   <div className="d-flex gap-1 flex-wrap">
                     {isAdmin && !r.hrApproved.at && ['PENDING', 'SUBMITTED'].includes(r.status) && (

@@ -9,6 +9,7 @@ import type {
   CreateSupplierInput,
   CreateAccountabilityInput,
   ReviewAccountabilityInput,
+  CreateFundDispatchInput,
 } from '@stap/shared';
 
 export function useRequisitions(params?: Parameters<typeof requisitionsApi.list>[0]) {
@@ -78,6 +79,26 @@ export function useCreatePurchaseOrder() {
     }: { requisitionId: string } & Omit<CreatePurchaseOrderInput, 'requisitionId'>) =>
       requisitionsApi.createPurchaseOrder(requisitionId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useFundDispatches(requisitionId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['fundDispatches', requisitionId],
+    queryFn:  () => requisitionsApi.getDispatches(requisitionId),
+    enabled:  Boolean(requisitionId) && enabled,
+  });
+}
+
+export function useRecordDispatch(requisitionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateFundDispatchInput) =>
+      requisitionsApi.recordDispatch(requisitionId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fundDispatches', requisitionId] });
+      qc.invalidateQueries({ queryKey: ['requisitions'] });
+    },
   });
 }
 

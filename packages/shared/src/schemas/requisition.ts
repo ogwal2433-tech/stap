@@ -124,6 +124,9 @@ export interface RequisitionResponse {
   rejectedAt:       string | null;
   rejectionReason:  string | null;
   purchaseOrders:   PurchaseOrderResponse[];
+  /** Sum of every dispatch raised against this requisition, in UGX. */
+  totalDispatched:  number;
+  dispatchStatus:   DispatchStatus;
   createdAt:        string;
   updatedAt:        string;
 }
@@ -153,6 +156,64 @@ export interface SupplierResponse {
   itemCategories: string[];
   paymentTerms:   string | null;
   createdAt:      string;
+}
+
+// ── Fund dispatch ──────────────────────────────────────────────────────────────
+
+/** Channels approved funds can be sent through. */
+export const DISPATCH_CHANNELS = [
+  { value: 'E_TRANSACT',    label: '💳 E-Transact' },
+  { value: 'CASH',          label: '💵 Cash' },
+  { value: 'BANK_TRANSFER', label: '🏦 Bank Transfer' },
+  { value: 'MOBILE_MONEY',  label: '📱 Mobile Money' },
+  { value: 'CHEQUE',        label: '📝 Cheque' },
+  { value: 'OTHER',         label: '📋 Other' },
+] as const;
+
+export type DispatchChannel = (typeof DISPATCH_CHANNELS)[number]['value'];
+
+/** Channels that leave a paper trail we insist on capturing. */
+export const REFERENCED_CHANNELS: readonly DispatchChannel[] = [
+  'E_TRANSACT', 'BANK_TRANSFER', 'CHEQUE',
+] as const;
+
+export const DISPATCH_STATUSES = ['PENDING', 'PARTIAL', 'FULLY_DISPATCHED'] as const;
+export type DispatchStatus = (typeof DISPATCH_STATUSES)[number];
+
+export function dispatchChannelLabel(channel: string): string {
+  return DISPATCH_CHANNELS.find((c) => c.value === channel)?.label ?? channel;
+}
+
+export const CreateFundDispatchSchema = z.object({
+  channel:          z.enum(['E_TRANSACT', 'CASH', 'BANK_TRANSFER', 'MOBILE_MONEY', 'CHEQUE', 'OTHER']),
+  amount:           z.coerce.number().int().min(1, 'Amount must be at least 1 UGX'),
+  reference:        z.string().max(200).optional().nullable(),
+  recipientName:    z.string().max(200).optional().nullable(),
+  recipientAccount: z.string().max(200).optional().nullable(),
+  dispatchDate:     z.string().datetime().optional(),
+  notes:            z.string().max(1000).optional().nullable(),
+}).refine(
+  (data) => !REFERENCED_CHANNELS.includes(data.channel) || !!data.reference?.trim(),
+  {
+    message: 'A reference number is required for E-Transact, Bank Transfer, and Cheque payments.',
+    path: ['reference'],
+  },
+);
+
+export type CreateFundDispatchInput = z.infer<typeof CreateFundDispatchSchema>;
+
+export interface FundDispatchResponse {
+  id:               string;
+  requisitionId:    string;
+  channel:          DispatchChannel;
+  amount:           number;
+  reference:        string | null;
+  recipientName:    string | null;
+  recipientAccount: string | null;
+  dispatchDate:     string;
+  notes:            string | null;
+  dispatchedBy:     { id: string; name: string };
+  createdAt:        string;
 }
 
 // ── Accountability ─────────────────────────────────────────────────────────────

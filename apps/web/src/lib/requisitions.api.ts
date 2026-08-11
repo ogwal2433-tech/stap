@@ -13,6 +13,8 @@ import type {
   AccountabilityResponse,
   CreateAccountabilityInput,
   ReviewAccountabilityInput,
+  FundDispatchResponse,
+  CreateFundDispatchInput,
 } from '@stap/shared';
 
 export const requisitionsApi = {
@@ -68,6 +70,18 @@ export const requisitionsApi = {
         `/requisitions/${requisitionId}/purchase-order`,
         data,
       )
+      .then((r) => r.data.data);
+  },
+
+  getDispatches(requisitionId: string): Promise<FundDispatchResponse[]> {
+    return api
+      .get<{ success: boolean; data: FundDispatchResponse[] }>(`/requisitions/${requisitionId}/dispatches`)
+      .then((r) => r.data.data);
+  },
+
+  recordDispatch(requisitionId: string, data: CreateFundDispatchInput): Promise<FundDispatchResponse> {
+    return api
+      .post<{ success: boolean; data: FundDispatchResponse }>(`/requisitions/${requisitionId}/dispatch`, data)
       .then((r) => r.data.data);
   },
 
