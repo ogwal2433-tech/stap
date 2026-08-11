@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { ROLES, DEPLOYABLE_STATUSES } from '@stap/shared';
+import { marketingService } from './marketingService';
 import type { DashboardData } from '@stap/shared';
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
@@ -45,11 +46,13 @@ class DashboardService {
         return this.getAdminStats();
       case ROLES.CONTROL_ROOM:
         return this.getControlRoomStats();
+      case ROLES.MARKETING:
+        return this.getMarketingStats(userId);
       case ROLES.CLIENT:
         return this.getClientStats(clientId);
       default:
-        // TRAINER and MARKETING land here alongside anything added later —
-        // the HR view is the safest general-purpose set.
+        // TRAINER lands here alongside anything added later — the HR view is
+        // the safest general-purpose set.
         return this.getHRStats();
     }
   }
@@ -280,6 +283,42 @@ class DashboardService {
           primary:   c.subject,
           secondary: c.client.clientName,
           badge:     c.severity,
+        })),
+      },
+    };
+  }
+
+  // ── Marketing — pipeline, bids and target progress ───────────────────────────
+
+  private async getMarketingStats(userId: string): Promise<DashboardData> {
+    // The marketing module owns these figures; reuse them rather than
+    // recomputing the pipeline in a second place that could disagree.
+    const m = await marketingService.getDashboard(userId);
+
+    return {
+      role:  'MARKETING',
+      stats: {
+        totalProspects:   m.stats.totalProspects,
+        inPipeline:       m.stats.inPipeline,
+        won:              m.stats.won,
+        activeBids:       m.stats.activeBids,
+        upcomingExpiries: m.stats.upcomingExpiries,
+        conversionRate:   m.stats.conversionRate,
+        targetProgress:   m.stats.targetProgress ?? 0,
+      },
+      feeds: {
+        recentActivity: m.recentActivity.map(a => ({
+          id:        a.id,
+          primary:   a.companyName,
+          secondary: `${a.fromStatus ? `${a.fromStatus.replace(/_/g, ' ')} → ` : ''}` +
+                     `${a.toStatus.replace(/_/g, ' ')} · ${a.changedBy.name}`,
+          badge:     new Date(a.createdAt).toLocaleDateString('en-GB'),
+        })),
+        pipelineStages: m.prospectsByStatus.map(s => ({
+          id:        s.status,
+          primary:   s.label,
+          secondary: `${s.count} prospect${s.count === 1 ? '' : 's'}`,
+          badge:     String(s.count),
         })),
       },
     };

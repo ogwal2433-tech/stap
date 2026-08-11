@@ -21,6 +21,7 @@ const ADMIN_ONLY       = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
 const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 // Firearms are the Trainer's to issue; Operations can see what is on its sites.
+const MARKETING_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const GUN_VIEW_ROLES = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
@@ -70,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] },
       { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[] },
+      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] },
       { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] },
     ],
   },
@@ -116,7 +118,7 @@ const ALL_NAV_PATHS = new Set([
   '/dashboard', '/guards', '/attendance', '/checkin',
   '/clients', '/zones', '/complaints',
   '/finance', '/inventory', '/requisitions',
-  '/hr', '/reports', '/settings', '/notifications', '/guns',
+  '/hr', '/reports', '/settings', '/notifications', '/guns', '/marketing',
   '/guards/dashboard', '/guards/import',
   '/attendance/dashboard', '/admin/errors',
 ]);
@@ -130,7 +132,7 @@ const ROLE_BADGE: Record<string, string> = {
   ACCOUNTS_OFFICER:      '#28a745',
   CONTROL_ROOM:          '#E8701A',
   TRAINER:               '#6c757d',
-  MARKETING:             '#17a2b8',
+  MARKETING:             '#0F7B6C',
   GUARD:                 '#f8f9fa',
   CLIENT:                '#f8f9fa',
 };

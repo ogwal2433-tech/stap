@@ -24,6 +24,12 @@ const AttendanceDashboardPage      = lazy(() => import('@/pages/attendance/Atten
 const CheckinPage                  = lazy(() => import('@/pages/attendance/CheckinPage'));
 const DeploymentSheetPage          = lazy(() => import('@/pages/roster/DeploymentSheetPage'));
 const GunManagementPage            = lazy(() => import('@/pages/trainer/GunManagementPage'));
+const MarketingLayout              = lazy(() => import('@/pages/marketing/MarketingLayout'));
+const ProspectsPage                = lazy(() => import('@/pages/marketing/ProspectsPage'));
+const BidsPage                     = lazy(() => import('@/pages/marketing/BidsPage'));
+const TargetsPage                  = lazy(() => import('@/pages/marketing/TargetsPage'));
+const ClosedBusinessPage           = lazy(() => import('@/pages/marketing/ClosedBusinessPage'));
+const MarketingReportsPage         = lazy(() => import('@/pages/marketing/ReportsPage'));
 const BulkImportPage               = lazy(() => import('@/pages/guards/BulkImportPage'));
 const GuardDashboardPage           = lazy(() => import('@/pages/guards/GuardDashboardPage'));
 const FinancePage                  = lazy(() => import('@/pages/finance/FinancePage'));
@@ -60,6 +66,7 @@ const COMPLAINT_VIEW_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== ROLES.
 // Read access to the deployment sheet. Write controls within the page carry
 // their own RoleGuard, so this stays a viewing list.
 // Firearms are the Trainer's to issue; Operations can see what is on its sites.
+const MARKETING_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const GUN_VIEW_ROLES: UserRole[] = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
@@ -113,6 +120,18 @@ function App() {
               <Route path="/finance" element={<L><RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}><FinancePage /></RoleGuard></L>} />
 
               {/* Requisitions */}
+              <Route
+                path="/marketing"
+                element={<L><RoleGuard allowedRoles={MARKETING_ROLES} fallback={<UnauthorisedPage />}><MarketingLayout /></RoleGuard></L>}
+              >
+                <Route index            element={<Navigate to="prospects" replace />} />
+                <Route path="prospects" element={<L><ProspectsPage /></L>} />
+                <Route path="bids"      element={<L><BidsPage /></L>} />
+                <Route path="targets"   element={<L><TargetsPage /></L>} />
+                <Route path="closed"    element={<L><ClosedBusinessPage /></L>} />
+                <Route path="reports"   element={<L><MarketingReportsPage /></L>} />
+              </Route>
+
               <Route path="/guns" element={<L><RoleGuard allowedRoles={GUN_VIEW_ROLES} fallback={<UnauthorisedPage />}><GunManagementPage /></RoleGuard></L>} />
 
               <Route path="/requisitions" element={<L><RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}><RequisitionsPage /></RoleGuard></L>} />

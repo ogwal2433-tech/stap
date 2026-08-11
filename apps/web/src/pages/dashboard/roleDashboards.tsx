@@ -145,6 +145,23 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     ],
   },
 
+  MARKETING: {
+    caption: 'Sales pipeline and targets',
+    stats: [
+      { key: 'totalProspects',   label: 'Total Prospects',   icon: '👥', colour: 'navy',  linkTo: '/marketing/prospects' },
+      { key: 'inPipeline',       label: 'In Pipeline',       icon: '🔄', colour: 'teal',  linkTo: '/marketing/prospects' },
+      { key: 'won',              label: 'Business Won',      icon: '✅', colour: 'green', linkTo: '/marketing/closed' },
+      { key: 'conversionRate',   label: 'Conversion Rate',   icon: '📈', colour: 'navy',  linkTo: '/marketing/reports', format: v => `${v}%` },
+      { key: 'activeBids',       label: 'Active Bids',       icon: '📋', colour: 'amber', linkTo: '/marketing/bids' },
+      { key: 'upcomingExpiries', label: 'Expiring Contracts', icon: '📅', colour: alertWhenAny, linkTo: '/clients' },
+      { key: 'targetProgress',   label: 'Target Progress',   icon: '🎯', colour: 'green', linkTo: '/marketing/targets', format: v => `${v}%` },
+    ],
+    feeds: [
+      { key: 'pipelineStages', title: 'Pipeline', icon: '🔄', emptyText: 'No prospects yet', linkTo: '/marketing/prospects' },
+      { key: 'recentActivity', title: 'Recent Activity', icon: '🕓', emptyText: 'No pipeline movement yet', linkTo: '/marketing/prospects' },
+    ],
+  },
+
   HR: {
     caption: 'People and records',
     stats: [

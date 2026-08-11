@@ -26,5 +26,6 @@ export type DashboardRole =
   | 'ACCOUNTS_OFFICER'
   | 'ADMINISTRATOR'
   | 'CONTROL_ROOM'
+  | 'MARKETING'
   | 'HR'
   | 'CLIENT';

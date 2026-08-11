@@ -145,6 +145,15 @@ model User {
   trainerSessions         TrainingSession[]      @relation("TrainerSessions")
   gunsRegistered          Gun[]                  @relation("GunRegistrar")
   gunMovementsRecorded    GunMovement[]          @relation("GunMovementRecorder")
+
+  prospectsAssigned       ProspectiveClient[]     @relation("ProspectAssignee")
+  prospectsCreated        ProspectiveClient[]     @relation("ProspectCreator")
+  prospectStatusChanges   ProspectStatusHistory[] @relation("ProspectStatusChanger")
+  bidsSubmitted           Bid[]                   @relation("BidSubmitter")
+  bidsAssigned            Bid[]                   @relation("BidAssignee")
+  bidsCreated             Bid[]                   @relation("BidCreator")
+  marketingTargets        MarketingTarget[]       @relation("TargetAssignee")
+  marketingTargetsCreated MarketingTarget[]       @relation("TargetCreator")
   approvedLeaves          LeaveRequest[]         @relation("LeaveApprover")
   recordedInventory       InventoryTransaction[] @relation("InventoryRecorder")
   authorisedTransfers     GuardTransfer[]        @relation("TransferAuthoriser")
@@ -446,6 +455,7 @@ model Client {
   invoices        Invoice[]
   serviceRequests ServiceRequest[]
   carryForwards   InvoiceCarryForward[]
+  wonFromProspect ProspectiveClient?    @relation("ProspectConversion")
 }
 
 model Site {
@@ -488,6 +498,130 @@ model Site {
   serviceRequests   ServiceRequest[]
   gunsPresent       Gun[]               @relation("GunCurrentSite")
   gunMovements      GunMovement[]       @relation("GunMovementSite")
+}
+
+// ── Marketing ─────────────────────────────────────────────────────────────────
+
+/// A company being pursued for business, before it becomes a Client.
+model ProspectiveClient {
+  id           String  @id @default(cuid())
+  companyName  String
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  address      String?
+  industry     String?
+  notes        String? @db.Text
+
+  /// NEW | CONTACTED | MEETING_SCHEDULED | PROPOSAL_SENT | NEGOTIATION | WON | LOST
+  status String @default("NEW")
+
+  /// Expected monthly contract value in UGX.
+  estimatedValue Int?
+
+  /// Required when status becomes LOST.
+  lostReason String?
+  /// Set when status becomes WON.
+  wonDate    DateTime?
+  /// Set once a won prospect has been turned into a real Client.
+  convertedClientId String? @unique
+  convertedClient   Client? @relation("ProspectConversion", fields: [convertedClientId], references: [id], onDelete: SetNull)
+
+  assignedToId   String?
+  assignedToUser User?   @relation("ProspectAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdById   String
+  createdByUser User   @relation("ProspectCreator", fields: [createdById], references: [id])
+
+  statusHistory ProspectStatusHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, assignedToId])
+}
+
+/// Every pipeline stage change, so a prospect's progress can be traced.
+model ProspectStatusHistory {
+  id         String            @id @default(cuid())
+  prospectId String
+  prospect   ProspectiveClient @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  /// Null on the row recording the prospect's creation.
+  fromStatus String?
+  toStatus   String
+  note       String?
+
+  changedById   String
+  changedByUser User   @relation("ProspectStatusChanger", fields: [changedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId, createdAt])
+}
+
+/// A tender, RFP or quotation the company is bidding for.
+model Bid {
+  id           String    @id @default(cuid())
+  organization String
+  /// TENDER | RFP | RFQ | DIRECT | OTHER
+  bidType      String
+  /// Estimated contract value in UGX.
+  amount       Int?
+  submissionDate DateTime?
+  closingDate    DateTime?
+  /// DRAFT | SUBMITTED | WON | LOST | CANCELLED
+  status       String    @default("DRAFT")
+  description  String?   @db.Text
+  requirements String?   @db.Text
+  notes        String?
+  lostReason   String?
+
+  submittedById   String?
+  submittedByUser User?   @relation("BidSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  assignedToId    String?
+  assignedToUser  User?   @relation("BidAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById     String
+  createdByUser   User    @relation("BidCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, closingDate])
+}
+
+/// A revenue or activity target set for a marketing officer over a period.
+model MarketingTarget {
+  id             String @id @default(cuid())
+  assignedToId   String
+  assignedToUser User   @relation("TargetAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+
+  /// Sortable key — "2026-06" for a month, "2026-Q1" for a quarter, "2026" for a year.
+  period      String
+  /// MONTHLY | QUARTERLY | ANNUAL
+  periodType  String
+  targetLabel String
+
+  /// UGX revenue to win in the period.
+  targetValue   Int
+  targetClients Int?
+  targetBids    Int?
+
+  /// Recomputed from won prospects and submitted bids rather than typed in.
+  achievedValue   Int @default(0)
+  achievedClients Int @default(0)
+  achievedBids    Int @default(0)
+
+  notes         String?
+  createdById   String
+  createdByUser User   @relation("TargetCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One target per officer per period — re-issuing updates rather than duplicates.
+  @@unique([assignedToId, period, periodType])
+  @@index([period])
 }
 
 // ── Gun Management ────────────────────────────────────────────────────────────
