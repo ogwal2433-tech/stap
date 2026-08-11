@@ -70,7 +70,10 @@ import {
   UpdateProgressSchema,
   CreatePurchaseOrderSchema,
   CreateSupplierSchema,
+  CreateAccountabilitySchema,
+  ReviewAccountabilitySchema,
 } from '@stap/shared';
+import { accountabilityService } from '../services/accountabilityService';
 
 const router: IRouter = Router();
 router.use(authenticate);
@@ -208,6 +211,60 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const supplier = await supplierService.update(req.params.id, req.body);
     res.json({ success: true, data: supplier });
+  }),
+);
+
+// ── Accountability ────────────────────────────────────────────────────────────
+// What was actually spent against an approved requisition. Admin, HR and the
+// Director each record their own figure per line; the Director's is final.
+
+router.get(
+  '/:id/accountability',
+  requireRole(...INTERNAL_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await accountabilityService.getByRequisition(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+// Submitted by whoever spent the money, so this is open to internal staff.
+router.post(
+  '/:id/accountability',
+  requireRole(...INTERNAL_ROLES),
+  validate(CreateAccountabilitySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await accountabilityService.submit(req.params.id, req.body.items, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/:id/accountability/admin',
+  requireRole(ROLES.ADMINISTRATOR, ROLES.ASSISTANT_MANAGER, ROLES.DIRECTOR),
+  validate(ReviewAccountabilitySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await accountabilityService.adminReview(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/:id/accountability/hr',
+  requireRole(ROLES.ASSISTANT_MANAGER, ROLES.DIRECTOR),
+  validate(ReviewAccountabilitySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await accountabilityService.hrReview(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/:id/accountability/director',
+  requireRole(ROLES.DIRECTOR),
+  validate(ReviewAccountabilitySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await accountabilityService.directorApprove(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
   }),
 );
 

@@ -7,6 +7,8 @@ import type {
   UpdateProgressInput,
   CreatePurchaseOrderInput,
   CreateSupplierInput,
+  CreateAccountabilityInput,
+  ReviewAccountabilityInput,
 } from '@stap/shared';
 
 export function useRequisitions(params?: Parameters<typeof requisitionsApi.list>[0]) {
@@ -76,6 +78,38 @@ export function useCreatePurchaseOrder() {
     }: { requisitionId: string } & Omit<CreatePurchaseOrderInput, 'requisitionId'>) =>
       requisitionsApi.createPurchaseOrder(requisitionId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
+export function useAccountability(requisitionId: string) {
+  return useQuery({
+    queryKey: ['accountability', requisitionId],
+    queryFn:  () => requisitionsApi.getAccountability(requisitionId),
+    enabled:  Boolean(requisitionId),
+  });
+}
+
+export function useSubmitAccountability(requisitionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateAccountabilityInput) =>
+      requisitionsApi.submitAccountability(requisitionId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accountability', requisitionId] });
+      qc.invalidateQueries({ queryKey: ['requisitions'] });
+    },
+  });
+}
+
+export function useReviewAccountability(requisitionId: string, stage: 'admin' | 'hr' | 'director') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ReviewAccountabilityInput) =>
+      requisitionsApi.reviewAccountability(requisitionId, stage, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accountability', requisitionId] });
+      qc.invalidateQueries({ queryKey: ['requisitions'] });
+    },
   });
 }
 

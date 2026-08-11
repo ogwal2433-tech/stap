@@ -151,6 +151,11 @@ model User {
   resolvedErrors          SystemError[]          @relation("ErrorResolver")
   guardPromotions         GuardPromotion[]       @relation("GuardPromotedBy")
 
+  submittedAccountability RequisitionAccountability[] @relation("AccountabilitySubmitter")
+  adminAccountability     RequisitionAccountability[] @relation("AccountabilityAdmin")
+  hrAccountability        RequisitionAccountability[] @relation("AccountabilityHR")
+  directorAccountability  RequisitionAccountability[] @relation("AccountabilityDirector")
+
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
   // the same clientId belong to the same company (one company can have many logins).
@@ -897,6 +902,81 @@ model Requisition {
 
   categoryItems  RequisitionCategoryItem[]
   purchaseOrders PurchaseOrder[]
+  accountability RequisitionAccountability?
+}
+
+/// What was actually spent against an approved requisition.
+///
+/// Admin, HR and the Director each record their own figure per line, so a
+/// disagreement is visible rather than overwritten. The Director's column is
+/// the approved one, and `variance` is that total against what was originally
+/// requisitioned — positive means overspent.
+model RequisitionAccountability {
+  id            String      @id @default(cuid())
+  requisitionId String      @unique
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+
+  /// SUBMITTED | ADMIN_REVIEWED | HR_REVIEWED | DIRECTOR_APPROVED
+  status String @default("SUBMITTED")
+
+  totalAdminAmount    Int @default(0)
+  totalHRAmount       Int @default(0)
+  totalDirectorAmount Int @default(0)
+  /// Snapshot of the requisition amount when accountability was submitted, so
+  /// the variance stays meaningful if the requisition is later edited.
+  originalAmount      Int @default(0)
+  /// totalDirectorAmount - originalAmount. Positive = overspend.
+  variance            Int @default(0)
+
+  submittedById String?
+  submittedBy   User?     @relation("AccountabilitySubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime?
+
+  adminReviewedById String?
+  adminReviewedBy   User?     @relation("AccountabilityAdmin", fields: [adminReviewedById], references: [id], onDelete: SetNull)
+  adminReviewedAt   DateTime?
+  adminNotes        String?
+
+  hrReviewedById String?
+  hrReviewedBy   User?     @relation("AccountabilityHR", fields: [hrReviewedById], references: [id], onDelete: SetNull)
+  hrReviewedAt   DateTime?
+  hrNotes        String?
+
+  directorApprovedById String?
+  directorApprovedBy   User?     @relation("AccountabilityDirector", fields: [directorApprovedById], references: [id], onDelete: SetNull)
+  directorApprovedAt   DateTime?
+  directorNotes        String?
+
+  items AccountabilityItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AccountabilityItem {
+  id               String                    @id @default(cuid())
+  accountabilityId String
+  accountability   RequisitionAccountability @relation(fields: [accountabilityId], references: [id], onDelete: Cascade)
+
+  itemNumber      Int
+  requisitionItem String
+  category        String
+  quantity        Int @default(1)
+  rate            Int @default(0)
+  /// quantity * rate, stored so the submitted figure survives later edits.
+  totalCost       Int @default(0)
+
+  /// Null until that reviewer has entered a figure.
+  adminAmount    Int?
+  hrAmount       Int?
+  directorAmount Int?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountabilityId, itemNumber])
 }
 
 model RequisitionCategoryItem {

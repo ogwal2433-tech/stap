@@ -154,3 +154,87 @@ export interface SupplierResponse {
   paymentTerms:   string | null;
   createdAt:      string;
 }
+
+// ── Accountability ─────────────────────────────────────────────────────────────
+
+/**
+ * Statuses a submitted accountability moves through, in order. Each reviewer
+ * records their own figure per line so a disagreement stays visible rather than
+ * being overwritten by the next person.
+ */
+export const ACCOUNTABILITY_STAGES = [
+  'SUBMITTED',
+  'ADMIN_REVIEWED',
+  'HR_REVIEWED',
+  'DIRECTOR_APPROVED',
+] as const;
+
+export type AccountabilityStatus = (typeof ACCOUNTABILITY_STAGES)[number];
+
+export const AccountabilityItemSchema = z.object({
+  requisitionItem: z.string().min(1, 'Describe what was bought').max(300),
+  category:        z.string().min(1, 'Category is required').max(100),
+  quantity:        z.coerce.number().int().min(1, 'Quantity must be at least 1'),
+  rate:            z.coerce.number().int().min(0, 'Rate cannot be negative'),
+  notes:           z.string().max(500).optional().nullable(),
+});
+
+export const CreateAccountabilitySchema = z.object({
+  items: z.array(AccountabilityItemSchema).min(1, 'Add at least one line').max(100),
+});
+
+/** One reviewer's figures. Every line must be given an amount. */
+export const ReviewAccountabilitySchema = z.object({
+  items: z.array(z.object({
+    id:     z.string().min(1),
+    amount: z.coerce.number().int().min(0, 'Amount cannot be negative'),
+    notes:  z.string().max(500).optional().nullable(),
+  })).min(1, 'Enter an amount for each line'),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export type AccountabilityItemInput   = z.infer<typeof AccountabilityItemSchema>;
+export type CreateAccountabilityInput = z.infer<typeof CreateAccountabilitySchema>;
+export type ReviewAccountabilityInput = z.infer<typeof ReviewAccountabilitySchema>;
+
+export interface AccountabilityItemResponse {
+  id:              string;
+  itemNumber:      number;
+  requisitionItem: string;
+  category:        string;
+  quantity:        number;
+  rate:            number;
+  /** quantity × rate as submitted. */
+  totalCost:       number;
+  adminAmount:     number | null;
+  hrAmount:        number | null;
+  directorAmount:  number | null;
+  notes:           string | null;
+}
+
+export interface AccountabilityResponse {
+  id:                  string;
+  requisitionId:       string;
+  status:              AccountabilityStatus;
+  totalSubmitted:      number;
+  totalAdminAmount:    number;
+  totalHRAmount:       number;
+  totalDirectorAmount: number;
+  originalAmount:      number;
+  /** totalDirectorAmount − originalAmount. Positive = overspend. */
+  variance:            number;
+  submittedBy:         { id: string; name: string } | null;
+  submittedAt:         string | null;
+  adminReviewedBy:     { id: string; name: string } | null;
+  adminReviewedAt:     string | null;
+  adminNotes:          string | null;
+  hrReviewedBy:        { id: string; name: string } | null;
+  hrReviewedAt:        string | null;
+  hrNotes:             string | null;
+  directorApprovedBy:  { id: string; name: string } | null;
+  directorApprovedAt:  string | null;
+  directorNotes:       string | null;
+  items:               AccountabilityItemResponse[];
+  createdAt:           string;
+  updatedAt:           string;
+}

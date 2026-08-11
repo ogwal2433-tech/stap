@@ -10,6 +10,9 @@ import type {
   UpdateProgressInput,
   CreatePurchaseOrderInput,
   CreateSupplierInput,
+  AccountabilityResponse,
+  CreateAccountabilityInput,
+  ReviewAccountabilityInput,
 } from '@stap/shared';
 
 export const requisitionsApi = {
@@ -63,6 +66,31 @@ export const requisitionsApi = {
     return api
       .post<{ success: boolean; data: PurchaseOrderResponse }>(
         `/requisitions/${requisitionId}/purchase-order`,
+        data,
+      )
+      .then((r) => r.data.data);
+  },
+
+  getAccountability(requisitionId: string): Promise<AccountabilityResponse | null> {
+    return api
+      .get<{ success: boolean; data: AccountabilityResponse | null }>(`/requisitions/${requisitionId}/accountability`)
+      .then((r) => r.data.data);
+  },
+
+  submitAccountability(requisitionId: string, data: CreateAccountabilityInput): Promise<AccountabilityResponse> {
+    return api
+      .post<{ success: boolean; data: AccountabilityResponse }>(`/requisitions/${requisitionId}/accountability`, data)
+      .then((r) => r.data.data);
+  },
+
+  reviewAccountability(
+    requisitionId: string,
+    stage: 'admin' | 'hr' | 'director',
+    data: ReviewAccountabilityInput,
+  ): Promise<AccountabilityResponse> {
+    return api
+      .patch<{ success: boolean; data: AccountabilityResponse }>(
+        `/requisitions/${requisitionId}/accountability/${stage}`,
         data,
       )
       .then((r) => r.data.data);

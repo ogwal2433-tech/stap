@@ -8,14 +8,17 @@ import {
   useRequisitions, useSuppliers, useApproveRequisition,
   useHRApproveRequisition, useDirectorApproveRequisition,
   useAssignRequisition, useUpdateRequisitionProgress,
-  useCreatePurchaseOrder,
+  useCreatePurchaseOrder, useAccountability,
 } from '../../hooks/useRequisitions';
 import { useAuth } from '../../context/AuthContext';
+import type { UserRole } from '@stap/shared';
 import RoleGuard from '../../components/RoleGuard';
 import RequisitionFormModal from '../../components/requisitions/RequisitionFormModal';
 import ApprovalModal from '../../components/requisitions/ApprovalModal';
 import PurchaseOrderModal from '../../components/requisitions/PurchaseOrderModal';
 import SupplierFormModal from '../../components/requisitions/SupplierFormModal';
+import AccountabilityTable from '../../components/requisitions/AccountabilityTable';
+import AccountabilityFormModal from '../../components/requisitions/AccountabilityFormModal';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES } from '@stap/shared';
@@ -59,6 +62,14 @@ function CategoryBadges({ items }: { items: RequisitionResponse['categoryItems']
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
 function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; onClose: () => void }) {
+  const { user } = useAuth();
+  const { data: accountability, refetch: refetchAccountability } = useAccountability(req.id);
+  const [showAccountabilityForm, setShowAccountabilityForm] = useState(false);
+
+  // Accountability applies once the money has been released.
+  const fundsReleased = ['APPROVED', 'ASSIGNED', 'IN_PROGRESS'].includes(req.status);
+  const closed = accountability?.status === 'DIRECTOR_APPROVED';
+
   return (
     <Modal show onHide={onClose} size="lg">
       <Modal.Header closeButton>
@@ -131,11 +142,52 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
               </Alert>
             </Col>
           )}
+
+          {/* ── Accountability ─────────────────────────────────────────────── */}
+          <Col md={12}>
+            <hr className="my-2" />
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <strong>Accountability</strong>
+              {fundsReleased && !closed && (
+                <Button size="sm" variant="outline-primary" onClick={() => setShowAccountabilityForm(true)}>
+                  {accountability ? 'Revise breakdown' : '+ Submit accountability'}
+                </Button>
+              )}
+            </div>
+
+            {!accountability ? (
+              <div style={{
+                border: '2px dashed #ced4da', borderRadius: '0.5rem',
+                padding: '18px', textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
+              }}>
+                {fundsReleased
+                  ? 'Nothing accounted for yet. Record what the money was actually spent on.'
+                  : 'Accountability applies once the requisition is approved and funds released.'}
+              </div>
+            ) : (
+              <AccountabilityTable
+                accountability={accountability}
+                requisitionId={req.id}
+                userRole={user?.role as UserRole | undefined}
+                onUpdated={() => refetchAccountability()}
+              />
+            )}
+          </Col>
         </Row>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onClose}>Close</Button>
       </Modal.Footer>
+
+      {showAccountabilityForm && (
+        <AccountabilityFormModal
+          requisitionId={req.id}
+          requisitionAmount={req.amount}
+          existing={accountability}
+          onClose={() => setShowAccountabilityForm(false)}
+          onSuccess={() => refetchAccountability()}
+        />
+      )}
     </Modal>
   );
 }
