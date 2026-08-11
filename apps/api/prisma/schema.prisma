@@ -143,6 +143,8 @@ model User {
   notifications           Notification[]
   assignedApplicants      Applicant[]            @relation("ApplicantAssignee")
   trainerSessions         TrainingSession[]      @relation("TrainerSessions")
+  gunsRegistered          Gun[]                  @relation("GunRegistrar")
+  gunMovementsRecorded    GunMovement[]          @relation("GunMovementRecorder")
   approvedLeaves          LeaveRequest[]         @relation("LeaveApprover")
   recordedInventory       InventoryTransaction[] @relation("InventoryRecorder")
   authorisedTransfers     GuardTransfer[]        @relation("TransferAuthoriser")
@@ -484,6 +486,82 @@ model Site {
   transfersTo       GuardTransfer[]     @relation("TransferToSite")
   equipmentItems    SiteEquipmentItem[]
   serviceRequests   ServiceRequest[]
+  gunsPresent       Gun[]               @relation("GunCurrentSite")
+  gunMovements      GunMovement[]       @relation("GunMovementSite")
+}
+
+// ── Gun Management ────────────────────────────────────────────────────────────
+
+/// A single firearm, identified by its serial number.
+///
+/// `status` and `currentSiteId` are the gun's present whereabouts; the full
+/// history of how it got there lives in GunMovement.
+model Gun {
+  id           String  @id @default(cuid())
+  serialNumber String  @unique
+  gunType      String
+  // AK-47 | G3 | Pistol | Shotgun | SMG | Other
+  manufacturer String?
+  calibre      String?
+
+  /// GOOD | FAIR | NEEDS_REPAIR | RETIRED
+  condition String @default("GOOD")
+  /// IN_ARMOURY | DEPLOYED | RETIRED
+  status    String @default("IN_ARMOURY")
+
+  /// Null whenever the gun is in the armoury.
+  currentSiteId String?
+  currentSite   Site?   @relation("GunCurrentSite", fields: [currentSiteId], references: [id], onDelete: SetNull)
+  /// Rounds currently held with the gun.
+  currentBullets Int    @default(0)
+
+  notes String?
+
+  registeredById   String
+  registeredByUser User   @relation("GunRegistrar", fields: [registeredById], references: [id])
+
+  movements GunMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, gunType])
+}
+
+/// Every movement of a gun, in one chronological ledger.
+///
+/// Deployment, withdrawal and transfer are the same physical event — a gun
+/// changing hands — recorded from different directions, so they share a table.
+/// Keeping them apart would mean a chain of custody that has to be reassembled
+/// from three sources and could not be ordered reliably.
+model GunMovement {
+  id    String @id @default(cuid())
+  gunId String
+  gun   Gun    @relation(fields: [gunId], references: [id], onDelete: Cascade)
+
+  /// DEPLOYMENT (armoury → site) | WITHDRAWAL (site → armoury) | TRANSFER (site → site)
+  movementType String
+
+  /// Null when the gun came from the armoury.
+  fromSiteId String?
+  /// Null when the gun is going back to the armoury.
+  toSiteId   String?
+  site       Site?  @relation("GunMovementSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+
+  /// Rounds handed over with the gun — issued outbound, returned inbound.
+  bullets Int @default(0)
+
+  movementDate DateTime @default(now())
+  reason       String?
+  notes        String?
+
+  recordedById   String
+  recordedByUser User   @relation("GunMovementRecorder", fields: [recordedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([gunId, movementDate])
+  @@index([toSiteId])
 }
 
 model SiteEquipmentItem {

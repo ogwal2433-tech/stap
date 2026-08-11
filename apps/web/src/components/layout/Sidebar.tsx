@@ -20,6 +20,10 @@ import {
 const ADMIN_ONLY       = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
 const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
+// Firearms are the Trainer's to issue; Operations can see what is on its sites.
+const GUN_VIEW_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
+];
 
 // ── Nav structure ──────────────────────────────────────────────────────────────
 
@@ -55,6 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] },
       { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] },
+      { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] },
       { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
     ],
   },
@@ -83,7 +88,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-people-fill',
     label: 'HR & Reporting',
     items: [
-      { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: HR_ROLES as UserRole[] },
+      { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: [...HR_ROLES, ROLES.TRAINER] as UserRole[] },
       { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', roles: REPORT_ROLES as UserRole[] },
     ],
   },
@@ -111,7 +116,7 @@ const ALL_NAV_PATHS = new Set([
   '/dashboard', '/guards', '/attendance', '/checkin',
   '/clients', '/zones', '/complaints',
   '/finance', '/inventory', '/requisitions',
-  '/hr', '/reports', '/settings', '/notifications',
+  '/hr', '/reports', '/settings', '/notifications', '/guns',
   '/guards/dashboard', '/guards/import',
   '/attendance/dashboard', '/admin/errors',
 ]);

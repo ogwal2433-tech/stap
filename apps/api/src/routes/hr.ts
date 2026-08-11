@@ -196,11 +196,19 @@ const router: IRouter = Router();
 
 router.use(authenticate);
 
+/**
+ * Recruitment and vetting. The Trainer runs this pipeline — recruiting, vetting
+ * and training guards is their brief — but converting an applicant into an
+ * employee stays with HR, since that writes a Guard record.
+ */
+const RECRUITMENT_ROLES = [...HR_ROLES, ROLES.TRAINER] as const;
+const RECRUITMENT_VIEW_ROLES = [...RECRUITMENT_ROLES, ROLES.OPERATIONS_SUPERVISOR] as const;
+
 // ── Recruitment ────────────────────────────────────────────────────────────────
 
 router.get(
   '/applicants',
-  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  requireRole(...RECRUITMENT_VIEW_ROLES),
   asyncHandler(async (req, res) => {
     const page  = Number(req.query.page)  || 1;
     const limit = Number(req.query.limit) || 20;
@@ -212,7 +220,7 @@ router.get(
 
 router.post(
   '/applicants',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   validate(CreateApplicantSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.createApplicant(req.body, req.user!.userId);
@@ -222,7 +230,7 @@ router.post(
 
 router.get(
   '/applicants/pipeline',
-  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  requireRole(...RECRUITMENT_VIEW_ROLES),
   asyncHandler(async (_req, res) => {
     const data = await hrService.getPipelineSummary();
     res.json({ success: true, data });
@@ -231,7 +239,7 @@ router.get(
 
 router.patch(
   '/applicants/:id/stage',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   validate(UpdateApplicantStageSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.updateStage(req.params.id, req.body, req.user!.userId);
@@ -241,7 +249,7 @@ router.patch(
 
 router.get(
   '/applicants/:id',
-  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  requireRole(...RECRUITMENT_VIEW_ROLES),
   asyncHandler(async (req, res) => {
     const data = await hrService.getApplicant(req.params.id);
     res.json({ success: true, data });
@@ -260,7 +268,7 @@ router.post(
 
 router.patch(
   '/applicants/:id/verify-documents',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   validate(DocumentVerificationSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.verifyDocuments(req.params.id, req.body, req.user!.userId);
@@ -270,7 +278,7 @@ router.patch(
 
 router.patch(
   '/applicants/:id/vetting-requirements',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   validate(VettingRequirementsSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.updateVettingRequirements(req.params.id, req.body, req.user!.userId);
@@ -280,7 +288,7 @@ router.patch(
 
 router.post(
   '/applicants/:id/application-letter',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   guardDocumentUpload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
@@ -295,7 +303,7 @@ router.post(
 
 router.post(
   '/applicants/:id/vetting-form',
-  requireRole(...HR_ROLES),
+  requireRole(...RECRUITMENT_ROLES),
   guardDocumentUpload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError('No file uploaded', 400);

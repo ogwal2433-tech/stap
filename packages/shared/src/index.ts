@@ -9,6 +9,7 @@ export * from './schemas/requisition';
 export * from './schemas/notification';
 export * from './schemas/reports';
 export * from './schemas/complaint';
+export * from './schemas/guns';
 export * from './schemas/hr';
 export * from './schemas/inventory';
 export * from './schemas/zone';

@@ -19,6 +19,7 @@ import zonesRouter from './zones';
 import { lettersRouter } from './letters';
 import { paymentsRouter } from './payments';
 import { systemErrorsRouter } from './systemErrors';
+import { gunsRouter } from './guns';
 
 const router: IRouter = Router();
 
@@ -39,6 +40,7 @@ router.use('/portal', portalRouter);
 router.use('/dashboard', dashboardRouter);
 router.use('/hr', hrRouter);
 router.use('/inventory', inventoryRouter);
+router.use('/guns', gunsRouter);
 router.use('/settings', settingsRouter);
 router.use('/zones', zonesRouter);
 router.use('/letters', lettersRouter);

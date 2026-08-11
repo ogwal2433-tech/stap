@@ -23,6 +23,7 @@ const AttendancePage               = lazy(() => import('@/pages/attendance/Atten
 const AttendanceDashboardPage      = lazy(() => import('@/pages/attendance/AttendanceDashboardPage'));
 const CheckinPage                  = lazy(() => import('@/pages/attendance/CheckinPage'));
 const DeploymentSheetPage          = lazy(() => import('@/pages/roster/DeploymentSheetPage'));
+const GunManagementPage            = lazy(() => import('@/pages/trainer/GunManagementPage'));
 const BulkImportPage               = lazy(() => import('@/pages/guards/BulkImportPage'));
 const GuardDashboardPage           = lazy(() => import('@/pages/guards/GuardDashboardPage'));
 const FinancePage                  = lazy(() => import('@/pages/finance/FinancePage'));
@@ -58,6 +59,10 @@ const DEPLOYMENT_ROLES: UserRole[] = [
 const COMPLAINT_VIEW_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT);
 // Read access to the deployment sheet. Write controls within the page carry
 // their own RoleGuard, so this stays a viewing list.
+// Firearms are the Trainer's to issue; Operations can see what is on its sites.
+const GUN_VIEW_ROLES: UserRole[] = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
+];
 const DEPLOYMENT_VIEW: UserRole[] = [
   ...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.CONTROL_ROOM,
 ];
@@ -108,6 +113,8 @@ function App() {
               <Route path="/finance" element={<L><RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}><FinancePage /></RoleGuard></L>} />
 
               {/* Requisitions */}
+              <Route path="/guns" element={<L><RoleGuard allowedRoles={GUN_VIEW_ROLES} fallback={<UnauthorisedPage />}><GunManagementPage /></RoleGuard></L>} />
+
               <Route path="/requisitions" element={<L><RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}><RequisitionsPage /></RoleGuard></L>} />
 
               {/* Clients */}
@@ -127,7 +134,7 @@ function App() {
               <Route path="/notifications" element={<L><NotificationsPage /></L>} />
 
               {/* HR */}
-              <Route path="/hr" element={<L><RoleGuard allowedRoles={HR_VIEW_ROLES} fallback={<UnauthorisedPage />}><HRPage /></RoleGuard></L>} />
+              <Route path="/hr" element={<L><RoleGuard allowedRoles={[...HR_VIEW_ROLES, ROLES.TRAINER]} fallback={<UnauthorisedPage />}><HRPage /></RoleGuard></L>} />
 
               {/* Inventory */}
               <Route path="/inventory" element={<L><RoleGuard allowedRoles={INV_ROLES} fallback={<UnauthorisedPage />}><InventoryPage /></RoleGuard></L>} />

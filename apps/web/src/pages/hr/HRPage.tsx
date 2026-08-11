@@ -1194,6 +1194,9 @@ function ApplicantDetailPanel({
 
 export default function HRPage() {
   const { user } = useAuth();
+  // The Trainer runs recruitment, vetting and training; leave and letter
+  // templates remain HR's.
+  const isHR = (HR_ROLES as string[]).includes(user?.role ?? '');
   const { showToast } = useToast();
   const approve = useApproveLeave();
 
@@ -1438,7 +1441,7 @@ export default function HRPage() {
         </Tab>
 
         {/* ── TAB 3: Leave ───────────────────────────────────────────────────── */}
-        <Tab eventKey="leave" title="Leave Management">
+        <Tab eventKey="leave" title="Leave Management" disabled={!isHR} tabAttrs={{ hidden: !isHR }}>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h6 className="fw-semibold mb-0">Leave Requests</h6>
             <div className="d-flex gap-2">
@@ -1532,7 +1535,7 @@ export default function HRPage() {
         </Tab>
 
         {/* ── TAB 4: Letter Templates ─────────────────────────────────────────── */}
-        <Tab eventKey="templates" title="Letter Templates">
+        <Tab eventKey="templates" title="Letter Templates" disabled={!isHR} tabAttrs={{ hidden: !isHR }}>
           <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
             <div className="mb-3">
               <h6 className="fw-semibold">Letter Template Library</h6>
