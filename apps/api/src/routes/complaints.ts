@@ -7,6 +7,7 @@ import { complaintService } from '../services/complaintService';
 import {
   ROLES,
   INTERNAL_ROLES,
+  COMPLAINT_ASSIGN_ROLES,
   CreateComplaintSchema,
   AssignComplaintSchema,
   UpdateComplaintStatusSchema,
@@ -19,7 +20,7 @@ const COMPLAINT_VIEW_ROLES = INTERNAL_ROLES.filter(
   (r) => r !== ROLES.GUARD && r !== ROLES.CLIENT,
 );
 const COMPLAINT_SUBMIT_ROLES = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
-const COMPLAINT_ASSIGN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as const;
+// Control Room owns complaint intake and routing; the others retain oversight.
 
 const ListQuery = z.object({
   status:   z.string().optional(),
@@ -91,7 +92,7 @@ router.patch(
   requireRole(...COMPLAINT_VIEW_ROLES),
   validate(UpdateComplaintStatusSchema),
   asyncHandler(async (req, res) => {
-    const data = await complaintService.updateStatus(req.params.id, req.body.status, req.user!.userId);
+    const data = await complaintService.updateStatus(req.params.id, req.body, req.user!.userId);
     res.json({ success: true, data });
   }),
 );

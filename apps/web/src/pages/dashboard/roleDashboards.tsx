@@ -127,6 +127,24 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     ],
   },
 
+  CONTROL_ROOM: {
+    caption: 'Complaints desk and live operations',
+    stats: [
+      { key: 'openComplaints',      label: 'Open Complaints',    icon: '📋', colour: dangerWhenAny, linkTo: '/complaints' },
+      { key: 'unassignedCount',     label: 'Needs Assignment',   icon: '⚠️', colour: dangerWhenAny, linkTo: '/complaints' },
+      { key: 'underInvestigation',  label: 'Under Investigation', icon: '🔍', colour: 'amber', linkTo: '/complaints' },
+      { key: 'resolvedToday',       label: 'Resolved Today',     icon: '✅', colour: 'green', linkTo: '/complaints' },
+      { key: 'deployedToday',       label: 'Guards Deployed',    icon: '📍', colour: 'navy',  linkTo: '/attendance' },
+      { key: 'activeGuards',        label: 'Active Guards',      icon: '👮', colour: 'teal',  linkTo: '/guards' },
+      { key: 'activeClients',       label: 'Active Clients',     icon: '🏢', colour: 'navy',  linkTo: '/clients' },
+      { key: 'pendingRequisitions', label: 'Pending Requisitions', icon: '📝', colour: alertWhenAny, linkTo: '/requisitions' },
+    ],
+    feeds: [
+      { key: 'unassignedComplaints', title: 'Needs Assignment', icon: '⚠️', emptyText: 'Everything is assigned', linkTo: '/complaints' },
+      { key: 'activeComplaints',     title: 'Active Complaints', icon: '📋', emptyText: 'No open complaints', linkTo: '/complaints' },
+    ],
+  },
+
   HR: {
     caption: 'People and records',
     stats: [

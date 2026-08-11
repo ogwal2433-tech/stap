@@ -29,6 +29,7 @@ export const ROLES = {
   FIELD_SUPERVISOR: 'FIELD_SUPERVISOR',
   TRAINER: 'TRAINER',
   ACCOUNTS_OFFICER: 'ACCOUNTS_OFFICER',
+  CONTROL_ROOM: 'CONTROL_ROOM',
   MARKETING: 'MARKETING',
   GUARD: 'GUARD',
   CLIENT: 'CLIENT',
@@ -48,6 +49,7 @@ export const ROLE_HIERARCHY: UserRole[] = [
   ROLES.FIELD_SUPERVISOR,
   ROLES.TRAINER,
   ROLES.ACCOUNTS_OFFICER,
+  ROLES.CONTROL_ROOM,
   ROLES.MARKETING,
   ROLES.GUARD,
   ROLES.CLIENT,
@@ -108,5 +110,35 @@ export const INTERNAL_ROLES: UserRole[] = [
   ROLES.FIELD_SUPERVISOR,
   ROLES.TRAINER,
   ROLES.ACCOUNTS_OFFICER,
+  ROLES.CONTROL_ROOM,
   ROLES.MARKETING,
+];
+
+/**
+ * Roles that may be recorded as having received a complaint.
+ *
+ * Control Room is the single point of entry for complaints from guards, field
+ * supervisors and clients — the API refuses any other role as `receivedById`.
+ */
+export const COMPLAINT_RECEIVER_ROLES: UserRole[] = [ROLES.CONTROL_ROOM];
+
+/** Roles that may assign a complaint to a member of staff. */
+export const COMPLAINT_ASSIGN_ROLES: UserRole[] = [
+  ROLES.CONTROL_ROOM,
+  ROLES.DIRECTOR,
+  ROLES.ASSISTANT_MANAGER,
+  ROLES.OPERATIONS_SUPERVISOR,
+];
+
+/**
+ * Roles that may read deployments without being able to change them.
+ *
+ * Deliberately separate from DEPLOYMENT_ROLES, which grants write access to the
+ * roster and the deployment sheet.
+ */
+export const DEPLOYMENT_VIEW_ROLES: UserRole[] = [
+  ...DEPLOYMENT_ROLES,
+  ROLES.ASSISTANT_MANAGER,
+  ROLES.ACCOUNTS_OFFICER,
+  ROLES.CONTROL_ROOM,
 ];

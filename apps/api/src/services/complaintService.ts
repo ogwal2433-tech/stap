@@ -2,9 +2,11 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { AppError, NotFoundError } from '../errors/AppError';
+import { ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH } from '@stap/shared';
 import type {
   CreateComplaintInput,
   AssignComplaintInput,
+  UpdateComplaintStatusInput,
   ComplaintResponse,
   ComplaintDashboard,
   PaginatedResponse,
@@ -13,10 +15,11 @@ import type {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const INCLUDE = {
-  client:         { select: { id: true, clientName: true, systemId: true, email: true } },
-  site:           { select: { id: true, siteName: true } },
-  receivedByUser: { select: { id: true, name: true } },
-  assignedToUser: { select: { id: true, name: true, role: true, phone: true } },
+  client:            { select: { id: true, clientName: true, systemId: true, email: true } },
+  site:              { select: { id: true, siteName: true } },
+  receivedByUser:    { select: { id: true, name: true } },
+  assignedToUser:    { select: { id: true, name: true, role: true, phone: true } },
+  actionTakenByUser: { select: { id: true, name: true } },
 } as const;
 
 function roleToTitle(role: string): string {
@@ -55,6 +58,11 @@ function sanitiseComplaint(c: any): ComplaintResponse {
       : null,
     assignedAt:  c.assignedAt?.toISOString() ?? null,
     resolution:  c.resolution ?? null,
+    actionTaken:   c.actionTaken ?? null,
+    actionTakenAt: c.actionTakenAt?.toISOString() ?? null,
+    actionTakenBy: c.actionTakenByUser
+      ? { id: c.actionTakenByUser.id, name: c.actionTakenByUser.name }
+      : null,
     resolvedAt:  c.resolvedAt?.toISOString() ?? null,
     resolvedBy:  c.resolvedBy ?? null,
     createdAt:   c.createdAt.toISOString(),
@@ -128,6 +136,16 @@ class ComplaintService {
     if (!receiver) throw new NotFoundError('Receiving staff member not found');
     if (!assignee) throw new NotFoundError('Assigned staff member not found');
 
+    // Control Room is the single point of entry for complaints — anyone else
+    // named as the receiver is a mistake, however senior they are.
+    if (!(COMPLAINT_RECEIVER_ROLES as string[]).includes(receiver.role)) {
+      throw new AppError(
+        `Only Control Room staff can receive complaints. "${receiver.name}" is a ` +
+        `${roleToTitle(receiver.role)} and cannot be set as the complaint receiver.`,
+        400,
+      );
+    }
+
     const updated = await prisma.clientComplaint.update({
       where: { id: complaintId },
       data:  {
@@ -165,7 +183,7 @@ class ComplaintService {
 
   async updateStatus(
     complaintId:  string,
-    newStatus:    'UNDER_INVESTIGATION' | 'RESOLVED',
+    data:         UpdateComplaintStatusInput,
     actingUserId: string,
   ): Promise<ComplaintResponse> {
     const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
@@ -181,17 +199,38 @@ class ComplaintService {
     });
 
     const isAssignedPerson = complaint.assignedToId === actingUserId;
+    const isControlRoom    = actingUser?.role === ROLES.CONTROL_ROOM;
     const isHR = ['DIRECTOR', 'ASSISTANT_MANAGER'].includes(actingUser?.role ?? '');
 
-    if (!isAssignedPerson && !isHR) {
+    if (!isAssignedPerson && !isControlRoom && !isHR) {
       throw new AppError(
-        'Only the staff member this complaint is assigned to (or HR) can update its status.',
+        'Only the staff member this complaint is assigned to, Control Room, or HR can update its status.',
         403,
       );
     }
 
-    const updateData: any = { status: newStatus };
-    if (newStatus === 'RESOLVED') {
+    const actionTaken = data.actionTaken?.trim() || null;
+
+    // Nothing is closed without a record of what was done about it. Checked here
+    // as well as in the schema so a direct service call cannot slip past it.
+    if (data.status === 'RESOLVED' && (actionTaken?.length ?? 0) < MIN_ACTION_TAKEN_LENGTH) {
+      throw new AppError(
+        'You must describe the action taken to resolve this complaint before marking it ' +
+        'as Resolved. Please fill in the "Action Taken" field.',
+        400,
+      );
+    }
+
+    const updateData: any = { status: data.status };
+    if (actionTaken) {
+      updateData.actionTaken     = actionTaken;
+      updateData.actionTakenAt   = new Date();
+      updateData.actionTakenById = actingUserId;
+    }
+    if (data.resolution !== undefined) {
+      updateData.resolution = data.resolution?.trim() || null;
+    }
+    if (data.status === 'RESOLVED') {
       updateData.resolvedAt = new Date();
       updateData.resolvedBy = actingUserId;
     }
@@ -207,7 +246,7 @@ class ComplaintService {
         action:   'COMPLAINT_STATUS_UPDATED',
         entity:   'clientComplaint',
         entityId: complaintId,
-        newValue: { status: newStatus, updatedBy: actingUserId },
+        newValue: { status: data.status, updatedBy: actingUserId, actionTaken },
       },
     });
 

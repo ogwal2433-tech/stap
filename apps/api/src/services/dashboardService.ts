@@ -43,6 +43,8 @@ class DashboardService {
         return this.getAccountsStats();
       case ROLES.ADMINISTRATOR:
         return this.getAdminStats();
+      case ROLES.CONTROL_ROOM:
+        return this.getControlRoomStats();
       case ROLES.CLIENT:
         return this.getClientStats(clientId);
       default:
@@ -205,6 +207,79 @@ class DashboardService {
           primary:   guardName(g),
           secondary: g.systemId ?? '—',
           badge:     g.rank ?? undefined,
+        })),
+      },
+    };
+  }
+
+  // ── Control Room — complaints desk plus a read-only view of operations ───────
+
+  private async getControlRoomStats(): Promise<DashboardData> {
+    const today = startOfDay();
+
+    const [
+      openComplaints,
+      underInvestigation,
+      resolvedToday,
+      unassignedCount,
+      deployedToday,
+      activeGuards,
+      activeClients,
+      pendingRequisitions,
+      activeComplaints,
+      unassignedComplaints,
+    ] = await Promise.all([
+      prisma.clientComplaint.count({ where: { status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } } }),
+      prisma.clientComplaint.count({ where: { status: 'UNDER_INVESTIGATION' } }),
+      prisma.clientComplaint.count({ where: { status: 'RESOLVED', resolvedAt: { gte: today } } }),
+      prisma.clientComplaint.count({ where: { status: 'OPEN', assignedToId: null } }),
+      prisma.deployment.count({ where: { date: today } }),
+      prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
+      prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
+      prisma.requisition.count({ where: { status: { in: ['PENDING', 'SUBMITTED'] } } }),
+      prisma.clientComplaint.findMany({
+        where:   { status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } },
+        include: {
+          client:         { select: { clientName: true } },
+          assignedToUser: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take:    8,
+      }),
+      prisma.clientComplaint.findMany({
+        where:   { status: 'OPEN', assignedToId: null },
+        include: { client: { select: { clientName: true } } },
+        orderBy: { createdAt: 'desc' },
+        take:    5,
+      }),
+    ]);
+
+    return {
+      role:  'CONTROL_ROOM',
+      stats: {
+        openComplaints,
+        underInvestigation,
+        resolvedToday,
+        unassignedCount,
+        deployedToday,
+        activeGuards,
+        activeClients,
+        pendingRequisitions,
+      },
+      feeds: {
+        activeComplaints: activeComplaints.map(c => ({
+          id:        c.id,
+          primary:   c.subject,
+          secondary: `${c.client.clientName} · ${
+            c.assignedToUser ? `Assigned to ${c.assignedToUser.name}` : 'Unassigned'
+          }`,
+          badge:     c.status.replace(/_/g, ' '),
+        })),
+        unassignedComplaints: unassignedComplaints.map(c => ({
+          id:        c.id,
+          primary:   c.subject,
+          secondary: c.client.clientName,
+          badge:     c.severity,
         })),
       },
     };

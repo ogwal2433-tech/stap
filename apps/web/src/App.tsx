@@ -56,6 +56,11 @@ const DEPLOYMENT_ROLES: UserRole[] = [
   ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR,
 ];
 const COMPLAINT_VIEW_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT);
+// Read access to the deployment sheet. Write controls within the page carry
+// their own RoleGuard, so this stays a viewing list.
+const DEPLOYMENT_VIEW: UserRole[] = [
+  ...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.CONTROL_ROOM,
+];
 const REPORT_ACCESS: UserRole[]        = [...new Set([...REPORT_ROLES, ROLES.OPERATIONS_SUPERVISOR])];
 
 function L({ children }: { children: React.ReactNode }) {
@@ -94,7 +99,7 @@ function App() {
               <Route path="/guards/:id/edit"     element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
 
               {/* Attendance */}
-              <Route path="/attendance"           element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
+              <Route path="/attendance"           element={<L><RoleGuard allowedRoles={DEPLOYMENT_VIEW} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
               <Route path="/attendance/deployment-sheet" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><DeploymentSheetPage /></RoleGuard></L>} />
               <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
               <Route path="/checkin"              element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import type { ComplaintResponse } from '@stap/shared';
-import { COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS } from '@stap/shared';
+import {
+  COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS,
+  COMPLAINT_ASSIGN_ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH, ROLES,
+} from '@stap/shared';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useAssignComplaint, useUpdateComplaintStatus } from '../../hooks/useComplaints';
@@ -26,10 +29,17 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
 
   const isAssignedToMe = complaint.assignedTo?.id === user?.id;
   const isHRRole       = ['DIRECTOR', 'ASSISTANT_MANAGER'].includes(user?.role ?? '');
-  const isAssignerRole = ['DIRECTOR', 'ASSISTANT_MANAGER', 'OPERATIONS_SUPERVISOR'].includes(user?.role ?? '');
+  const isControlRoom  = user?.role === ROLES.CONTROL_ROOM;
+  const isAssignerRole = (COMPLAINT_ASSIGN_ROLES as string[]).includes(user?.role ?? '');
 
   const [receivedById, setReceivedById] = useState('');
   const [assignedToId, setAssignedToId] = useState('');
+  // Resolving is a two-step: the button opens the form, the form records what
+  // was done. Nothing closes without that note.
+  const [resolveMode, setResolveMode]   = useState(false);
+  const [actionTaken, setActionTaken]   = useState('');
+  const [resolution, setResolution]     = useState('');
+  const [attempted, setAttempted]       = useState(false);
 
   const assignMutation = useAssignComplaint(complaint.id);
   const statusMutation = useUpdateComplaintStatus(complaint.id);
@@ -43,6 +53,11 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
     label:    u.name,
     sublabel: u.role.replace(/_/g, ' '),
   }));
+  // Only Control Room can be recorded as the receiver, so offering anyone else
+  // would just produce a rejected save.
+  const receiverOptions = (usersPage?.data ?? [])
+    .filter((u) => (COMPLAINT_RECEIVER_ROLES as string[]).includes(u.role))
+    .map((u) => ({ value: u.id, label: u.name, sublabel: u.role.replace(/_/g, ' ') }));
 
   async function handleAssign() {
     if (!receivedById || !assignedToId) return;
@@ -57,12 +72,23 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
   async function handleStatusUpdate(status: 'UNDER_INVESTIGATION' | 'RESOLVED') {
     try {
       await statusMutation.mutateAsync({ status });
-      showToast(
-        status === 'RESOLVED'
-          ? 'Complaint marked as Resolved'
-          : 'Complaint marked Under Investigation',
-        'success',
-      );
+      showToast('Complaint marked Under Investigation', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to update status', 'danger');
+    }
+  }
+
+  async function handleResolve() {
+    setAttempted(true);
+    if (actionTaken.trim().length < MIN_ACTION_TAKEN_LENGTH) return;
+    try {
+      await statusMutation.mutateAsync({
+        status:      'RESOLVED',
+        actionTaken: actionTaken.trim(),
+        resolution:  resolution.trim() || null,
+      });
+      showToast('Complaint marked as Resolved', 'success');
+      setResolveMode(false);
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to update status', 'danger');
     }
@@ -145,12 +171,15 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
                 Received By <span className="text-danger">*</span>
               </Form.Label>
               <SearchableSelect
-                options={staffOptions}
+                options={receiverOptions}
                 value={receivedById}
                 onChange={setReceivedById}
-                placeholder="Who received this complaint?"
+                placeholder="Which Control Room operator received this?"
                 isLoading={usersLoading}
               />
+              <Form.Text className="text-muted">
+                Complaints are received by Control Room only.
+              </Form.Text>
             </div>
           )
         )}
@@ -214,32 +243,120 @@ export default function ClientComplaintDetailModal({ show, complaint, onClose }:
           )
         )}
 
-        {/* ── Status Update buttons ─────────────────────────────── */}
-        {complaint.assignedTo && (isAssignedToMe || isHRRole) && (
+        {/* ── Status Update ─────────────────────────────────────── */}
+        {complaint.assignedTo && complaint.status !== 'RESOLVED' &&
+         (isAssignedToMe || isControlRoom || isHRRole) && (
           <div className="mb-3">
             <div className="fw-bold small mb-2">Update Status</div>
-            <div className="d-flex gap-2 flex-wrap">
-              <Button
-                variant="warning"
-                size="sm"
-                disabled={
-                  complaint.status === 'UNDER_INVESTIGATION' ||
-                  complaint.status === 'RESOLVED' ||
-                  statusMutation.isPending
-                }
-                onClick={() => handleStatusUpdate('UNDER_INVESTIGATION')}
-              >
-                🔍 Under Investigation
-              </Button>
-              <Button
-                variant="success"
-                size="sm"
-                disabled={complaint.status === 'RESOLVED' || statusMutation.isPending}
-                onClick={() => handleStatusUpdate('RESOLVED')}
-              >
-                ✅ Resolved
-              </Button>
+
+            {resolveMode ? (
+              <div>
+                <Form.Group className="mb-2">
+                  <Form.Label className="fw-bold small">
+                    Action Taken <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    maxLength={2000}
+                    value={actionTaken}
+                    placeholder="Describe what was done to resolve this complaint…"
+                    isInvalid={attempted && actionTaken.trim().length < MIN_ACTION_TAKEN_LENGTH}
+                    onChange={(e) => setActionTaken(e.target.value)}
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    Please describe the action taken (at least {MIN_ACTION_TAKEN_LENGTH} characters).
+                  </Form.Control.Feedback>
+                  <Form.Text className="text-muted">
+                    Recorded as the official resolution action against this complaint.
+                  </Form.Text>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label className="small">
+                    Additional notes <span className="text-muted">(optional)</span>
+                  </Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    maxLength={2000}
+                    value={resolution}
+                    placeholder="Any further context…"
+                    onChange={(e) => setResolution(e.target.value)}
+                  />
+                </Form.Group>
+
+                <div className="d-flex gap-2">
+                  <Button
+                    variant="success"
+                    size="sm"
+                    disabled={statusMutation.isPending}
+                    onClick={handleResolve}
+                  >
+                    {statusMutation.isPending
+                      ? <><Spinner size="sm" className="me-1" />Saving…</>
+                      : '✅ Confirm Resolved'}
+                  </Button>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    disabled={statusMutation.isPending}
+                    onClick={() => { setResolveMode(false); setActionTaken(''); setAttempted(false); }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="d-flex gap-2 flex-wrap">
+                <Button
+                  variant="warning"
+                  size="sm"
+                  disabled={complaint.status === 'UNDER_INVESTIGATION' || statusMutation.isPending}
+                  onClick={() => handleStatusUpdate('UNDER_INVESTIGATION')}
+                >
+                  🔍 Under Investigation
+                </Button>
+                <Button
+                  variant="success"
+                  size="sm"
+                  disabled={statusMutation.isPending}
+                  onClick={() => { setResolveMode(true); setAttempted(false); }}
+                >
+                  ✅ Mark Resolved
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Action taken, once recorded ───────────────────────── */}
+        {complaint.actionTaken && (
+          <div
+            style={{
+              background:   '#d5f5e3',
+              borderRadius: '0.5rem',
+              padding:      '12px 16px',
+              marginBottom: '12px',
+              borderLeft:   '4px solid #1E8449',
+            }}
+          >
+            <div className="fw-bold small mb-1" style={{ color: '#1E8449' }}>
+              ✅ Action Taken to Resolve
             </div>
+            <div style={{ fontSize: '0.85rem', color: '#2C3E50', whiteSpace: 'pre-wrap' }}>
+              {complaint.actionTaken}
+            </div>
+            {complaint.resolution && (
+              <div className="text-muted small mt-1 fst-italic" style={{ whiteSpace: 'pre-wrap' }}>
+                {complaint.resolution}
+              </div>
+            )}
+            {complaint.actionTakenBy && complaint.actionTakenAt && (
+              <div className="text-muted mt-2" style={{ fontSize: '0.72rem' }}>
+                Recorded by {complaint.actionTakenBy.name} on {formatDate(complaint.actionTakenAt)}
+              </div>
+            )}
           </div>
         )}
 

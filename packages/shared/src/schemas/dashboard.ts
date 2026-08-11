@@ -25,5 +25,6 @@ export type DashboardRole =
   | 'FIELD_SUPERVISOR'
   | 'ACCOUNTS_OFFICER'
   | 'ADMINISTRATOR'
+  | 'CONTROL_ROOM'
   | 'HR'
   | 'CLIENT';

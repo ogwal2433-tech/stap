@@ -53,6 +53,7 @@ async function main() {
     { name: 'Emmanuel Okello',       email: 'fieldsupervisor@stapsecurity.co.ug', role: Role.FIELD_SUPERVISOR,  status: UserStatus.ACTIVE },
     { name: 'Immaculate Nalubega',   email: 'trainer@stapsecurity.co.ug',      role: Role.TRAINER,              status: UserStatus.ACTIVE },
     { name: 'Charles Mwesigwa',      email: 'accounts@stapsecurity.co.ug',     role: Role.ACCOUNTS_OFFICER,     status: UserStatus.ACTIVE },
+    { name: 'Betty Nakiwala',        email: 'controlroom@stapsecurity.co.ug',  role: Role.CONTROL_ROOM,         status: UserStatus.ACTIVE },
     { name: 'Sylvia Akello',         email: 'marketing@stapsecurity.co.ug',    role: Role.MARKETING,            status: UserStatus.ACTIVE },
     { name: 'David Wasswa',          email: 'guard.wasswa@stapsecurity.co.ug', role: Role.GUARD,                status: UserStatus.ACTIVE },
     { name: 'Michael Kakooza',       email: 'client.kakooza@stapsecurity.co.ug', role: Role.CLIENT,             status: UserStatus.ACTIVE },

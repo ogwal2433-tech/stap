@@ -80,6 +80,7 @@ import { QueueService } from '../jobs/QueueService';
 import {
   ROLES,
   DEPLOYMENT_ROLES,
+  DEPLOYMENT_VIEW_ROLES,
   INTERNAL_ROLES,
   CreateRosterSchema,
   CopyRosterSchema,
@@ -138,7 +139,7 @@ router.post(
 // ── GET /today — today's deployments ──────────────────────────────────────────
 router.get(
   '/today',
-  requireRole(...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER),
+  requireRole(...DEPLOYMENT_VIEW_ROLES),
   validateQuery(DeploymentListQuerySchema),
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as import('@stap/shared').DeploymentListQuery;
@@ -150,7 +151,7 @@ router.get(
 // ── GET /sheet — daily deployment sheet ───────────────────────────────────────
 router.get(
   '/sheet',
-  requireRole(...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(...DEPLOYMENT_VIEW_ROLES),
   asyncHandler(async (req, res) => {
     const date   = typeof req.query.date   === 'string' ? req.query.date   : undefined;
     const siteId = typeof req.query.siteId === 'string' ? req.query.siteId : undefined;

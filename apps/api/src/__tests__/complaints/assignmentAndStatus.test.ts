@@ -77,7 +77,7 @@ describe('assignComplaint()', () => {
   it('sets receivedById, assignedToId, and assignedAt', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane Receiver', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane Receiver', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce({ id: ASSIGNEE_ID, name: 'John Assignee', role: 'OPERATIONS_SUPERVISOR', phone: '0700000000' });
     (prisma.clientComplaint.update as any).mockResolvedValue(updatedWithAssignment);
     (prisma.auditLog.create as any).mockResolvedValue({});
@@ -109,7 +109,7 @@ describe('assignComplaint()', () => {
   it('throws 404 if assignedToId user does not exist', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce(null);
 
     await expect(
@@ -120,7 +120,7 @@ describe('assignComplaint()', () => {
   it('sends a notification to the assigned user', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce({ id: ASSIGNEE_ID, name: 'John', role: 'OPERATIONS_SUPERVISOR', phone: null });
     (prisma.clientComplaint.update as any).mockResolvedValue(updatedWithAssignment);
     (prisma.auditLog.create as any).mockResolvedValue({});
@@ -139,7 +139,7 @@ describe('assignComplaint()', () => {
   it('creates an audit log entry', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce({ id: ASSIGNEE_ID, name: 'John', role: 'OPERATIONS_SUPERVISOR', phone: null });
     (prisma.clientComplaint.update as any).mockResolvedValue(updatedWithAssignment);
     (prisma.auditLog.create as any).mockResolvedValue({});
@@ -158,7 +158,7 @@ describe('assignComplaint()', () => {
   it('derives assignedTo.title correctly from role', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce({ id: ASSIGNEE_ID, name: 'John', role: 'OPERATIONS_SUPERVISOR', phone: null });
     (prisma.clientComplaint.update as any).mockResolvedValue({
       ...updatedWithAssignment,
@@ -178,7 +178,7 @@ describe('assignComplaint()', () => {
   it('returns "Not provided" for phone when user has no phone on file', async () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
     (prisma.user.findUnique as any)
-      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'DIRECTOR' })
+      .mockResolvedValueOnce({ id: RECEIVER_ID, name: 'Jane', role: 'CONTROL_ROOM' })
       .mockResolvedValueOnce({ id: ASSIGNEE_ID, name: 'John', role: 'OPERATIONS_SUPERVISOR', phone: null });
     (prisma.clientComplaint.update as any).mockResolvedValue({
       ...updatedWithAssignment,
@@ -212,7 +212,7 @@ describe('updateStatus()', () => {
     });
     (prisma.auditLog.create as any).mockResolvedValue({});
 
-    const result = await complaintService.updateStatus(COMPLAINT_ID, 'UNDER_INVESTIGATION', ASSIGNEE_ID);
+    const result = await complaintService.updateStatus(COMPLAINT_ID, { status: 'UNDER_INVESTIGATION' }, ASSIGNEE_ID);
     expect(result.status).toBe('UNDER_INVESTIGATION');
   });
 
@@ -225,7 +225,7 @@ describe('updateStatus()', () => {
     });
     (prisma.auditLog.create as any).mockResolvedValue({});
 
-    const result = await complaintService.updateStatus(COMPLAINT_ID, 'RESOLVED', ASSIGNEE_ID);
+    const result = await complaintService.updateStatus(COMPLAINT_ID, { status: 'RESOLVED', actionTaken: 'Supervisor dispatched; issue closed on site.' }, ASSIGNEE_ID);
     expect(result.status).toBe('RESOLVED');
   });
 
@@ -234,7 +234,7 @@ describe('updateStatus()', () => {
     (prisma.user.findUnique as any).mockResolvedValue({ role: 'TRAINER' });
 
     await expect(
-      complaintService.updateStatus(COMPLAINT_ID, 'UNDER_INVESTIGATION', OTHER_USER_ID),
+      complaintService.updateStatus(COMPLAINT_ID, { status: 'UNDER_INVESTIGATION' }, OTHER_USER_ID),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
@@ -247,7 +247,7 @@ describe('updateStatus()', () => {
     });
     (prisma.auditLog.create as any).mockResolvedValue({});
 
-    const result = await complaintService.updateStatus(COMPLAINT_ID, 'RESOLVED', DIRECTOR_ID);
+    const result = await complaintService.updateStatus(COMPLAINT_ID, { status: 'RESOLVED', actionTaken: 'Reviewed and closed by the Director.' }, DIRECTOR_ID);
     expect(result.status).toBe('RESOLVED');
   });
 
@@ -255,7 +255,7 @@ describe('updateStatus()', () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(baseComplaint);
 
     await expect(
-      complaintService.updateStatus(COMPLAINT_ID, 'UNDER_INVESTIGATION', DIRECTOR_ID),
+      complaintService.updateStatus(COMPLAINT_ID, { status: 'UNDER_INVESTIGATION' }, DIRECTOR_ID),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
@@ -263,7 +263,7 @@ describe('updateStatus()', () => {
     (prisma.clientComplaint.findUnique as any).mockResolvedValue(null);
 
     await expect(
-      complaintService.updateStatus('nonexistent', 'RESOLVED', DIRECTOR_ID),
+      complaintService.updateStatus('nonexistent', { status: 'RESOLVED', actionTaken: 'n/a — complaint missing' }, DIRECTOR_ID),
     ).rejects.toMatchObject({ message: 'Complaint not found' });
   });
 });

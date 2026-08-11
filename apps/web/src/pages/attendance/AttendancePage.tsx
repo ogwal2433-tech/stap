@@ -77,6 +77,10 @@ export default function AttendancePage() {
   const { user }      = useAuth();
 
   const isAdmin = ADMIN_ROLES.includes(user?.role as UserRole);
+  // Roles such as Control Room may read the sheet but not mark it. The save bar
+  // is already RoleGuard-ed; this stops the inputs looking editable when it is
+  // never going to appear.
+  const canMarkAttendance = ATTENDANCE_WRITE.includes(user?.role as UserRole);
 
   const [selectedDate,   setSelectedDate]   = useState(todayStr());
   const [selectedSiteId, setSelectedSiteId] = useState('');
@@ -259,6 +263,7 @@ export default function AttendancePage() {
             size="sm"
             value={edit.status}
             onChange={(e) => handleStatusChange(e.target.value as AttendanceStatus)}
+            disabled={!canMarkAttendance}
             style={{ fontSize: '0.8rem', background: selectBg }}
           >
             {STATUS_OPTIONS.map((o) => (
@@ -278,6 +283,7 @@ export default function AttendancePage() {
             placeholder="Note…"
             value={edit.notes}
             onChange={(e) => setEdit(key, { notes: e.target.value })}
+            disabled={!canMarkAttendance}
             style={{ fontSize: '0.8rem' }}
           />
         </td>

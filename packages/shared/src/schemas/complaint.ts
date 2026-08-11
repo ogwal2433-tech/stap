@@ -18,9 +18,24 @@ export const AssignComplaintSchema = z.object({
 });
 export type AssignComplaintInput = z.infer<typeof AssignComplaintSchema>;
 
+/** Minimum length of an action note — enough to rule out "ok" and "done". */
+export const MIN_ACTION_TAKEN_LENGTH = 5;
+
 export const UpdateComplaintStatusSchema = z.object({
-  status: z.enum(['UNDER_INVESTIGATION', 'RESOLVED']),
-});
+  status:      z.enum(['UNDER_INVESTIGATION', 'RESOLVED']),
+  /** What was done about it. Required to resolve; ignored otherwise. */
+  actionTaken: z.string().max(2000).optional().nullable(),
+  /** Optional extra context, stored on the existing `resolution` column. */
+  resolution:  z.string().max(2000).optional().nullable(),
+}).refine(
+  (data) =>
+    data.status !== 'RESOLVED' ||
+    (data.actionTaken?.trim().length ?? 0) >= MIN_ACTION_TAKEN_LENGTH,
+  {
+    message: 'You must describe the action taken before marking this complaint as Resolved.',
+    path: ['actionTaken'],
+  },
+);
 export type UpdateComplaintStatusInput = z.infer<typeof UpdateComplaintStatusSchema>;
 
 // ── Interfaces ─────────────────────────────────────────────────────────────────
@@ -44,6 +59,10 @@ export interface ComplaintResponse {
   } | null;
   assignedAt:  string | null;
   resolution:  string | null;
+  /** What was done to resolve it — set before the status can become RESOLVED. */
+  actionTaken:   string | null;
+  actionTakenAt: string | null;
+  actionTakenBy: { id: string; name: string } | null;
   resolvedAt:  string | null;
   resolvedBy:  string | null;
   createdAt:   string;

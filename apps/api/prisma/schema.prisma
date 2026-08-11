@@ -18,6 +18,7 @@ enum Role {
   FIELD_SUPERVISOR
   TRAINER
   ACCOUNTS_OFFICER
+  CONTROL_ROOM
   MARKETING
   GUARD
   CLIENT
@@ -132,6 +133,7 @@ model User {
   checkins                SupervisorCheckin[]    @relation("CheckinSupervisor")
   complaintsAssigned      ClientComplaint[]      @relation("ComplaintAssignedTo")
   complaintsReceived      ClientComplaint[]      @relation("ComplaintReceivedBy")
+  complaintActions        ClientComplaint[]      @relation("ComplaintActionBy")
   requestedRequisitions   Requisition[]          @relation("RequisitionRequestedBy")
   hrApprovedRequisitions  Requisition[]          @relation("RequisitionHRApprover")
   dirApprovedRequisitions Requisition[]          @relation("RequisitionDirectorApprover")
@@ -548,14 +550,23 @@ model ClientComplaint {
   status       ComplaintStatus   @default(OPEN)
   resolvedAt   DateTime?
   resolvedBy   String?
+  /// Free-text context recorded alongside actionTaken. Optional.
   resolution   String?
+
+  /// What was actually done about the complaint. Required before the status can
+  /// move to RESOLVED, so no complaint can be closed without a record of it.
+  actionTaken     String?   @db.Text
+  actionTakenAt   DateTime?
+  actionTakenById String?
+
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  client         Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  site           Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  receivedByUser User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
-  assignedToUser User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  client           Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site             Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  receivedByUser   User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  assignedToUser   User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  actionTakenByUser User? @relation("ComplaintActionBy", fields: [actionTakenById], references: [id], onDelete: SetNull)
 }
 
 model Deployment {
