@@ -49,6 +49,21 @@ export const portalApi = {
     return api.get('/portal/complaints').then(r => r.data);
   },
 
+  /** Notices STAP has sent to this client. */
+  getNotices(): Promise<PaginatedResponse<ComplaintResponse>> {
+    return api.get('/portal/notices').then(r => r.data);
+  },
+
+  getUnreadNoticeCount(): Promise<number> {
+    return api.get('/portal/notices/unread-count').then(r => r.data.data.count as number);
+  },
+
+  acknowledgeNotice(id: string, clientResponse?: string | null): Promise<ComplaintResponse> {
+    return api
+      .patch(`/portal/notices/${id}/acknowledge`, { clientResponse: clientResponse ?? null })
+      .then(r => r.data.data);
+  },
+
   getServiceRequests(): Promise<PaginatedResponse<ServiceRequestResponse>> {
     return api.get('/portal/service-requests').then(r => r.data);
   },

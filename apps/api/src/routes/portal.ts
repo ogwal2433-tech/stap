@@ -53,7 +53,7 @@ import { complaintService } from '../services/complaintService';
 import { serviceRequestService } from '../services/serviceRequestService';
 import { notificationService } from '../services/notificationService';
 import { AppError } from '../errors/AppError';
-import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema } from '@stap/shared';
+import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema, AcknowledgeNoticeSchema } from '@stap/shared';
 import prisma from '../db/prisma';
 
 const router = Router();
@@ -184,13 +184,67 @@ router.post(
   }),
 );
 
-// GET /portal/complaints
+// GET /portal/complaints — what this client raised with STAP.
+// Scoped to INBOUND so notices STAP sent them stay under /portal/notices and
+// do not appear in the client's own "My Complaints" list.
 router.get(
   '/complaints',
   asyncHandler(async (req, res) => {
     const clientId = (req as any).clientId as string;
-    const result   = await complaintService.list({ clientId, page: 1, limit: 50 });
+    const result   = await complaintService.list({ clientId, direction: 'INBOUND', page: 1, limit: 50 });
     res.json({ success: true, ...result });
+  }),
+);
+
+// ── Notices from STAP (outbound complaints) ───────────────────────────────────
+// clientPortalGuard has already pinned clientId to the JWT, so a client can only
+// ever read or acknowledge their own company's notices.
+
+// GET /portal/notices
+router.get(
+  '/notices',
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+    const result   = await complaintService.list({ clientId, direction: 'OUTBOUND', page: 1, limit: 50 });
+    res.json({ success: true, ...result });
+  }),
+);
+
+// GET /portal/notices/unread-count — drives the badge on the portal tab
+router.get(
+  '/notices/unread-count',
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+    const count    = await complaintService.countUnreadNotices(clientId);
+    res.json({ success: true, data: { count } });
+  }),
+);
+
+// PATCH /portal/notices/:id/acknowledge
+router.patch(
+  '/notices/:id/acknowledge',
+  validate(AcknowledgeNoticeSchema),
+  asyncHandler(async (req, res) => {
+    const clientId = (req as any).clientId as string;
+
+    // Confirm the notice is this client's before the service touches it —
+    // otherwise the id alone would be enough to acknowledge another company's.
+    const notice = await prisma.clientComplaint.findUnique({
+      where:  { id: req.params.id },
+      select: { id: true, clientId: true },
+    });
+    if (!notice || notice.clientId !== clientId) {
+      // Same response either way: existence of another company's notice is not
+      // something this client should be able to probe for.
+      return res.status(404).json({ success: false, error: 'Notice not found' });
+    }
+
+    const data = await complaintService.acknowledgeNotice(
+      req.params.id,
+      req.body.clientResponse ?? undefined,
+      req.user!.userId,
+    );
+    res.json({ success: true, data });
   }),
 );
 

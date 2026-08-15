@@ -88,6 +88,11 @@ enum ComplaintStatus {
   IN_PROGRESS
   UNDER_INVESTIGATION
   RESOLVED
+  // Outbound only — a notice STAP sent to a client, and the client's receipt of
+  // it. Inbound complaints never take these, and outbound ones never take
+  // OPEN/IN_PROGRESS/UNDER_INVESTIGATION; both end at RESOLVED.
+  SENT
+  ACKNOWLEDGED
 }
 
 enum AttendanceStatus {
@@ -134,6 +139,8 @@ model User {
   complaintsAssigned      ClientComplaint[]      @relation("ComplaintAssignedTo")
   complaintsReceived      ClientComplaint[]      @relation("ComplaintReceivedBy")
   complaintActions        ClientComplaint[]      @relation("ComplaintActionBy")
+  noticesSent             ClientComplaint[]      @relation("ComplaintSender")
+  noticesAcknowledged     ClientComplaint[]      @relation("ComplaintAcknowledger")
   requestedRequisitions   Requisition[]          @relation("RequisitionRequestedBy")
   hrApprovedRequisitions  Requisition[]          @relation("RequisitionHRApprover")
   dirApprovedRequisitions Requisition[]          @relation("RequisitionDirectorApprover")
@@ -771,6 +778,28 @@ model ClientComplaint {
   actionTakenAt   DateTime?
   actionTakenById String?
 
+  /// Who raised this with whom.
+  ///
+  /// INBOUND  = the client complained to STAP (the original flow, and the
+  ///            default, so every existing row keeps its meaning).
+  /// OUTBOUND = STAP sent the client a formal notice. Same table because both
+  ///            are a grievance about the same contract between the same two
+  ///            parties — splitting them would duplicate category, severity,
+  ///            resolution and the whole action-taken trail.
+  direction String @default("INBOUND")
+
+  /// Outbound only — the staff member who sent the notice.
+  sentById   String?
+  sentByUser User?     @relation("ComplaintSender", fields: [sentById], references: [id], onDelete: SetNull)
+  sentAt     DateTime?
+
+  /// Outbound only — the client user who confirmed receipt, and what they said
+  /// back. A null acknowledgedAt is what "unread" means on the client portal.
+  acknowledgedAt     DateTime?
+  acknowledgedById   String?
+  acknowledgedByUser User?     @relation("ComplaintAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  clientResponse     String?   @db.Text
+
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
@@ -779,6 +808,8 @@ model ClientComplaint {
   receivedByUser   User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
   assignedToUser   User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   actionTakenByUser User? @relation("ComplaintActionBy", fields: [actionTakenById], references: [id], onDelete: SetNull)
+
+  @@index([clientId, direction, status])
 }
 
 model Deployment {

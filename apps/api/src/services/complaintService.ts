@@ -5,6 +5,7 @@ import { AppError, NotFoundError } from '../errors/AppError';
 import { ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH } from '@stap/shared';
 import type {
   CreateComplaintInput,
+  CreateOutboundComplaintInput,
   AssignComplaintInput,
   UpdateComplaintStatusInput,
   ComplaintResponse,
@@ -20,6 +21,8 @@ const INCLUDE = {
   receivedByUser:    { select: { id: true, name: true } },
   assignedToUser:    { select: { id: true, name: true, role: true, phone: true } },
   actionTakenByUser: { select: { id: true, name: true } },
+  sentByUser:         { select: { id: true, name: true } },
+  acknowledgedByUser: { select: { id: true, name: true } },
 } as const;
 
 function roleToTitle(role: string): string {
@@ -68,6 +71,17 @@ function sanitiseComplaint(c: any): ComplaintResponse {
     createdAt:   c.createdAt.toISOString(),
     updatedAt:   c.updatedAt.toISOString(),
     daysOpen:    daysOpen(c.createdAt, c.resolvedAt),
+
+    // Rows written before outbound notices existed have no direction — they are
+    // all inbound, which is what the column default says too.
+    direction:   (c.direction ?? 'INBOUND') as 'INBOUND' | 'OUTBOUND',
+    sentBy:      c.sentByUser ? { id: c.sentByUser.id, name: c.sentByUser.name } : null,
+    sentAt:      c.sentAt?.toISOString() ?? null,
+    acknowledgedAt: c.acknowledgedAt?.toISOString() ?? null,
+    acknowledgedBy: c.acknowledgedByUser
+      ? { id: c.acknowledgedByUser.id, name: c.acknowledgedByUser.name }
+      : null,
+    clientResponse: c.clientResponse ?? null,
   };
 }
 
@@ -114,6 +128,213 @@ class ComplaintService {
     return sanitiseComplaint(complaint);
   }
 
+  // ── Outbound notices (STAP → client) ─────────────────────────────────────────
+
+  /**
+   * Sends a formal notice from STAP to a client.
+   *
+   * The mirror image of create(): the complaint is raised by staff against the
+   * client, so it starts at SENT rather than OPEN and waits on the client to
+   * acknowledge instead of on a staff member to be assigned.
+   */
+  async createOutbound(
+    data:     CreateOutboundComplaintInput,
+    sentById: string,
+  ): Promise<ComplaintResponse> {
+    const client = await prisma.client.findUnique({
+      where:  { id: data.clientId },
+      select: { id: true, clientName: true },
+    });
+    if (!client) throw new NotFoundError('Client not found');
+
+    if (data.siteId) {
+      const site = await prisma.site.findFirst({
+        where:  { id: data.siteId, clientId: data.clientId },
+        select: { id: true },
+      });
+      if (!site) {
+        throw new AppError('That site does not belong to the selected client.', 400);
+      }
+    }
+
+    const complaint = await prisma.clientComplaint.create({
+      data: {
+        clientId:    data.clientId,
+        siteId:      data.siteId ?? null,
+        subject:     data.subject.trim(),
+        description: data.description.trim(),
+        category:    data.category ?? 'OTHER',
+        // priority and severity are the same LOW/MEDIUM/HIGH scale.
+        severity:    data.priority ?? 'MEDIUM',
+        direction:   'OUTBOUND',
+        status:      'SENT',
+        sentById,
+        sentAt:      new Date(),
+      },
+      include: INCLUDE,
+    });
+
+    // Every portal login for this company needs to see it, not just one contact.
+    const clientUsers = await prisma.user.findMany({
+      where:  { clientId: data.clientId, role: ROLES.CLIENT, status: 'ACTIVE' },
+      select: { id: true },
+    });
+
+    await Promise.all([
+      ...clientUsers.map((u) =>
+        notificationService.send({
+          userId:     u.id,
+          type:       'SYSTEM',
+          title:      '📋 Notice from STAP Security',
+          message:
+            `STAP Security has sent you a notice: "${complaint.subject}". ` +
+            'Log in to your portal to read and acknowledge it.',
+          entityType: 'complaint',
+          entityId:   complaint.id,
+        }),
+      ),
+      QueueService.logAudit({
+        userId:   sentById,
+        action:   'OUTBOUND_COMPLAINT_SENT',
+        entity:   'ClientComplaint',
+        entityId: complaint.id,
+        newValue: {
+          clientId:   data.clientId,
+          clientName: client.clientName,
+          subject:    complaint.subject,
+          priority:   complaint.severity,
+          notified:   clientUsers.length,
+        },
+      }),
+    ]);
+
+    if (clientUsers.length === 0) {
+      console.warn(
+        `Outbound notice ${complaint.id} sent to ${client.clientName}, which has no active ` +
+        'portal user — nobody will be notified until one is created.',
+      );
+    }
+
+    return sanitiseComplaint(complaint);
+  }
+
+  /**
+   * Records a client's receipt of a notice, with an optional reply.
+   *
+   * Callers must have already established that the notice belongs to the
+   * acknowledging client — the portal guard does that from the JWT.
+   */
+  async acknowledgeNotice(
+    complaintId:      string,
+    clientResponse:   string | undefined,
+    acknowledgedById: string,
+  ): Promise<ComplaintResponse> {
+    const complaint = await prisma.clientComplaint.findUnique({
+      where:  { id: complaintId },
+      select: { id: true, direction: true, status: true, subject: true, sentById: true },
+    });
+    if (!complaint) throw new NotFoundError('Notice not found');
+
+    if (complaint.direction !== 'OUTBOUND') {
+      throw new AppError(
+        'Only notices sent by STAP can be acknowledged. This is a complaint you raised with us.',
+        400,
+      );
+    }
+    if (complaint.status !== 'SENT') {
+      throw new AppError(
+        complaint.status === 'ACKNOWLEDGED'
+          ? 'You have already acknowledged this notice.'
+          : 'This notice has already been closed and can no longer be acknowledged.',
+        400,
+      );
+    }
+
+    const response = clientResponse?.trim() || null;
+
+    const updated = await prisma.clientComplaint.update({
+      where: { id: complaintId },
+      data:  {
+        status:         'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        acknowledgedById,
+        clientResponse: response,
+      },
+      include: INCLUDE,
+    });
+
+    // Tell whoever sent it that the client has seen it.
+    if (complaint.sentById) {
+      await notificationService.send({
+        userId:     complaint.sentById,
+        type:       'SYSTEM',
+        title:      '✅ Client Acknowledged Your Notice',
+        message:
+          `${updated.client.clientName} acknowledged "${complaint.subject}".` +
+          (response ? ` They replied: "${response.slice(0, 100)}"` : ''),
+        entityType: 'complaint',
+        entityId:   complaintId,
+      });
+    }
+
+    await QueueService.logAudit({
+      userId:   acknowledgedById,
+      action:   'OUTBOUND_COMPLAINT_ACKNOWLEDGED',
+      entity:   'ClientComplaint',
+      entityId: complaintId,
+      newValue: { status: 'ACKNOWLEDGED', hasResponse: response !== null },
+    });
+
+    return sanitiseComplaint(updated);
+  }
+
+  /** Staff closes a notice once whatever it asked for has happened. */
+  async resolveOutbound(complaintId: string, actingUserId: string): Promise<ComplaintResponse> {
+    const complaint = await prisma.clientComplaint.findUnique({
+      where:  { id: complaintId },
+      select: { id: true, direction: true, status: true },
+    });
+    if (!complaint) throw new NotFoundError('Notice not found');
+
+    if (complaint.direction !== 'OUTBOUND') {
+      throw new AppError(
+        'This is an inbound complaint — use the regular status endpoint, which records the action taken.',
+        400,
+      );
+    }
+    if (complaint.status === 'RESOLVED') {
+      throw new AppError('This notice is already resolved.', 400);
+    }
+
+    const updated = await prisma.clientComplaint.update({
+      where: { id: complaintId },
+      data:  {
+        status:     'RESOLVED',
+        resolvedAt: new Date(),
+        resolvedBy: actingUserId,
+      },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   actingUserId,
+      action:   'OUTBOUND_COMPLAINT_RESOLVED',
+      entity:   'ClientComplaint',
+      entityId: complaintId,
+      // Worth recording: a notice closed without the client ever confirming receipt.
+      newValue: { status: 'RESOLVED', wasAcknowledged: complaint.status === 'ACKNOWLEDGED' },
+    });
+
+    return sanitiseComplaint(updated);
+  }
+
+  /** Unacknowledged notices for one client — the portal's unread count. */
+  async countUnreadNotices(clientId: string): Promise<number> {
+    return prisma.clientComplaint.count({
+      where: { clientId, direction: 'OUTBOUND', status: 'SENT' },
+    });
+  }
+
   async assignComplaint(
     complaintId:  string,
     data:         AssignComplaintInput,
@@ -121,6 +342,12 @@ class ComplaintService {
   ): Promise<ComplaintResponse> {
     const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
     if (!complaint) throw new NotFoundError('Complaint not found');
+
+    // Assignment routes a client's complaint to whoever will handle it. A notice
+    // STAP sent has no such owner — it is waiting on the client, not on us.
+    if (complaint.direction === 'OUTBOUND') {
+      throw new AppError('A notice sent to a client cannot be assigned to a staff member.', 400);
+    }
 
     const [receiver, assignee] = await Promise.all([
       prisma.user.findUnique({
@@ -189,6 +416,15 @@ class ComplaintService {
     const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
     if (!complaint) throw new NotFoundError('Complaint not found');
 
+    // Outbound notices run SENT → ACKNOWLEDGED → RESOLVED and are never assigned
+    // to a staff member, so this endpoint's rules do not apply to them.
+    if (complaint.direction === 'OUTBOUND') {
+      throw new AppError(
+        'This is a notice STAP sent to a client. Close it with the resolve-notice action instead.',
+        400,
+      );
+    }
+
     if (!complaint.assignedToId) {
       throw new AppError('This complaint must be assigned to a staff member before its status can be updated.', 400);
     }
@@ -254,17 +490,21 @@ class ComplaintService {
   }
 
   async list(query: {
-    status?:   string;
-    clientId?: string;
-    category?: string;
-    page:      number;
-    limit:     number;
+    status?:    string;
+    clientId?:  string;
+    category?:  string;
+    direction?: string;
+    page:       number;
+    limit:      number;
   }): Promise<PaginatedResponse<ComplaintResponse>> {
-    const { page = 1, limit = 20, status, clientId, category } = query;
+    const { page = 1, limit = 20, status, clientId, category, direction } = query;
     const where: any = {};
     if (status)   where.status   = status;
     if (clientId) where.clientId = clientId;
     if (category) where.category = category;
+    // Omitted (or ALL) returns both directions, so callers that predate outbound
+    // notices keep working unchanged.
+    if (direction && direction !== 'ALL') where.direction = direction;
 
     const [total, items] = await Promise.all([
       prisma.clientComplaint.count({ where }),
@@ -300,17 +540,23 @@ class ComplaintService {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
+    // This dashboard measures how STAP handles client grievances — resolution
+    // times, open volume by category. Notices STAP sends out are a different
+    // thing entirely and would quietly distort every figure here, so they are
+    // excluded rather than filtered at the edges.
+    const inbound = { direction: 'INBOUND' } as const;
+
     const [allOpen, allResolved, recentComplaints] = await Promise.all([
       prisma.clientComplaint.findMany({
-        where:   { status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } },
+        where:   { ...inbound, status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } },
         include: { client: { select: { clientName: true } } },
       }),
       prisma.clientComplaint.findMany({
-        where:   { status: 'RESOLVED', resolvedAt: { not: null } },
+        where:   { ...inbound, status: 'RESOLVED', resolvedAt: { not: null } },
         select:  { createdAt: true, resolvedAt: true },
       }),
       prisma.clientComplaint.findMany({
-        where:   { createdAt: { gte: sixMonthsAgo } },
+        where:   { ...inbound, createdAt: { gte: sixMonthsAgo } },
         select:  { category: true, status: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
       }),

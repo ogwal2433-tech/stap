@@ -6,6 +6,8 @@ import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { dashboardApi } from '../../lib/dashboard.api';
 import RoleDashboard from '../dashboard/RoleDashboard';
+import AcknowledgeNoticeModal from '../../components/portal/AcknowledgeNoticeModal';
+import type { ComplaintResponse } from '@stap/shared';
 
 const STA_BADGE: Record<string, string> = { PENDING: 'warning', OVERDUE: 'danger', PAID: 'success' };
 const COMP_BADGE: Record<string, string> = { OPEN: 'danger', IN_PROGRESS: 'warning', RESOLVED: 'success' };
@@ -62,8 +64,18 @@ export default function ClientPortalPage() {
     queryFn:  portalApi.getComplaints,
   });
 
+  // Notices STAP has sent to this client. Polled so a notice sent while the
+  // portal is open still surfaces without a manual refresh.
+  const { data: noticesRes, isLoading: loadNotices, refetch: refetchNotices } = useQuery({
+    queryKey:        ['portal-notices'],
+    queryFn:         portalApi.getNotices,
+    refetchInterval: 60_000,
+  });
+
   const invoices   = invoicesRes?.data ?? [];
   const complaints = complaintsRes?.data ?? [];
+  const notices    = noticesRes?.data ?? [];
+  const unreadNotices = notices.filter(n => n.status === 'SENT').length;
 
   const { data: sites } = useQuery({
     queryKey: ['portal-sites'],
@@ -106,6 +118,8 @@ export default function ClientPortalPage() {
   const [compForm, setCompForm] = useState({ subject: '', category: 'GUARD_CONDUCT', severity: 'MEDIUM', description: '', siteId: '' });
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [compError, setCompError] = useState<string | null>(null);
+  /** The notice the client is acknowledging, if any. */
+  const [ackNotice, setAckNotice] = useState<ComplaintResponse | null>(null);
 
   const submitComplaint = useMutation({
     mutationFn: () => portalApi.submitComplaint({
@@ -274,8 +288,140 @@ export default function ClientPortalPage() {
           )}
         </Tab>
 
-        {/* TAB 4: Complaints */}
-        <Tab eventKey="complaint" title="Complaints">
+        {/* TAB 4: Complaints & Notices */}
+        <Tab
+          eventKey="complaint"
+          title={
+            <>
+              Complaints
+              {unreadNotices > 0 && (
+                <Badge bg="danger" className="ms-2" style={{ fontSize: '0.62rem' }}>
+                  {unreadNotices}
+                </Badge>
+              )}
+            </>
+          }
+        >
+          {/* ── Notices from STAP — shown first: these need the client to act ── */}
+          <div className="mb-4">
+            <div className="d-flex align-items-center gap-2 mb-3">
+              <h6 className="fw-semibold mb-0" style={{ color: '#1B3A6B' }}>
+                📤 Notices from STAP Security
+              </h6>
+              {unreadNotices > 0 && (
+                <Badge bg="danger" style={{ fontSize: '0.7rem' }}>{unreadNotices} unread</Badge>
+              )}
+            </div>
+
+            {loadNotices ? (
+              <TabSpinner />
+            ) : notices.length === 0 ? (
+              <div
+                style={{
+                  border: '2px dashed #ced4da', borderRadius: '0.5rem',
+                  padding: '20px', textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
+                }}
+              >
+                No notices from STAP Security
+              </div>
+            ) : (
+              notices.map(n => (
+                <div
+                  key={n.id}
+                  style={{
+                    border:       '1px solid #e9ecef',
+                    borderRadius: '0.5rem',
+                    padding:      '14px 16px',
+                    marginBottom: '10px',
+                    borderLeft:   `4px solid ${
+                      n.status === 'SENT' ? '#1B3A6B'
+                      : n.status === 'ACKNOWLEDGED' ? '#0F7B6C'
+                      : '#1E8449'}`,
+                    background:   n.status === 'SENT' ? '#EBF5FB' : '#fff',
+                  }}
+                >
+                  <div className="d-flex justify-content-between align-items-start gap-2">
+                    <div style={{ flex: 1 }}>
+                      {n.status === 'SENT' && (
+                        <div
+                          style={{
+                            fontSize: '0.68rem', fontWeight: 700, color: '#1B3A6B',
+                            textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px',
+                          }}
+                        >
+                          🔵 New — action required
+                        </div>
+                      )}
+
+                      <div className="fw-bold" style={{ fontSize: '0.92rem' }}>{n.subject}</div>
+
+                      <div className="text-muted small mt-1">
+                        From STAP Security Ltd ·{' '}
+                        {new Date(n.sentAt ?? n.createdAt).toLocaleDateString('en-GB', {
+                          day: 'numeric', month: 'long', year: 'numeric',
+                        })}
+                        {' · '}
+                        <Badge
+                          bg={n.severity === 'HIGH' ? 'danger' : n.severity === 'MEDIUM' ? 'warning' : 'success'}
+                          text={n.severity === 'MEDIUM' ? 'dark' : undefined}
+                          style={{ fontSize: '0.62rem' }}
+                        >
+                          {n.severity}
+                        </Badge>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '0.85rem', color: '#2C3E50', marginTop: '8px',
+                          lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {n.description}
+                      </div>
+
+                      {n.acknowledgedAt && (
+                        <div
+                          style={{
+                            background: '#d5f5e3', borderRadius: '0.375rem',
+                            padding: '6px 10px', marginTop: '10px',
+                            fontSize: '0.78rem', color: '#1E8449',
+                          }}
+                        >
+                          ✅ You acknowledged this on{' '}
+                          {new Date(n.acknowledgedAt).toLocaleDateString('en-GB', {
+                            day: 'numeric', month: 'long', year: 'numeric',
+                          })}
+                          {n.clientResponse && (
+                            <div className="fst-italic mt-1 text-muted">
+                              Your response: “{n.clientResponse}”
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {n.status === 'SENT' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => setAckNotice(n)}
+                      >
+                        Acknowledge
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <hr className="my-4" />
+
+          <h6 className="fw-semibold mb-3" style={{ color: '#1B3A6B' }}>
+            📥 My Complaints to STAP
+          </h6>
+
           <Row>
             <Col md={6}>
               <h6 className="fw-semibold mb-3">Submit a Complaint</h6>
@@ -463,6 +609,15 @@ export default function ClientPortalPage() {
           </Row>
         </Tab>
       </Tabs>
+
+      {ackNotice && (
+        <AcknowledgeNoticeModal
+          show
+          notice={ackNotice}
+          onClose={() => setAckNotice(null)}
+          onSuccess={() => { refetchNotices(); }}
+        />
+      )}
     </Container>
   );
 }

@@ -3,6 +3,7 @@ import type {
   ComplaintResponse,
   ComplaintDashboard,
   CreateComplaintInput,
+  CreateOutboundComplaintInput,
   AssignComplaintInput,
   UpdateComplaintStatusInput,
   PaginatedResponse,
@@ -10,13 +11,25 @@ import type {
 
 export const complaintsApi = {
   list(params?: {
-    status?:   string;
-    clientId?: string;
-    category?: string;
-    page?:     number;
-    limit?:    number;
+    status?:    string;
+    clientId?:  string;
+    category?:  string;
+    /** Omit for both directions. */
+    direction?: 'INBOUND' | 'OUTBOUND' | 'ALL';
+    page?:      number;
+    limit?:     number;
   }): Promise<PaginatedResponse<ComplaintResponse>> {
     return api.get('/complaints', { params }).then((r) => r.data);
+  },
+
+  /** Send a formal notice from STAP to a client. */
+  sendNotice(data: CreateOutboundComplaintInput): Promise<ComplaintResponse> {
+    return api.post('/complaints/outbound', data).then((r) => r.data.data);
+  },
+
+  /** Close an outbound notice once it has been dealt with. */
+  resolveNotice(id: string): Promise<ComplaintResponse> {
+    return api.patch(`/complaints/${id}/resolve-notice`).then((r) => r.data.data);
   },
 
   getById(id: string): Promise<ComplaintResponse> {

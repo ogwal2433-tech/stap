@@ -11,10 +11,20 @@ import {
   CreateComplaintSchema,
   AssignComplaintSchema,
   UpdateComplaintStatusSchema,
+  CreateOutboundComplaintSchema,
+  COMPLAINT_DIRECTIONS,
 } from '@stap/shared';
 import { z } from 'zod';
 
 const router = Router();
+
+/** Who may send a formal notice to a client on STAP's behalf. */
+const NOTICE_SEND_ROLES = [
+  ROLES.DIRECTOR,
+  ROLES.ASSISTANT_MANAGER,
+  ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.CONTROL_ROOM,
+] as const;
 
 const COMPLAINT_VIEW_ROLES = INTERNAL_ROLES.filter(
   (r) => r !== ROLES.GUARD && r !== ROLES.CLIENT,
@@ -26,6 +36,8 @@ const ListQuery = z.object({
   status:   z.string().optional(),
   clientId: z.string().optional(),
   category: z.string().optional(),
+  /** Omit or pass ALL for both directions. */
+  direction: z.enum([...COMPLAINT_DIRECTIONS, 'ALL']).optional(),
   page:     z.coerce.number().int().min(1).default(1),
   limit:    z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -61,6 +73,28 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = await complaintService.create(req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
+  }),
+);
+
+// POST /complaints/outbound — STAP sends a formal notice to a client.
+// Declared before /:id so "outbound" is never read as an id.
+router.post(
+  '/outbound',
+  requireRole(...NOTICE_SEND_ROLES),
+  validate(CreateOutboundComplaintSchema),
+  asyncHandler(async (req, res) => {
+    const data = await complaintService.createOutbound(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+// PATCH /complaints/:id/resolve-notice — staff closes an outbound notice.
+router.patch(
+  '/:id/resolve-notice',
+  requireRole(...NOTICE_SEND_ROLES),
+  asyncHandler(async (req, res) => {
+    const data = await complaintService.resolveOutbound(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
   }),
 );
 
