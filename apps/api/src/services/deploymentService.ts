@@ -21,6 +21,7 @@ import type {
   GuardBasicResponse,
   DeploymentSheetRow,
   DeploymentSheetResult,
+  UserRole,
 } from '@stap/shared';
 import { REPLACEMENT_REASONS, type ReplacementReason } from '@stap/shared';
 
@@ -1023,6 +1024,7 @@ class DeploymentService {
   async saveDeploymentSheet(
     rows: DeploymentSheetRow[],
     submittedBy: string,
+    submittedByRole?: UserRole,
   ): Promise<DeploymentSheetResult> {
     const result: DeploymentSheetResult = { created: 0, updated: 0, skipped: 0, errors: [] };
 
@@ -1031,6 +1033,18 @@ class DeploymentService {
       select: { code: true },
     });
     const validShiftCodes = new Set(activeShifts.map(s => s.code));
+
+    // A Field Supervisor deploys within their own zone. The sheet's Site
+    // dropdown already only offers those sites, but the restriction has to hold
+    // on this side too — the dropdown is a convenience, not the boundary.
+    let allowedSiteIds: Set<string> | null = null;
+    if (submittedByRole === ROLES.FIELD_SUPERVISOR) {
+      const zoneSites = await prisma.site.findMany({
+        where:  { zone: { isActive: true, OR: [{ supervisorId: submittedBy }, { alternateId: submittedBy }] } },
+        select: { id: true },
+      });
+      allowedSiteIds = new Set(zoneSites.map(s => s.id));
+    }
 
     for (let i = 0; i < rows.length; i++) {
       const row    = rows[i];
@@ -1050,6 +1064,15 @@ class DeploymentService {
 
         if (!guard) { result.errors.push({ row: rowNum, reason: 'Guard not found.' }); result.skipped++; continue; }
         if (!site)  { result.errors.push({ row: rowNum, reason: 'Site not found.' });  result.skipped++; continue; }
+
+        if (allowedSiteIds && !allowedSiteIds.has(site.id)) {
+          result.errors.push({
+            row:    rowNum,
+            reason: `${site.siteName} is not in your zone — you can only deploy to sites in the zone you supervise.`,
+          });
+          result.skipped++;
+          continue;
+        }
 
         if (!DEPLOYABLE_STATUSES.includes(guard.employmentStatus as GuardEmploymentStatus)) {
           result.errors.push({

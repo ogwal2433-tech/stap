@@ -49,6 +49,53 @@ export interface ZoneResponse {
   updatedAt:   string;
 }
 
+/**
+ * A site as offered in the deployment sheet's Site dropdown, carrying the shift
+ * the site will deploy on so the sheet can show it without a second round trip.
+ */
+export interface ZoneSiteOption {
+  id:           string;
+  siteName:     string;
+  location:     string;
+  clientName:   string;
+  /** Resolved deployable shift code (DAY | NIGHT | FULL_24 …), null if none set. */
+  shift:        string | null;
+  /** The client contract's shift pattern (SINGLE_SHIFT, TWO_SHIFTS …), for context. */
+  shiftPattern: string | null;
+  /**
+   * Shifts this site may be deployed on. One entry (or none) means the shift is
+   * fixed and the sheet shows it read-only; several means the site runs more
+   * than one shift and a row must be able to say which.
+   */
+  shiftOptions: string[];
+}
+
+/** Where a site's deployment shift was resolved from. */
+export type SiteShiftSource =
+  | 'SITE_DEFAULT'
+  | 'SITE_ALLOWED'
+  | 'CONTRACT'
+  | 'SYSTEM_DEFAULT'
+  | 'NONE';
+
+export interface SiteShiftResponse {
+  siteId:       string;
+  siteName:     string;
+  /** Deployable shift code, or null when nothing could be resolved. */
+  shift:        string | null;
+  source:       SiteShiftSource;
+  /** Shift pattern on the client's active contract, when there is one. */
+  shiftPattern: string | null;
+  /**
+   * Shifts this site may be deployed on. One entry (or none) means the shift is
+   * fixed and the sheet shows it read-only; several means the site runs more
+   * than one shift and a row must be able to say which.
+   */
+  shiftOptions: string[];
+  /** Human-readable note explaining where the shift came from. */
+  note:         string;
+}
+
 export interface ZoneSite {
   id:                  string;
   siteName:            string;

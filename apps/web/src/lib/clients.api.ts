@@ -11,6 +11,7 @@ import type {
   CreateSiteInput,
   UpdateSiteInput,
   CreateIncidentInput,
+  SiteShiftResponse,
 } from '@stap/shared';
 
 export const clientsApi = {
@@ -71,6 +72,13 @@ export const clientsApi = {
   getSite(siteId: string): Promise<SiteResponse> {
     return api
       .get<{ success: boolean; data: SiteResponse }>(`/clients/sites/${siteId}`)
+      .then((r) => r.data.data);
+  },
+
+  /** The shift a site deploys on — fills the deployment sheet's Shift column. */
+  getSiteShift(siteId: string): Promise<SiteShiftResponse> {
+    return api
+      .get<{ success: boolean; data: SiteShiftResponse }>(`/clients/sites/${siteId}/shift`)
       .then((r) => r.data.data);
   },
 

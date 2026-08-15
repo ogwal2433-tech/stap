@@ -102,7 +102,11 @@ router.post(
   requireRole(...DEPLOYMENT_ROLES),
   validate(DeploymentSheetBatchSchema),
   asyncHandler(async (req, res) => {
-    const result = await deploymentService.saveDeploymentSheet(req.body.rows, req.user!.userId);
+    const result = await deploymentService.saveDeploymentSheet(
+      req.body.rows,
+      req.user!.userId,
+      req.user!.role,
+    );
     res.status(200).json({ success: true, data: result });
   }),
 );

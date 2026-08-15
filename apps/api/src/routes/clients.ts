@@ -176,6 +176,17 @@ router.get(
   }),
 );
 
+// ── GET /sites/:siteId/shift — the shift this site deploys on ─────────────────
+// Feeds the deployment sheet's read-only Shift column.
+router.get(
+  '/sites/:siteId/shift',
+  requireRole(...STAFF_ROLES),
+  asyncHandler(async (req, res) => {
+    const shift = await siteService.getShift(req.params.siteId);
+    res.status(200).json({ success: true, data: shift });
+  }),
+);
+
 // ── GET /sites/:siteId — single site ──────────────────────────────────────────
 router.get(
   '/sites/:siteId',

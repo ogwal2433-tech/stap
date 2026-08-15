@@ -414,6 +414,18 @@ export interface GuardResponse {
   nextIncrementDate:     string | null;
   effectiveServiceStart: string | null;
 
+  /**
+   * The site the guard is deployed to right now — derived from their open
+   * deployment history record (the one with no end date), not stored on the
+   * guard. A transfer closes that record and opens another, so this follows the
+   * transfer without a second column that could drift out of step.
+   *
+   * Only present on single-record responses, which are the ones that load
+   * deployment history.
+   */
+  currentSiteId?:   string | null;
+  currentSiteName?: string | null;
+
   latestSuspension?: {
     reason:      string;
     incidentDate:string;

@@ -5,9 +5,11 @@ import { generateIdCardPdf } from '../lib/idCard/generateIdCardPdf';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
+import { siteService } from './siteService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, guardStatusLabel, EXITED_STATUSES, type UserRole, type GuardEmploymentStatus } from '@stap/shared';
 import { generateGuardId } from '../lib/systemId';
+import type { ShiftType } from '@prisma/client';
 import type {
   CreateGuardInput,
   UpdateGuardInput,
@@ -834,6 +836,14 @@ class GuardService {
       response._count = guard._count;
     }
 
+    // "Where is this guard now" is the open deployment history record — the one
+    // a transfer closes when it moves them on.
+    if (guard.deploymentHistory) {
+      const open = (guard.deploymentHistory as any[]).find((d) => !d.endDate);
+      response.currentSiteId   = open?.siteId ?? null;
+      response.currentSiteName = open?.site?.siteName ?? null;
+    }
+
     if (guard.employmentStatus === 'SUSPENDED' && guard.disciplinary?.length) {
       const rec = guard.disciplinary[0];
       response.latestSuspension = {
@@ -1021,14 +1031,31 @@ class GuardService {
       data:  { endDate: new Date(data.transferDate) },
     });
 
+    // The new posting runs on whatever shift the destination site deploys on,
+    // not an assumed day shift.
+    const toSiteShift = await siteService.getShift(data.toSiteId);
+    const newShiftType = (toSiteShift.shift ?? 'DAY') as ShiftType;
+
     await prisma.deploymentHistory.create({
       data: {
         guardId,
         siteId:      data.toSiteId,
         startDate:   new Date(data.transferDate),
-        shiftType:   'DAY',
+        shiftType:   newShiftType,
         supervisorId: authorisedBy,
       },
+    });
+
+    // Attendance has to follow the guard. Rosters are routinely built a week or
+    // more ahead, so a transfer taking effect today leaves postings sitting at
+    // the old site for dates the guard will not be there — they are moved to the
+    // new site, while everything before the effective date stays put as history.
+    const moved = await this.relocateAttendanceOnTransfer({
+      guardId,
+      fromSiteId:    resolvedFromSiteId,
+      toSiteId:      data.toSiteId,
+      effectiveDate: new Date(data.transferDate),
+      shiftType:     newShiftType,
     });
 
     await notificationService.sendToRole({
@@ -1044,14 +1071,77 @@ class GuardService {
         entity:   'guard',
         entityId: guardId,
         newValue: {
-          toSiteId:   data.toSiteId,
-          toSiteName: toSite.siteName,
-          reason:     data.reason,
+          fromSiteId:    resolvedFromSiteId,
+          fromSiteName:  currentDeployment.site.siteName,
+          toSiteId:      data.toSiteId,
+          toSiteName:    toSite.siteName,
+          effectiveDate: new Date(data.transferDate).toISOString(),
+          transferredBy: authorisedBy,
+          reason:        data.reason,
+          deploymentsMoved: moved.deployments,
+          attendanceMoved:  moved.attendance,
+          attendanceDropped: moved.attendanceDropped,
         },
       },
     });
 
     return this.mapTransferResponse(transfer);
+  }
+
+  /**
+   * Moves a transferred guard's deployment and attendance rows from the old
+   * site to the new one, for every date on or after the transfer takes effect.
+   *
+   * Deployment is unique per guard per day, so those rows simply repoint.
+   * Attendance is unique per guard, site and day, so a row can collide with one
+   * that already exists at the destination — the destination's own record is
+   * the more specific of the two and wins; the stale row from the old site is
+   * removed rather than repointed.
+   */
+  private async relocateAttendanceOnTransfer(args: {
+    guardId:       string;
+    fromSiteId:    string;
+    toSiteId:      string;
+    effectiveDate: Date;
+    shiftType:     ShiftType;
+  }): Promise<{ deployments: number; attendance: number; attendanceDropped: number }> {
+    const from = new Date(args.effectiveDate);
+    from.setUTCHours(0, 0, 0, 0);
+
+    const scope = { guardId: args.guardId, siteId: args.fromSiteId, date: { gte: from } };
+
+    const deployments = await prisma.deployment.updateMany({
+      where: scope,
+      data:  { siteId: args.toSiteId, shiftType: args.shiftType },
+    });
+
+    const [stale, existing] = await Promise.all([
+      prisma.attendanceRecord.findMany({ where: scope, select: { id: true, date: true } }),
+      prisma.attendanceRecord.findMany({
+        where:  { guardId: args.guardId, siteId: args.toSiteId, date: { gte: from } },
+        select: { date: true },
+      }),
+    ]);
+
+    const alreadyAtNewSite = new Set(existing.map((a) => a.date.getTime()));
+    const clashing = stale.filter((a) => alreadyAtNewSite.has(a.date.getTime()));
+    const movable  = stale.filter((a) => !alreadyAtNewSite.has(a.date.getTime()));
+
+    if (clashing.length) {
+      await prisma.attendanceRecord.deleteMany({ where: { id: { in: clashing.map((a) => a.id) } } });
+    }
+    if (movable.length) {
+      await prisma.attendanceRecord.updateMany({
+        where: { id: { in: movable.map((a) => a.id) } },
+        data:  { siteId: args.toSiteId },
+      });
+    }
+
+    return {
+      deployments:       deployments.count,
+      attendance:        movable.length,
+      attendanceDropped: clashing.length,
+    };
   }
 
   async getTransferHistory(guardId: string): Promise<GuardTransferResponse[]> {

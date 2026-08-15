@@ -20,6 +20,17 @@ vi.mock('../../db/prisma', () => ({
       findFirst: vi.fn(),
       update:    vi.fn(),
     },
+    deployment: {
+      updateMany: vi.fn(),
+    },
+    attendanceRecord: {
+      findMany:   vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    shiftTypeConfig: {
+      findMany: vi.fn(),
+    },
     auditLog: { create: vi.fn() },
   },
 }));
@@ -102,6 +113,13 @@ beforeEach(() => {
   mp.deploymentHistory.update.mockResolvedValue({});
   mp.auditLog.create.mockResolvedValue({});
   mockNotif.sendToRole.mockResolvedValue(undefined);
+
+  // Attendance relocation: nothing rostered ahead unless a test says otherwise.
+  mp.deployment.updateMany.mockResolvedValue({ count: 0 });
+  mp.attendanceRecord.findMany.mockResolvedValue([]);
+  mp.attendanceRecord.updateMany.mockResolvedValue({ count: 0 });
+  mp.attendanceRecord.deleteMany.mockResolvedValue({ count: 0 });
+  mp.shiftTypeConfig.findMany.mockResolvedValue([{ code: 'DAY' }, { code: 'NIGHT' }, { code: 'FULL_24' }]);
 });
 
 // ── transferGuard(): happy path ────────────────────────────────────────────────
@@ -297,17 +315,114 @@ describe('guardService.transferGuard() — side effects', () => {
     await guardService.transferGuard('g1', transferInput, 'user1');
 
     expect(mp.auditLog.create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         action:   'GUARD_TRANSFERRED',
         entity:   'guard',
         entityId: 'g1',
-        newValue: {
-          toSiteId:   'site-2',
-          toSiteName: 'City Mall',
-          reason:     'Operational requirement',
-        },
-      },
+        newValue: expect.objectContaining({
+          fromSiteId:    'site-1',
+          fromSiteName:  'Warehouse A',
+          toSiteId:      'site-2',
+          toSiteName:    'City Mall',
+          reason:        'Operational requirement',
+          effectiveDate: '2026-05-18T00:00:00.000Z',
+          transferredBy: 'user1',
+        }),
+      }),
     });
+  });
+});
+
+// ── Attendance follows the transfer ────────────────────────────────────────────
+
+describe('guardService.transferGuard() — attendance follows the guard', () => {
+  beforeEach(() => {
+    mp.guard.findUnique.mockResolvedValue(activeGuard);
+    mp.site.findUnique.mockResolvedValue(toSite);
+    mp.guardTransfer.create.mockResolvedValue(transferRecord);
+  });
+
+  it('repoints deployments at the old site from the effective date onwards', async () => {
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.deployment.updateMany).toHaveBeenCalledWith({
+      where: {
+        guardId: 'g1',
+        siteId:  'site-1',
+        date:    { gte: new Date('2026-05-18T00:00:00.000Z') },
+      },
+      data: expect.objectContaining({ siteId: 'site-2' }),
+    });
+  });
+
+  it('leaves deployments before the effective date at the old site', async () => {
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    // The only filter on date is `gte` the transfer date — nothing earlier is touched.
+    const where = mp.deployment.updateMany.mock.calls[0][0].where;
+    expect(where.date.lt).toBeUndefined();
+    expect(where.date.gte).toEqual(new Date('2026-05-18T00:00:00.000Z'));
+  });
+
+  it('moves forward-dated attendance to the new site', async () => {
+    mp.attendanceRecord.findMany
+      .mockResolvedValueOnce([
+        { id: 'a1', date: new Date('2026-05-19T00:00:00.000Z') },
+        { id: 'a2', date: new Date('2026-05-20T00:00:00.000Z') },
+      ])
+      .mockResolvedValueOnce([]);   // nothing already recorded at the new site
+
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.attendanceRecord.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a1', 'a2'] } },
+      data:  { siteId: 'site-2' },
+    });
+    expect(mp.attendanceRecord.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('drops the old row when the new site already has attendance for that day', async () => {
+    const clashDate = new Date('2026-05-19T00:00:00.000Z');
+    mp.attendanceRecord.findMany
+      .mockResolvedValueOnce([
+        { id: 'a1', date: clashDate },
+        { id: 'a2', date: new Date('2026-05-20T00:00:00.000Z') },
+      ])
+      .mockResolvedValueOnce([{ date: clashDate }]);
+
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    // The destination's own record wins; only the non-clashing row is moved.
+    expect(mp.attendanceRecord.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['a1'] } } });
+    expect(mp.attendanceRecord.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a2'] } },
+      data:  { siteId: 'site-2' },
+    });
+  });
+
+  it('records what was moved on the audit entry', async () => {
+    mp.deployment.updateMany.mockResolvedValue({ count: 3 });
+    mp.attendanceRecord.findMany
+      .mockResolvedValueOnce([{ id: 'a1', date: new Date('2026-05-19T00:00:00.000Z') }])
+      .mockResolvedValueOnce([]);
+
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.auditLog.create.mock.calls[0][0].data.newValue).toMatchObject({
+      deploymentsMoved:  3,
+      attendanceMoved:   1,
+      attendanceDropped: 0,
+    });
+  });
+
+  it('posts the guard on the destination site\'s own shift, not an assumed day shift', async () => {
+    mp.site.findUnique.mockResolvedValue({ ...toSite, defaultShiftType: 'NIGHT', allowedShiftTypes: [] });
+
+    await guardService.transferGuard('g1', transferInput, 'user1');
+
+    expect(mp.deploymentHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ shiftType: 'NIGHT' }) }),
+    );
   });
 });
 

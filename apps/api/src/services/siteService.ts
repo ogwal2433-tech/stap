@@ -7,6 +7,8 @@ import type {
   UpdateSiteInput,
   SiteResponse,
   PaginatedResponse,
+  SiteShiftResponse,
+  SiteShiftSource,
 } from '@stap/shared';
 
 const SITE_INCLUDE = {
@@ -15,6 +17,103 @@ const SITE_INCLUDE = {
   zone:           { select: { id: true, name: true } },
   _count:         { select: { deployments: true, attendance: true, incidents: true } },
 } as const;
+
+/**
+ * Which shifts a contract's billing pattern implies, for sites that have not
+ * been configured with their own. A client billed for a single shift is being
+ * guarded round the clock by one posting; two or three shifts split the day.
+ */
+const CONTRACT_PATTERN_SHIFTS: Record<string, string[]> = {
+  SINGLE_SHIFT: ['FULL_24'],
+  TWO_SHIFTS:   ['DAY', 'NIGHT'],
+  THREE_SHIFTS: ['DAY', 'NIGHT'],
+};
+
+/** Shift codes the deployment sheet will accept, in display order. */
+export async function listActiveShiftCodes(): Promise<string[]> {
+  const shifts = await prisma.shiftTypeConfig.findMany({
+    where:   { isActive: true },
+    orderBy: { displayOrder: 'asc' },
+    select:  { code: true },
+  });
+  return shifts.map((s) => s.code);
+}
+
+export interface SiteShiftInput {
+  id:                string;
+  siteName:          string;
+  defaultShiftType:  string | null;
+  allowedShiftTypes: string[];
+  shiftPattern:      string | null;
+}
+
+/**
+ * Works out the shift a site deploys on, and which shifts a row on the sheet is
+ * allowed to choose between.
+ *
+ * `shiftOptions` having one entry means the answer is settled and the sheet
+ * shows the shift read-only. More than one means the site genuinely runs
+ * several shifts — a two-shift site needs both its day and its night rows, so
+ * locking the cell there would make half the roster unenterable.
+ */
+export function resolveSiteShift(
+  site: SiteShiftInput,
+  activeShiftCodes?: string[],
+): SiteShiftResponse {
+  // Only ever propose a shift the deployment sheet would actually accept.
+  const permitted = (codes: string[]) =>
+    (activeShiftCodes ? codes.filter((c) => activeShiftCodes.includes(c)) : codes);
+
+  const base = {
+    siteId:       site.id,
+    siteName:     site.siteName,
+    shiftPattern: site.shiftPattern,
+  };
+
+  const build = (
+    options: string[],
+    source: SiteShiftSource,
+    note: string,
+  ): SiteShiftResponse => ({
+    ...base,
+    shift:        options[0] ?? null,
+    source:       options.length ? source : 'NONE',
+    shiftOptions: options,
+    note:         options.length ? note : 'No shift could be resolved for this site.',
+  });
+
+  if (site.defaultShiftType && permitted([site.defaultShiftType]).length) {
+    return build([site.defaultShiftType], 'SITE_DEFAULT', "The site's default shift.");
+  }
+
+  const allowed = permitted(site.allowedShiftTypes ?? []);
+  if (allowed.length) {
+    return build(
+      allowed,
+      'SITE_ALLOWED',
+      allowed.length === 1
+        ? 'The only shift this site is configured for.'
+        : 'This site runs more than one shift — pick the one being posted.',
+    );
+  }
+
+  const fromContract = permitted(CONTRACT_PATTERN_SHIFTS[site.shiftPattern ?? ''] ?? []);
+  if (fromContract.length) {
+    return build(
+      fromContract,
+      'CONTRACT',
+      `From the client's active contract (${site.shiftPattern?.replace(/_/g, ' ').toLowerCase()}).`,
+    );
+  }
+
+  // Last resort, and deliberately the same one saveDeploymentSheet applies, so
+  // the sheet never shows a shift different from the one that gets written.
+  if (activeShiftCodes?.length) {
+    return build([activeShiftCodes[0]], 'SYSTEM_DEFAULT', 'Falling back to the first active shift type.');
+  }
+
+  return build([], 'NONE', '');
+}
 
 function toSiteResponse(site: Record<string, unknown>): SiteResponse {
   const client = site.client as { clientName: string } | undefined;
@@ -157,6 +256,51 @@ class SiteService {
         hasPrev:    page > 1,
       },
     };
+  }
+
+  // ── Shift ──────────────────────────────────────────────────────────────────
+
+  /**
+   * The shift the deployment sheet should post this site on.
+   *
+   * Contract.shiftPattern describes how many shifts a client is billed for
+   * (SINGLE_SHIFT, TWO_SHIFTS …) — it is not itself a deployable shift code, so
+   * it can only narrow the choice, never name it outright. The site's own
+   * configuration is therefore checked first and the contract used as the
+   * fallback that decides what a site with no configuration may run.
+   */
+  async getShift(siteId: string): Promise<SiteShiftResponse> {
+    const [site, activeShiftCodes] = await Promise.all([
+      prisma.site.findUnique({
+        where:  { id: siteId },
+        select: {
+          id: true, siteName: true, defaultShiftType: true, allowedShiftTypes: true,
+          client: {
+            select: {
+              contracts: {
+                where:   { status: 'ACTIVE' },
+                orderBy: { contractStart: 'desc' },
+                take:    1,
+                select:  { shiftPattern: true },
+              },
+            },
+          },
+        },
+      }),
+      listActiveShiftCodes(),
+    ]);
+    if (!site) throw new NotFoundError(`Site ${siteId} not found`);
+
+    return resolveSiteShift(
+      {
+        id:                site.id,
+        siteName:          site.siteName,
+        defaultShiftType:  site.defaultShiftType,
+        allowedShiftTypes: site.allowedShiftTypes,
+        shiftPattern:      site.client?.contracts?.[0]?.shiftPattern ?? null,
+      },
+      activeShiftCodes,
+    );
   }
 
   // ── Get by ID ──────────────────────────────────────────────────────────────

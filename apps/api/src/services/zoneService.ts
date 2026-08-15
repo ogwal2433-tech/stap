@@ -1,11 +1,13 @@
 import { DEPLOYABLE_STATUSES } from '@stap/shared';
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
+import { resolveSiteShift, listActiveShiftCodes } from './siteService';
 import type {
   CreateZoneInput,
   UpdateZoneInput,
   ZoneResponse,
   ZoneRosterData,
+  ZoneSiteOption,
   PaginatedResponse,
 } from '@stap/shared';
 
@@ -100,6 +102,86 @@ class ZoneService {
       include: zoneInclude,
     });
     return zones.map((z) => toZoneResponse(z as Record<string, unknown>));
+  }
+
+  /**
+   * The single zone a Field Supervisor works — what the deployment sheet reads
+   * so they never have to pick a zone by hand.
+   *
+   * A supervisor covering more than one zone (or standing in as the alternate
+   * on another) gets the one they own outright, falling back to the first they
+   * cover. Returns null rather than throwing: not yet being assigned a zone is
+   * an ordinary state the sheet has to render a prompt for, not an error.
+   */
+  async getMyZone(userId: string): Promise<ZoneResponse | null> {
+    const owned = await prisma.zone.findFirst({
+      where:   { isActive: true, supervisorId: userId },
+      orderBy: { name: 'asc' },
+      include: zoneDetailInclude,
+    });
+    if (owned) return toZoneResponse(owned as Record<string, unknown>);
+
+    const covered = await prisma.zone.findFirst({
+      where:   { isActive: true, alternateId: userId },
+      orderBy: { name: 'asc' },
+      include: zoneDetailInclude,
+    });
+    return covered ? toZoneResponse(covered as Record<string, unknown>) : null;
+  }
+
+  /**
+   * Sites in a zone, each carrying the shift it deploys on so the deployment
+   * sheet can fill the Shift column straight from the dropdown selection.
+   */
+  async listSites(zoneId: string): Promise<ZoneSiteOption[]> {
+    const zone = await prisma.zone.findUnique({ where: { id: zoneId }, select: { id: true } });
+    if (!zone) throw new NotFoundError(`Zone ${zoneId} not found`);
+
+    const [sites, activeShiftCodes] = await Promise.all([
+      prisma.site.findMany({
+        where:   { zoneId },
+        orderBy: { siteName: 'asc' },
+        select: {
+          id: true, siteName: true, location: true,
+          defaultShiftType: true, allowedShiftTypes: true,
+          client: {
+            select: {
+              clientName: true,
+              contracts:  {
+                where:   { status: 'ACTIVE' },
+                orderBy: { contractStart: 'desc' },
+                take:    1,
+                select:  { shiftPattern: true },
+              },
+            },
+          },
+        },
+      }),
+      listActiveShiftCodes(),
+    ]);
+
+    return sites.map((s) => {
+      const shiftPattern = s.client?.contracts?.[0]?.shiftPattern ?? null;
+      const resolved = resolveSiteShift(
+        {
+          id:                s.id,
+          siteName:          s.siteName,
+          defaultShiftType:  s.defaultShiftType,
+          allowedShiftTypes: s.allowedShiftTypes,
+          shiftPattern,
+        },
+        activeShiftCodes,
+      );
+      return {
+        id:           s.id,
+        siteName:     s.siteName,
+        location:     s.location,
+        clientName:   s.client?.clientName ?? '',
+        shift:        resolved.shift,
+        shiftPattern: resolved.shiftPattern,
+        shiftOptions: resolved.shiftOptions,
+      };
+    });
   }
 
   async getById(id: string): Promise<ZoneResponse> {

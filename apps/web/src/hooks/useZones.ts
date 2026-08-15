@@ -19,6 +19,28 @@ export function useMyZones() {
   });
 }
 
+/**
+ * The zone the signed-in supervisor covers. `enabled` is left to the caller so
+ * screens can skip the request entirely for roles that work across all zones.
+ */
+export function useMyZone(enabled = true) {
+  return useQuery({
+    queryKey:  ['zones', 'my-zone'],
+    queryFn:   () => zonesApi.myZone(),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useZoneSites(zoneId: string | null | undefined) {
+  return useQuery({
+    queryKey:  ['zones', zoneId, 'sites'],
+    queryFn:   () => zonesApi.listSites(zoneId!),
+    enabled:   !!zoneId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useZone(id: string) {
   return useQuery({
     queryKey: ['zones', id],

@@ -49,6 +49,26 @@ router.get(
   }),
 );
 
+// GET /zones/my-zone — the one zone the caller supervises, for the deployment sheet
+router.get(
+  '/my-zone',
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const zone = await zoneService.getMyZone(req.user!.userId);
+    res.json({ success: true, data: zone });
+  }),
+);
+
+// GET /zones/:id/sites — sites in a zone, with the shift each deploys on
+router.get(
+  '/:id/sites',
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const sites = await zoneService.listSites(req.params.id);
+    res.json({ success: true, data: sites });
+  }),
+);
+
 // GET /zones/:id — single zone detail
 router.get(
   '/:id',

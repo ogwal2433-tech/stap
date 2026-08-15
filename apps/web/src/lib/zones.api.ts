@@ -1,5 +1,8 @@
 import api from './api';
-import type { ZoneResponse, ZoneRosterData, PaginatedResponse, CreateZoneInput, UpdateZoneInput } from '@stap/shared';
+import type {
+  ZoneResponse, ZoneRosterData, ZoneSiteOption,
+  PaginatedResponse, CreateZoneInput, UpdateZoneInput,
+} from '@stap/shared';
 
 export const zonesApi = {
   list(params?: { page?: number; limit?: number; isActive?: boolean; search?: string }): Promise<PaginatedResponse<ZoneResponse>> {
@@ -11,6 +14,19 @@ export const zonesApi = {
   myZones(): Promise<ZoneResponse[]> {
     return api
       .get<{ success: boolean; data: ZoneResponse[] }>('/zones/my-zones')
+      .then((r) => r.data.data);
+  },
+
+  /** The single zone the signed-in supervisor covers — null if none yet. */
+  myZone(): Promise<ZoneResponse | null> {
+    return api
+      .get<{ success: boolean; data: ZoneResponse | null }>('/zones/my-zone')
+      .then((r) => r.data.data);
+  },
+
+  listSites(zoneId: string): Promise<ZoneSiteOption[]> {
+    return api
+      .get<{ success: boolean; data: ZoneSiteOption[] }>(`/zones/${zoneId}/sites`)
       .then((r) => r.data.data);
   },
 
