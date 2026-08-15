@@ -30,15 +30,6 @@ function fmtDate(dateStr: string): string {
   });
 }
 
-function fmtTime(isoOrNull: string | null | undefined): string {
-  if (!isoOrNull) return '';
-  try {
-    return new Date(isoOrNull).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}
-
 function fmtRank(rank: string | null | undefined): string {
   return (rank ?? 'GUARD').replace(/_/g, ' ');
 }
@@ -72,9 +63,9 @@ function buildSheet(
 // ══════════════════════════════════════════════════════════════════════════════
 
 export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): void {
-  // Column definitions: #, Guard Name, Rank, Shift, Status, Time In, Time Out, Notes
-  const NUM_COLS = 8;
-  const wch      = [4, 26, 18, 7, 12, 9, 9, 32];
+  // Column definitions: #, Guard Name, Rank, Shift, Status, Notes
+  const NUM_COLS = 6;
+  const wch      = [4, 26, 18, 7, 12, 32];
 
   const rows:       CellValue[][] = [];
   const merges:     XLSX.Range[]  = [];
@@ -140,7 +131,7 @@ export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): 
       );
 
       // Column headers
-      rows.push(['#', 'GUARD NAME', 'RANK', 'SHIFT', 'STATUS', 'TIME IN', 'TIME OUT', 'NOTES']);
+      rows.push(['#', 'GUARD NAME', 'RANK', 'SHIFT', 'STATUS', 'NOTES']);
       rowHeights.push(14);
 
       // Guard rows
@@ -153,8 +144,6 @@ export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): 
           fmtRank(dep.guard.rank),
           fmtShift(dep.shiftType),
           att?.status ?? '—',
-          fmtTime(att?.timeIn),
-          fmtTime(att?.timeOut),
           att?.notes ?? '',
         ]);
         rowHeights.push(15);

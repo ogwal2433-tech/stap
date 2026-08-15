@@ -813,8 +813,6 @@ model AttendanceRecord {
   siteId              String
   date                DateTime
   status              AttendanceStatus
-  timeIn              DateTime?
-  timeOut             DateTime?
   supervisorCheckinId String?
   notes               String?
   replacedByGuardId   String?

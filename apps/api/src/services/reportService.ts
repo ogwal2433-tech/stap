@@ -231,7 +231,7 @@ class ReportService {
 
     // Sheet 2: Deployment Detail
     const detail = wb.addWorksheet('Deployment Detail');
-    detail.addRow(['Guard', 'Site', 'Attendance Status', 'Time In', 'Time Out']);
+    detail.addRow(['Guard', 'Site', 'Attendance Status']);
     styleHeader(detail.getRow(1));
     const attMap = new Map(attendance.map(a => [a.guardId + a.siteId, a]));
     deployments.forEach((d, i) => {
@@ -240,12 +240,10 @@ class ReportService {
         `${d.guard.firstName} ${d.guard.lastName}`,
         d.site.siteName,
         att?.status ?? 'NOT MARKED',
-        att?.timeIn  ? new Date(att.timeIn).toLocaleTimeString()  : '—',
-        att?.timeOut ? new Date(att.timeOut).toLocaleTimeString() : '—',
       ]);
       styleRow(row, i);
     });
-    [1, 2, 3, 4, 5].forEach((c, i) => { detail.getColumn(i + 1).width = [25, 25, 18, 12, 12][i]; });
+    [1, 2, 3].forEach((c, i) => { detail.getColumn(i + 1).width = [25, 25, 18][i]; });
 
     // Sheet 3: Incidents
     const incSheet = wb.addWorksheet('Incidents');

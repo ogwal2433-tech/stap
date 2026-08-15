@@ -439,9 +439,6 @@ export default function AttendancePage() {
 
       {sheet && sheet.zones.length > 0 && (
         <div className="attendance-sheet">
-          <small className="text-muted d-block d-print-none mb-3">
-            ℹ️ Time In and Time Out are not required — working hours are defined by the assigned shift type for each deployment.
-          </small>
           {/* Summary bar */}
           <div
             className="d-print-none"

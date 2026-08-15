@@ -113,10 +113,6 @@ export const MarkAttendanceSchema = z.object({
     siteId:  z.string().min(1),
     date:    z.string().datetime(),
     status:  AttendanceStatusSchema,
-    /** @deprecated Not collected from UI. Shift type defines working hours. */
-    timeIn:  z.string().optional(),
-    /** @deprecated Not collected from UI. Shift type defines working hours. */
-    timeOut: z.string().optional(),
     notes:   z.string().max(500).optional(),
   })).min(1),
 });
@@ -273,8 +269,6 @@ export interface DeploymentResponse {
   replacementReason:string | null;
   attendance?: {
     status:           string;
-    timeIn:           string | null;
-    timeOut:          string | null;
     notes:            string | null;
     replacedByGuardId:string | null;
     replacementNote:  string | null;
@@ -287,8 +281,6 @@ export interface AttendanceRecord {
   site:      { id: string; siteName: string };
   date:      string;
   status:    AttendanceStatusValue;
-  timeIn:    string | null;
-  timeOut:   string | null;
   notes:     string | null;
   createdAt: string;
 }

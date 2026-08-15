@@ -44,7 +44,6 @@ const baseRecord = {
   siteId: 's1',
   date: '2026-04-14T00:00:00.000Z',
   status: 'PRESENT' as const,
-  timeIn: '08:00',
 };
 
 beforeEach(() => {

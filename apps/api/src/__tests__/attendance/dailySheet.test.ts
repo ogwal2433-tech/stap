@@ -55,8 +55,6 @@ function makeAttendance(guardId: string, siteId: string, status: string) {
     siteId,
     date:    new Date('2026-06-02T00:00:00.000Z'),
     status,
-    timeIn:  status === 'PRESENT' ? new Date('2026-06-02T06:00:00.000Z') : null,
-    timeOut: null,
     notes:   null,
   };
 }

@@ -266,8 +266,6 @@ export default function AttendanceRecordsTab() {
                 <th>Guard</th>
                 <th>Site</th>
                 <th>Status</th>
-                <th>Time in</th>
-                <th>Time out</th>
               </tr>
             </thead>
             <tbody>
@@ -291,8 +289,6 @@ export default function AttendanceRecordsTab() {
                         {cfg ? `${cfg.icon} ${cfg.label}` : r.status}
                       </Badge>
                     </td>
-                    <td>{r.timeIn ?? '—'}</td>
-                    <td>{r.timeOut ?? '—'}</td>
                   </tr>
                 );
               })}

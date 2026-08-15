@@ -668,8 +668,6 @@ class DeploymentService {
       attendance: att
         ? {
             status:            att.status,
-            timeIn:            att.timeIn  ? (att.timeIn  instanceof Date ? att.timeIn.toISOString()  : att.timeIn)  : null,
-            timeOut:           att.timeOut ? (att.timeOut instanceof Date ? att.timeOut.toISOString() : att.timeOut) : null,
             notes:             att.notes              ?? null,
             replacedByGuardId: att.replacedByGuardId  ?? null,
             replacementNote:   att.replacementNote    ?? null,

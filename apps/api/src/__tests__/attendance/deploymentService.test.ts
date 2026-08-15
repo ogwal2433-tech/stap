@@ -193,8 +193,6 @@ describe('deploymentService.getTodaysDeployments()', () => {
       guardId: 'g1',
       siteId: 's1',
       status: 'PRESENT',
-      timeIn: null,
-      timeOut: null,
       notes: null,
     };
 

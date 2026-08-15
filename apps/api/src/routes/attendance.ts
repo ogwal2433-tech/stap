@@ -32,8 +32,6 @@
  *                   properties:
  *                     deploymentId: { type: string }
  *                     status: { type: string, enum: [PRESENT, ABSENT, LATE, HALF_DAY] }
- *                     timeIn: { type: string }
- *                     timeOut: { type: string }
  *     responses:
  *       200:
  *         description: Attendance saved

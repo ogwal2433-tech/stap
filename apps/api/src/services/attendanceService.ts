@@ -26,9 +26,6 @@ class AttendanceService {
       const date = new Date(record.date);
       date.setUTCHours(0, 0, 0, 0);
 
-      const timeIn  = record.timeIn  ? new Date(`1970-01-01T${record.timeIn}:00Z`)  : null;
-      const timeOut = record.timeOut ? new Date(`1970-01-01T${record.timeOut}:00Z`) : null;
-
       const existing = await prisma.attendanceRecord.findUnique({
         where: { guardId_siteId_date: { guardId: record.guardId, siteId: record.siteId, date } },
         select: { id: true },
@@ -43,14 +40,10 @@ class AttendanceService {
           siteId:  record.siteId,
           date,
           status:  record.status,
-          timeIn,
-          timeOut,
           notes:   record.notes ?? null,
         },
         update: {
           status:  record.status,
-          timeIn,
-          timeOut,
           notes:   record.notes ?? null,
         },
       });
@@ -338,8 +331,6 @@ class AttendanceService {
       site: { id: r.site.id, siteName: r.site.siteName },
       date: r.date instanceof Date ? r.date.toISOString() : r.date,
       status: r.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL',
-      timeIn: r.timeIn ? (r.timeIn instanceof Date ? r.timeIn.toISOString() : r.timeIn) : null,
-      timeOut: r.timeOut ? (r.timeOut instanceof Date ? r.timeOut.toISOString() : r.timeOut) : null,
       notes: r.notes ?? null,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
     };
