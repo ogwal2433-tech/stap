@@ -249,6 +249,7 @@ class ZoneService {
             location:            true,
             guardsRequired:      true,
             siteType:            true,
+            defaultShiftType:    true,
             armedGuardsRequired:  true,
             firearmsRequired:     true,
             batonRequired:        true,
@@ -310,7 +311,9 @@ class ZoneService {
       location:            s.location,
       guardsRequired:      s.guardsRequired,
       siteType:            s.siteType,
-      defaultShiftType:    null,
+      // Was hardcoded null, which quietly disabled the roster builder's shift
+      // pre-fill even though the column is selected above.
+      defaultShiftType:    s.defaultShiftType ?? null,
       armedGuardsRequired: (s as any).armedGuardsRequired ?? 0,
       firearmsRequired:    (s as any).firearmsRequired ?? 0,
       batonRequired:       (s as any).batonRequired ?? 0,
