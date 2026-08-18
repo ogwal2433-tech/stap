@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { safeDate } from '../lib/dateUtils';
 import { QueueService } from '../jobs/QueueService';
 import { AppError } from '../errors/AppError';
 import type {
@@ -83,18 +84,27 @@ class AttendanceService {
 
     const where: import('@prisma/client').Prisma.AttendanceRecordWhereInput = {};
 
+    // Attendance dates are stored at UTC midnight, so the bounds are built as
+    // explicit UTC instants rather than local ones. utcDayStart/utcDayEnd return
+    // null for anything unparseable, which is then left out of the filter — an
+    // Invalid Date here would be rejected by Prisma and 500 the whole page.
+    const utcDayStart = (v?: string) => safeDate(v ? `${v.slice(0, 10)}T00:00:00.000Z` : null);
+    const utcDayEnd   = (v?: string) => safeDate(v ? `${v.slice(0, 10)}T23:59:59.999Z` : null);
+
     // A range wins over the single-day param, so callers can move from one to
     // the other without having to clear `date` first.
-    if (dateFrom || dateTo) {
+    const rangeFrom = utcDayStart(dateFrom);
+    const rangeTo   = utcDayEnd(dateTo);
+
+    if (rangeFrom || rangeTo) {
       where.date = {
-        ...(dateFrom ? { gte: new Date(dateFrom.slice(0, 10) + 'T00:00:00.000Z') } : {}),
-        ...(dateTo   ? { lte: new Date(dateTo.slice(0, 10) + 'T23:59:59.999Z') }   : {}),
+        ...(rangeFrom ? { gte: rangeFrom } : {}),
+        ...(rangeTo   ? { lte: rangeTo }   : {}),
       };
-    } else if (date) {
-      where.date = {
-        gte: new Date(date.slice(0, 10) + 'T00:00:00.000Z'),
-        lte: new Date(date.slice(0, 10) + 'T23:59:59.999Z'),
-      };
+    } else {
+      const dayStart = utcDayStart(date);
+      const dayEnd   = utcDayEnd(date);
+      if (dayStart && dayEnd) where.date = { gte: dayStart, lte: dayEnd };
     }
 
     if (siteId)  where.siteId  = siteId;
@@ -138,8 +148,14 @@ class AttendanceService {
     guardId?: string,
     siteId?: string,
   ): Promise<AttendanceSummary[]> {
-    const fromDate = new Date(from.slice(0, 10) + 'T00:00:00.000Z');
-    const toDate = new Date(to.slice(0, 10) + 'T23:59:59.999Z');
+    const fromDate = safeDate(`${from.slice(0, 10)}T00:00:00.000Z`);
+    const toDate   = safeDate(`${to.slice(0, 10)}T23:59:59.999Z`);
+
+    // Both bounds are required here, so an unreadable one is a bad request —
+    // dropping it would silently summarise every record ever stored.
+    if (!fromDate || !toDate) {
+      throw new AppError('from and to must be valid dates (YYYY-MM-DD).', 400);
+    }
 
     const where: import('@prisma/client').Prisma.AttendanceRecordWhereInput = {
       date: { gte: fromDate, lte: toDate },
@@ -187,8 +203,12 @@ class AttendanceService {
     to: string,
     siteId?: string,
   ): Promise<GuardAttendanceSummaryResponse> {
-    const fromDate = new Date(from.slice(0, 10) + 'T00:00:00.000Z');
-    const toDate   = new Date(to.slice(0, 10) + 'T23:59:59.999Z');
+    const fromDate = safeDate(`${from.slice(0, 10)}T00:00:00.000Z`);
+    const toDate   = safeDate(`${to.slice(0, 10)}T23:59:59.999Z`);
+
+    if (!fromDate || !toDate) {
+      throw new AppError('from and to must be valid dates (YYYY-MM-DD).', 400);
+    }
 
     if (toDate < fromDate) {
       throw new AppError('The end of the period cannot be before the start.', 400);

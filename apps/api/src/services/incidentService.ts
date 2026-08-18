@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
+import { dateRangeFilter } from '../lib/dateUtils';
 import type {
   CreateIncidentInput,
   IncidentResponse,
@@ -204,12 +205,8 @@ class IncidentService {
 
     if (query.severity) where.severity = query.severity;
     if (query.siteId) where.siteId = query.siteId;
-    if (query.from || query.to) {
-      where.occurredAt = {
-        ...(query.from ? { gte: new Date(query.from) } : {}),
-        ...(query.to ? { lte: new Date(query.to) } : {}),
-      };
-    }
+    const occurredAt = dateRangeFilter(query.from, query.to);
+    if (occurredAt) where.occurredAt = occurredAt;
 
     const [incidents, total] = await Promise.all([
       prisma.incident.findMany({

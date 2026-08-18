@@ -149,6 +149,17 @@ export const UpdateBidSchema = z.object({
 );
 export type UpdateBidInput = z.infer<typeof UpdateBidSchema>;
 
+/**
+ * The shape a target's period must take for each type. The server derives the
+ * date window it measures achievement over by parsing this string, so a period
+ * that does not match its type leaves the target uncomputable.
+ */
+export const TARGET_PERIOD_PATTERNS: Record<TargetPeriodType, { regex: RegExp; example: string }> = {
+  MONTHLY:   { regex: /^\d{4}-(0[1-9]|1[0-2])$/, example: '2026-08' },
+  QUARTERLY: { regex: /^\d{4}-Q[1-4]$/,          example: '2026-Q3' },
+  ANNUAL:    { regex: /^\d{4}$/,                 example: '2026' },
+};
+
 export const CreateTargetSchema = z.object({
   assignedToId:  z.string().min(1, 'Select the officer this target belongs to'),
   period:        z.string().min(4, 'Period is required').max(20),
@@ -158,6 +169,17 @@ export const CreateTargetSchema = z.object({
   targetClients: z.coerce.number().int().min(0).optional().nullable(),
   targetBids:    z.coerce.number().int().min(0).optional().nullable(),
   notes:         z.string().max(1000).optional().nullable(),
+}).superRefine((data, ctx) => {
+  const pattern = TARGET_PERIOD_PATTERNS[data.periodType];
+  if (pattern && !pattern.regex.test(data.period)) {
+    ctx.addIssue({
+      code:    z.ZodIssueCode.custom,
+      path:    ['period'],
+      message:
+        `${data.periodType === 'ANNUAL' ? 'An' : 'A'} ${data.periodType.toLowerCase()} ` +
+        `period must look like "${pattern.example}".`,
+    });
+  }
 });
 export type CreateTargetInput = z.infer<typeof CreateTargetSchema>;
 

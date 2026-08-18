@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
+import { dateRangeFilter } from '../lib/dateUtils';
 import type {
   SystemErrorResponse,
   SystemErrorStats,
@@ -49,11 +50,8 @@ function buildWhere(query: SystemErrorQuery) {
       { errorCode: { contains: query.search, mode: 'insensitive' } },
     ];
   }
-  if (query.dateFrom || query.dateTo) {
-    where.lastSeenAt = {};
-    if (query.dateFrom) where.lastSeenAt.gte = new Date(query.dateFrom);
-    if (query.dateTo)   where.lastSeenAt.lte = new Date(query.dateTo);
-  }
+  const lastSeenAt = dateRangeFilter(query.dateFrom, query.dateTo);
+  if (lastSeenAt) where.lastSeenAt = lastSeenAt;
   return where;
 }
 

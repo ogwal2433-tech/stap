@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
+import { safeDate, dateRangeFilter } from '../lib/dateUtils';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { generateClientId } from '../lib/systemId';
 import {
@@ -122,18 +123,45 @@ function periodKey(date: Date, periodType: string): string {
 }
 
 /** Inclusive start and exclusive end of a period key. */
-function periodRange(period: string, periodType: string): { start: Date; end: Date } {
+/**
+ * The calendar window a target is measured over.
+ *
+ * Returns null when `period` does not match `periodType` — a QUARTERLY target
+ * whose period is a bare year, say. Every branch here used to build the range
+ * from Number(), so an unparseable period produced `new Date(NaN)` and Prisma
+ * rejected the whole query, taking the targets list and the marketing
+ * dashboard down with it. Callers now decide what to do with an unreadable
+ * period instead of querying on a broken one.
+ */
+function periodRange(period: string, periodType: string): { start: Date; end: Date } | null {
+  const ok = (start: Date, end: Date) =>
+    Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? null : { start, end };
+
+  // Number('') is 0, not NaN — without this an empty period would silently
+  // resolve to the year 1900 rather than being rejected.
+  if (typeof period !== 'string' || period.trim() === '') return null;
+
   if (periodType === 'ANNUAL') {
     const y = Number(period);
-    return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
+    if (!Number.isInteger(y)) return null;
+    return ok(new Date(y, 0, 1), new Date(y + 1, 0, 1));
   }
+
   if (periodType === 'QUARTERLY') {
-    const [y, q] = period.split('-Q').map(Number);
+    const parts = period.split('-Q');
+    if (parts.length !== 2) return null;
+    const [y, q] = parts.map(Number);
+    if (!Number.isInteger(y) || !Number.isInteger(q) || q < 1 || q > 4) return null;
     const m = (q - 1) * 3;
-    return { start: new Date(y, m, 1), end: new Date(y, m + 3, 1) };
+    return ok(new Date(y, m, 1), new Date(y, m + 3, 1));
   }
-  const [y, m] = period.split('-').map(Number);
-  return { start: new Date(y, m - 1, 1), end: new Date(y, m, 1) };
+
+  // MONTHLY — "YYYY-MM"
+  const parts = period.split('-');
+  if (parts.length !== 2) return null;
+  const [y, m] = parts.map(Number);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) return null;
+  return ok(new Date(y, m - 1, 1), new Date(y, m, 1));
 }
 
 class MarketingService {
@@ -547,7 +575,20 @@ class MarketingService {
     const target = await prisma.marketingTarget.findUnique({ where: { id }, include: TARGET_INCLUDE });
     if (!target) throw new NotFoundError('Target not found');
 
-    const { start, end } = periodRange(target.period, target.periodType);
+    const range = periodRange(target.period, target.periodType);
+
+    // An unreadable period means achievement cannot be computed. Returning the
+    // stored figures untouched keeps the targets list and the dashboard alive
+    // for every other row; recomputing against a guessed window, or writing
+    // zeroes, would put a number on screen that nothing supports.
+    if (!range) {
+      console.warn(
+        `Marketing target ${target.id} has period "${target.period}" which is not a valid ` +
+        `${target.periodType} period — achievement left as stored.`,
+      );
+      return sanitiseTarget(target);
+    }
+    const { start, end } = range;
 
     const [won, bids] = await Promise.all([
       prisma.prospectiveClient.findMany({
@@ -660,11 +701,12 @@ class MarketingService {
     type: MarketingReportType,
     filters: { dateFrom?: string; dateTo?: string; assignedToId?: string },
   ): Promise<MarketingReport> {
-    const from = filters.dateFrom ? new Date(filters.dateFrom) : null;
-    const to   = filters.dateTo   ? new Date(filters.dateTo)   : null;
-    const range = from || to
-      ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) }
-      : undefined;
+    // Query strings arrive unvalidated: '' and 'garbage' both reached new Date()
+    // here, and an Invalid Date crashed either toISOString() below or the Prisma
+    // call further down. An unreadable bound is now simply not applied.
+    const from  = safeDate(filters.dateFrom);
+    const to    = safeDate(filters.dateTo);
+    const range = dateRangeFilter(from, to, true);
     const officer = filters.assignedToId ? { assignedToId: filters.assignedToId } : {};
 
     const base = {

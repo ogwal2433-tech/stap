@@ -319,6 +319,62 @@ describe('refreshTarget()', () => {
     expect(where.wonDate.lt).toEqual(new Date(2026, 3, 1));
   });
 
+  // A target whose period does not match its type used to build the window from
+  // Number(), producing new Date(NaN). Prisma rejects that, and because
+  // listTargets refreshes every row through Promise.all, one bad row took down
+  // the whole targets page and the marketing dashboard with it.
+  const corruptTarget = (period: string, periodType: string) => ({
+    id: 't1', assignedToId: OFFICER, period, periodType,
+    targetLabel: 'x', targetValue: 1000, targetClients: null, targetBids: null,
+    achievedValue: 250, achievedClients: 2, achievedBids: 1, notes: null,
+    assignedToUser: { id: OFFICER, name: 'S' }, createdAt: new Date(), updatedAt: new Date(),
+  });
+
+  it.each([
+    ['2026',      'QUARTERLY'],
+    ['2026-Q9',   'QUARTERLY'],
+    ['2026-13',   'MONTHLY'],
+    ['not-a-date','MONTHLY'],
+    ['hello',     'ANNUAL'],
+    ['',          'ANNUAL'],
+  ])('never queries on an unreadable period (%s / %s)', async (period, periodType) => {
+    mp.marketingTarget.findUnique.mockResolvedValue(corruptTarget(period, periodType));
+
+    await expect(marketingService.refreshTarget('t1')).resolves.toBeTruthy();
+    expect(mp.prospectiveClient.findMany).not.toHaveBeenCalled();
+    expect(mp.bid.count).not.toHaveBeenCalled();
+  });
+
+  it('leaves stored achievement untouched when the period is unreadable', async () => {
+    // Recomputing against a guessed window, or writing zeroes, would put a
+    // number on screen that nothing in the record supports.
+    mp.marketingTarget.findUnique.mockResolvedValue(corruptTarget('2026', 'QUARTERLY'));
+
+    const res = await marketingService.refreshTarget('t1');
+
+    expect(mp.marketingTarget.update).not.toHaveBeenCalled();
+    expect(res.achievedValue).toBe(250);
+  });
+
+  it('still computes a window for every valid period shape', async () => {
+    for (const [period, periodType, gte, lt] of [
+      ['2026-08', 'MONTHLY',   new Date(2026, 7, 1),  new Date(2026, 8, 1)],
+      ['2026-Q4', 'QUARTERLY', new Date(2026, 9, 1),  new Date(2027, 0, 1)],
+      ['2026',    'ANNUAL',    new Date(2026, 0, 1),  new Date(2027, 0, 1)],
+    ] as [string, string, Date, Date][]) {
+      vi.clearAllMocks();
+      mp.marketingTarget.findUnique.mockResolvedValue(corruptTarget(period, periodType));
+      mp.prospectiveClient.findMany.mockResolvedValue([]);
+      mp.bid.count.mockResolvedValue(0);
+      mp.marketingTarget.update.mockResolvedValue(corruptTarget(period, periodType));
+
+      await marketingService.refreshTarget('t1');
+
+      const w = mp.prospectiveClient.findMany.mock.calls[0][0].where;
+      expect(w.wonDate).toEqual({ gte, lt });
+    }
+  });
+
   it('reports 0% rather than dividing by zero', async () => {
     mp.marketingTarget.findUnique.mockResolvedValue({
       id: 't1', assignedToId: OFFICER, period: '2026-08', periodType: 'MONTHLY',

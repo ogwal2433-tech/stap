@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
+import { dateRangeFilter } from '../lib/dateUtils';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, SR_TERMINAL_STATUSES } from '@stap/shared';
 import type {
@@ -121,17 +122,11 @@ class ServiceRequestService {
     if (query.clientId) where.clientId = query.clientId;
     if (query.priority) where.priority = query.priority;
 
-    if (query.dateFrom || query.dateTo) {
-      const createdAt: { gte?: Date; lte?: Date } = {};
-      if (query.dateFrom) createdAt.gte = new Date(query.dateFrom);
-      if (query.dateTo) {
-        // Inclusive of the whole end day, which is what a date picker implies.
-        const to = new Date(query.dateTo);
-        to.setHours(23, 59, 59, 999);
-        createdAt.lte = to;
-      }
-      where.createdAt = createdAt;
-    }
+    // Inclusive of the whole end day, which is what a date picker implies.
+    // Unparseable bounds are dropped rather than passed to Prisma as Invalid
+    // Dates, which it rejects outright.
+    const createdAt = dateRangeFilter(query.dateFrom, query.dateTo, true);
+    if (createdAt) where.createdAt = createdAt;
 
     const [total, items] = await Promise.all([
       prisma.serviceRequest.count({ where }),
