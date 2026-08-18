@@ -98,6 +98,13 @@ export const LETTER_TYPES = [
   'CONTRACT_EXTENSION',
   'CONFIRMATION_OF_EMPLOYMENT',
   'SALARY_REVIEW',
+  // The exit and leave paperwork STAP issues on headed paper.
+  'DESERTION_NOTICE',
+  'RESIGNATION_ACCEPTANCE',
+  'SICK_LEAVE_APPROVAL',
+  'REINSTATEMENT_LETTER',
+  'EXPULSION_LETTER',
+  'CLEARANCE_FORM',
 ] as const;
 
 export const SaveLetterTemplateSchema = z.object({
@@ -135,12 +142,19 @@ export const STRUCTURED_LETTER_TYPES = ['COMMITMENT_AGREEMENT', 'SUSPENSION'] as
 // LetterTemplate rows (see LETTER_TYPES above) predate the current 7-type
 // GeneratedLetter taxonomy and use their own, more granular type strings —
 // this maps a real letter type to the eligible template(s) HR can load from
-// when composing that type. Types with no entry (SUSPENSION, COMMENDATION,
-// REINSTATEMENT, COMMITMENT_AGREEMENT) have no matching template.
+// when composing that type. SUSPENSION and COMMITMENT_AGREEMENT have no entry:
+// both are assembled from structured fields (see STRUCTURED_LETTER_TYPES)
+// rather than loaded from an editable template.
 export const TEMPLATE_TYPES_BY_LETTER_TYPE: Record<string, readonly string[]> = {
   WARNING:     ['VERBAL_WARNING', 'FIRST_WARNING', 'FINAL_WARNING'],
-  TERMINATION: ['TERMINATION_NOTICE'],
-  GENERAL:     ['APPOINTMENT_LETTER', 'CONTRACT_EXTENSION', 'CONFIRMATION_OF_EMPLOYMENT', 'SALARY_REVIEW'],
+  // Desertion and expulsion both end the employment, so they compose as a
+  // termination rather than as a general letter.
+  TERMINATION: ['TERMINATION_NOTICE', 'DESERTION_NOTICE', 'EXPULSION_LETTER'],
+  REINSTATEMENT: ['REINSTATEMENT_LETTER'],
+  GENERAL:     [
+    'APPOINTMENT_LETTER', 'CONTRACT_EXTENSION', 'CONFIRMATION_OF_EMPLOYMENT', 'SALARY_REVIEW',
+    'RESIGNATION_ACCEPTANCE', 'SICK_LEAVE_APPROVAL', 'CLEARANCE_FORM',
+  ],
 };
 
 export const DISCIPLINARY_LETTER_LABELS = {

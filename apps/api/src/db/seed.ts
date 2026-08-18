@@ -1,4 +1,5 @@
 import { PrismaClient, Role, UserStatus, EmploymentStatus, ContractStatus, ClientContractStatus } from '@prisma/client';
+import { HR_LETTER_TEMPLATES } from './hrLetterTemplates';
 import bcrypt from 'bcryptjs';
 
 function fmtId(prefix: string, n: number): string {
@@ -511,14 +512,20 @@ async function main() {
     },
   ];
 
-  for (const tmpl of letterTemplates) {
+  // The exit/leave paperwork lives in its own module — same shape, kept apart
+  // so the wording can be reviewed against the printed forms without wading
+  // through the seed.
+  const allTemplates = [...letterTemplates, ...HR_LETTER_TEMPLATES];
+
+  for (const tmpl of allTemplates) {
     await prisma.letterTemplate.upsert({
       where:  { letterType: tmpl.letterType },
+      // Never overwrite: an admin may have edited the wording since.
       update: {},
       create: { ...tmpl, createdBy: directorId, isActive: true, version: 1 },
     });
   }
-  console.log(`✅ ${letterTemplates.length} letter templates seeded`);
+  console.log(`✅ ${allTemplates.length} letter templates seeded`);
 
   // ── Uniform Inventory ────────────────────────────────────────────────────────
 

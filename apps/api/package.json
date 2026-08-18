@@ -16,7 +16,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "letters:init": "tsx src/db/initTemplates.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
