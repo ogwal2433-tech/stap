@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Badge, Nav, Offcanvas } from 'react-bootstrap';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
 import { useSystemErrorStats } from '../../hooks/useSystemErrors';
+import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import RoleGuard from '../RoleGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import {
@@ -22,6 +24,11 @@ const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINI
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 // Firearms are the Trainer's to issue; Operations can see what is on its sites.
 const MARKETING_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
+// Who answers what clients ask for. Mirrors the /service-requests router.
+const SERVICE_REQUEST_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.CONTROL_ROOM, ROLES.ADMINISTRATOR,
+];
 const GUN_VIEW_ROLES = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
@@ -73,6 +80,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[] },
       { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] },
       { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] },
+      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] },
     ],
   },
   {
@@ -237,6 +245,7 @@ function NavGroupPanel({
   pathname,
   unreadCount,
   openErrorCount,
+  pendingSrCount,
 }: {
   group:       NavGroup;
   defaultOpen: boolean;
@@ -244,6 +253,7 @@ function NavGroupPanel({
   pathname:    string;
   unreadCount: number;
   openErrorCount: number;
+  pendingSrCount: number;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const hasActiveItem = group.items.some(
@@ -289,8 +299,9 @@ function NavGroupPanel({
                 item={item}
                 onNavigate={onNavigate}
                 unreadBadge={
-                  item.to === '/notifications' ? unreadCount
-                  : item.to === '/admin/errors' ? openErrorCount
+                  item.to === '/notifications'    ? unreadCount
+                  : item.to === '/admin/errors'     ? openErrorCount
+                  : item.to === '/service-requests' ? pendingSrCount
                   : undefined
                 }
               />
@@ -362,6 +373,16 @@ function NavContent({ onNavigate }: NavContentProps) {
   const { data: errorStats } = useSystemErrorStats(isErrorAdmin);
   const openErrorCount = (errorStats?.openCritical ?? 0) + (errorStats?.openError ?? 0);
 
+  // Unanswered client requests, so staff see them without opening the page.
+  const canSeeServiceRequests = !!user && (SERVICE_REQUEST_ROLES as string[]).includes(user.role);
+  const { data: srSummary } = useQuery({
+    queryKey:        ['sr-summary'],
+    queryFn:         serviceRequestsApi.getSummary,
+    enabled:         canSeeServiceRequests,
+    refetchInterval: 2 * 60_000,
+  });
+  const pendingSrCount = srSummary?.pending ?? 0;
+
   // A group starts open if the current path falls inside it
   function isGroupActive(group: NavGroup) {
     return group.items.some(item => pathname === item.to || pathname.startsWith(item.to + '/'));
@@ -405,6 +426,7 @@ function NavContent({ onNavigate }: NavContentProps) {
             pathname={pathname}
             unreadCount={unreadCount}
             openErrorCount={openErrorCount}
+            pendingSrCount={pendingSrCount}
           />
         ))}
 

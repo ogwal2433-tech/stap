@@ -56,6 +56,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'guardsOnLeave',   label: 'Guards on Leave',  icon: '🌴', colour: 'grey',  linkTo: '/guards?status=ON_LEAVE' },
       { key: 'activeClients',   label: 'Active Clients',   icon: '🏢', colour: 'teal',  linkTo: '/clients' },
       { key: 'openComplaints',  label: 'Open Complaints',  icon: '📋', colour: alertWhenAny, linkTo: '/complaints' },
+      { key: 'pendingServiceRequests', label: 'Service Requests', icon: '🛠️', colour: alertWhenAny, linkTo: '/service-requests' },
       { key: 'pendingInvoices', label: 'Unpaid Invoices',  icon: '📄', colour: alertWhenAny, linkTo: '/finance' },
       { key: 'monthlyRevenue',  label: 'Revenue This Month', icon: '💰', colour: 'green', linkTo: '/finance', format: ugxCompact },
     ],
@@ -75,6 +76,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'absentToday',       label: 'Absent Today',     icon: '🚫', colour: dangerWhenAny, linkTo: '/attendance' },
       { key: 'sitesCoveredToday', label: 'Sites Covered',    icon: '🏭', colour: 'navy',  linkTo: '/zones' },
       { key: 'openComplaints',    label: 'Open Complaints',  icon: '📋', colour: alertWhenAny, linkTo: '/complaints' },
+      { key: 'pendingServiceRequests', label: 'Service Requests', icon: '🛠️', colour: alertWhenAny, linkTo: '/service-requests' },
     ],
     feeds: [
       { key: 'undeployedGuards', title: 'Awaiting Deployment', icon: '🕓', emptyText: 'Everyone is deployed', linkTo: '/attendance', itemLink: g => `/guards/${g.id}` },

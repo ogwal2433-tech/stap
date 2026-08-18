@@ -36,6 +36,7 @@ const FinancePage                  = lazy(() => import('@/pages/finance/FinanceP
 const RequisitionsPage             = lazy(() => import('@/pages/requisitions/RequisitionsPage'));
 const ComplaintsPage               = lazy(() => import('@/pages/complaints/ComplaintsPage'));
 const ComplaintsDashboard          = lazy(() => import('@/pages/complaints/ComplaintsDashboard'));
+const StaffServiceRequestsPage     = lazy(() => import('@/pages/serviceRequests/StaffServiceRequestsPage'));
 const ReportsPage                  = lazy(() => import('@/pages/reports/ReportsPage'));
 const NotificationsPage            = lazy(() => import('@/pages/notifications/NotificationsPage'));
 const NotificationSettingsPage     = lazy(() => import('@/pages/settings/NotificationSettingsPage'));
@@ -145,6 +146,9 @@ function App() {
               {/* Complaints */}
               <Route path="/complaints"           element={<L><RoleGuard allowedRoles={COMPLAINT_VIEW_ROLES} fallback={<UnauthorisedPage />}><ComplaintsPage /></RoleGuard></L>} />
               <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
+
+              {/* Service requests raised by clients */}
+              <Route path="/service-requests" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.CONTROL_ROOM, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><StaffServiceRequestsPage /></RoleGuard></L>} />
 
               {/* Reports */}
               <Route path="/reports" element={<L><RoleGuard allowedRoles={REPORT_ACCESS} fallback={<UnauthorisedPage />}><ReportsPage /></RoleGuard></L>} />

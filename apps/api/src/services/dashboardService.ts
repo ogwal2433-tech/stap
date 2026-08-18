@@ -74,6 +74,7 @@ class DashboardService {
       recentComplaints,
       recentInvoices,
       guardsNeedingAttention,
+      pendingServiceRequests,
     ] = await Promise.all([
       prisma.guard.count(),
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
@@ -103,6 +104,7 @@ class DashboardService {
         orderBy: { updatedAt: 'desc' },
         take:    5,
       }),
+      prisma.serviceRequest.count({ where: { status: 'PENDING' } }),
     ]);
 
     void today;
@@ -116,6 +118,7 @@ class DashboardService {
         activeClients,
         openComplaints,
         pendingInvoices,
+        pendingServiceRequests,
         monthlyRevenue: revenueAgg._sum.totalAmount ?? 0,
       },
       feeds: {
@@ -154,6 +157,7 @@ class DashboardService {
       openComplaints,
       recentTransfers,
       deployedIds,
+      pendingServiceRequests,
     ] = await Promise.all([
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
       prisma.deployment.count({ where: { date: today } }),
@@ -169,6 +173,7 @@ class DashboardService {
         },
       }),
       prisma.deployment.findMany({ where: { date: today }, select: { guardId: true } }),
+      prisma.serviceRequest.count({ where: { status: 'PENDING' } }),
     ]);
 
     // "Undeployed" means deployable but with no deployment row for today.
@@ -197,6 +202,7 @@ class DashboardService {
         sitesCoveredToday: sitesCovered.length,
         openComplaints,
         undeployedGuards:  undeployedCount,
+        pendingServiceRequests,
       },
       feeds: {
         recentTransfers: recentTransfers.map(t => ({

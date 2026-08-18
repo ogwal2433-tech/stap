@@ -141,6 +141,8 @@ model User {
   complaintActions        ClientComplaint[]      @relation("ComplaintActionBy")
   noticesSent             ClientComplaint[]      @relation("ComplaintSender")
   noticesAcknowledged     ClientComplaint[]      @relation("ComplaintAcknowledger")
+  serviceRequestsRaised   ServiceRequest[]       @relation("SRCreator")
+  serviceRequestsAnswered ServiceRequest[]       @relation("SRResponder")
   requestedRequisitions   Requisition[]          @relation("RequisitionRequestedBy")
   hrApprovedRequisitions  Requisition[]          @relation("RequisitionHRApprover")
   dirApprovedRequisitions Requisition[]          @relation("RequisitionDirectorApprover")
@@ -1630,14 +1632,30 @@ model ServiceRequest {
   subject     String
   description String
   quantity    Int?
-  status      String    @default("PENDING") // PENDING | IN_PROGRESS | RESOLVED | CANCELLED
+  /// PENDING | IN_PROGRESS | COMPLETED | REJECTED.
+  /// REJECTED means STAP declined the request — distinct from the client
+  /// withdrawing it, which nothing can currently do.
+  status      String    @default("PENDING")
   priority    String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
-  resolvedBy  String?
-  resolvedAt  DateTime?
-  resolution  String?
-  createdBy   String
+
+  /// What STAP told the client. Shown in their portal, and required before a
+  /// request can be completed or rejected so no request closes unexplained.
+  staffResponse String? @db.Text
+  /// Staff-only working notes. Never leaves the internal API.
+  staffNotes    String? @db.Text
+
+  respondedById   String?
+  respondedByUser User?     @relation("SRResponder", fields: [respondedById], references: [id], onDelete: SetNull)
+  respondedAt     DateTime?
+
+  createdBy     String
+  createdByUser User   @relation("SRCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([clientId, status])
 }
 
 model DeductionType {

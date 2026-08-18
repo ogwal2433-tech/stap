@@ -148,9 +148,35 @@ describe('Service request isolation', () => {
     await prisma.serviceRequest.delete({ where: { id: res.body.data.id } });
   });
 
-  it('DIRECTOR cannot list service requests — the legacy staff endpoint no longer exists', async () => {
+  // Staff answering client requests is the point of the feature; what stays
+  // walled off is one client seeing another, and either seeing internal notes.
+  it('DIRECTOR can list service requests across every client', async () => {
     const res = await request(app).get('/api/v1/service-requests').set('Authorization', `Bearer ${tokens.DIRECTOR}`);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const clientIds = new Set(res.body.data.map((sr: any) => sr.clientId));
+    expect(clientIds.has(CLIENT_A_ID)).toBe(true);
+    expect(clientIds.has(CLIENT_B_ID)).toBe(true);
+  });
+
+  it('a CLIENT cannot reach the staff service-request endpoints', async () => {
+    for (const path of ['/api/v1/service-requests', '/api/v1/service-requests/summary']) {
+      const res = await request(app).get(path).set('Authorization', `Bearer ${tokens.A}`);
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('a CLIENT cannot change a request\'s status', async () => {
+    const res = await request(app)
+      .patch('/api/v1/service-requests/any-id/status')
+      .set('Authorization', `Bearer ${tokens.A}`)
+      .send({ status: 'COMPLETED', staffResponse: 'approving my own request' });
+    expect(res.status).toBe(403);
+  });
+
+  it('internal staff notes never appear on the client portal', async () => {
+    const res = await request(app).get('/api/v1/portal/service-requests').set('Authorization', `Bearer ${tokens.A}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.every((sr: any) => !('staffNotes' in sr))).toBe(true);
   });
 
   it('DIRECTOR cannot reach service requests via the client portal either', async () => {

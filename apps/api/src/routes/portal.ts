@@ -248,12 +248,13 @@ router.patch(
   }),
 );
 
-// ── Service requests — client-facing only. This is a private channel from the
-// client to STAP: these two routes are the ONLY service-request endpoints that
-// exist, and clientPortalGuard above already 403s every non-CLIENT caller, so
-// staff cannot read requests through the API at all. Staff are notified that a
-// request came in and act through the normal deployment / roster flow, without
-// reading the client's request details here.
+// ── Service requests — the client's half of the channel.
+//
+// These two routes are scoped to the caller's own company by clientPortalGuard.
+// Staff read and answer the same requests through /service-requests, which is
+// closed to the CLIENT role. Requests are addressed to STAP by the client, so
+// staff seeing them is the point; what staff must not expose back is
+// `staffNotes`, and the portal's formatter omits it.
 
 // GET /portal/service-requests
 router.get(
@@ -276,15 +277,18 @@ router.post(
       req.user!.userId,
     );
 
-    // Staff are notified a request came in, but the notification deliberately
-    // omits the client name/details — staff must contact the client directly
-    // rather than reading their private request data through this channel.
+    // Name the client and the request, otherwise staff get an alert they cannot
+    // act on and have to go hunting for what it refers to.
     await notificationService.sendToRoles(
-      ['DIRECTOR', 'ASSISTANT_MANAGER', 'OPERATIONS_SUPERVISOR'],
+      ['DIRECTOR', 'ASSISTANT_MANAGER', 'OPERATIONS_SUPERVISOR', 'CONTROL_ROOM'],
       {
-        type:    'SYSTEM',
-        title:   'New Client Service Request',
-        message: `A client has submitted a new service request: ${data.type.replace(/_/g, ' ')}.`,
+        type:       'SYSTEM',
+        title:      'New Client Service Request',
+        message:
+          `${data.clientName} raised a ${data.type.replace(/_/g, ' ').toLowerCase()} request: ` +
+          `"${data.subject}"${data.priority === 'URGENT' ? ' — marked URGENT' : ''}.`,
+        entityType: 'serviceRequest',
+        entityId:   data.id,
       },
     );
 

@@ -594,9 +594,30 @@ export default function ClientPortalPage() {
                         {sr.quantity != null && <div className="small mt-1">Quantity requested: {sr.quantity}</div>}
                         <div className="text-muted">{sr.description.slice(0, 80)}{sr.description.length > 80 ? '…' : ''}</div>
                         <div className="text-muted" style={{ fontSize: '0.7rem' }}>Submitted: {new Date(sr.createdAt).toLocaleDateString('en-UG')}</div>
-                        {sr.resolution && (
-                          <div className="mt-1 p-2 bg-success bg-opacity-10 rounded">
-                            <strong>Resolution:</strong> {sr.resolution}
+                        {sr.staffResponse && (
+                          <div
+                            style={{
+                              background:   '#d5f5e3',
+                              borderLeft:   '4px solid #1E8449',
+                              borderRadius: '0.5rem',
+                              padding:      '10px 14px',
+                              marginTop:    '8px',
+                            }}
+                          >
+                            <div className="fw-bold small text-success mb-1">✅ STAP response</div>
+                            <div style={{
+                              fontSize: '0.85rem', color: '#2C3E50',
+                              whiteSpace: 'pre-wrap', lineHeight: 1.6,
+                            }}>
+                              {sr.staffResponse}
+                            </div>
+                            {sr.respondedAt && (
+                              <div className="text-muted" style={{ fontSize: '0.72rem', marginTop: 4 }}>
+                                Responded {new Date(sr.respondedAt).toLocaleDateString('en-GB', {
+                                  day: 'numeric', month: 'long', year: 'numeric',
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </Card.Body>
