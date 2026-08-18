@@ -47,6 +47,7 @@ const ZonesPage                    = lazy(() => import('@/pages/zones/ZonesPage'
 const ZoneDetailPage               = lazy(() => import('@/pages/zones/ZoneDetailPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
 const SystemErrorsPage             = lazy(() => import('@/pages/admin/SystemErrorsPage'));
+const AuditLogPage                 = lazy(() => import('@/pages/admin/AuditLogPage'));
 
 const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
@@ -172,6 +173,7 @@ function App() {
 
               {/* Admin */}
               <Route path="/admin/errors" element={<L><RoleGuard allowedRoles={ERROR_ADMIN_ROLES} fallback={<UnauthorisedPage />}><SystemErrorsPage /></RoleGuard></L>} />
+              <Route path="/admin/audit-log" element={<L><RoleGuard allowedRoles={ERROR_ADMIN_ROLES} fallback={<UnauthorisedPage />}><AuditLogPage /></RoleGuard></L>} />
             </Route>
           </Route>
 

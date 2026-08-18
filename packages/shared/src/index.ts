@@ -17,6 +17,7 @@ export * from './schemas/zone';
 export * from './schemas/settings';
 export * from './schemas/shiftType';
 export * from './schemas/serviceRequest';
+export * from './schemas/auditLog';
 export * from './schemas/systemError';
 export * from './schemas/dashboard';
 export * from './types/api';

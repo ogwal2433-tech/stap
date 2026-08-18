@@ -109,6 +109,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] },
       { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] },
+      { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] },
     ],
   },
 ];
