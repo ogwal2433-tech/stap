@@ -123,13 +123,16 @@ const NOTIFICATION_ITEM: NavItem = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// Paths that have a route behind them. A nav item missing from this set renders
+// as a greyed-out "Soon" stub instead of a link, so anything added to NAV_GROUPS
+// must be listed here too or the page is unreachable from the sidebar.
 const ALL_NAV_PATHS = new Set([
   '/dashboard', '/guards', '/attendance', '/checkin',
-  '/clients', '/zones', '/complaints',
+  '/clients', '/zones', '/complaints', '/service-requests',
   '/finance', '/inventory', '/requisitions',
   '/hr', '/reports', '/settings', '/notifications', '/guns', '/marketing',
   '/guards/dashboard', '/guards/import',
-  '/attendance/dashboard', '/admin/errors',
+  '/attendance/dashboard', '/admin/errors', '/admin/audit-log',
 ]);
 
 const ROLE_BADGE: Record<string, string> = {
