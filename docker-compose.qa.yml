@@ -1,0 +1,179 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Security360 — QA environment
+#
+#   Web:      http://<host>:8000        (production stays on 80/443)
+#   Data:     qa_postgres_data volume   (production uses postgres_data)
+#   Network:  security360_qa_network    (production uses stap-network)
+#
+# Nothing here is shared with production: different volumes, different network,
+# different container names. The only overlap is the host, so the two stacks
+# cannot see each other's data even by accident.
+#
+# The API and web images are built from the SAME Dockerfiles production uses.
+# QA's differences — seeding, NODE_ENV, the nginx proxy config — are applied
+# here as mounts and overrides. A parallel set of QA Dockerfiles would drift,
+# and QA would quietly stop testing what production runs.
+#
+#   pnpm qa:up      build and start
+#   pnpm qa:logs    follow logs
+#   pnpm qa:reset   destroy QA data and rebuild from seed
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: security360-qa
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: s360-postgres-qa
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${QA_POSTGRES_USER:-s360_qa}
+      POSTGRES_PASSWORD: ${QA_POSTGRES_PASSWORD:?QA_POSTGRES_PASSWORD is required — copy .env.qa.example to .env.qa}
+      POSTGRES_DB:       ${QA_POSTGRES_DB:-s360_qa}
+    volumes:
+      - qa_postgres_data:/var/lib/postgresql/data
+    networks: [qa-network]
+    # Not published to the host: reach it with `pnpm qa:shell:db`. Publishing
+    # would put a second Postgres on the host's port range next to production.
+    healthcheck:
+      test:         ["CMD-SHELL", "pg_isready -U ${QA_POSTGRES_USER:-s360_qa}"]
+      interval:     10s
+      timeout:      5s
+      retries:      5
+      start_period: 20s
+
+  # ── Redis ───────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: s360-redis-qa
+    restart: unless-stopped
+    volumes:
+      - qa_redis_data:/data
+    networks: [qa-network]
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context:    .
+      dockerfile: apps/api/Dockerfile
+    image: s360-api-qa:latest
+    container_name: s360-api-qa
+    restart: unless-stopped
+    # Same image as production, different first instruction: the QA entrypoint
+    # additionally seeds so there are accounts to sign in with.
+    entrypoint: ["sh", "/app/docker-entrypoint.qa.sh"]
+    volumes:
+      - ./apps/api/docker-entrypoint.qa.sh:/app/docker-entrypoint.qa.sh:ro
+      - qa_uploads:/app/public/uploads
+    environment:
+      NODE_ENV: production   # the app's runtime mode; QA_* below carry the environment's identity
+      PORT:     3001
+      APP_VERSION:    ${QA_APP_VERSION:-qa}
+      ENABLE_SWAGGER: ${QA_ENABLE_SWAGGER:-true}
+
+      DATABASE_URL: postgresql://${QA_POSTGRES_USER:-s360_qa}:${QA_POSTGRES_PASSWORD}@postgres:5432/${QA_POSTGRES_DB:-s360_qa}
+      REDIS_URL:    redis://redis:6379
+
+      JWT_SECRET:         ${QA_JWT_SECRET:?QA_JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${QA_JWT_REFRESH_SECRET:?QA_JWT_REFRESH_SECRET is required}
+      FRONTEND_URL:       http://${QA_HOST:-localhost}:${QA_PORT:-8000}
+
+      SEED_PASSWORD: ${QA_SEED_PASSWORD:-12345678}
+      QA_SKIP_SEED:  ${QA_SKIP_SEED:-false}
+
+      # Point at a mail catcher. Left blank the API logs instead of sending, so
+      # QA never emails a real guard or client.
+      SMTP_HOST: ${QA_SMTP_HOST:-}
+      SMTP_PORT: ${QA_SMTP_PORT:-}
+      SMTP_USER: ${QA_SMTP_USER:-}
+      SMTP_PASS: ${QA_SMTP_PASS:-}
+
+      HR_EMAIL:          ${QA_HR_EMAIL:-}
+      OPS_MANAGER_PHONE: ${QA_OPS_MANAGER_PHONE:-}
+
+      # Payment gateway — sandbox credentials only. Blank by default so a QA
+      # run cannot move real money.
+      XCEL_API_KEY:                  ${QA_XCEL_API_KEY:-}
+      XCEL_MERCHANT_ID:              ${QA_XCEL_MERCHANT_ID:-}
+      XCEL_BASE_URL:                 ${QA_XCEL_BASE_URL:-}
+      XCEL_WEBHOOK_URL:              http://${QA_HOST:-localhost}:${QA_PORT:-8000}/api/v1/payments/webhook
+      XCEL_DISBURSEMENT_WEBHOOK_URL: ${QA_XCEL_DISBURSEMENT_WEBHOOK_URL:-}
+      XCEL_PRODUCT_ID:               ${QA_XCEL_PRODUCT_ID:-}
+      XCEL_MERCHANT_ACCOUNT:         ${QA_XCEL_MERCHANT_ACCOUNT:-}
+      XCEL_BANK_CODE:                ${QA_XCEL_BANK_CODE:-044}
+      XCEL_PARTNER_ID:               ${QA_XCEL_PARTNER_ID:-}
+      XCEL_PARTNER_API_KEY:          ${QA_XCEL_PARTNER_API_KEY:-}
+      XCEL_PARTNER_BASE_URL:         ${QA_XCEL_PARTNER_BASE_URL:-}
+      XCEL_CONFIG_PRESET:            ${QA_XCEL_CONFIG_PRESET:-}
+      XCEL_DL_CODE_BASE_URL:         ${QA_XCEL_DL_CODE_BASE_URL:-}
+    networks: [qa-network]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  # ── Worker (BullMQ) ─────────────────────────────────────────────────
+  # Audit entries, emails and SMS are all queued rather than written inline.
+  # Without this container they are enqueued and never processed, so the audit
+  # log stays empty and no notification is delivered — QA would look broken in
+  # ways production is not.
+  worker:
+    image: s360-api-qa:latest
+    container_name: s360-worker-qa
+    restart: unless-stopped
+    entrypoint: ["node", "apps/api/dist/worker.js"]
+    volumes:
+      - qa_uploads:/app/public/uploads
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${QA_POSTGRES_USER:-s360_qa}:${QA_POSTGRES_PASSWORD}@postgres:5432/${QA_POSTGRES_DB:-s360_qa}
+      REDIS_URL:    redis://redis:6379
+      JWT_SECRET:         ${QA_JWT_SECRET}
+      JWT_REFRESH_SECRET: ${QA_JWT_REFRESH_SECRET}
+      SMTP_HOST: ${QA_SMTP_HOST:-}
+      SMTP_PORT: ${QA_SMTP_PORT:-}
+      SMTP_USER: ${QA_SMTP_USER:-}
+      SMTP_PASS: ${QA_SMTP_PASS:-}
+    networks: [qa-network]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      api:      { condition: service_started }
+
+  # ── Web (React + nginx) ─────────────────────────────────────────────
+  web:
+    build:
+      context:    .
+      dockerfile: apps/web/Dockerfile
+    image: s360-web-qa:latest
+    container_name: s360-web-qa
+    restart: unless-stopped
+    # Production's web container serves static files only and a separate nginx
+    # proxies the API. QA has no TLS to terminate, so this one does both — the
+    # mounted config adds the /api and /uploads rules.
+    volumes:
+      - ./apps/web/nginx-qa.conf:/etc/nginx/conf.d/default.conf:ro
+      - qa_uploads:/var/www/uploads:ro
+    ports:
+      - "${QA_PORT:-8000}:80"
+    networks: [qa-network]
+    depends_on: [api]
+
+volumes:
+  qa_postgres_data:
+    name: security360_qa_postgres
+  qa_redis_data:
+    name: security360_qa_redis
+  qa_uploads:
+    name: security360_qa_uploads
+
+networks:
+  qa-network:
+    name:   security360_qa_network
+    driver: bridge

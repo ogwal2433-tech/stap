@@ -9,3 +9,5 @@ apps/api/prisma/migrations/*.sql
 packages/shared/dist/
 apps/api/dist/
 apps/web/dist/
+# QA environment secrets
+.env.qa

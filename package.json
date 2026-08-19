@@ -6,7 +6,20 @@
     "build": "pnpm --filter @stap/shared build && pnpm --filter api build && pnpm --filter web build",
     "dev": "pnpm --filter @stap/shared build && concurrently \"pnpm --filter api dev\" \"pnpm --filter api dev:worker\" \"pnpm --filter web dev\"",
     "lint": "pnpm -r lint",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "qa:up": "docker compose -f docker-compose.qa.yml --env-file .env.qa up -d --build",
+    "qa:down": "docker compose -f docker-compose.qa.yml --env-file .env.qa down",
+    "qa:restart": "docker compose -f docker-compose.qa.yml --env-file .env.qa restart",
+    "qa:rebuild": "docker compose -f docker-compose.qa.yml --env-file .env.qa up -d --build --force-recreate",
+    "qa:reset": "docker compose -f docker-compose.qa.yml --env-file .env.qa down -v && docker compose -f docker-compose.qa.yml --env-file .env.qa up -d --build",
+    "qa:status": "docker compose -f docker-compose.qa.yml --env-file .env.qa ps",
+    "qa:logs": "docker compose -f docker-compose.qa.yml --env-file .env.qa logs -f",
+    "qa:logs:api": "docker compose -f docker-compose.qa.yml --env-file .env.qa logs -f api",
+    "qa:logs:web": "docker compose -f docker-compose.qa.yml --env-file .env.qa logs -f web",
+    "qa:logs:worker": "docker compose -f docker-compose.qa.yml --env-file .env.qa logs -f worker",
+    "qa:shell:api": "docker exec -it s360-api-qa sh",
+    "qa:shell:db": "docker exec -it s360-postgres-qa psql -U ${QA_POSTGRES_USER:-s360_qa} -d ${QA_POSTGRES_DB:-s360_qa}",
+    "qa:config": "docker compose -f docker-compose.qa.yml --env-file .env.qa config"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
