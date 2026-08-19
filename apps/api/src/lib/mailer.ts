@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { COMPANY_NAME } from '@stap/shared';
 
 export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST ?? 'sandbox.smtp.mailtrap.io',
@@ -17,7 +18,10 @@ export async function sendEmail(opts: {
   attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 }) {
   return transporter.sendMail({
-    from:        '"STAP Security Ltd" <no-reply@stapsecurity.co.ug>',
+    // The company, not the platform: recipients are its guards and clients, and
+    // a display name that does not match the sending domain reads as spoofing
+    // to both people and spam filters.
+    from:        `"${COMPANY_NAME}" <no-reply@stapsecurity.co.ug>`,
     to:          opts.to,
     subject:     opts.subject,
     html:        opts.html,

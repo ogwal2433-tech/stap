@@ -40,6 +40,7 @@ import { swaggerSpec } from './lib/swagger';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticate } from './middleware/authenticate';
 import { errorLogger } from './services/errorLogger';
+import { APP_NAME } from '@stap/shared';
 
 const app: Express = express();
 // Trust the first proxy (Nginx) — required when running behind a reverse proxy
@@ -73,7 +74,7 @@ app.use('/api/v1', apiRouter);
 // ── Swagger UI (dev + staging) ─────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    customSiteTitle: 'STAP Security API Docs',
+    customSiteTitle: `${APP_NAME} API Docs`,
   }));
   app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
   console.log('📖 API docs: http://localhost:3001/api/docs');

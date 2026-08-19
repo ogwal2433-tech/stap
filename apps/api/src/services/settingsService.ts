@@ -5,6 +5,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
+import { APP_NAME } from '@stap/shared';
 import type {
   SystemSettingResponse,
   UserResponse,
@@ -194,7 +195,7 @@ class SettingsService {
     try {
       await QueueService.sendEmail({
         to:       data.email,
-        subject:  'Welcome to STAP Security Management Platform',
+        subject:  `Welcome to ${APP_NAME}`,
         template: 'welcome',
         data:     { name: data.name, email: data.email, password: data.password },
       });

@@ -10,7 +10,7 @@ import {
   InputGroup,
   Spinner,
 } from 'react-bootstrap';
-import { LoginSchema, ROLES, type LoginInput } from '@stap/shared';
+import { APP_NAME, APP_TAGLINE, COMPANY_NAME, LoginSchema, ROLES, type LoginInput } from '@stap/shared';
 import { useAuth } from '../context/AuthContext';
 import type { AxiosError } from 'axios';
 
@@ -70,9 +70,9 @@ export default function LoginPage() {
         <Card className="shadow-sm border-0">
           <Card.Header className="text-center py-4 bg-white border-0">
             <h4 className="mb-1 fw-bold" style={{ color: '#1B3A6B' }}>
-              STAP Security Ltd
+              {APP_NAME}
             </h4>
-            <p className="text-muted mb-0 small">Management Platform</p>
+            <p className="text-muted mb-0 small">{APP_TAGLINE}</p>
           </Card.Header>
 
           <Card.Body className="px-4 py-4">
@@ -167,7 +167,7 @@ export default function LoginPage() {
           </Card.Body>
 
           <Card.Footer className="text-center text-muted small py-3 bg-white border-0">
-            &copy; 2026 STAP Security Ltd
+            &copy; 2026 {COMPANY_NAME}
           </Card.Footer>
         </Card>
       </div>

@@ -9,6 +9,8 @@ import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import RoleGuard from '../RoleGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import {
+  APP_NAME,
+  APP_TAGLINE,
   ROLES,
   INTERNAL_ROLES,
   FINANCE_ROLES,
@@ -396,8 +398,8 @@ function NavContent({ onNavigate }: NavContentProps) {
     <div className="d-flex flex-column h-100">
       {/* Logo */}
       <div className="px-3 py-4 border-bottom border-white border-opacity-25">
-        <div className="fw-bold text-white fs-5">STAP Security</div>
-        <div className="text-white small" style={{ opacity: 0.6 }}>Management Platform</div>
+        <div className="fw-bold text-white fs-5">{APP_NAME}</div>
+        <div className="text-white small" style={{ opacity: 0.6 }}>{APP_TAGLINE}</div>
       </div>
 
       {/* Nav — vertical only, clip horizontal overflow */}

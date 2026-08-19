@@ -1,10 +1,11 @@
 import swaggerJsdoc from 'swagger-jsdoc';
+import { APP_NAME } from '@stap/shared';
 
 const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'STAP Security Management API',
+      title: `${APP_NAME} Management API`,
       version: '1.0.0',
       description:
         'REST API for STAP Security Ltd web management platform. ' +

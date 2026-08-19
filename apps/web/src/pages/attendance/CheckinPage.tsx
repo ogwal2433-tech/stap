@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { clientsApi } from '../../lib/clients.api';
 import { useQuery } from '@tanstack/react-query';
 import type { SupervisorCheckinInput } from '@stap/shared';
+import { COMPANY_NAME } from '@stap/shared';
 
 interface QueuedCheckin {
   data: SupervisorCheckinInput;
@@ -155,7 +156,7 @@ export default function CheckinPage() {
     return (
       <>
         <Navbar bg="dark" variant="dark" className="px-3">
-          <Navbar.Brand className="fw-bold small">STAP Security — Site Check-in</Navbar.Brand>
+          <Navbar.Brand className="fw-bold small">{COMPANY_NAME} — Site Check-in</Navbar.Brand>
         </Navbar>
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh', padding: '1rem' }}>
           <Card className="shadow-sm text-center" style={{ maxWidth: 360, width: '100%' }}>
@@ -184,7 +185,7 @@ export default function CheckinPage() {
   return (
     <>
       <Navbar bg="dark" variant="dark" className="px-3">
-        <Navbar.Brand className="fw-bold small">STAP Security — Site Check-in</Navbar.Brand>
+        <Navbar.Brand className="fw-bold small">{COMPANY_NAME} — Site Check-in</Navbar.Brand>
         <div className="ms-auto text-white small">{user?.name}</div>
       </Navbar>
 

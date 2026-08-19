@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Button, Navbar } from 'react-bootstrap';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
+import { APP_NAME } from '@stap/shared';
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -21,7 +22,7 @@ export default function AppLayout() {
         >
           ☰
         </Button>
-        <Navbar.Brand className="ms-3 fw-bold">STAP Security</Navbar.Brand>
+        <Navbar.Brand className="ms-3 fw-bold">{APP_NAME}</Navbar.Brand>
         <div className="ms-auto">
           <NotificationBell />
         </div>
