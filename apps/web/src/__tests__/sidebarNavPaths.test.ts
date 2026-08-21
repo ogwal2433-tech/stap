@@ -11,11 +11,6 @@ import { resolve } from 'node:path';
  * and only the sidebar is dead. These read the two files and assert the lists
  * agree, so adding a page without wiring the path fails here instead of
  * shipping an unreachable menu entry.
- *
- * The sidebar is deliberately down to Users and Settings. Every other module
- * keeps its route and stays reachable by URL — so this file no longer checks
- * that the menu is broad, it checks that the two entries left are wired and
- * that nothing creeps back in unnoticed.
  */
 const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
 
@@ -36,11 +31,8 @@ const routed = new Set([...app.matchAll(/<Route\s+path="([^"]+)"/g)].map(m => m[
 
 describe('sidebar navigation wiring', () => {
   it('finds nav items and the whitelist', () => {
-    // Guards the regexes above rather than the size of the menu: if a refactor
-    // renames `to:` or ALL_NAV_PATHS, these collapse to zero and every other
-    // assertion here passes vacuously.
-    expect(navPaths.length).toBeGreaterThan(0);
-    expect(allowed.size).toBeGreaterThan(0);
+    expect(navPaths.length).toBeGreaterThan(5);
+    expect(allowed.size).toBeGreaterThan(5);
     expect(routed.size).toBeGreaterThan(5);
   });
 
@@ -55,14 +47,16 @@ describe('sidebar navigation wiring', () => {
     expect(dangling, `linked but unrouted: ${dangling.join(', ')}`).toEqual([]);
   });
 
-  it('offers exactly Users and Settings', () => {
-    // The menu was cut to these two on purpose. If a nav item is added back,
-    // this fails on purpose too — decide it deliberately, then update the list.
-    expect([...navPaths].sort()).toEqual(['/settings', '/staff']);
+  it('keeps the staff directory reachable', () => {
+    // Staff was re-added by hand when the sidebar was restored from git, so it
+    // is the one item not covered by the original file's expectations.
+    expect(navPaths, '/staff missing from the sidebar').toContain('/staff');
+    expect(allowed.has('/staff'), '/staff would render as "Soon"').toBe(true);
+    expect(routed.has('/staff'), '/staff has no route').toBe(true);
   });
 
-  it('keeps the two surviving entries wired end to end', () => {
-    for (const p of ['/staff', '/settings']) {
+  it('keeps the two pages added this sprint reachable', () => {
+    for (const p of ['/service-requests', '/admin/audit-log']) {
       expect(navPaths, `${p} missing from the sidebar`).toContain(p);
       expect(allowed.has(p), `${p} would render as "Soon"`).toBe(true);
       expect(routed.has(p), `${p} has no route`).toBe(true);

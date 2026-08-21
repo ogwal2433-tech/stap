@@ -1,12 +1,41 @@
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Offcanvas } from 'react-bootstrap';
+import { Badge, Nav, Offcanvas } from 'react-bootstrap';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { useUnreadCount } from '../../hooks/useNotifications';
+import { useSystemErrorStats } from '../../hooks/useSystemErrors';
+import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import RoleGuard from '../RoleGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
-import { APP_NAME, APP_TAGLINE, ROLES, type UserRole } from '@stap/shared';
+import {
+  APP_NAME,
+  APP_TAGLINE,
+  ROLES,
+  INTERNAL_ROLES,
+  FINANCE_ROLES,
+  HR_ROLES,
+  DEPLOYMENT_VIEW_ROLES,
+  REPORT_ROLES,
+  GUARD_WRITE_ROLES,
+  type UserRole,
+} from '@stap/shared';
 
+const ADMIN_ONLY       = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
 // Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.
 const STAFF_MANAGER_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
+// Firearms are the Trainer's to issue; Operations can see what is on its sites.
+const MARKETING_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
+// Who answers what clients ask for. Mirrors the /service-requests router.
+const SERVICE_REQUEST_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.CONTROL_ROOM, ROLES.ADMINISTRATOR,
+];
+const GUN_VIEW_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
+];
 
 // ── Nav structure ──────────────────────────────────────────────────────────────
 
@@ -17,36 +46,99 @@ interface NavItem {
   roles: UserRole[];
 }
 
-/**
- * The sidebar is deliberately down to these two entries.
- *
- * Every other module — guards, clients, finance, complaints, deployments,
- * requisitions, marketing, guns, reports, notifications, audit log, system
- * errors — still has its route, its page and its role guard in App.tsx, and is
- * still reachable by URL. Only the sidebar links were withdrawn; restoring one
- * means adding its entry back here and its path to ALL_NAV_PATHS.
- */
-const NAV_ITEMS: NavItem[] = [
+interface NavGroup {
+  id:    string;
+  icon:  string;
+  label: string;
+  items: NavItem[];
+}
+
+// Standalone items rendered outside of groups
+const STANDALONE_ITEMS: NavItem[] = [
   {
-    icon:  'bi-people-fill',
-    label: 'Users',
-    to:    '/staff',
-    roles: STAFF_MANAGER_ROLES as UserRole[],
-  },
-  {
-    icon:  'bi-gear-fill',
-    label: 'Settings',
-    to:    '/settings',
-    roles: [ROLES.DIRECTOR] as UserRole[],
+    icon:  'bi-house-fill',
+    label: 'Dashboard',
+    to:    '/dashboard',
+    roles: INTERNAL_ROLES as UserRole[],
   },
 ];
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id:    'operations',
+    icon:  'bi-shield-fill',
+    label: 'Guard Operations',
+    items: [
+      { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] },
+      { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] },
+      { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] },
+      { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
+    ],
+  },
+  {
+    id:    'clients',
+    icon:  'bi-building-fill',
+    label: 'Clients & Sites',
+    items: [
+      { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] },
+      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[] },
+      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] },
+      { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] },
+      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] },
+    ],
+  },
+  {
+    id:    'finance',
+    icon:  'bi-cash-coin',
+    label: 'Finance & Resources',
+    items: [
+      { icon: 'bi-cash-coin',      label: 'Finance',      to: '/finance',      roles: FINANCE_ROLES as UserRole[] },
+      { icon: 'bi-box-seam-fill',  label: 'Inventory',    to: '/inventory',    roles: ADMIN_ONLY as UserRole[] },
+      { icon: 'bi-clipboard2-fill', label: 'Requisitions', to: '/requisitions', roles: NON_GUARD_INTERNAL as UserRole[] },
+    ],
+  },
+  {
+    id:    'hr',
+    icon:  'bi-people-fill',
+    label: 'HR & Reporting',
+    items: [
+      { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: [...HR_ROLES, ROLES.TRAINER] as UserRole[] },
+      { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', roles: REPORT_ROLES as UserRole[] },
+    ],
+  },
+  {
+    id:    'system',
+    icon:  'bi-gear-fill',
+    label: 'System',
+    items: [
+      { icon: 'bi-person-badge-fill',   label: 'Staff',         to: '/staff',         roles: STAFF_MANAGER_ROLES as UserRole[] },
+      { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] },
+      { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] },
+      { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] },
+    ],
+  },
+];
+
+const NOTIFICATION_ITEM: NavItem = {
+  icon:  'bi-bell-fill',
+  label: 'Notifications',
+  to:    '/notifications',
+  roles: INTERNAL_ROLES as UserRole[],
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 // Paths that have a route behind them. A nav item missing from this set renders
-// as a greyed-out "Soon" stub instead of a link, so anything added to NAV_ITEMS
+// as a greyed-out "Soon" stub instead of a link, so anything added to NAV_GROUPS
 // must be listed here too or the page is unreachable from the sidebar.
-const ALL_NAV_PATHS = new Set(['/staff', '/settings']);
+const ALL_NAV_PATHS = new Set([
+  '/dashboard', '/guards', '/attendance', '/checkin',
+  '/clients', '/zones', '/complaints', '/service-requests',
+  '/finance', '/inventory', '/requisitions',
+  '/hr', '/reports', '/settings', '/staff', '/notifications', '/guns', '/marketing',
+  '/guards/dashboard', '/guards/import',
+  '/attendance/dashboard', '/admin/errors', '/admin/audit-log',
+]);
 
 const ROLE_BADGE: Record<string, string> = {
   DIRECTOR:              '#1B3A6B',
@@ -92,14 +184,39 @@ const ICON_STYLE: React.CSSProperties = {
   textAlign:  'center',
 };
 
-function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+const SUB_ITEM_STYLE: React.CSSProperties = {
+  ...ITEM_STYLE,
+  padding:     '4px 10px 4px 28px',
+  fontSize:    '0.75rem',
+};
+
+const SUB_ICON_STYLE: React.CSSProperties = {
+  fontSize:   '0.72rem',
+  width:      13,
+  flexShrink: 0,
+  textAlign:  'center',
+};
+
+function NavItemLink({
+  item,
+  sub = false,
+  onNavigate,
+  unreadBadge,
+}: {
+  item:        NavItem;
+  sub?:        boolean;
+  onNavigate?: () => void;
+  unreadBadge?:number;
+}) {
   const { pathname } = useLocation();
   const isActive = pathname === item.to || pathname.startsWith(item.to + '/');
+  const baseStyle = sub ? SUB_ITEM_STYLE : ITEM_STYLE;
+  const iconStyle = sub ? SUB_ICON_STYLE : ICON_STYLE;
 
   if (!ALL_NAV_PATHS.has(item.to)) {
     return (
-      <div style={{ ...ITEM_STYLE, color: 'rgba(255,255,255,0.3)', cursor: 'not-allowed' }} title="Coming soon">
-        <i className={`bi ${item.icon}`} style={ICON_STYLE} />
+      <div style={{ ...baseStyle, color: 'rgba(255,255,255,0.3)', cursor: 'not-allowed' }} title="Coming soon">
+        <i className={`bi ${item.icon}`} style={iconStyle} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
         <span style={{ marginLeft: 'auto', fontSize: '0.58rem', background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.45)', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>Soon</span>
       </div>
@@ -111,15 +228,145 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
       to={item.to}
       onClick={onNavigate}
       style={{
-        ...ITEM_STYLE,
+        ...baseStyle,
         color:      isActive ? '#fff' : 'rgba(255,255,255,0.68)',
         background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
         fontWeight: isActive ? 600 : 400,
       }}
     >
-      <i className={`bi ${item.icon}`} style={ICON_STYLE} />
+      <i className={`bi ${item.icon}`} style={iconStyle} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{item.label}</span>
+      {unreadBadge != null && unreadBadge > 0 && (
+        <Badge bg="danger" pill style={{ fontSize: '0.58rem', flexShrink: 0 }}>
+          {unreadBadge > 99 ? '99+' : unreadBadge}
+        </Badge>
+      )}
     </NavLink>
+  );
+}
+
+// ── NavGroupPanel ──────────────────────────────────────────────────────────────
+
+function NavGroupPanel({
+  group,
+  defaultOpen,
+  onNavigate,
+  pathname,
+  unreadCount,
+  openErrorCount,
+  pendingSrCount,
+}: {
+  group:       NavGroup;
+  defaultOpen: boolean;
+  onNavigate?: () => void;
+  pathname:    string;
+  unreadCount: number;
+  openErrorCount: number;
+  pendingSrCount: number;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const hasActiveItem = group.items.some(
+    item => pathname === item.to || pathname.startsWith(item.to + '/'),
+  );
+  const effectiveOpen = open || hasActiveItem;
+
+  return (
+    <div style={{ marginBottom: 2 }}>
+      {/* Group header */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:       'flex',
+          alignItems:    'center',
+          gap:           6,
+          width:         '100%',
+          background:    'transparent',
+          border:        'none',
+          color:         hasActiveItem ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.45)',
+          cursor:        'pointer',
+          textAlign:     'left',
+          fontSize:      '0.68rem',
+          fontWeight:    700,
+          letterSpacing: '0.5px',
+          textTransform: 'uppercase',
+          padding:       '6px 10px 4px',
+          boxSizing:     'border-box',
+        }}
+      >
+        <i className={`bi ${group.icon}`} style={{ fontSize: '0.72rem', width: 13, flexShrink: 0, textAlign: 'center' }} />
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label}</span>
+        <i className={`bi bi-chevron-${effectiveOpen ? 'up' : 'down'}`} style={{ fontSize: '0.6rem', opacity: 0.5, flexShrink: 0 }} />
+      </button>
+
+      {/* Group items */}
+      {effectiveOpen && (
+        <div>
+          {group.items.map(item => (
+            <RoleGuard key={item.to} allowedRoles={item.roles}>
+              <NavItemLink
+                item={item}
+                onNavigate={onNavigate}
+                unreadBadge={
+                  item.to === '/notifications'    ? unreadCount
+                  : item.to === '/admin/errors'     ? openErrorCount
+                  : item.to === '/service-requests' ? pendingSrCount
+                  : undefined
+                }
+              />
+            </RoleGuard>
+          ))}
+
+          {/* Sub-nav: Guards */}
+          {group.id === 'operations' && pathname.startsWith('/guards') && (
+            <>
+              <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+                <NavLink
+                  to="/guards/dashboard"
+                  onClick={onNavigate}
+                  style={({ isActive }) => ({ ...SUB_ITEM_STYLE, color: isActive ? '#fff' : 'rgba(255,255,255,0.55)', background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent', fontWeight: isActive ? 600 : 400 })}
+                >
+                  <i className="bi bi-bar-chart-fill" style={SUB_ICON_STYLE} />
+                  <span>Overview</span>
+                </NavLink>
+              </RoleGuard>
+              <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                <NavLink
+                  to="/guards/import"
+                  onClick={onNavigate}
+                  style={({ isActive }) => ({ ...SUB_ITEM_STYLE, color: isActive ? '#fff' : 'rgba(255,255,255,0.55)', background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent', fontWeight: isActive ? 600 : 400 })}
+                >
+                  <i className="bi bi-file-earmark-arrow-up" style={SUB_ICON_STYLE} />
+                  <span>Bulk Import</span>
+                </NavLink>
+              </RoleGuard>
+            </>
+          )}
+
+          {/* Sub-nav: Attendance */}
+          {group.id === 'operations' && pathname.startsWith('/attendance') && (
+            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR] as UserRole[]}>
+              <NavLink
+                to="/attendance/dashboard"
+                onClick={onNavigate}
+                style={({ isActive }) => ({ ...SUB_ITEM_STYLE, color: isActive ? '#fff' : 'rgba(255,255,255,0.55)', background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent', fontWeight: isActive ? 600 : 400 })}
+              >
+                <i className="bi bi-bar-chart-fill" style={SUB_ICON_STYLE} />
+                <span>Dashboard</span>
+              </NavLink>
+              <NavLink
+                to="/attendance/deployment-sheet"
+                onClick={onNavigate}
+                style={({ isActive }) => ({ ...SUB_ITEM_STYLE, color: isActive ? '#fff' : 'rgba(255,255,255,0.55)', background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent', fontWeight: isActive ? 600 : 400 })}
+              >
+                <i className="bi bi-table" style={SUB_ICON_STYLE} />
+                <span>Deployment Sheet</span>
+              </NavLink>
+            </RoleGuard>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -127,6 +374,28 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
 
 function NavContent({ onNavigate }: NavContentProps) {
   const { user, logout } = useAuth();
+  const { pathname }     = useLocation();
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData?.count ?? 0;
+
+  const isErrorAdmin = !!user && (ERROR_ADMIN_ROLES as string[]).includes(user.role);
+  const { data: errorStats } = useSystemErrorStats(isErrorAdmin);
+  const openErrorCount = (errorStats?.openCritical ?? 0) + (errorStats?.openError ?? 0);
+
+  // Unanswered client requests, so staff see them without opening the page.
+  const canSeeServiceRequests = !!user && (SERVICE_REQUEST_ROLES as string[]).includes(user.role);
+  const { data: srSummary } = useQuery({
+    queryKey:        ['sr-summary'],
+    queryFn:         serviceRequestsApi.getSummary,
+    enabled:         canSeeServiceRequests,
+    refetchInterval: 2 * 60_000,
+  });
+  const pendingSrCount = srSummary?.pending ?? 0;
+
+  // A group starts open if the current path falls inside it
+  function isGroupActive(group: NavGroup) {
+    return group.items.some(item => pathname === item.to || pathname.startsWith(item.to + '/'));
+  }
 
   return (
     <div className="d-flex flex-column h-100">
@@ -146,11 +415,37 @@ function NavContent({ onNavigate }: NavContentProps) {
         paddingTop: 6,
         paddingBottom: 6,
       }}>
-        {NAV_ITEMS.map(item => (
+        {/* Standalone: Dashboard */}
+        {STANDALONE_ITEMS.map(item => (
           <RoleGuard key={item.to} allowedRoles={item.roles}>
             <NavItemLink item={item} onNavigate={onNavigate} />
           </RoleGuard>
         ))}
+
+        {/* Divider */}
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '6px 10px' }} />
+
+        {/* Grouped sections */}
+        {NAV_GROUPS.map(group => (
+          <NavGroupPanel
+            key={group.id}
+            group={group}
+            defaultOpen={isGroupActive(group)}
+            onNavigate={onNavigate}
+            pathname={pathname}
+            unreadCount={unreadCount}
+            openErrorCount={openErrorCount}
+            pendingSrCount={pendingSrCount}
+          />
+        ))}
+
+        {/* Divider */}
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '6px 10px' }} />
+
+        {/* Standalone: Notifications */}
+        <RoleGuard allowedRoles={NOTIFICATION_ITEM.roles}>
+          <NavItemLink item={NOTIFICATION_ITEM} onNavigate={onNavigate} unreadBadge={unreadCount} />
+        </RoleGuard>
       </div>
 
       {/* User footer */}
