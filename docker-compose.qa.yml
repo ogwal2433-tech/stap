@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Security360 — QA environment
+# STAP Security — QA environment
 #
 #   Web:      http://<host>:8000        (production stays on 80/443)
 #   Data:     qa_postgres_data volume   (production uses postgres_data)

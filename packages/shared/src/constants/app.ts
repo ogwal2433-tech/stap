@@ -1,7 +1,7 @@
 /**
  * Product and company identity.
  *
- * Two different things that both used to be spelled "STAP Security":
+ * Two different things that are spelled almost the same:
  *
  *  APP_NAME     the software itself — browser tab, sidebar, login screen.
  *  COMPANY_NAME the legal entity guards are employed by and clients contract
@@ -12,7 +12,7 @@
  * Renaming the product is a change here; renaming the business is not the same
  * decision and is deliberately a separate constant.
  */
-export const APP_NAME    = 'Security360';
+export const APP_NAME    = 'STAP Security';
 export const APP_TAGLINE = 'Guard Management Platform';
 
 /** The legal entity. Unchanged by the product rename. */

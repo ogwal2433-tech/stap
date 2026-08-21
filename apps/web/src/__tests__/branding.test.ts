@@ -15,7 +15,7 @@ const root = (p: string) => readFileSync(resolve(__dirname, '../..', p), 'utf8')
 
 describe('brand constants', () => {
   it('names the product and the company separately', () => {
-    expect(APP_NAME).toBe('Security360');
+    expect(APP_NAME).toBe('STAP Security');
     expect(COMPANY_NAME).toBe('STAP Security Ltd');
     expect(APP_NAME).not.toBe(COMPANY_NAME);
     expect(APP_TAGLINE.length).toBeGreaterThan(0);
@@ -47,10 +47,12 @@ describe('client- and guard-facing surfaces name the company', () => {
   });
 
   it('the client portal still says who is writing to them', () => {
-    // A notice "from Security360" would leave a client unsure who sent it.
+    // A notice that named the platform rather than the business would leave a
+    // client unsure who sent it. Product and company read almost the same again
+    // after the rename back, so this pins the wording the client sees rather
+    // than which constant produced it.
     const s = src('pages/portal/ClientPortalPage.tsx');
     expect(s).toContain('Notices from STAP Security');
-    expect(s).not.toContain('Notices from Security360');
   });
 
   it('letter content keeps the legal entity', () => {

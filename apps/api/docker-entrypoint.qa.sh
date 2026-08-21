@@ -9,7 +9,7 @@ set -e
 # from the real one and QA would stop testing what actually ships.
 
 echo "════════════════════════════════════════"
-echo "  Security360 — QA environment"
+echo "  STAP Security — QA environment"
 echo "════════════════════════════════════════"
 
 cd /app/apps/api
