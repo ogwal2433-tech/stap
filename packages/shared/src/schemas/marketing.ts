@@ -90,6 +90,14 @@ export const CreateProspectSchema = z.object({
   status:         z.enum(PROSPECT_STATUS_VALUES).default('NEW'),
   estimatedValue: z.coerce.number().int().min(0, 'Value cannot be negative').optional().nullable(),
   assignedToId:   z.string().min(1).optional().nullable(),
+  /**
+   * Only meaningful when the lead is created straight into LOST — recording a
+   * deal that was already dead on arrival. Unlike UpdateProspectSchema this
+   * does not insist on a reason, because the board offers no "+ Add" button on
+   * the Lost column; a lead reaching LOST through the pipeline goes via the
+   * update path, which does require one.
+   */
+  lostReason:     z.string().max(500).optional().nullable(),
 });
 export type CreateProspectInput = z.infer<typeof CreateProspectSchema>;
 

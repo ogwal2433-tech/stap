@@ -92,7 +92,7 @@ function reportType(raw: string): MarketingReportType {
 router.get(
   '/dashboard',
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await marketingService.getDashboard(req.user!.userId);
+    const data = await marketingService.getDashboard(req.user!.userId, req.user!.role);
     res.json({ success: true, data });
   }),
 );
@@ -107,6 +107,8 @@ router.get(
       dateFrom:     req.query.dateFrom     as string | undefined,
       dateTo:       req.query.dateTo       as string | undefined,
       assignedToId: req.query.assignedToId as string | undefined,
+      viewerRole:   req.user!.role,
+      viewerUserId: req.user!.userId,
     });
 
     const sheet = XLSX.utils.aoa_to_sheet([
@@ -137,6 +139,8 @@ router.get(
       dateFrom:     req.query.dateFrom     as string | undefined,
       dateTo:       req.query.dateTo       as string | undefined,
       assignedToId: req.query.assignedToId as string | undefined,
+      viewerRole:   req.user!.role,
+      viewerUserId: req.user!.userId,
     });
     res.json({ success: true, data });
   }),
@@ -153,6 +157,10 @@ router.get(
       search:       req.query.search       as string | undefined,
       page:         page(req),
       limit:        limit(req),
+      // A Marketing Officer sees only their own leads; for them assignedToId
+      // above is ignored rather than trusted.
+      viewerRole:   req.user!.role,
+      viewerUserId: req.user!.userId,
     });
     res.json({ success: true, ...result });
   }),
@@ -178,7 +186,10 @@ router.post(
 router.get(
   '/prospects/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await marketingService.getProspect(req.params.id);
+    const data = await marketingService.getProspect(req.params.id, {
+      role:   req.user!.role,
+      userId: req.user!.userId,
+    });
     res.json({ success: true, data });
   }),
 );

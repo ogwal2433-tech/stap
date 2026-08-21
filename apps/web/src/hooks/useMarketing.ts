@@ -5,7 +5,9 @@ import type {
   CreateTargetInput, MarketingReportType,
 } from '@stap/shared';
 
-export function useProspects(params?: { status?: string; search?: string; limit?: number }) {
+export function useProspects(params?: {
+  status?: string; search?: string; limit?: number; assignedToId?: string;
+}) {
   return useQuery({
     queryKey: ['marketing', 'prospects', params],
     queryFn:  () => marketingApi.listProspects({ limit: 200, ...params }),

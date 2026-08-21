@@ -19,10 +19,17 @@ function useStaffMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>)
   });
 }
 
-export function useStaffList(params: StaffListParams) {
+/**
+ * `enabled` lets a caller hold the request back when the viewer is not allowed
+ * to read the staff directory — /staff answers 403 to anyone outside
+ * Director / Assistant Manager / Administrator, so firing it regardless just
+ * buys a guaranteed failure.
+ */
+export function useStaffList(params: StaffListParams, enabled = true) {
   return useQuery({
     queryKey: ['staff', 'list', params],
     queryFn:  () => staffApi.list(params),
+    enabled,
   });
 }
 

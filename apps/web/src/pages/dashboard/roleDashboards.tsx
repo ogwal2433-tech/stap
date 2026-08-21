@@ -155,6 +155,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'totalProspects',   label: 'Total Prospects',   icon: '👥', colour: 'navy',  linkTo: '/marketing/prospects' },
       { key: 'inPipeline',       label: 'In Pipeline',       icon: '🔄', colour: 'teal',  linkTo: '/marketing/prospects' },
       { key: 'won',              label: 'Business Won',      icon: '✅', colour: 'green', linkTo: '/marketing/closed' },
+      { key: 'lost',             label: 'Lost Leads',        icon: '❌', colour: 'grey',  linkTo: '/marketing/prospects' },
       { key: 'conversionRate',   label: 'Conversion Rate',   icon: '📈', colour: 'navy',  linkTo: '/marketing/reports', format: v => `${v}%` },
       { key: 'activeBids',       label: 'Active Bids',       icon: '📋', colour: 'amber', linkTo: '/marketing/bids' },
       { key: 'upcomingExpiries', label: 'Expiring Contracts', icon: '📅', colour: alertWhenAny, linkTo: '/clients' },

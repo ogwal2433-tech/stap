@@ -11,10 +11,17 @@ import {
   useProspects, useProspect, useCreateProspect, useUpdateProspect, useConvertProspect,
 } from '../../hooks/useMarketing';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { useStaffList } from '../../hooks/useStaff';
 import { getApiErrorMessage } from '../../lib/api';
 
 const NAVY  = '#1B3A6B';
 const AMBER = '#F2AA20';
+const GREY  = '#6c757d';
+const GREEN = '#1E8449';
+
+/** Roles that see every officer's leads. Mirrors the API's visibility rule. */
+const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER'];
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -342,8 +349,23 @@ export default function ProspectsPage() {
   const [statusFilter, setStatus] = useState('');
   const [detailId, setDetailId]   = useState<string | null>(null);
   const [createIn, setCreateIn]   = useState<ProspectStatus | null>(null);
+  const [officerFilter, setOfficerFilter] = useState('');
 
-  const { data, isLoading } = useProspects();
+  const { user } = useAuth();
+  const isManager = MARKETING_MANAGER_ROLES.includes(user?.role ?? '');
+
+  // Officers to offer in the manager's filter. The API scopes the board by the
+  // caller's own role regardless, so this only narrows a view that is already
+  // allowed — it can never widen one.
+  const { data: staffData } = useStaffList(
+    { role: 'MARKETING', isActive: true, limit: 100 },
+    isManager,
+  );
+  const marketingOfficers = isManager ? (staffData?.data ?? []) : [];
+
+  const { data, isLoading } = useProspects(
+    isManager && officerFilter ? { assignedToId: officerFilter } : undefined,
+  );
   const prospects = data?.data ?? [];
 
   const filtered = useMemo(() => {
@@ -384,39 +406,122 @@ export default function ProspectsPage() {
         </div>
       </div>
 
+      {/* Whose leads am I looking at? Without this an officer cannot tell an
+          empty pipeline from a filtered one. */}
+      <div style={{
+        background:     isManager ? '#D6E0F0' : '#EBF5FB',
+        borderRadius:   '0.5rem',
+        padding:        '8px 14px',
+        marginBottom:   '14px',
+        fontSize:       '0.82rem',
+        borderLeft:     `3px solid ${NAVY}`,
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        flexWrap:       'wrap',
+        gap:            '8px',
+      }}>
+        <span>
+          {isManager ? (
+            <>👁️ <strong>Manager view</strong> — showing all leads from all officers</>
+          ) : (
+            <>👤 <strong>My leads</strong> — showing only leads assigned to you</>
+          )}
+        </span>
+
+        {isManager && marketingOfficers.length > 0 && (
+          <div className="d-flex align-items-center gap-2">
+            <span className="text-muted small">Filter by officer:</span>
+            <Form.Select
+              size="sm"
+              value={officerFilter}
+              onChange={(e) => setOfficerFilter(e.target.value)}
+              style={{ fontSize: '0.78rem', width: 'auto', minWidth: 160 }}
+            >
+              <option value="">All officers</option>
+              {marketingOfficers.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </Form.Select>
+          </div>
+        )}
+      </div>
+
       {isLoading ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : view === 'board' ? (
         <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px' }}>
-          {PIPELINE_ORDER.filter(s => s !== 'LOST').map((stage) => {
+          {PIPELINE_ORDER.map((stage) => {
             const stageProspects = filtered.filter(p => p.status === stage);
+            // Won and lost are where a deal stops moving. Both read as
+            // outcomes rather than next steps, and neither takes a new lead.
+            const isLost = stage === 'LOST';
+            const isWon  = stage === 'WON';
+            const accent = isLost ? GREY : isWon ? GREEN : AMBER;
+
             return (
-              <div key={stage} style={{ minWidth: 230, background: '#F2F4F7', borderRadius: '0.5rem', overflow: 'hidden' }}>
-                <div style={{ background: NAVY, padding: '8px 12px', display: 'flex',
-                              justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={stage} style={{
+                minWidth:     230,
+                background:   isLost ? '#F8F9FA' : isWon ? '#F0FFF4' : '#F2F4F7',
+                borderRadius: '0.5rem',
+                overflow:     'hidden',
+              }}>
+                <div style={{
+                  background:     isLost ? GREY : isWon ? GREEN : NAVY,
+                  padding:        '8px 12px',
+                  display:        'flex',
+                  justifyContent: 'space-between',
+                  alignItems:     'center',
+                }}>
                   <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>
                     {prospectStatusLabel(stage)}
                   </span>
-                  <Badge bg="light" text="dark" style={{ fontSize: '0.68rem' }}>{stageProspects.length}</Badge>
+                  <Badge
+                    bg={isLost ? 'secondary' : isWon ? 'success' : 'light'}
+                    text={!isLost && !isWon ? 'dark' : undefined}
+                    style={{ fontSize: '0.68rem' }}
+                  >
+                    {stageProspects.length}
+                  </Badge>
                 </div>
                 <div style={{ padding: '8px', minHeight: 200, maxHeight: 600, overflowY: 'auto' }}>
+                  {stageProspects.length === 0 && (
+                    <div style={{ textAlign: 'center', color: '#adb5bd', fontSize: '0.75rem', padding: '20px 8px' }}>
+                      {isLost ? 'No lost leads' : isWon ? 'No won leads' : 'None'}
+                    </div>
+                  )}
                   {stageProspects.map((p) => (
                     <div
                       key={p.id}
                       onClick={() => setDetailId(p.id)}
                       style={{
                         background: 'white', borderRadius: '0.375rem', padding: '10px 12px',
-                        marginBottom: '8px', cursor: 'pointer', borderLeft: `3px solid ${AMBER}`,
+                        marginBottom: '8px', cursor: 'pointer', borderLeft: `3px solid ${accent}`,
                         boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                        opacity: isLost ? 0.85 : 1,
                       }}
                     >
-                      <div className="fw-bold" style={{ fontSize: '0.85rem' }}>{p.companyName}</div>
+                      <div className="fw-bold" style={{
+                        fontSize:       '0.85rem',
+                        textDecoration: isLost ? 'line-through' : 'none',
+                        color:          isLost ? GREY : '#1A1A1A',
+                      }}>
+                        {p.companyName}
+                      </div>
                       {p.contactName && (
                         <div className="text-muted" style={{ fontSize: '0.75rem' }}>{p.contactName}</div>
                       )}
                       {p.estimatedValue != null && (
-                        <div style={{ fontSize: '0.72rem', color: '#1E8449', fontWeight: 600, marginTop: 4 }}>
+                        <div style={{
+                          fontSize: '0.72rem', fontWeight: 600, marginTop: 4,
+                          color: isLost ? '#adb5bd' : GREEN,
+                        }}>
                           {ugxCompact(p.estimatedValue)}/mo
+                        </div>
+                      )}
+                      {isLost && p.lostReason && (
+                        <div style={{ fontSize: '0.7rem', color: '#dc3545', marginTop: 4, fontStyle: 'italic' }}>
+                          ❌ {p.lostReason}
                         </div>
                       )}
                       <div style={{ fontSize: '0.68rem', color: '#adb5bd', marginTop: 4 }}>
@@ -424,13 +529,15 @@ export default function ProspectsPage() {
                       </div>
                     </div>
                   ))}
-                  <Button
-                    variant="outline-secondary" size="sm" className="w-100 mt-1"
-                    style={{ fontSize: '0.75rem', borderStyle: 'dashed' }}
-                    onClick={() => setCreateIn(stage)}
-                  >
-                    + Add
-                  </Button>
+                  {!isLost && !isWon && (
+                    <Button
+                      variant="outline-secondary" size="sm" className="w-100 mt-1"
+                      style={{ fontSize: '0.75rem', borderStyle: 'dashed' }}
+                      onClick={() => setCreateIn(stage)}
+                    >
+                      + Add
+                    </Button>
+                  )}
                 </div>
               </div>
             );

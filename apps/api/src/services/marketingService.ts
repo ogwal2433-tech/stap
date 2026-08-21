@@ -17,6 +17,38 @@ import type {
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Roles that see the whole pipeline. Everyone else on the marketing module —
+ * i.e. the Marketing Officer — sees only the leads assigned to them.
+ *
+ * The role list is duplicated from ROLES rather than imported as a group
+ * because this is a visibility rule, not a route guard: widening the route's
+ * MARKETING_ROLES must not silently widen who can read other officers' leads.
+ */
+const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER'];
+
+export function isMarketingManager(role: string): boolean {
+  return MARKETING_MANAGER_ROLES.includes(role);
+}
+
+/**
+ * The prospect `where` fragment a given viewer is allowed to see.
+ *
+ * A manager may narrow to one officer with `assignedToId`; an officer is
+ * pinned to their own leads and the parameter is ignored, so passing someone
+ * else's id in the query string cannot widen what comes back.
+ */
+function prospectScope(
+  viewerRole: string,
+  viewerUserId: string,
+  assignedToId?: string,
+): { assignedToId?: string } {
+  if (isMarketingManager(viewerRole)) {
+    return assignedToId ? { assignedToId } : {};
+  }
+  return { assignedToId: viewerUserId };
+}
+
 const PROSPECT_INCLUDE = {
   assignedToUser: { select: { id: true, name: true } },
   createdByUser:  { select: { id: true, name: true } },
@@ -184,7 +216,12 @@ class MarketingService {
           estimatedValue: data.estimatedValue ?? null,
           assignedToId:   data.assignedToId ?? createdById,
           createdById,
-          ...(status === 'WON' ? { wonDate: new Date() } : {}),
+          ...(status === 'WON'  ? { wonDate: new Date() } : {}),
+          // A lead created straight into LOST could not carry a reason at all:
+          // the field was absent from CreateProspectSchema and dropped here, so
+          // the board showed a dead deal with no explanation. The update path
+          // always kept it.
+          ...(status === 'LOST' ? { lostReason: data.lostReason?.trim() || null } : {}),
         },
         include: PROSPECT_INCLUDE,
       });
@@ -361,10 +398,11 @@ class MarketingService {
 
   async listProspects(query: {
     status?: string; assignedToId?: string; search?: string; page: number; limit: number;
+    viewerRole: string; viewerUserId: string;
   }): Promise<PaginatedResponse<ProspectResponse>> {
-    const where: any = {};
-    if (query.status)       where.status       = query.status;
-    if (query.assignedToId) where.assignedToId = query.assignedToId;
+    // Scope first, so nothing below can widen it.
+    const where: any = prospectScope(query.viewerRole, query.viewerUserId, query.assignedToId);
+    if (query.status) where.status = query.status;
     if (query.search) {
       where.OR = [
         { companyName: { contains: query.search, mode: 'insensitive' } },
@@ -393,7 +431,12 @@ class MarketingService {
     };
   }
 
-  async getProspect(id: string): Promise<ProspectWithHistory> {
+  /**
+   * Officers may open only their own leads. Without this the list filter is
+   * cosmetic — any id guessed or kept from an earlier assignment would still
+   * return the full record.
+   */
+  async getProspect(id: string, viewer?: { role: string; userId: string }): Promise<ProspectWithHistory> {
     const p = await prisma.prospectiveClient.findUnique({
       where:   { id },
       include: {
@@ -405,6 +448,11 @@ class MarketingService {
       },
     });
     if (!p) throw new NotFoundError('Prospect not found');
+    // Not found rather than forbidden: whether a lead exists is itself
+    // something another officer's view should not confirm.
+    if (viewer && !isMarketingManager(viewer.role) && p.assignedToId !== viewer.userId) {
+      throw new NotFoundError('Prospect not found');
+    }
     return { ...sanitiseProspect(p), statusHistory: p.statusHistory.map(sanitiseHistory) };
   }
 
@@ -635,13 +683,20 @@ class MarketingService {
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
 
-  async getDashboard(userId: string): Promise<MarketingDashboardData> {
+  /**
+   * `viewerRole` defaults to a manager view so existing callers keep the
+   * whole-pipeline figures; the officer view is opted into by passing the role.
+   */
+  async getDashboard(userId: string, viewerRole = 'DIRECTOR'): Promise<MarketingDashboardData> {
     const now       = new Date();
     const in60Days  = new Date(now.getTime() + 60 * DAY_MS);
     const thisMonth = periodKey(now, 'MONTHLY');
 
+    // An officer's pipeline figures must match the board they are looking at.
+    const scope = prospectScope(viewerRole, userId);
+
     const [byStatus, activeBids, upcomingExpiries, target, activity] = await Promise.all([
-      prisma.prospectiveClient.groupBy({ by: ['status'], _count: { id: true } }),
+      prisma.prospectiveClient.groupBy({ by: ['status'], where: scope, _count: { id: true } }),
       prisma.bid.count({ where: { status: 'SUBMITTED' } }),
       prisma.contract.count({
         where: { status: 'ACTIVE', contractEnd: { gte: now, lte: in60Days } },
@@ -651,6 +706,9 @@ class MarketingService {
         include: TARGET_INCLUDE,
       }),
       prisma.prospectStatusHistory.findMany({
+        // Scoped through the parent prospect — otherwise the activity feed
+        // names companies the officer is not allowed to see.
+        where:   { prospect: scope },
         orderBy: { createdAt: 'desc' },
         take:    10,
         include: {
@@ -699,7 +757,10 @@ class MarketingService {
 
   async generateReport(
     type: MarketingReportType,
-    filters: { dateFrom?: string; dateTo?: string; assignedToId?: string },
+    filters: {
+      dateFrom?: string; dateTo?: string; assignedToId?: string;
+      viewerRole?: string; viewerUserId?: string;
+    },
   ): Promise<MarketingReport> {
     // Query strings arrive unvalidated: '' and 'garbage' both reached new Date()
     // here, and an Invalid Date crashed either toISOString() below or the Prisma
@@ -707,7 +768,12 @@ class MarketingService {
     const from  = safeDate(filters.dateFrom);
     const to    = safeDate(filters.dateTo);
     const range = dateRangeFilter(from, to, true);
-    const officer = filters.assignedToId ? { assignedToId: filters.assignedToId } : {};
+    // Same rule as the board: a manager may narrow to one officer, an officer
+    // is pinned to themselves. Without this the export is a way around the
+    // list filter — download every lead as a spreadsheet.
+    const officer = filters.viewerRole && filters.viewerUserId
+      ? prospectScope(filters.viewerRole, filters.viewerUserId, filters.assignedToId)
+      : (filters.assignedToId ? { assignedToId: filters.assignedToId } : {});
 
     const base = {
       type,

@@ -47,7 +47,7 @@ class DashboardService {
       case ROLES.CONTROL_ROOM:
         return this.getControlRoomStats();
       case ROLES.MARKETING:
-        return this.getMarketingStats(userId);
+        return this.getMarketingStats(userId, role);
       case ROLES.CLIENT:
         return this.getClientStats(clientId);
       default:
@@ -301,10 +301,11 @@ class DashboardService {
 
   // ── Marketing — pipeline, bids and target progress ───────────────────────────
 
-  private async getMarketingStats(userId: string): Promise<DashboardData> {
+  private async getMarketingStats(userId: string, role: string): Promise<DashboardData> {
     // The marketing module owns these figures; reuse them rather than
-    // recomputing the pipeline in a second place that could disagree.
-    const m = await marketingService.getDashboard(userId);
+    // recomputing the pipeline in a second place that could disagree. The role
+    // goes with the id so an officer's dashboard counts only their own leads.
+    const m = await marketingService.getDashboard(userId, role);
 
     return {
       role:  'MARKETING',
@@ -312,6 +313,7 @@ class DashboardService {
         totalProspects:   m.stats.totalProspects,
         inPipeline:       m.stats.inPipeline,
         won:              m.stats.won,
+        lost:             m.stats.lost,
         activeBids:       m.stats.activeBids,
         upcomingExpiries: m.stats.upcomingExpiries,
         conversionRate:   m.stats.conversionRate,

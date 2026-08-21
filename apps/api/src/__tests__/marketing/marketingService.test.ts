@@ -395,6 +395,130 @@ describe('refreshTarget()', () => {
   });
 });
 
+// ── Lost reason ────────────────────────────────────────────────────────────────
+
+describe('createProspect() lost reason', () => {
+  it('persists the reason when a lead is created straight into LOST', async () => {
+    mp.$transaction.mockImplementation(async (fn: any) => fn(mp));
+    mp.prospectiveClient.create.mockResolvedValue(prospectRow({ status: 'LOST' }));
+    mp.prospectStatusHistory.create.mockResolvedValue({});
+
+    await marketingService.createProspect(
+      { companyName: 'Dead Deal Ltd', status: 'LOST', lostReason: 'Budget cut' } as any,
+      OFFICER,
+    );
+
+    // The schema demands a reason for a LOST prospect; dropping it here saved a
+    // record the board could never explain.
+    expect(mp.prospectiveClient.create.mock.calls[0][0].data)
+      .toMatchObject({ lostReason: 'Budget cut' });
+  });
+
+  it('leaves lostReason unset for a live lead', async () => {
+    mp.$transaction.mockImplementation(async (fn: any) => fn(mp));
+    mp.prospectiveClient.create.mockResolvedValue(prospectRow());
+    mp.prospectStatusHistory.create.mockResolvedValue({});
+
+    await marketingService.createProspect(
+      { companyName: 'Live Deal Ltd', status: 'NEW' } as any,
+      OFFICER,
+    );
+
+    expect(mp.prospectiveClient.create.mock.calls[0][0].data.lostReason).toBeUndefined();
+  });
+});
+
+// ── Lead visibility ────────────────────────────────────────────────────────────
+
+/**
+ * A Marketing Officer sees only the leads assigned to them; a Director or
+ * Assistant Manager sees the whole pipeline. These pin the `where` the service
+ * builds, because the rule is only worth as much as the query that enforces it
+ * — a filter dropped here leaks every officer's pipeline to every other one.
+ */
+describe('lead visibility', () => {
+  const MANAGER = 'user-director';
+
+  beforeEach(() => {
+    mp.prospectiveClient.findMany.mockResolvedValue([]);
+    mp.prospectiveClient.count.mockResolvedValue(0);
+  });
+
+  const whereFromList = () => mp.prospectiveClient.findMany.mock.calls[0][0].where;
+
+  it('pins an officer to their own leads', async () => {
+    await marketingService.listProspects({
+      page: 1, limit: 50, viewerRole: 'MARKETING', viewerUserId: OFFICER,
+    });
+    expect(whereFromList()).toMatchObject({ assignedToId: OFFICER });
+  });
+
+  it('ignores an assignedToId an officer supplies for someone else', async () => {
+    await marketingService.listProspects({
+      page: 1, limit: 50, assignedToId: 'someone-else',
+      viewerRole: 'MARKETING', viewerUserId: OFFICER,
+    });
+    // The query string must not be able to widen the officer's own view.
+    expect(whereFromList().assignedToId).toBe(OFFICER);
+  });
+
+  it('leaves a manager unfiltered', async () => {
+    await marketingService.listProspects({
+      page: 1, limit: 50, viewerRole: 'DIRECTOR', viewerUserId: MANAGER,
+    });
+    expect(whereFromList().assignedToId).toBeUndefined();
+  });
+
+  it('lets a manager narrow to one officer', async () => {
+    await marketingService.listProspects({
+      page: 1, limit: 50, assignedToId: OFFICER,
+      viewerRole: 'ASSISTANT_MANAGER', viewerUserId: MANAGER,
+    });
+    expect(whereFromList()).toMatchObject({ assignedToId: OFFICER });
+  });
+
+  it('keeps the status filter alongside the officer scope', async () => {
+    await marketingService.listProspects({
+      page: 1, limit: 50, status: 'LOST',
+      viewerRole: 'MARKETING', viewerUserId: OFFICER,
+    });
+    expect(whereFromList()).toMatchObject({ assignedToId: OFFICER, status: 'LOST' });
+  });
+
+  it('hides another officer\'s lead behind the same 404 as a missing one', async () => {
+    mp.prospectiveClient.findUnique.mockResolvedValue(
+      prospectRow({ assignedToId: 'another-officer', statusHistory: [] }),
+    );
+    await expect(
+      marketingService.getProspect('p1', { role: 'MARKETING', userId: OFFICER }),
+    ).rejects.toThrow('Prospect not found');
+  });
+
+  it('opens any lead for a manager', async () => {
+    mp.prospectiveClient.findUnique.mockResolvedValue(
+      prospectRow({ assignedToId: 'another-officer', statusHistory: [] }),
+    );
+    const p = await marketingService.getProspect('p1', { role: 'DIRECTOR', userId: MANAGER });
+    expect(p.companyName).toBe('Nakumatt Uganda Ltd');
+  });
+
+  it('scopes the officer dashboard to their own pipeline', async () => {
+    mp.prospectiveClient.groupBy.mockResolvedValue([]);
+    mp.bid.count.mockResolvedValue(0);
+    mp.contract.count.mockResolvedValue(0);
+    mp.marketingTarget.findFirst.mockResolvedValue(null);
+    mp.prospectStatusHistory.findMany.mockResolvedValue([]);
+
+    await marketingService.getDashboard(OFFICER, 'MARKETING');
+
+    expect(mp.prospectiveClient.groupBy.mock.calls[0][0].where)
+      .toMatchObject({ assignedToId: OFFICER });
+    // The activity feed names companies, so it is scoped through the parent.
+    expect(mp.prospectStatusHistory.findMany.mock.calls[0][0].where)
+      .toMatchObject({ prospect: { assignedToId: OFFICER } });
+  });
+});
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
 describe('getDashboard()', () => {
