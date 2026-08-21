@@ -75,6 +75,7 @@ class DashboardService {
       recentInvoices,
       guardsNeedingAttention,
       pendingServiceRequests,
+      activeStaff,
     ] = await Promise.all([
       prisma.guard.count(),
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
@@ -105,6 +106,9 @@ class DashboardService {
         take:    5,
       }),
       prisma.serviceRequest.count({ where: { status: 'PENDING' } }),
+      // Internal accounts only — guards and client portal logins are counted
+      // elsewhere and would drown the staff head-count.
+      prisma.user.count({ where: { status: 'ACTIVE', role: { notIn: ['GUARD', 'CLIENT'] } } }),
     ]);
 
     void today;
@@ -119,6 +123,7 @@ class DashboardService {
         openComplaints,
         pendingInvoices,
         pendingServiceRequests,
+        activeStaff,
         monthlyRevenue: revenueAgg._sum.totalAmount ?? 0,
       },
       feeds: {
@@ -456,9 +461,12 @@ class DashboardService {
   // ── Administrator — system health ────────────────────────────────────────────
 
   private async getAdminStats(): Promise<DashboardData> {
-    const [totalUsers, openSystemErrors, totalGuards, totalClients, recentErrors, recentUsers] =
+    const [totalUsers, activeStaff, openSystemErrors, totalGuards, totalClients, recentErrors, recentUsers] =
       await Promise.all([
         prisma.user.count(),
+        // Internal accounts only — guards and client portal logins are counted
+        // elsewhere and would drown the staff head-count.
+        prisma.user.count({ where: { status: 'ACTIVE', role: { notIn: ['GUARD', 'CLIENT'] } } }),
         prisma.systemError.count({ where: { status: { in: ['OPEN', 'INVESTIGATING'] } } }),
         prisma.guard.count(),
         prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
@@ -477,7 +485,7 @@ class DashboardService {
 
     return {
       role:  'ADMINISTRATOR',
-      stats: { totalUsers, openSystemErrors, totalGuards, totalClients },
+      stats: { totalUsers, activeStaff, openSystemErrors, totalGuards, totalClients },
       feeds: {
         recentErrors: recentErrors.map(e => ({
           id:        e.id,

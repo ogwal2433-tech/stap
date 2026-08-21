@@ -23,6 +23,7 @@ import { serviceRequestsRouter } from './serviceRequests';
 import { auditLogsRouter } from './auditLogs';
 import { gunsRouter } from './guns';
 import { marketingRouter } from './marketing';
+import { staffRouter } from './staff';
 
 const router: IRouter = Router();
 
@@ -34,6 +35,7 @@ router.use('/clients', clientsRouter);
 router.use('/attendance', attendanceRouter);
 router.use('/contracts', contractsRouter);
 router.use('/users', usersRouter);
+router.use('/staff', staffRouter);
 router.use('/finance', financeRouter);
 router.use('/requisitions', requisitionsRouter);
 router.use('/notifications', notificationsRouter);

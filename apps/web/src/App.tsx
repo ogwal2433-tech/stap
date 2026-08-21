@@ -48,6 +48,7 @@ const ZoneDetailPage               = lazy(() => import('@/pages/zones/ZoneDetail
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
 const SystemErrorsPage             = lazy(() => import('@/pages/admin/SystemErrorsPage'));
 const AuditLogPage                 = lazy(() => import('@/pages/admin/AuditLogPage'));
+const StaffPage                    = lazy(() => import('@/pages/staff/StaffPage'));
 
 const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
@@ -61,6 +62,8 @@ const REQUISITION_ROLES: UserRole[] = [
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING];
 const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
 const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+// Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.
+const STAFF_MANAGER_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const DEPLOYMENT_ROLES: UserRole[] = [
   ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR,
 ];
@@ -170,6 +173,9 @@ function App() {
               {/* Settings */}
               <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
+
+              {/* Staff directory */}
+              <Route path="/staff" element={<L><RoleGuard allowedRoles={STAFF_MANAGER_ROLES} fallback={<UnauthorisedPage />}><StaffPage /></RoleGuard></L>} />
 
               {/* Admin */}
               <Route path="/admin/errors" element={<L><RoleGuard allowedRoles={ERROR_ADMIN_ROLES} fallback={<UnauthorisedPage />}><SystemErrorsPage /></RoleGuard></L>} />

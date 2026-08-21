@@ -3,7 +3,7 @@ import prisma from '../db/prisma';
 import { redisConnection } from '../lib/redis';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { QueueService } from '../jobs/QueueService';
-import { AccountLockedError, UnauthorisedError } from '../errors/AppError';
+import { AccountLockedError, UnauthorisedError, AppError } from '../errors/AppError';
 import type { LoginResponse } from '@stap/shared';
 import type { UserRole } from '@stap/shared';
 
@@ -80,6 +80,24 @@ export class AuthService {
       return null;
     }
 
+    // Deactivated accounts are refused only once the password has checked out.
+    // Refusing earlier would tell anyone typing an email whether it belongs to
+    // a real — if suspended — member of staff.
+    if (user.status !== 'ACTIVE') {
+      await QueueService.logAudit({
+        userId: user.id,
+        action: 'LOGIN_DENIED_INACTIVE',
+        entity: 'auth',
+        entityId: user.id,
+        ipAddress,
+        userAgent,
+      });
+      throw new AppError(
+        'Your account has been deactivated. Please contact your administrator.',
+        403,
+      );
+    }
+
     // Successful login — reset failed attempts
     await redisConnection.del(failedKey(user.id));
 
@@ -94,6 +112,17 @@ export class AuthService {
 
     // Store refresh token in Redis (single-session enforcement)
     await redisConnection.setex(refreshKey(user.id), REFRESH_TOKEN_TTL, refreshToken);
+
+    // Drives the "Last Login" column in the staff directory. A write failure
+    // here must not cost the user their session — the tokens are already issued.
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data:  { lastLoginAt: new Date() },
+      });
+    } catch (err) {
+      console.error('⚠️  Failed to record lastLoginAt for', user.id, err);
+    }
 
     await QueueService.logAudit({
       userId: user.id,

@@ -57,6 +57,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'activeClients',   label: 'Active Clients',   icon: '🏢', colour: 'teal',  linkTo: '/clients' },
       { key: 'openComplaints',  label: 'Open Complaints',  icon: '📋', colour: alertWhenAny, linkTo: '/complaints' },
       { key: 'pendingServiceRequests', label: 'Service Requests', icon: '🛠️', colour: alertWhenAny, linkTo: '/service-requests' },
+      { key: 'activeStaff',     label: 'Active Staff',     icon: '👥', colour: 'teal',  linkTo: '/staff' },
       { key: 'pendingInvoices', label: 'Unpaid Invoices',  icon: '📄', colour: alertWhenAny, linkTo: '/finance' },
       { key: 'monthlyRevenue',  label: 'Revenue This Month', icon: '💰', colour: 'green', linkTo: '/finance', format: ugxCompact },
     ],
@@ -120,12 +121,13 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     stats: [
       { key: 'openSystemErrors', label: 'Open System Errors', icon: '🐛', colour: dangerWhenAny, linkTo: '/admin/errors' },
       { key: 'totalUsers',       label: 'User Accounts',      icon: '👤', colour: 'navy', linkTo: '/settings' },
+      { key: 'activeStaff',      label: 'Active Staff',       icon: '👥', colour: 'teal', linkTo: '/staff' },
       { key: 'totalGuards',      label: 'Total Guards',       icon: '👮', colour: 'navy', linkTo: '/guards' },
       { key: 'totalClients',     label: 'Active Clients',     icon: '🏢', colour: 'teal', linkTo: '/clients' },
     ],
     feeds: [
       { key: 'recentErrors', title: 'Recent System Errors', icon: '🐛', emptyText: 'No open errors', linkTo: '/admin/errors' },
-      { key: 'recentUsers',  title: 'Recently Added Users', icon: '👤', emptyText: 'No users yet', linkTo: '/settings' },
+      { key: 'recentUsers',  title: 'Recently Added Users', icon: '👤', emptyText: 'No users yet', linkTo: '/staff' },
     ],
   },
 

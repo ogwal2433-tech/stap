@@ -21,5 +21,6 @@ export * from './schemas/auditLog';
 export * from './constants/app';
 export * from './schemas/systemError';
 export * from './schemas/dashboard';
+export * from './schemas/staff';
 export * from './types/api';
 export * from './types/roles';

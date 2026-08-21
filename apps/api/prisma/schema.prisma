@@ -124,36 +124,53 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  // ── Staff management (see /staff) ────────────────────────────────────────────
+  // `status` remains the single source of truth for whether an account may log
+  // in — the fields below record the human context around a deactivation and
+  // the profile detail the staff directory shows.
+  department         String?
+  jobTitle           String?
+  avatarUrl          String?
+  emergencyContact   String?
+  emergencyPhone     String?
+  lastLoginAt        DateTime?
+  deactivatedAt      DateTime?
+  deactivatedById    String?
+  deactivationReason String?
+
+  deactivatedBy    User?  @relation("UserDeactivator", fields: [deactivatedById], references: [id], onDelete: SetNull)
+  deactivatedUsers User[] @relation("UserDeactivator")
+
   // ── 2FA fields (setup UI in Sprint 3 / TST-003) ──────────────────────────────
   twoFactorEnabled     Boolean  @default(false)
   twoFactorSecret      String? // Encrypted TOTP secret — null until user sets up 2FA
   twoFactorBackupCodes String[] // Array of hashed one-time backup codes
 
   // Back-relations
-  guard                   Guard?                 @relation("GuardUser")
-  uploadedDocuments       GuardDocument[]        @relation("DocumentUploader")
-  supervisedHistory       DeploymentHistory[]    @relation("DeploymentSupervisor")
-  disciplinaryActions     DisciplinaryRecord[]   @relation("DisciplinaryOfficer")
-  deployments             Deployment[]           @relation("DeploymentSupervisor")
-  checkins                SupervisorCheckin[]    @relation("CheckinSupervisor")
-  complaintsAssigned      ClientComplaint[]      @relation("ComplaintAssignedTo")
-  complaintsReceived      ClientComplaint[]      @relation("ComplaintReceivedBy")
-  complaintActions        ClientComplaint[]      @relation("ComplaintActionBy")
-  noticesSent             ClientComplaint[]      @relation("ComplaintSender")
-  noticesAcknowledged     ClientComplaint[]      @relation("ComplaintAcknowledger")
-  serviceRequestsRaised   ServiceRequest[]       @relation("SRCreator")
-  serviceRequestsAnswered ServiceRequest[]       @relation("SRResponder")
-  requestedRequisitions   Requisition[]          @relation("RequisitionRequestedBy")
-  hrApprovedRequisitions  Requisition[]          @relation("RequisitionHRApprover")
-  dirApprovedRequisitions Requisition[]          @relation("RequisitionDirectorApprover")
-  assignedRequisitions    Requisition[]          @relation("RequisitionAssignedTo")
+  guard                   Guard?               @relation("GuardUser")
+  uploadedDocuments       GuardDocument[]      @relation("DocumentUploader")
+  supervisedHistory       DeploymentHistory[]  @relation("DeploymentSupervisor")
+  disciplinaryActions     DisciplinaryRecord[] @relation("DisciplinaryOfficer")
+  deployments             Deployment[]         @relation("DeploymentSupervisor")
+  checkins                SupervisorCheckin[]  @relation("CheckinSupervisor")
+  complaintsAssigned      ClientComplaint[]    @relation("ComplaintAssignedTo")
+  complaintsReceived      ClientComplaint[]    @relation("ComplaintReceivedBy")
+  complaintActions        ClientComplaint[]    @relation("ComplaintActionBy")
+  noticesSent             ClientComplaint[]    @relation("ComplaintSender")
+  noticesAcknowledged     ClientComplaint[]    @relation("ComplaintAcknowledger")
+  serviceRequestsRaised   ServiceRequest[]     @relation("SRCreator")
+  serviceRequestsAnswered ServiceRequest[]     @relation("SRResponder")
+  requestedRequisitions   Requisition[]        @relation("RequisitionRequestedBy")
+  hrApprovedRequisitions  Requisition[]        @relation("RequisitionHRApprover")
+  dirApprovedRequisitions Requisition[]        @relation("RequisitionDirectorApprover")
+  assignedRequisitions    Requisition[]        @relation("RequisitionAssignedTo")
   auditLogs               AuditLog[]
-  reportedIncidents       Incident[]             @relation("IncidentReporter")
+  reportedIncidents       Incident[]           @relation("IncidentReporter")
   notifications           Notification[]
-  assignedApplicants      Applicant[]            @relation("ApplicantAssignee")
-  trainerSessions         TrainingSession[]      @relation("TrainerSessions")
-  gunsRegistered          Gun[]                  @relation("GunRegistrar")
-  gunMovementsRecorded    GunMovement[]          @relation("GunMovementRecorder")
+  assignedApplicants      Applicant[]          @relation("ApplicantAssignee")
+  trainerSessions         TrainingSession[]    @relation("TrainerSessions")
+  gunsRegistered          Gun[]                @relation("GunRegistrar")
+  gunMovementsRecorded    GunMovement[]        @relation("GunMovementRecorder")
 
   prospectsAssigned       ProspectiveClient[]     @relation("ProspectAssignee")
   prospectsCreated        ProspectiveClient[]     @relation("ProspectCreator")
@@ -163,27 +180,29 @@ model User {
   bidsCreated             Bid[]                   @relation("BidCreator")
   marketingTargets        MarketingTarget[]       @relation("TargetAssignee")
   marketingTargetsCreated MarketingTarget[]       @relation("TargetCreator")
-  approvedLeaves          LeaveRequest[]         @relation("LeaveApprover")
-  recordedInventory       InventoryTransaction[] @relation("InventoryRecorder")
-  authorisedTransfers     GuardTransfer[]        @relation("TransferAuthoriser")
-  supervisedZones         Zone[]                 @relation("ZoneSupervisor")
-  alternateZones          Zone[]                 @relation("ZoneAlternate")
-  generatedLetters        GeneratedLetter[]      @relation("LetterGenerator")
-  approvedLetters         GeneratedLetter[]      @relation("LetterApprover")
-  resolvedErrors          SystemError[]          @relation("ErrorResolver")
-  guardPromotions         GuardPromotion[]       @relation("GuardPromotedBy")
+  approvedLeaves          LeaveRequest[]          @relation("LeaveApprover")
+  recordedInventory       InventoryTransaction[]  @relation("InventoryRecorder")
+  authorisedTransfers     GuardTransfer[]         @relation("TransferAuthoriser")
+  supervisedZones         Zone[]                  @relation("ZoneSupervisor")
+  alternateZones          Zone[]                  @relation("ZoneAlternate")
+  generatedLetters        GeneratedLetter[]       @relation("LetterGenerator")
+  approvedLetters         GeneratedLetter[]       @relation("LetterApprover")
+  resolvedErrors          SystemError[]           @relation("ErrorResolver")
+  guardPromotions         GuardPromotion[]        @relation("GuardPromotedBy")
 
   submittedAccountability RequisitionAccountability[] @relation("AccountabilitySubmitter")
   adminAccountability     RequisitionAccountability[] @relation("AccountabilityAdmin")
   hrAccountability        RequisitionAccountability[] @relation("AccountabilityHR")
   directorAccountability  RequisitionAccountability[] @relation("AccountabilityDirector")
-  fundDispatches          FundDispatch[]             @relation("FundDispatchedBy")
+  fundDispatches          FundDispatch[]              @relation("FundDispatchedBy")
 
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
   // the same clientId belong to the same company (one company can have many logins).
   clientId String?
   client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
+
+  @@index([role, status])
 }
 
 model Guard {
@@ -313,9 +332,9 @@ model Guard {
 /// referenced so the history stays truthful if a GuardRank is later renamed,
 /// deleted, or has its default salary changed.
 model GuardPromotion {
-  id       String @id @default(cuid())
-  guardId  String
-  guard    Guard  @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  guardId String
+  guard   Guard  @relation(fields: [guardId], references: [id], onDelete: Cascade)
 
   fromRank        String
   toRank          String
@@ -457,7 +476,7 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           User[]            @relation("ClientPortalUser")
+  users           User[]                @relation("ClientPortalUser")
   sites           Site[]
   contracts       Contract[]
   complaints      ClientComplaint[]
@@ -529,12 +548,12 @@ model ProspectiveClient {
   estimatedValue Int?
 
   /// Required when status becomes LOST.
-  lostReason String?
+  lostReason        String?
   /// Set when status becomes WON.
-  wonDate    DateTime?
+  wonDate           DateTime?
   /// Set once a won prospect has been turned into a real Client.
-  convertedClientId String? @unique
-  convertedClient   Client? @relation("ProspectConversion", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedClientId String?   @unique
+  convertedClient   Client?   @relation("ProspectConversion", fields: [convertedClientId], references: [id], onDelete: SetNull)
 
   assignedToId   String?
   assignedToUser User?   @relation("ProspectAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -571,20 +590,20 @@ model ProspectStatusHistory {
 
 /// A tender, RFP or quotation the company is bidding for.
 model Bid {
-  id           String    @id @default(cuid())
-  organization String
+  id             String    @id @default(cuid())
+  organization   String
   /// TENDER | RFP | RFQ | DIRECT | OTHER
-  bidType      String
+  bidType        String
   /// Estimated contract value in UGX.
-  amount       Int?
+  amount         Int?
   submissionDate DateTime?
   closingDate    DateTime?
   /// DRAFT | SUBMITTED | WON | LOST | CANCELLED
-  status       String    @default("DRAFT")
-  description  String?   @db.Text
-  requirements String?   @db.Text
-  notes        String?
-  lostReason   String?
+  status         String    @default("DRAFT")
+  description    String?   @db.Text
+  requirements   String?   @db.Text
+  notes          String?
+  lostReason     String?
 
   submittedById   String?
   submittedByUser User?   @relation("BidSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
@@ -623,7 +642,7 @@ model MarketingTarget {
 
   notes         String?
   createdById   String
-  createdByUser User   @relation("TargetCreator", fields: [createdById], references: [id])
+  createdByUser User    @relation("TargetCreator", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -653,10 +672,10 @@ model Gun {
   status    String @default("IN_ARMOURY")
 
   /// Null whenever the gun is in the armoury.
-  currentSiteId String?
-  currentSite   Site?   @relation("GunCurrentSite", fields: [currentSiteId], references: [id], onDelete: SetNull)
+  currentSiteId  String?
+  currentSite    Site?   @relation("GunCurrentSite", fields: [currentSiteId], references: [id], onDelete: SetNull)
   /// Rounds currently held with the gun.
-  currentBullets Int    @default(0)
+  currentBullets Int     @default(0)
 
   notes String?
 
@@ -689,7 +708,7 @@ model GunMovement {
   fromSiteId String?
   /// Null when the gun is going back to the armoury.
   toSiteId   String?
-  site       Site?  @relation("GunMovementSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+  site       Site?   @relation("GunMovementSite", fields: [toSiteId], references: [id], onDelete: SetNull)
 
   /// Rounds handed over with the gun — issued outbound, returned inbound.
   bullets Int @default(0)
@@ -802,14 +821,14 @@ model ClientComplaint {
   acknowledgedByUser User?     @relation("ComplaintAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
   clientResponse     String?   @db.Text
 
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  client           Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  site             Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  receivedByUser   User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
-  assignedToUser   User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  actionTakenByUser User? @relation("ComplaintActionBy", fields: [actionTakenById], references: [id], onDelete: SetNull)
+  client            Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site              Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  receivedByUser    User?  @relation("ComplaintReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  assignedToUser    User?  @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  actionTakenByUser User?  @relation("ComplaintActionBy", fields: [actionTakenById], references: [id], onDelete: SetNull)
 
   @@index([clientId, direction, status])
 }
@@ -965,35 +984,35 @@ model SystemError {
 // ─── Finance Models ────────────────────────────────────────────────────────────
 
 model Invoice {
-  id             String    @id @default(cuid())
-  clientId       String
-  client         Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  contractId     String?
-  contract       Contract? @relation(fields: [contractId], references: [id])
-  invoiceNumber  String    @unique
-  periodStart    DateTime
-  periodEnd      DateTime
-  guardsDeployed Int
-  ratePerGuard   Int
-  subtotal       Int
-  taxAmount      Int       @default(0)
-  totalAmount    Int
+  id                 String    @id @default(cuid())
+  clientId           String
+  client             Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractId         String?
+  contract           Contract? @relation(fields: [contractId], references: [id])
+  invoiceNumber      String    @unique
+  periodStart        DateTime
+  periodEnd          DateTime
+  guardsDeployed     Int
+  ratePerGuard       Int
+  subtotal           Int
+  taxAmount          Int       @default(0)
+  totalAmount        Int
   /// Sum of every payment recorded against this invoice, kept in step whenever
   /// one is recorded so a partial payment is visible without re-aggregating.
-  paidAmount     Int       @default(0)
+  paidAmount         Int       @default(0)
   /// totalAmount - paidAmount, floored at 0.
-  outstandingBalance Int   @default(0)
-  status         String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID
-  pdfPath        String?
-  yoPaymentRef   String?
-  dueDate        DateTime
-  paidAt         DateTime?
-  emailSentAt    DateTime?
-  emailSentTo    String?
-  autoGenerated  Boolean   @default(false)
-  createdBy      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  outstandingBalance Int       @default(0)
+  status             String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID
+  pdfPath            String?
+  yoPaymentRef       String?
+  dueDate            DateTime
+  paidAt             DateTime?
+  emailSentAt        DateTime?
+  emailSentTo        String?
+  autoGenerated      Boolean   @default(false)
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   payments        Payment[]
   invoicePayments InvoicePayment[]
@@ -1289,10 +1308,10 @@ model AccountabilityItem {
   itemNumber      Int
   requisitionItem String
   category        String
-  quantity        Int @default(1)
-  rate            Int @default(0)
+  quantity        Int    @default(1)
+  rate            Int    @default(0)
   /// quantity * rate, stored so the submitted figure survives later edits.
-  totalCost       Int @default(0)
+  totalCost       Int    @default(0)
 
   /// Null until that reviewer has entered a figure.
   adminAmount    Int?
@@ -1623,20 +1642,20 @@ model InvoiceLineItem {
 }
 
 model ServiceRequest {
-  id          String    @id @default(cuid())
+  id          String  @id @default(cuid())
   clientId    String
-  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client      Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   siteId      String?
-  site        Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  type        String    @default("OTHER") // SITE_ADDITION | GUARD_CHANGE | BILLING_QUERY | SCHEDULE_CHANGE | MORE_GUARDS | FEWER_GUARDS | EQUIPMENT | OTHER
+  site        Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  type        String  @default("OTHER") // SITE_ADDITION | GUARD_CHANGE | BILLING_QUERY | SCHEDULE_CHANGE | MORE_GUARDS | FEWER_GUARDS | EQUIPMENT | OTHER
   subject     String
   description String
   quantity    Int?
   /// PENDING | IN_PROGRESS | COMPLETED | REJECTED.
   /// REJECTED means STAP declined the request — distinct from the client
   /// withdrawing it, which nothing can currently do.
-  status      String    @default("PENDING")
-  priority    String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  status      String  @default("PENDING")
+  priority    String  @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
 
   /// What STAP told the client. Shown in their portal, and required before a
   /// request can be completed or rejected so no request closes unexplained.
@@ -1651,8 +1670,8 @@ model ServiceRequest {
   createdBy     String
   createdByUser User   @relation("SRCreator", fields: [createdBy], references: [id], onDelete: Restrict)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
   @@index([clientId, status])
