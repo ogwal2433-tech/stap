@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx src/db/seed.ts",
+    "db:set-password": "tsx src/db/setPassword.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
