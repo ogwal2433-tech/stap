@@ -12,13 +12,46 @@ import { UnauthorisedError } from '../errors/AppError';
 const router: IRouter = Router();
 
 const REFRESH_COOKIE = 'refreshToken';
-const REFRESH_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
-  path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
+const REFRESH_COOKIE_PATH = '/';
+
+/**
+ * Whether the refresh cookie may carry the Secure attribute.
+ *
+ * A Secure cookie is discarded by the browser over plain HTTP — silently, with
+ * no error anywhere. Keying this off NODE_ENV assumed production always means
+ * HTTPS, which it does not: nginx serves this app over plain HTTP on the bare
+ * IP alongside the TLS host. On that address the refresh cookie was never
+ * stored, and since the access token lives only in memory and every page load
+ * bootstraps through /auth/refresh, the first reload after signing in landed
+ * back on the login screen.
+ *
+ * Derived from the scheme the app is actually served on, with COOKIE_SECURE as
+ * an explicit override for setups that terminate TLS somewhere this cannot see.
+ */
+function useSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE) return process.env.COOKIE_SECURE === 'true';
+  return (process.env.FRONTEND_URL ?? '').startsWith('https://');
+}
+
+/**
+ * SameSite=Lax, not None.
+ *
+ * None was pinned to production and is the stricter requirement of the two: it
+ * is only honoured alongside Secure, so it made HTTPS mandatory for a cookie
+ * that did not need cross-site delivery in the first place. The frontend calls
+ * the API on a relative /api/v1 path through the same nginx, so every request
+ * carrying this cookie is same-origin. Lax delivers on those and withholds it
+ * from cross-site POSTs, which is the CSRF protection None was giving up.
+ */
+function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure:   useSecureCookie(),
+    sameSite: 'lax' as const,
+    path:     REFRESH_COOKIE_PATH,
+    maxAge:   7 * 24 * 60 * 60 * 1000,
+  };
+}
 
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -93,7 +126,7 @@ router.post(
       return;
     }
 
-    res.cookie(REFRESH_COOKIE, result.refreshToken, REFRESH_COOKIE_OPTIONS);
+    res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions());
 
     res.status(200).json({
       success: true,
@@ -121,7 +154,7 @@ router.post(
     const { accessToken, refreshToken } = await authService.refresh(token, ip, ua);
 
     // Rotate cookie
-    res.cookie(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTIONS);
+    res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
 
     res.status(200).json({
       success: true,
@@ -137,7 +170,7 @@ router.post(
   asyncHandler(async (req, res) => {
     await authService.logout(req.user!.userId, req.ip, req.headers['user-agent']);
 
-    res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_OPTIONS.path });
+    res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
 
     res.status(200).json({ success: true });
   }),
@@ -168,5 +201,8 @@ router.get(
     res.status(200).json({ success: true, data: user });
   }),
 );
+
+/** Exposed for tests only — see auth/loginErrors.test.ts. */
+export const __testRefreshCookieOptions = refreshCookieOptions;
 
 export default router;

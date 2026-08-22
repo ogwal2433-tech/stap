@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { loginFailureMessage, verboseAuthErrors } from '../../services/authService';
 
 /**
@@ -65,5 +65,54 @@ describe('loginFailureMessage()', () => {
     // Byte-identical, not merely similar: a difference in wording, casing or
     // even trailing whitespace is enough to enumerate accounts with.
     expect(unknown).toBe(wrong);
+  });
+});
+
+/**
+ * Refresh-cookie flags.
+ *
+ * A Secure cookie is dropped by the browser over plain HTTP with no error
+ * raised anywhere, and the access token is memory-only — every page load
+ * restores the session through /auth/refresh. So a wrongly-Secure cookie does
+ * not degrade gracefully: it logs the user out on their first reload, which
+ * looks exactly like a failed login.
+ */
+describe('refresh cookie flags', () => {
+  const load = async () => {
+    vi.resetModules();
+    return import('../../routes/auth');
+  };
+
+  it('is not Secure when the app is served over plain HTTP', async () => {
+    process.env.NODE_ENV     = 'production';
+    process.env.FRONTEND_URL = 'http://185.194.218.245';
+    delete process.env.COOKIE_SECURE;
+    const { __testRefreshCookieOptions } = await load();
+    expect(__testRefreshCookieOptions().secure).toBe(false);
+  });
+
+  it('is Secure when the app is served over HTTPS', async () => {
+    process.env.NODE_ENV     = 'production';
+    process.env.FRONTEND_URL = 'https://stap.stapsecurity.com';
+    delete process.env.COOKIE_SECURE;
+    const { __testRefreshCookieOptions } = await load();
+    expect(__testRefreshCookieOptions().secure).toBe(true);
+  });
+
+  it('honours COOKIE_SECURE when TLS terminates upstream', async () => {
+    process.env.NODE_ENV      = 'production';
+    process.env.FRONTEND_URL  = 'http://internal-lb';
+    process.env.COOKIE_SECURE = 'true';
+    const { __testRefreshCookieOptions } = await load();
+    expect(__testRefreshCookieOptions().secure).toBe(true);
+  });
+
+  it('uses SameSite=Lax, which does not require Secure', async () => {
+    process.env.FRONTEND_URL = 'http://localhost:5173';
+    delete process.env.COOKIE_SECURE;
+    const { __testRefreshCookieOptions } = await load();
+    // None is only honoured alongside Secure, and the API is same-origin with
+    // the frontend, so Lax delivers on every request that needs the cookie.
+    expect(__testRefreshCookieOptions().sameSite).toBe('lax');
   });
 });
