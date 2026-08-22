@@ -52,6 +52,15 @@ services:
       COOKIE_SECRET: ${COOKIE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
       SEED_PASSWORD: ${SEED_PASSWORD}
+      # Mail. The worker sends the queued messages, so it needs these too — a
+      # password containing $ must be written $$ in the .env compose reads,
+      # or interpolation eats it before the container ever sees it.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
       XCEL_API_KEY: ${XCEL_API_KEY}
       XCEL_MERCHANT_ID: ${XCEL_MERCHANT_ID}
       XCEL_BASE_URL: ${XCEL_BASE_URL}
@@ -87,6 +96,15 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      # This container drains the email queue, so it is the one that actually
+      # needs the mail credentials. Same $$-escaping caveat as the api service.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
     volumes:
       - uploads:/app/public/uploads
     networks:
