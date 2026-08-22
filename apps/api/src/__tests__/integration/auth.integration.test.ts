@@ -51,7 +51,9 @@ describe('POST /api/v1/auth/login', () => {
       .post('/api/v1/auth/login')
       .send({ email: 'it.director@stap.test', password: 'wrongpassword' });
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Invalid credentials');
+    // Tests run outside production, so the detailed message is the one in play.
+    // The generic-mode wording is pinned in auth/loginErrors.test.ts.
+    expect(res.body.error).toBe('Incorrect password. Please try again.');
   });
 
   it('returns 401 for non-existent email', async () => {
@@ -59,6 +61,7 @@ describe('POST /api/v1/auth/login', () => {
       .post('/api/v1/auth/login')
       .send({ email: 'nobody@stap.test', password: 'pass' });
     expect(res.status).toBe(401);
+    expect(res.body.error).toBe('No account found with this email address.');
   });
 
   it('returns 400 for missing password', async () => {

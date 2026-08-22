@@ -1,7 +1,7 @@
 import { Router, type IRouter } from 'express';
 import rateLimit from 'express-rate-limit';
 import { LoginSchema, ROLES } from '@stap/shared';
-import { authService } from '../services/authService';
+import { authService, loginFailureMessage } from '../services/authService';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -84,8 +84,12 @@ router.post(
 
     const result = await authService.login(email, password, ip, ua);
 
-    if (!result) {
-      res.status(401).json({ success: false, error: 'Invalid credentials' });
+    // A string result is a refusal reason rather than a session. How much of it
+    // the caller is told is decided in loginFailureMessage() — detailed in
+    // development, a single generic answer in production, because telling an
+    // unknown email apart from a wrong password enumerates accounts.
+    if (typeof result === 'string') {
+      res.status(401).json({ success: false, error: loginFailureMessage(result) });
       return;
     }
 

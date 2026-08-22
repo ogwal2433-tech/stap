@@ -54,8 +54,13 @@ export default function LoginPage() {
       if (axiosErr.response?.status === 423) {
         setIsLocked(true);
       } else {
+        // Fall back to the axios message so a request that never reached the
+        // API ("Network Error", a timeout) says so, rather than being reported
+        // as a rejected login.
         setApiError(
-          axiosErr.response?.data?.error ?? 'Login failed. Please try again.',
+          axiosErr.response?.data?.error
+          ?? axiosErr.message
+          ?? 'Login failed. Please try again.',
         );
       }
     }
@@ -136,7 +141,7 @@ export default function LoginPage() {
               )}
               {apiError && !isLocked && (
                 <Alert variant="danger" className="py-2 small">
-                  {apiError}
+                  ⚠️ {apiError}
                 </Alert>
               )}
 

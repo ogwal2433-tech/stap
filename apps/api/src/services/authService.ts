@@ -38,13 +38,45 @@ interface LoginResult {
   user: LoginResponse['user'];
 }
 
+/**
+ * Why a login was refused, so the route can say something specific.
+ *
+ * EMAIL_NOT_FOUND and WRONG_PASSWORD are answered before the caller has proved
+ * anything, so telling them apart tells an unauthenticated visitor which email
+ * addresses have accounts here — a list worth having if you intend to phish or
+ * credential-stuff them. They are distinguished only when verbose auth errors
+ * are switched on; otherwise both read the same. Everything else is decided
+ * after the password checked out, and can be as specific as it likes.
+ */
+export type LoginFailure = 'EMAIL_NOT_FOUND' | 'WRONG_PASSWORD';
+
+/**
+ * Detailed pre-authentication login errors.
+ *
+ * On in development, off in production, and settable either way with
+ * AUTH_VERBOSE_ERRORS. Turning it on in production is a deliberate trade of
+ * user enumeration for easier support, not a default.
+ */
+export const verboseAuthErrors = (): boolean =>
+  process.env.AUTH_VERBOSE_ERRORS
+    ? process.env.AUTH_VERBOSE_ERRORS === 'true'
+    : process.env.NODE_ENV !== 'production';
+
+/** What the client is told for each pre-auth failure. */
+export function loginFailureMessage(reason: LoginFailure): string {
+  if (!verboseAuthErrors()) return 'Invalid credentials';
+  return reason === 'EMAIL_NOT_FOUND'
+    ? 'No account found with this email address.'
+    : 'Incorrect password. Please try again.';
+}
+
 export class AuthService {
   async login(
     email: string,
     password: string,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<LoginResult | null> {
+  ): Promise<LoginResult | LoginFailure> {
     const user = await prisma.user.findUnique({
       where: { email },
       select: { id: true, name: true, email: true, passwordHash: true, role: true, status: true, clientId: true },
@@ -58,7 +90,7 @@ export class AuthService {
         ipAddress,
         userAgent,
       });
-      return null;
+      return 'EMAIL_NOT_FOUND';
     }
 
     // Check lockout before verifying password
@@ -103,7 +135,10 @@ export class AuthService {
           remedy:       'Reset the password through the application rather than by hand: POST /api/v1/staff/:id/reset-password, or apps/api/src/db/setPassword.ts.',
         },
       });
-      return null;
+      // Deliberately reported as a wrong password: the account exists, and the
+      // real reason is already on the System Errors page for whoever can act
+      // on it. Nothing useful reaches the person at the login form.
+      return 'WRONG_PASSWORD';
     }
 
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
@@ -119,7 +154,7 @@ export class AuthService {
         ipAddress,
         userAgent,
       });
-      return null;
+      return 'WRONG_PASSWORD';
     }
 
     // Deactivated accounts are refused only once the password has checked out.
@@ -134,8 +169,13 @@ export class AuthService {
         ipAddress,
         userAgent,
       });
+      // Safe to name the exact status: the password already checked out, so
+      // this reaches the account's owner rather than someone probing for it.
+      // SUSPENDED and INACTIVE mean different things to whoever they ask next.
       throw new AppError(
-        'Your account has been deactivated. Please contact your administrator.',
+        user.status === 'SUSPENDED'
+          ? 'Your account has been suspended. Please contact your administrator.'
+          : 'Your account has been deactivated. Please contact your administrator.',
         403,
       );
     }
