@@ -4,21 +4,10 @@ import { redisConnection } from '../lib/redis';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { QueueService } from '../jobs/QueueService';
 import { errorLogger } from './errorLogger';
+import { isValidBcryptHash } from '../lib/passwordHash';
 import { AccountLockedError, UnauthorisedError, AppError } from '../errors/AppError';
 import type { LoginResponse } from '@stap/shared';
 import type { UserRole } from '@stap/shared';
-
-/**
- * A bcrypt hash: algorithm, cost factor, then 53 chars of salt+digest.
- *
- * Worth checking because bcrypt.compare() answers `false` for a malformed hash
- * rather than throwing, so a corrupted column is indistinguishable from a wrong
- * password — the account simply refuses every password, silently and with
- * nothing in the logs. The way it gets corrupted is a password set by hand in
- * SQL: an unquoted `$2a$12$…` in a double-quoted shell string has its three
- * `$` segments eaten by parameter expansion before psql ever sees it.
- */
-const BCRYPT_HASH = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILED_ATTEMPT_TTL = 30 * 60; // 30 minutes in seconds
@@ -113,7 +102,7 @@ export class AuthService {
     // a wrong password. The caller still gets the same generic answer — whether
     // an account's hash is broken is not something an unauthenticated visitor
     // should be able to probe for — but it now says so where operators look.
-    if (!BCRYPT_HASH.test(user.passwordHash)) {
+    if (!isValidBcryptHash(user.passwordHash)) {
       void errorLogger.log({
         message:   `Stored password hash for ${user.email} is not a valid bcrypt hash. This account cannot authenticate until it is reset.`,
         errorCode: 'CORRUPT_PASSWORD_HASH',
