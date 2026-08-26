@@ -1,5 +1,7 @@
 import { PrismaClient, Role, UserStatus } from '@prisma/client';
 import { HR_LETTER_TEMPLATES } from './hrLetterTemplates';
+import { PERMISSIONS, permissionModule, permissionName } from '../constants/permissions';
+import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
 import bcrypt from 'bcryptjs';
 
 function fmtId(prefix: string, n: number): string {
@@ -15,24 +17,48 @@ if (!PASSWORD) {
 }
 const SALT_ROUNDS = 12;
 
+/**
+ * Gives a system ID to rows that predate the scheme.
+ *
+ * Numbering restarts from the highest ID already issued, not from 1. Starting
+ * at 1 meant the second run collided with the first on a unique constraint and
+ * aborted the whole seed — so a database that had ever been seeded, then gained
+ * one row without an ID, could not be seeded again.
+ */
 async function backfillSystemIds() {
   console.log('📋 Backfilling system IDs...');
 
-  const guards = await prisma.guard.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
-  for (let i = 0; i < guards.length; i++) {
-    await prisma.guard.update({ where: { id: guards[i].id }, data: { systemId: fmtId('SSLG', i + 1) } });
+  /** Highest number already used for a prefix, so numbering continues past it. */
+  const highest = async (
+    rows: Array<{ systemId: string | null }>,
+    prefix: string,
+  ): Promise<number> =>
+    rows.reduce((max, r) => {
+      const m = r.systemId?.match(new RegExp(`^${prefix}(\\d+)$`));
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 0);
+
+  const guardRows = await prisma.guard.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
+  let n = await highest(guardRows, 'SSLG');
+  const guards = guardRows.filter((g) => !g.systemId);
+  for (const g of guards) {
+    await prisma.guard.update({ where: { id: g.id }, data: { systemId: fmtId('SSLG', ++n) } });
   }
   if (guards.length) console.log(`✅ Backfilled ${guards.length} guard IDs`);
 
-  const clients = await prisma.client.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
-  for (let i = 0; i < clients.length; i++) {
-    await prisma.client.update({ where: { id: clients[i].id }, data: { systemId: fmtId('SSLC', i + 1) } });
+  const clientRows = await prisma.client.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
+  n = await highest(clientRows, 'SSLC');
+  const clients = clientRows.filter((c) => !c.systemId);
+  for (const c of clients) {
+    await prisma.client.update({ where: { id: c.id }, data: { systemId: fmtId('SSLC', ++n) } });
   }
   if (clients.length) console.log(`✅ Backfilled ${clients.length} client IDs`);
 
-  const users = await prisma.user.findMany({ where: { systemId: null }, select: { id: true }, orderBy: { createdAt: 'asc' } });
-  for (let i = 0; i < users.length; i++) {
-    await prisma.user.update({ where: { id: users[i].id }, data: { systemId: fmtId('SSLS', i + 1) } });
+  const userRows = await prisma.user.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
+  n = await highest(userRows, 'SSLS');
+  const users = userRows.filter((u) => !u.systemId);
+  for (const u of users) {
+    await prisma.user.update({ where: { id: u.id }, data: { systemId: fmtId('SSLS', ++n) } });
   }
   if (users.length) console.log(`✅ Backfilled ${users.length} user IDs`);
 }
@@ -71,6 +97,46 @@ async function main() {
     users[seed.role] = user;
     console.log(`✅ User created: ${user.name} (${user.role})`);
   }
+
+  // ── Permissions ─────────────────────────────────────────────────────────────
+  //
+  // Both loops upsert and neither deletes, so re-seeding adds anything new
+  // without disturbing grants an administrator has changed from the UI. Taking
+  // a role back to the defaults is a deliberate action there, not a deploy.
+
+  console.log('🔐 Seeding permissions...');
+  for (const [constant, key] of Object.entries(PERMISSIONS)) {
+    await prisma.permission.upsert({
+      where:  { key },
+      update: { name: permissionName(constant), module: permissionModule(key) },
+      create: { key, name: permissionName(constant), module: permissionModule(key) },
+    });
+  }
+  console.log(`✅ ${Object.keys(PERMISSIONS).length} permissions`);
+
+  console.log('🔐 Assigning default role permissions...');
+  const permByKey = new Map(
+    (await prisma.permission.findMany({ select: { id: true, key: true } }))
+      .map((p) => [p.key, p.id]),
+  );
+
+  let granted = 0;
+  for (const [role, keys] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+    for (const key of keys) {
+      const permissionId = permByKey.get(key);
+      if (!permissionId) {
+        console.warn(`   ⚠️  ${role}: no permission row for "${key}" — skipped`);
+        continue;
+      }
+      await prisma.rolePermission.upsert({
+        where:  { role_permissionId: { role: role as Role, permissionId } },
+        update: {},
+        create: { role: role as Role, permissionId },
+      });
+      granted++;
+    }
+  }
+  console.log(`✅ ${granted} role permissions across ${Object.keys(DEFAULT_ROLE_PERMISSIONS).length} roles`);
 
   // ── Business records are deliberately not seeded ────────────────────────────
   //

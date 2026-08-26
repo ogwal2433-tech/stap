@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import rateLimit from 'express-rate-limit';
 import { LoginSchema, ROLES } from '@stap/shared';
 import { authService, loginFailureMessage } from '../services/authService';
+import { permissionsFor } from '../middleware/permissions';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -198,7 +199,10 @@ router.get(
       throw new UnauthorisedError();
     }
 
-    res.status(200).json({ success: true, data: user });
+    // The UI hides what the caller cannot use, so it needs the resolved set
+    // rather than inferring it from the role name.
+    const permissions = await permissionsFor(req.user!.role);
+    res.status(200).json({ success: true, data: { ...user, permissions } });
   }),
 );
 

@@ -24,6 +24,7 @@ import { auditLogsRouter } from './auditLogs';
 import { gunsRouter } from './guns';
 import { marketingRouter } from './marketing';
 import { staffRouter } from './staff';
+import permissionsRouter from './permissions';
 
 const router: IRouter = Router();
 
@@ -36,6 +37,7 @@ router.use('/attendance', attendanceRouter);
 router.use('/contracts', contractsRouter);
 router.use('/users', usersRouter);
 router.use('/staff', staffRouter);
+router.use('/permissions', permissionsRouter);
 router.use('/finance', financeRouter);
 router.use('/requisitions', requisitionsRouter);
 router.use('/notifications', notificationsRouter);

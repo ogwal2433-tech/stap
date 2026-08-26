@@ -43,6 +43,7 @@ const NotificationSettingsPage     = lazy(() => import('@/pages/settings/Notific
 const HRPage                       = lazy(() => import('@/pages/hr/HRPage'));
 const InventoryPage                = lazy(() => import('@/pages/inventory/InventoryPage'));
 const SettingsPage                 = lazy(() => import('@/pages/settings/SettingsPage'));
+const RolesPermissionsPage         = lazy(() => import('@/pages/settings/RolesPermissionsPage'));
 const ZonesPage                    = lazy(() => import('@/pages/zones/ZonesPage'));
 const ZoneDetailPage               = lazy(() => import('@/pages/zones/ZoneDetailPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
@@ -173,6 +174,7 @@ function App() {
               {/* Settings */}
               <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
+              <Route path="/settings/roles" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><RolesPermissionsPage /></RoleGuard></L>} />
 
               {/* Staff directory */}
               <Route path="/staff" element={<L><RoleGuard allowedRoles={STAFF_MANAGER_ROLES} fallback={<UnauthorisedPage />}><StaffPage /></RoleGuard></L>} />

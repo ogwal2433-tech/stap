@@ -173,6 +173,7 @@ model User {
   gunMovementsRecorded    GunMovement[]        @relation("GunMovementRecorder")
 
   prospectsAssigned       ProspectiveClient[]     @relation("ProspectAssignee")
+  permissionsGranted      RolePermission[]        @relation("PermissionGranter")
   prospectsCreated        ProspectiveClient[]     @relation("ProspectCreator")
   prospectStatusChanges   ProspectStatusHistory[] @relation("ProspectStatusChanger")
   bidsSubmitted           Bid[]                   @relation("BidSubmitter")
@@ -1688,4 +1689,42 @@ model DeductionType {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// A single thing a role may be allowed to do, e.g. "guards.edit".
+///
+/// The rows are the catalogue, not the grants — RolePermission decides who
+/// holds what. Seeding is idempotent so a deploy adding a permission does not
+/// disturb grants an administrator has already changed by hand.
+model Permission {
+  id          String   @id @default(cuid())
+  /// module.action, e.g. "guards.edit". The stable identifier code refers to.
+  key         String   @unique
+  name        String
+  description String?
+  /// Groups the permission in the management UI: guards, finance, hr, …
+  module      String
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
+}
+
+/// Grants one permission to one role.
+///
+/// Keyed on the Role enum rather than a Role table: roles are a closed set the
+/// code already branches on, and making them rows would let someone create a
+/// role no route has ever heard of.
+model RolePermission {
+  id            String     @id @default(cuid())
+  role          Role
+  permissionId  String
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedAt     DateTime   @default(now())
+  grantedById   String?
+  grantedByUser User?      @relation("PermissionGranter", fields: [grantedById], references: [id])
+
+  @@unique([role, permissionId])
+  @@index([role])
 }

@@ -113,6 +113,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: 'bi-person-badge-fill',   label: 'Staff',         to: '/staff',         roles: STAFF_MANAGER_ROLES as UserRole[] },
       { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] },
+      { icon: 'bi-shield-lock-fill',    label: 'Roles & Permissions', to: '/settings/roles', roles: ADMIN_ONLY as UserRole[] },
       { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] },
       { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] },
     ],
@@ -135,7 +136,7 @@ const ALL_NAV_PATHS = new Set([
   '/dashboard', '/guards', '/attendance', '/checkin',
   '/clients', '/zones', '/complaints', '/service-requests',
   '/finance', '/inventory', '/requisitions',
-  '/hr', '/reports', '/settings', '/staff', '/notifications', '/guns', '/marketing',
+  '/hr', '/reports', '/settings', '/settings/roles', '/staff', '/notifications', '/guns', '/marketing',
   '/guards/dashboard', '/guards/import',
   '/attendance/dashboard', '/admin/errors', '/admin/audit-log',
 ]);
