@@ -11,6 +11,40 @@ import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
 const router = Router();
 
 router.use(authenticate);
+
+/**
+ * The caller's own permissions.
+ *
+ * Declared before the roles.manage gate below: every signed-in user needs to
+ * know what they may do, and gating this on permission management would leave
+ * the frontend guessing from the role name — which is exactly how the nav and
+ * the route guards drifted apart in the first place.
+ */
+router.get(
+  '/me',
+  asyncHandler(async (req: Request, res: Response) => {
+    const rows = await prisma.rolePermission.findMany({
+      where:   { role: req.user!.role as never },
+      include: { permission: { select: { key: true, name: true, module: true } } },
+      orderBy: { permission: { key: 'asc' } },
+    });
+
+    const byModule: Record<string, string[]> = {};
+    for (const r of rows) {
+      (byModule[r.permission.module] ??= []).push(r.permission.key);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        role:        req.user!.role,
+        permissions: rows.map((r) => r.permission.key),
+        byModule,
+      },
+    });
+  }),
+);
+
 // Managing permissions is itself a permission, so the matrix cannot be opened
 // by someone who only happens to hold a high role.
 router.use(requirePermission(PERMISSIONS.ROLES_MANAGE));

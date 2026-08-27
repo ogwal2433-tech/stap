@@ -11,6 +11,8 @@ import api, { setAccessToken } from '../lib/api';
 import type { AuthState, User } from '../types/auth';
 
 interface AuthContextValue extends AuthState {
+  /** Permission keys the signed-in user's role holds, from the database. */
+  permissions: string[];
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
@@ -20,6 +22,22 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+
+  // Fetched rather than inferred from the role: what a role may do lives in the
+  // database and an administrator can change it, so the role name is no longer
+  // enough to know.
+  const [permissions, setPermissions] = useState<string[]>([]);
+
+  const loadPermissions = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ data: { permissions: string[] } }>('/permissions/me');
+      setPermissions(data.data.permissions ?? []);
+    } catch {
+      // A failure here must not cost the user their session — it only means the
+      // UI falls back to showing nothing permission-gated.
+      setPermissions([]);
+    }
+  }, []);
 
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -48,8 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAuthenticated: true,
           isLoading: false,
         });
+        await loadPermissions();
       } catch {
-        setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+        setPermissions([]);
+        setPermissions([]);
+      setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
       }
     };
 
@@ -66,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(accessToken);
 
     setState({ user, accessToken, isAuthenticated: true, isLoading: false });
+    await loadPermissions();
   }, []);
 
   const logout = useCallback(async () => {
@@ -88,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshToken }}>
+    <AuthContext.Provider value={{ ...state, permissions, login, logout, refreshToken }}>
       {children}
     </AuthContext.Provider>
   );
@@ -98,4 +120,16 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
+}
+
+/** True when the user's role holds every listed permission. */
+export function useHasPermission(...keys: string[]): boolean {
+  const { permissions } = useAuth();
+  return keys.every((k) => permissions.includes(k));
+}
+
+/** True when the user's role holds at least one of the listed permissions. */
+export function useHasAnyPermission(...keys: string[]): boolean {
+  const { permissions } = useAuth();
+  return keys.some((k) => permissions.includes(k));
 }

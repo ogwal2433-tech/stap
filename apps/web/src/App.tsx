@@ -9,7 +9,7 @@ import RoleGuard from '@/components/RoleGuard';
 import PageSpinner from '@/components/ui/PageSpinner';
 import LoginPage from '@/pages/LoginPage';
 import UnauthorisedPage from '@/pages/UnauthorisedPage';
-import { ROLES, INTERNAL_ROLES, REPORT_ROLES, FINANCE_ROLES, type UserRole } from '@stap/shared';
+import { ROLES, INTERNAL_ROLES, REPORT_ROLES, FINANCE_ROLES, DEPLOYMENT_VIEW_ROLES, type UserRole } from '@stap/shared';
 
 // Code-split all page-level components
 const DashboardPage                = lazy(() => import('@/pages/DashboardPage'));
@@ -55,11 +55,15 @@ const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
 const INV_ROLES: UserRole[]      = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
-const REQUISITION_ROLES: UserRole[] = [
-  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
-  ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.TRAINER,
-  ROLES.ACCOUNTS_OFFICER, ROLES.MARKETING_HEAD, ROLES.SALES,
-];
+/**
+ * Mirrors the API, which lets any internal role submit a requisition, and the
+ * sidebar, which shows the link to all of them. Control Room was missing here
+ * while appearing in both of the others, so the link was visible and answered
+ * with Access Denied — from this guard, before the request was ever made.
+ */
+const REQUISITION_ROLES: UserRole[] = INTERNAL_ROLES.filter(
+  (r) => r !== ROLES.CLIENT && r !== ROLES.GUARD,
+);
 const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
 const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
@@ -76,8 +80,13 @@ const MARKETING_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, RO
 const GUN_VIEW_ROLES: UserRole[] = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
+/**
+ * The shared list the sidebar already uses, plus Administrator. Keeping a
+ * separate copy here is what let Accounts Officer onto the nav item and off the
+ * page behind it.
+ */
 const DEPLOYMENT_VIEW: UserRole[] = [
-  ...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.CONTROL_ROOM,
+  ...new Set<UserRole>([...DEPLOYMENT_VIEW_ROLES, ROLES.ADMINISTRATOR]),
 ];
 const REPORT_ACCESS: UserRole[]        = [...new Set([...REPORT_ROLES, ROLES.OPERATIONS_SUPERVISOR])];
 
