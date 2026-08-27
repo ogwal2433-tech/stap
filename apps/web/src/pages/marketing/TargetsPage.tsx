@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts';
-import { TARGET_PERIOD_TYPES, type TargetPeriodType } from '@stap/shared';
+import { TARGET_PERIOD_TYPES, type TargetPeriodType, MARKETING_MANAGER_ROLES } from '@stap/shared';
 import { useTargets, useCreateTarget, useMarketingDashboard } from '../../hooks/useMarketing';
-import { useStaffUsers } from '../../hooks/useUsers';
+import { marketingApi } from '../../lib/marketing.api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -27,7 +28,15 @@ function currentMonth(): string {
 function AssignTargetModal({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast();
   const create = useCreateTarget();
-  const { data: staff = [] } = useStaffUsers();
+  // Sales officers, from the marketing module rather than the user directory:
+  // /users is gated on roles a marketing head does not hold, so the dropdown
+  // came back empty for the very role that assigns targets. This also narrows
+  // it to the people a marketing target is actually for — it previously
+  // offered every internal staff member, trainers and accountants included.
+  const { data: staff = [] } = useQuery({
+    queryKey: ['marketing', 'sales-staff'],
+    queryFn:  marketingApi.salesStaff,
+  });
 
   const [assignedToId, setAssignedToId] = useState('');
   const [periodType, setPeriodType]     = useState<TargetPeriodType>('MONTHLY');
@@ -70,7 +79,7 @@ function AssignTargetModal({ onClose }: { onClose: () => void }) {
         <Form.Group className="mb-3">
           <Form.Label className="fw-bold small">Officer <span className="text-danger">*</span></Form.Label>
           <SearchableSelect
-            options={staff.map(u => ({ value: u.id, label: u.name, sublabel: u.role.replace(/_/g, ' ') }))}
+            options={staff.map(u => ({ value: u.id, label: u.name, sublabel: u.email }))}
             value={assignedToId}
             onChange={(id) => { setAssignedToId(id); setError(''); }}
             placeholder="Select an officer…"
@@ -135,7 +144,11 @@ export default function TargetsPage() {
   const { data: targets = [], isLoading } = useTargets();
   const { data: dashboard }               = useMarketingDashboard();
 
-  const canAssign = user?.role === 'DIRECTOR' || user?.role === 'ASSISTANT_MANAGER';
+  // Mirrors MARKETING_HEAD_ROLES on the route. Read from the shared constant
+  // rather than spelled out again: the two drifted apart when the marketing
+  // role was split, and the button vanished for the role that had just been
+  // given the job.
+  const canAssign = (MARKETING_MANAGER_ROLES as string[]).includes(user?.role ?? '');
 
   const mine = useMemo(
     () => targets.filter(t => t.assignedTo.id === user?.id),

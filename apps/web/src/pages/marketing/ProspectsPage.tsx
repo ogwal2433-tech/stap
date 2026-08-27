@@ -7,6 +7,7 @@ import {
   PROSPECT_STATUSES, PIPELINE_ORDER,
   prospectStatusLabel, prospectStatusColour,
   type ProspectResponse, type ProspectStatus,
+  MARKETING_MANAGER_ROLES,
 } from '@stap/shared';
 import {
   useProspects, useProspect, useCreateProspect, useUpdateProspect, useConvertProspect,
@@ -21,8 +22,6 @@ const AMBER = '#F2AA20';
 const GREY  = '#6c757d';
 const GREEN = '#1E8449';
 
-/** Roles that see every officer's leads. Mirrors the API's visibility rule. */
-const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER', 'MARKETING_HEAD'];
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -353,7 +352,7 @@ export default function ProspectsPage() {
   const [officerFilter, setOfficerFilter] = useState('');
 
   const { user } = useAuth();
-  const isManager = MARKETING_MANAGER_ROLES.includes(user?.role ?? '');
+  const isManager = (MARKETING_MANAGER_ROLES as string[]).includes(user?.role ?? '');
 
   // Sales officers to offer in the head's filter, from the marketing module
   // rather than the staff directory — that is gated on staff-management roles a
