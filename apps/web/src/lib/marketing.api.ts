@@ -10,6 +10,13 @@ type Page<T> = { success: boolean } & PaginatedResponse<T>;
 
 export const marketingApi = {
   // ── Prospects ───────────────────────────────────────────────────────────────
+  /** Sales officers leads may be assigned to — for the head's board filter. */
+  salesStaff(): Promise<Array<{ id: string; name: string; email: string }>> {
+    return api
+      .get<{ data: Array<{ id: string; name: string; email: string }> }>('/marketing/sales-staff')
+      .then((r) => r.data.data);
+  },
+
   listProspects(params?: { status?: string; assignedToId?: string; search?: string; page?: number; limit?: number }) {
     return api.get<Page<ProspectResponse>>('/marketing/prospects', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

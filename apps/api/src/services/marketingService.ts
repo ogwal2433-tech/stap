@@ -24,8 +24,9 @@ const DAY_MS = 86_400_000;
  * The role list is duplicated from ROLES rather than imported as a group
  * because this is a visibility rule, not a route guard: widening the route's
  * MARKETING_ROLES must not silently widen who can read other officers' leads.
+ * SALES is deliberately absent: a sales officer sees only their own leads.
  */
-const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER'];
+const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER', 'MARKETING_HEAD'];
 
 export function isMarketingManager(role: string): boolean {
   return MARKETING_MANAGER_ROLES.includes(role);
@@ -890,7 +891,8 @@ class MarketingService {
 
     // PERFORMANCE — one row per officer.
     const officers = await prisma.user.findMany({
-      where:  { role: 'MARKETING', ...(filters.assignedToId ? { id: filters.assignedToId } : {}) },
+      // SALES now, not MARKETING: these are the people leads are assigned to.
+      where:  { role: 'SALES', ...(filters.assignedToId ? { id: filters.assignedToId } : {}) },
       select: { id: true, name: true },
     });
 

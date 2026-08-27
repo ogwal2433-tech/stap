@@ -16,7 +16,10 @@
  *  TRAINER              — Training sessions full; Guard profiles view (training section).
  *  ACCOUNTS_OFFICER     — Invoices full; Payments record/reconcile; Cashbook full;
  *                         Payroll view; AR aging full.
- *  MARKETING            — Client profiles view; Leads/visits full (Sprint 2).
+ *  MARKETING_HEAD       — All leads from all sales staff; targets; bids and tenders;
+ *                         all marketing reports; client profiles view.
+ *  SALES                — Own assigned leads only; client profiles view. No targets,
+ *                         no bids, no cross-officer visibility.
  *  GUARD                — Own profile view; Own attendance view; Leave requests submit.
  *  CLIENT               — Own invoices/payments/guards view; Own complaints submit/view.
  */
@@ -30,7 +33,11 @@ export const ROLES = {
   TRAINER: 'TRAINER',
   ACCOUNTS_OFFICER: 'ACCOUNTS_OFFICER',
   CONTROL_ROOM: 'CONTROL_ROOM',
+  /** @deprecated Split into MARKETING_HEAD and SALES. Kept so rows and tokens
+   *  predating the split still resolve; nothing assigns it. */
   MARKETING: 'MARKETING',
+  MARKETING_HEAD: 'MARKETING_HEAD',
+  SALES: 'SALES',
   GUARD: 'GUARD',
   CLIENT: 'CLIENT',
 } as const;
@@ -51,6 +58,8 @@ export const ROLE_HIERARCHY: UserRole[] = [
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
   ROLES.MARKETING,
+  ROLES.MARKETING_HEAD,
+  ROLES.SALES,
   ROLES.GUARD,
   ROLES.CLIENT,
 ];
@@ -111,7 +120,8 @@ export const INTERNAL_ROLES: UserRole[] = [
   ROLES.TRAINER,
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
-  ROLES.MARKETING,
+  ROLES.MARKETING_HEAD,
+  ROLES.SALES,
 ];
 
 /**
@@ -141,4 +151,22 @@ export const DEPLOYMENT_VIEW_ROLES: UserRole[] = [
   ROLES.ASSISTANT_MANAGER,
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
+];
+
+/**
+ * Marketing roles that see the whole pipeline.
+ *
+ * SALES is deliberately absent: sales staff see only the leads assigned to
+ * them, and this list is what decides that.
+ */
+export const MARKETING_MANAGER_ROLES: UserRole[] = [
+  ROLES.DIRECTOR,
+  ROLES.ASSISTANT_MANAGER,
+  ROLES.MARKETING_HEAD,
+];
+
+/** Everyone who can open the marketing module at all. */
+export const MARKETING_MODULE_ROLES: UserRole[] = [
+  ...MARKETING_MANAGER_ROLES,
+  ROLES.SALES,
 ];

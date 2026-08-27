@@ -121,7 +121,8 @@ const STAFF_ROLES = INTERNAL_ROLES as UserRole[];
 const CLIENT_WRITE_ROLES: UserRole[] = [
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
-  ROLES.MARKETING,
+  ROLES.MARKETING_HEAD,
+  ROLES.SALES,
 ];
 
 // Roles that can manage client archiving

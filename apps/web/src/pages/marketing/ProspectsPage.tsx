@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table,
 } from 'react-bootstrap';
@@ -12,7 +13,7 @@ import {
 } from '../../hooks/useMarketing';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import { useStaffList } from '../../hooks/useStaff';
+import { marketingApi } from '../../lib/marketing.api';
 import { getApiErrorMessage } from '../../lib/api';
 
 const NAVY  = '#1B3A6B';
@@ -21,7 +22,7 @@ const GREY  = '#6c757d';
 const GREEN = '#1E8449';
 
 /** Roles that see every officer's leads. Mirrors the API's visibility rule. */
-const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER'];
+const MARKETING_MANAGER_ROLES: string[] = ['DIRECTOR', 'ASSISTANT_MANAGER', 'MARKETING_HEAD'];
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -354,14 +355,15 @@ export default function ProspectsPage() {
   const { user } = useAuth();
   const isManager = MARKETING_MANAGER_ROLES.includes(user?.role ?? '');
 
-  // Officers to offer in the manager's filter. The API scopes the board by the
-  // caller's own role regardless, so this only narrows a view that is already
-  // allowed — it can never widen one.
-  const { data: staffData } = useStaffList(
-    { role: 'MARKETING', isActive: true, limit: 100 },
-    isManager,
-  );
-  const marketingOfficers = isManager ? (staffData?.data ?? []) : [];
+  // Sales officers to offer in the head's filter, from the marketing module
+  // rather than the staff directory — that is gated on staff-management roles a
+  // marketing head does not hold. The API scopes the board by the caller's own
+  // role regardless, so this only narrows a view that is already allowed.
+  const { data: marketingOfficers = [] } = useQuery({
+    queryKey: ['marketing', 'sales-staff'],
+    queryFn:  marketingApi.salesStaff,
+    enabled:  isManager,
+  });
 
   const { data, isLoading } = useProspects(
     isManager && officerFilter ? { assignedToId: officerFilter } : undefined,
@@ -423,22 +425,22 @@ export default function ProspectsPage() {
       }}>
         <span>
           {isManager ? (
-            <>👁️ <strong>Manager view</strong> — showing all leads from all officers</>
+            <>👁️ <strong>Head view</strong> — showing all leads from all sales staff</>
           ) : (
-            <>👤 <strong>My leads</strong> — showing only leads assigned to you</>
+            <>🤝 <strong>My leads</strong> — showing only leads assigned to you</>
           )}
         </span>
 
         {isManager && marketingOfficers.length > 0 && (
           <div className="d-flex align-items-center gap-2">
-            <span className="text-muted small">Filter by officer:</span>
+            <span className="text-muted small">Filter by sales officer:</span>
             <Form.Select
               size="sm"
               value={officerFilter}
               onChange={(e) => setOfficerFilter(e.target.value)}
               style={{ fontSize: '0.78rem', width: 'auto', minWidth: 160 }}
             >
-              <option value="">All officers</option>
+              <option value="">All sales staff</option>
               {marketingOfficers.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}

@@ -167,6 +167,43 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     ],
   },
 
+  // Full pipeline: targets and bids are this role's to run.
+  MARKETING_HEAD: {
+    caption: 'Sales pipeline and targets — all sales staff',
+    stats: [
+      { key: 'totalProspects',   label: 'Total Prospects',   icon: '👥', colour: 'navy',  linkTo: '/marketing/prospects' },
+      { key: 'inPipeline',       label: 'In Pipeline',       icon: '🔄', colour: 'teal',  linkTo: '/marketing/prospects' },
+      { key: 'won',              label: 'Business Won',      icon: '✅', colour: 'green', linkTo: '/marketing/closed' },
+      { key: 'lost',             label: 'Lost Leads',        icon: '❌', colour: 'grey',  linkTo: '/marketing/prospects' },
+      { key: 'conversionRate',   label: 'Conversion Rate',   icon: '📈', colour: 'navy',  linkTo: '/marketing/reports', format: v => `${v}%` },
+      { key: 'activeBids',       label: 'Active Bids',       icon: '📋', colour: 'amber', linkTo: '/marketing/bids' },
+      { key: 'upcomingExpiries', label: 'Expiring Contracts', icon: '📅', colour: alertWhenAny, linkTo: '/clients' },
+      { key: 'targetProgress',   label: 'Target Progress',   icon: '🎯', colour: 'green', linkTo: '/marketing/targets', format: v => `${v}%` },
+    ],
+    feeds: [
+      { key: 'pipelineStages', title: 'Pipeline', icon: '🔄', emptyText: 'No prospects yet', linkTo: '/marketing/prospects' },
+      { key: 'recentActivity', title: 'Recent Activity', icon: '🕓', emptyText: 'No pipeline movement yet', linkTo: '/marketing/prospects' },
+    ],
+  },
+
+  // Own leads only. No bids or targets tiles — the API scopes the figures, and
+  // linking to pages this role cannot open would only produce a 403.
+  SALES: {
+    caption: 'Your leads and targets',
+    stats: [
+      { key: 'totalProspects',   label: 'My Leads',        icon: '👥', colour: 'navy',  linkTo: '/marketing/prospects' },
+      { key: 'inPipeline',       label: 'In Pipeline',     icon: '🔄', colour: 'teal',  linkTo: '/marketing/prospects' },
+      { key: 'won',              label: 'Business Won',    icon: '✅', colour: 'green', linkTo: '/marketing/closed' },
+      { key: 'lost',             label: 'Lost Leads',      icon: '❌', colour: 'grey',  linkTo: '/marketing/prospects' },
+      { key: 'conversionRate',   label: 'Conversion Rate', icon: '📈', colour: 'navy',  format: v => `${v}%` },
+      { key: 'targetProgress',   label: 'My Target',       icon: '🎯', colour: 'green', format: v => `${v}%` },
+    ],
+    feeds: [
+      { key: 'pipelineStages', title: 'My Pipeline', icon: '🔄', emptyText: 'No leads assigned to you yet', linkTo: '/marketing/prospects' },
+      { key: 'recentActivity', title: 'Recent Activity', icon: '🕓', emptyText: 'No pipeline movement yet', linkTo: '/marketing/prospects' },
+    ],
+  },
+
   HR: {
     caption: 'People and records',
     stats: [

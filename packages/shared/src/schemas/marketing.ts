@@ -267,7 +267,7 @@ export interface MarketingTargetResponse {
 }
 
 export interface MarketingDashboardData {
-  role:  'MARKETING';
+  role:  'MARKETING' | 'MARKETING_HEAD' | 'SALES';
   stats: {
     totalProspects:   number;
     inPipeline:       number;

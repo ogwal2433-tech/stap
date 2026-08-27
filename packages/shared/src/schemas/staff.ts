@@ -74,10 +74,22 @@ export const ROLE_CONFIG: Record<string, RoleConfig> = {
     icon:        '🎯',
   },
   MARKETING: {
-    label:       'Marketing Officer',
-    description: 'Manages prospective clients, bids, targets, and marketing reports.',
+    label:       'Marketing (legacy)',
+    description: 'Superseded by Marketing Head and Sales. No account should still hold it.',
     colour:      '#0F7B6C',
     icon:        '📈',
+  },
+  MARKETING_HEAD: {
+    label:       'Marketing Head',
+    description: 'Full marketing access. Sees every lead from every sales officer, sets targets, manages bids and tenders, and runs all marketing reports.',
+    colour:      '#6C3483',
+    icon:        '📊',
+  },
+  SALES: {
+    label:       'Sales',
+    description: 'Sells. Sees only the leads assigned to them, and creates and updates those. No targets, no bids, no sight of a colleague\'s pipeline.',
+    colour:      '#E8701A',
+    icon:        '🤝',
   },
 };
 
@@ -91,7 +103,10 @@ export const STAFF_ROLE_VALUES = [
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
   ROLES.TRAINER,
-  ROLES.MARKETING,
+  // MARKETING is deliberately absent — it is retired, and offering it would let
+  // someone create a new account holding a role nothing grants any more.
+  ROLES.MARKETING_HEAD,
+  ROLES.SALES,
 ] as const;
 
 const StaffRoleEnum = z.enum(STAFF_ROLE_VALUES);

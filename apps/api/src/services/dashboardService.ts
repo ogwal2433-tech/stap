@@ -47,6 +47,10 @@ class DashboardService {
       case ROLES.CONTROL_ROOM:
         return this.getControlRoomStats();
       case ROLES.MARKETING:
+      case ROLES.MARKETING_HEAD:
+      case ROLES.SALES:
+        // getMarketingStats scopes by role: a head sees the whole pipeline, a
+        // sales officer only their own leads.
         return this.getMarketingStats(userId, role);
       case ROLES.CLIENT:
         return this.getClientStats(clientId);
@@ -308,7 +312,10 @@ class DashboardService {
     const m = await marketingService.getDashboard(userId, role);
 
     return {
-      role:  'MARKETING',
+      // The caller's actual role, not the module name. The frontend picks its
+      // dashboard spec off this, and a hardcoded 'MARKETING' would give a sales
+      // officer the head's tiles — links to bids and targets they cannot open.
+      role:  role as DashboardData['role'],
       stats: {
         totalProspects:   m.stats.totalProspects,
         inPipeline:       m.stats.inPipeline,

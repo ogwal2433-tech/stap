@@ -203,7 +203,8 @@ router.get(
     ROLES.FIELD_SUPERVISOR,
     ROLES.TRAINER,
     ROLES.ACCOUNTS_OFFICER,
-    ROLES.MARKETING,
+    ROLES.MARKETING_HEAD,
+  ROLES.SALES,
   ),
   validateQuery(AttendanceQuerySchema),
   asyncHandler(async (req, res) => {

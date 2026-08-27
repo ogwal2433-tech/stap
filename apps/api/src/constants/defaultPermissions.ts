@@ -13,7 +13,8 @@ const P = PERMISSIONS;
  *
  * GUARD and CLIENT are absent on purpose: they reach the system through the
  * check-in screen and the client portal, which are scoped to the holder's own
- * records rather than gated on permissions.
+ * records rather than gated on permissions. MARKETING is absent because it was
+ * split into MARKETING_HEAD and SALES and nothing holds it any more.
  */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   // Everything, including roles.manage. Kept whole deliberately: a Director who
@@ -103,10 +104,23 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.REPORTS_VIEW,
   ],
 
-  MARKETING: [
+  // Everything marketing: every lead, targets, bids, all reports. Also
+  // staff.view, so a head can see the sales officers leads are assigned to.
+  MARKETING_HEAD: [
     P.CLIENTS_VIEW,
     P.MARKETING_VIEW, P.MARKETING_PROSPECTS, P.MARKETING_BIDS,
     P.MARKETING_TARGETS, P.MARKETING_REPORTS,
+    P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
+    P.REPORTS_VIEW, P.REPORTS_EXPORT,
+    P.STAFF_VIEW,
+  ],
+
+  // Prospects and nothing else in marketing. No bids, no targets, no marketing
+  // reports and no export — the pipeline this role can see is its own, and an
+  // export is how that boundary would otherwise be walked around.
+  SALES: [
+    P.CLIENTS_VIEW,
+    P.MARKETING_VIEW, P.MARKETING_PROSPECTS,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW,
   ],

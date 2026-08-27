@@ -50,6 +50,7 @@ import { Router, type IRouter, type Request, type Response } from 'express';
 import * as XLSX from 'xlsx';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import prisma from '../db/prisma';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../errors/AppError';
@@ -68,9 +69,21 @@ import type { MarketingReportType } from '@stap/shared';
 const router: IRouter = Router();
 router.use(authenticate);
 
-const MARKETING_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING] as const;
-/** Setting someone's target is a management act, not a marketing one. */
-const TARGET_WRITE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER] as const;
+/** Everyone who may open the module at all, sales included. */
+const MARKETING_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES,
+] as const;
+
+/**
+ * Everything a sales officer may not do.
+ *
+ * Targets are set for sales staff, and bids are pursued on the company's
+ * behalf, so both are decided above the person selling. SALES is absent from
+ * this list for that reason, not by oversight.
+ */
+const MARKETING_HEAD_ROLES = [
+  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD,
+] as const;
 
 router.use(requireRole(...MARKETING_ROLES));
 
@@ -102,6 +115,7 @@ router.get(
 
 router.get(
   '/reports/:type/export',
+  requireRole(...MARKETING_HEAD_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
     const report = await marketingService.generateReport(reportType(req.params.type), {
       dateFrom:     req.query.dateFrom     as string | undefined,
@@ -134,6 +148,7 @@ router.get(
 
 router.get(
   '/reports/:type',
+  requireRole(...MARKETING_HEAD_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await marketingService.generateReport(reportType(req.params.type), {
       dateFrom:     req.query.dateFrom     as string | undefined,
@@ -143,6 +158,26 @@ router.get(
       viewerUserId: req.user!.userId,
     });
     res.json({ success: true, data });
+  }),
+);
+
+/**
+ * The sales officers leads can be assigned to.
+ *
+ * Exists so the board's officer filter does not need the staff directory: that
+ * is gated on staff-management roles, which a marketing head does not hold, and
+ * widening it for a dropdown would hand over account administration with it.
+ */
+router.get(
+  '/sales-staff',
+  requireRole(...MARKETING_HEAD_ROLES),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const staff = await prisma.user.findMany({
+      where:   { role: ROLES.SALES, status: 'ACTIVE' },
+      select:  { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: staff });
   }),
 );
 
@@ -222,6 +257,7 @@ router.get(
 
 router.post(
   '/bids',
+  requireRole(...MARKETING_HEAD_ROLES),
   validate(CreateBidSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await marketingService.createBid(req.body, req.user!.userId);
@@ -239,6 +275,7 @@ router.get(
 
 router.patch(
   '/bids/:id',
+  requireRole(...MARKETING_HEAD_ROLES),
   validate(UpdateBidSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await marketingService.updateBid(req.params.id, req.body, req.user!.userId);
@@ -261,7 +298,7 @@ router.get(
 
 router.post(
   '/targets',
-  requireRole(...TARGET_WRITE_ROLES),
+  requireRole(...MARKETING_HEAD_ROLES),
   validate(CreateTargetSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await marketingService.createTarget(req.body, req.user!.userId);

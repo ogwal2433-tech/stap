@@ -15,7 +15,7 @@ function token(role: UserRole, userId = `ci-${role}`) {
 
 const dirToken = token(ROLES.DIRECTOR);
 const amToken = token(ROLES.ASSISTANT_MANAGER);
-const mktToken = token(ROLES.MARKETING);
+const mktToken = token(ROLES.MARKETING_HEAD);
 const adminToken = token(ROLES.ADMINISTRATOR);
 const opsToken = token(ROLES.OPERATIONS_SUPERVISOR);
 const fieldToken = token(ROLES.FIELD_SUPERVISOR);
@@ -74,7 +74,7 @@ describe('POST /api/v1/clients', () => {
     expect(res.status).toBe(403);
   });
 
-  it('201 or 500 — MARKETING token, valid body', async () => {
+  it('201 or 500 — MARKETING_HEAD token, valid body', async () => {
     const res = await request(app)
       .post('/api/v1/clients')
       .set('Authorization', `Bearer ${mktToken}`)

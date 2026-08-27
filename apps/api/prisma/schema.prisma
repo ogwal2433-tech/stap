@@ -19,7 +19,16 @@ enum Role {
   TRAINER
   ACCOUNTS_OFFICER
   CONTROL_ROOM
+  /// Split into MARKETING_HEAD and SALES. Retained so existing rows and any
+  /// token issued before the split still resolve — dropping an enum value in
+  /// Postgres means recreating the type and rewriting every column that uses
+  /// it. Nothing assigns it any more; the migration moved every holder to
+  /// MARKETING_HEAD.
   MARKETING
+  /// Full marketing access: every lead, targets, bids, all reports.
+  MARKETING_HEAD
+  /// Sales staff. Only the leads assigned to them; no targets, no bids.
+  SALES
   GUARD
   CLIENT
 }

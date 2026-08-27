@@ -88,7 +88,8 @@ router.get(
     ROLES.FIELD_SUPERVISOR,
     ROLES.TRAINER,
     ROLES.ACCOUNTS_OFFICER,
-    ROLES.MARKETING,
+    ROLES.MARKETING_HEAD,
+  ROLES.SALES,
   ),
   asyncHandler(async (req, res) => {
     const { clientId, status, page, limit } = req.query as Record<string, string | undefined>;
@@ -136,7 +137,8 @@ router.get(
     ROLES.FIELD_SUPERVISOR,
     ROLES.TRAINER,
     ROLES.ACCOUNTS_OFFICER,
-    ROLES.MARKETING,
+    ROLES.MARKETING_HEAD,
+  ROLES.SALES,
   ),
   asyncHandler(async (req, res) => {
     const contract = await contractService.getById(req.params.id);

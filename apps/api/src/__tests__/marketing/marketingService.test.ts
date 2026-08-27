@@ -448,7 +448,7 @@ describe('lead visibility', () => {
 
   it('pins an officer to their own leads', async () => {
     await marketingService.listProspects({
-      page: 1, limit: 50, viewerRole: 'MARKETING', viewerUserId: OFFICER,
+      page: 1, limit: 50, viewerRole: 'SALES', viewerUserId: OFFICER,
     });
     expect(whereFromList()).toMatchObject({ assignedToId: OFFICER });
   });
@@ -456,15 +456,15 @@ describe('lead visibility', () => {
   it('ignores an assignedToId an officer supplies for someone else', async () => {
     await marketingService.listProspects({
       page: 1, limit: 50, assignedToId: 'someone-else',
-      viewerRole: 'MARKETING', viewerUserId: OFFICER,
+      viewerRole: 'SALES', viewerUserId: OFFICER,
     });
     // The query string must not be able to widen the officer's own view.
     expect(whereFromList().assignedToId).toBe(OFFICER);
   });
 
-  it('leaves a manager unfiltered', async () => {
+  it('leaves a marketing head unfiltered', async () => {
     await marketingService.listProspects({
-      page: 1, limit: 50, viewerRole: 'DIRECTOR', viewerUserId: MANAGER,
+      page: 1, limit: 50, viewerRole: 'MARKETING_HEAD', viewerUserId: MANAGER,
     });
     expect(whereFromList().assignedToId).toBeUndefined();
   });
@@ -480,7 +480,7 @@ describe('lead visibility', () => {
   it('keeps the status filter alongside the officer scope', async () => {
     await marketingService.listProspects({
       page: 1, limit: 50, status: 'LOST',
-      viewerRole: 'MARKETING', viewerUserId: OFFICER,
+      viewerRole: 'SALES', viewerUserId: OFFICER,
     });
     expect(whereFromList()).toMatchObject({ assignedToId: OFFICER, status: 'LOST' });
   });
@@ -490,7 +490,7 @@ describe('lead visibility', () => {
       prospectRow({ assignedToId: 'another-officer', statusHistory: [] }),
     );
     await expect(
-      marketingService.getProspect('p1', { role: 'MARKETING', userId: OFFICER }),
+      marketingService.getProspect('p1', { role: 'SALES', userId: OFFICER }),
     ).rejects.toThrow('Prospect not found');
   });
 
@@ -509,7 +509,7 @@ describe('lead visibility', () => {
     mp.marketingTarget.findFirst.mockResolvedValue(null);
     mp.prospectStatusHistory.findMany.mockResolvedValue([]);
 
-    await marketingService.getDashboard(OFFICER, 'MARKETING');
+    await marketingService.getDashboard(OFFICER, 'SALES');
 
     expect(mp.prospectiveClient.groupBy.mock.calls[0][0].where)
       .toMatchObject({ assignedToId: OFFICER });
