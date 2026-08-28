@@ -6,6 +6,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
 import PortalLayout from '@/components/layout/PortalLayout';
 import RoleGuard from '@/components/RoleGuard';
+import PermissionGuard, { PermissionDenied } from '@/components/PermissionGuard';
 import PageSpinner from '@/components/ui/PageSpinner';
 import LoginPage from '@/pages/LoginPage';
 import UnauthorisedPage from '@/pages/UnauthorisedPage';
@@ -126,13 +127,13 @@ function App() {
               <Route path="/guards/:id/edit"     element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
 
               {/* Attendance */}
-              <Route path="/attendance"           element={<L><RoleGuard allowedRoles={DEPLOYMENT_VIEW} fallback={<UnauthorisedPage />}><AttendancePage /></RoleGuard></L>} />
+              <Route path="/attendance"           element={<L><PermissionGuard permission="attendance.view" fallback={<PermissionDenied permission="attendance.view" />}><AttendancePage /></PermissionGuard></L>} />
               <Route path="/attendance/deployment-sheet" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><DeploymentSheetPage /></RoleGuard></L>} />
               <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
               <Route path="/checkin"              element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
 
               {/* Finance */}
-              <Route path="/finance" element={<L><RoleGuard allowedRoles={FINANCE_ROLES_ARR} fallback={<UnauthorisedPage />}><FinancePage /></RoleGuard></L>} />
+              <Route path="/finance" element={<L><PermissionGuard permission="finance.view" fallback={<PermissionDenied permission="finance.view" />}><FinancePage /></PermissionGuard></L>} />
 
               {/* Requisitions */}
               <Route
@@ -147,9 +148,9 @@ function App() {
                 <Route path="reports"   element={<L><MarketingReportsPage /></L>} />
               </Route>
 
-              <Route path="/guns" element={<L><RoleGuard allowedRoles={GUN_VIEW_ROLES} fallback={<UnauthorisedPage />}><GunManagementPage /></RoleGuard></L>} />
+              <Route path="/guns" element={<L><PermissionGuard permission="guns.view" fallback={<PermissionDenied permission="guns.view" />}><GunManagementPage /></PermissionGuard></L>} />
 
-              <Route path="/requisitions" element={<L><RoleGuard allowedRoles={REQUISITION_ROLES} fallback={<UnauthorisedPage />}><RequisitionsPage /></RoleGuard></L>} />
+              <Route path="/requisitions" element={<L><PermissionGuard permission="requisitions.view" fallback={<PermissionDenied permission="requisitions.view" />}><RequisitionsPage /></PermissionGuard></L>} />
 
               {/* Clients */}
               <Route path="/clients"          element={<L><ClientsListPage /></L>} />
@@ -158,39 +159,39 @@ function App() {
               <Route path="/clients/:id/edit" element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
 
               {/* Complaints */}
-              <Route path="/complaints"           element={<L><RoleGuard allowedRoles={COMPLAINT_VIEW_ROLES} fallback={<UnauthorisedPage />}><ComplaintsPage /></RoleGuard></L>} />
+              <Route path="/complaints"           element={<L><PermissionGuard permission="complaints.view" fallback={<PermissionDenied permission="complaints.view" />}><ComplaintsPage /></PermissionGuard></L>} />
               <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
 
               {/* Service requests raised by clients */}
-              <Route path="/service-requests" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.CONTROL_ROOM, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><StaffServiceRequestsPage /></RoleGuard></L>} />
+              <Route path="/service-requests" element={<L><PermissionGuard permission="service_requests.view" fallback={<PermissionDenied permission="service_requests.view" />}><StaffServiceRequestsPage /></PermissionGuard></L>} />
 
               {/* Reports */}
-              <Route path="/reports" element={<L><RoleGuard allowedRoles={REPORT_ACCESS} fallback={<UnauthorisedPage />}><ReportsPage /></RoleGuard></L>} />
+              <Route path="/reports" element={<L><PermissionGuard permission="reports.view" fallback={<PermissionDenied permission="reports.view" />}><ReportsPage /></PermissionGuard></L>} />
 
               {/* Notifications */}
               <Route path="/notifications" element={<L><NotificationsPage /></L>} />
 
               {/* HR */}
-              <Route path="/hr" element={<L><RoleGuard allowedRoles={[...HR_VIEW_ROLES, ROLES.TRAINER]} fallback={<UnauthorisedPage />}><HRPage /></RoleGuard></L>} />
+              <Route path="/hr" element={<L><PermissionGuard permission="hr.view" fallback={<PermissionDenied permission="hr.view" />}><HRPage /></PermissionGuard></L>} />
 
               {/* Inventory */}
-              <Route path="/inventory" element={<L><RoleGuard allowedRoles={INV_ROLES} fallback={<UnauthorisedPage />}><InventoryPage /></RoleGuard></L>} />
+              <Route path="/inventory" element={<L><PermissionGuard permission="inventory.view" fallback={<PermissionDenied permission="inventory.view" />}><InventoryPage /></PermissionGuard></L>} />
 
               {/* Zones */}
-              <Route path="/zones"    element={<L><RoleGuard allowedRoles={ZONE_VIEW_ROLES} fallback={<UnauthorisedPage />}><ZonesPage /></RoleGuard></L>} />
-              <Route path="/zones/:id" element={<L><RoleGuard allowedRoles={ZONE_VIEW_ROLES} fallback={<UnauthorisedPage />}><ZoneDetailPage /></RoleGuard></L>} />
+              <Route path="/zones"    element={<L><PermissionGuard permission="sites.view" fallback={<PermissionDenied permission="sites.view" />}><ZonesPage /></PermissionGuard></L>} />
+              <Route path="/zones/:id" element={<L><PermissionGuard permission="sites.view" fallback={<PermissionDenied permission="sites.view" />}><ZoneDetailPage /></PermissionGuard></L>} />
 
               {/* Settings */}
-              <Route path="/settings" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><SettingsPage /></RoleGuard></L>} />
+              <Route path="/settings" element={<L><PermissionGuard permission="settings.view" fallback={<PermissionDenied permission="settings.view" />}><SettingsPage /></PermissionGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
-              <Route path="/settings/roles" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><RolesPermissionsPage /></RoleGuard></L>} />
+              <Route path="/settings/roles" element={<L><PermissionGuard permission="roles.manage" fallback={<PermissionDenied permission="roles.manage" />}><RolesPermissionsPage /></PermissionGuard></L>} />
 
               {/* Staff directory */}
-              <Route path="/staff" element={<L><RoleGuard allowedRoles={STAFF_MANAGER_ROLES} fallback={<UnauthorisedPage />}><StaffPage /></RoleGuard></L>} />
+              <Route path="/staff" element={<L><PermissionGuard permission="staff.view" fallback={<PermissionDenied permission="staff.view" />}><StaffPage /></PermissionGuard></L>} />
 
               {/* Admin */}
-              <Route path="/admin/errors" element={<L><RoleGuard allowedRoles={ERROR_ADMIN_ROLES} fallback={<UnauthorisedPage />}><SystemErrorsPage /></RoleGuard></L>} />
-              <Route path="/admin/audit-log" element={<L><RoleGuard allowedRoles={ERROR_ADMIN_ROLES} fallback={<UnauthorisedPage />}><AuditLogPage /></RoleGuard></L>} />
+              <Route path="/admin/errors" element={<L><PermissionGuard permission="system.errors" fallback={<PermissionDenied permission="system.errors" />}><SystemErrorsPage /></PermissionGuard></L>} />
+              <Route path="/admin/audit-log" element={<L><PermissionGuard permission="audit.log" fallback={<PermissionDenied permission="audit.log" />}><AuditLogPage /></PermissionGuard></L>} />
             </Route>
           </Route>
 

@@ -55,6 +55,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.SETTINGS_VIEW, P.SETTINGS_EDIT, P.SYSTEM_ERRORS, P.AUDIT_LOG,
     P.ROLES_MANAGE,
     P.REPORTS_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.ATTENDANCE_VIEW, P.COMPLAINTS_VIEW, P.INVENTORY_VIEW, P.REQUISITIONS_VIEW, P.SERVICE_REQUESTS_VIEW,
   ],
 
   OPERATIONS_SUPERVISOR: [
@@ -67,6 +70,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.INVENTORY_VIEW,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.GUNS_VIEW,
   ],
 
   FIELD_SUPERVISOR: [
@@ -74,6 +80,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.ROSTER_VIEW, P.ROSTER_BUILD,
     P.ATTENDANCE_VIEW, P.ATTENDANCE_EDIT,
     P.SITES_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.CLIENTS_VIEW, P.COMPLAINTS_VIEW, P.REQUISITIONS_VIEW,
   ],
 
   ACCOUNTS_OFFICER: [
@@ -83,6 +92,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE, P.REQUISITIONS_DISPATCH,
     P.SERVICE_REQUESTS_VIEW,
     P.REPORTS_VIEW, P.REPORTS_EXPORT,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.ATTENDANCE_VIEW, P.COMPLAINTS_VIEW, P.GUARDS_VIEW,
   ],
 
   CONTROL_ROOM: [
@@ -102,6 +114,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.HR_VIEW, P.HR_LETTERS,
     P.REPORTS_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.CLIENTS_VIEW, P.COMPLAINTS_VIEW,
   ],
 
   // Everything marketing: every lead, targets, bids, all reports. Also
@@ -113,6 +128,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT,
     P.STAFF_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.COMPLAINTS_VIEW, P.GUARDS_VIEW,
   ],
 
   // Prospects and nothing else in marketing. No bids, no targets, no marketing
@@ -123,6 +141,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.MARKETING_VIEW, P.MARKETING_PROSPECTS,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW,
+    // Reconciled with the pages this role already reaches, so moving the nav
+    // and route guards onto permissions does not take access away.
+    P.COMPLAINTS_VIEW, P.GUARDS_VIEW,
   ],
 };
 

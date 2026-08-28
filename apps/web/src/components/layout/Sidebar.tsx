@@ -7,6 +7,7 @@ import { useUnreadCount } from '../../hooks/useNotifications';
 import { useSystemErrorStats } from '../../hooks/useSystemErrors';
 import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import RoleGuard from '../RoleGuard';
+import PermissionGuard from '../PermissionGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import {
   APP_NAME,
@@ -43,6 +44,13 @@ interface NavItem {
   icon:  string;
   label: string;
   to:    string;
+  /**
+   * Permission that decides whether this item is shown. Where present it
+   * replaces `roles`, so granting it in the Roles & Permissions page makes the
+   * item appear without a code change. `roles` stays for the few items that
+   * have no permission of their own (Dashboard, Check-in, Notifications).
+   */
+  permission?: string;
   roles: UserRole[];
 }
 
@@ -69,9 +77,9 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-shield-fill',
     label: 'Guard Operations',
     items: [
-      { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] },
-      { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] },
-      { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] },
+      { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] , permission: 'guards.view'},
+      { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] , permission: 'attendance.view'},
+      { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] , permission: 'guns.view'},
       { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
     ],
   },
@@ -80,11 +88,11 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-building-fill',
     label: 'Clients & Sites',
     items: [
-      { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] },
-      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[] },
-      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] },
-      { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] },
-      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] },
+      { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] , permission: 'clients.view'},
+      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'sites.view' },
+      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] , permission: 'marketing.view'},
+      { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] , permission: 'complaints.view'},
+      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] , permission: 'service_requests.view'},
     ],
   },
   {
@@ -92,9 +100,9 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-cash-coin',
     label: 'Finance & Resources',
     items: [
-      { icon: 'bi-cash-coin',      label: 'Finance',      to: '/finance',      roles: FINANCE_ROLES as UserRole[] },
-      { icon: 'bi-box-seam-fill',  label: 'Inventory',    to: '/inventory',    roles: ADMIN_ONLY as UserRole[] },
-      { icon: 'bi-clipboard2-fill', label: 'Requisitions', to: '/requisitions', roles: NON_GUARD_INTERNAL as UserRole[] },
+      { icon: 'bi-cash-coin',      label: 'Finance',      to: '/finance',      roles: FINANCE_ROLES as UserRole[] , permission: 'finance.view'},
+      { icon: 'bi-box-seam-fill',  label: 'Inventory',    to: '/inventory',    roles: ADMIN_ONLY as UserRole[] , permission: 'inventory.view'},
+      { icon: 'bi-clipboard2-fill', label: 'Requisitions', to: '/requisitions', roles: NON_GUARD_INTERNAL as UserRole[] , permission: 'requisitions.view'},
     ],
   },
   {
@@ -102,8 +110,8 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-people-fill',
     label: 'HR & Reporting',
     items: [
-      { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: [...HR_ROLES, ROLES.TRAINER] as UserRole[] },
-      { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', roles: REPORT_ROLES as UserRole[] },
+      { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: [...HR_ROLES, ROLES.TRAINER] as UserRole[], permission: 'hr.view' },
+      { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view'},
     ],
   },
   {
@@ -111,11 +119,11 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-gear-fill',
     label: 'System',
     items: [
-      { icon: 'bi-person-badge-fill',   label: 'Staff',         to: '/staff',         roles: STAFF_MANAGER_ROLES as UserRole[] },
-      { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] },
-      { icon: 'bi-shield-lock-fill',    label: 'Roles & Permissions', to: '/settings/roles', roles: ADMIN_ONLY as UserRole[] },
-      { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] },
-      { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] },
+      { icon: 'bi-person-badge-fill',   label: 'Staff',         to: '/staff',         roles: STAFF_MANAGER_ROLES as UserRole[] , permission: 'staff.view'},
+      { icon: 'bi-gear-fill',           label: 'Settings',      to: '/settings',      roles: [ROLES.DIRECTOR] as UserRole[] , permission: 'settings.view'},
+      { icon: 'bi-shield-lock-fill',    label: 'Roles & Permissions', to: '/settings/roles', roles: ADMIN_ONLY as UserRole[] , permission: 'roles.manage'},
+      { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] , permission: 'system.errors'},
+      { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] , permission: 'audit.log'},
     ],
   },
 ];
@@ -154,6 +162,20 @@ const ROLE_BADGE: Record<string, string> = {
   GUARD:                 '#f8f9fa',
   CLIENT:                '#f8f9fa',
 };
+
+/**
+ * Shows a nav item when the user's role holds its permission, falling back to
+ * the role list for the handful of items that have no permission of their own.
+ *
+ * Both the item and the route behind it now read the same permission, which is
+ * what stops the sidebar offering a page the router then refuses.
+ */
+function NavGate({ item, children }: { item: NavItem; children: React.ReactNode }) {
+  if (item.permission) {
+    return <PermissionGuard permission={item.permission}>{children}</PermissionGuard>;
+  }
+  return <RoleGuard allowedRoles={item.roles}>{children}</RoleGuard>;
+}
 
 interface NavContentProps {
   onNavigate?: () => void;
@@ -304,7 +326,7 @@ function NavGroupPanel({
       {effectiveOpen && (
         <div>
           {group.items.map(item => (
-            <RoleGuard key={item.to} allowedRoles={item.roles}>
+            <NavGate key={item.to} item={item}>
               <NavItemLink
                 item={item}
                 onNavigate={onNavigate}
@@ -315,7 +337,7 @@ function NavGroupPanel({
                   : undefined
                 }
               />
-            </RoleGuard>
+            </NavGate>
           ))}
 
           {/* Sub-nav: Guards */}
