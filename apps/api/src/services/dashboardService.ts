@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { OUTSTANDING_STATUSES } from './invoiceService';
 import { ROLES, DEPLOYABLE_STATUSES } from '@stap/shared';
 import { marketingService } from './marketingService';
 import type { DashboardData } from '@stap/shared';
@@ -86,7 +87,7 @@ class DashboardService {
       prisma.guard.count({ where: { employmentStatus: 'ON_LEAVE' } }),
       prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
       prisma.clientComplaint.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS', 'UNDER_INVESTIGATION'] } } }),
-      prisma.invoice.count({ where: { status: { in: ['PENDING', 'OVERDUE'] } } }),
+      prisma.invoice.count({ where: { status: { in: [...OUTSTANDING_STATUSES] } } }),
       prisma.invoice.aggregate({
         _sum:  { totalAmount: true },
         where: { status: 'PAID', paidAt: { gte: monthStart } },
@@ -98,7 +99,7 @@ class DashboardService {
         take:    5,
       }),
       prisma.invoice.findMany({
-        where:   { status: { in: ['PENDING', 'OVERDUE'] } },
+        where:   { status: { in: [...OUTSTANDING_STATUSES] } },
         include: { client: { select: { clientName: true } } },
         orderBy: { createdAt: 'desc' },
         take:    5,
@@ -421,8 +422,10 @@ class DashboardService {
       overdueInvoices,
       recentInvoices,
     ] = await Promise.all([
-      prisma.invoice.count({ where: { status: { in: ['PENDING', 'OVERDUE'] } } }),
-      prisma.invoice.aggregate({ _sum: { totalAmount: true }, where: { status: { in: ['PENDING', 'OVERDUE'] } } }),
+      prisma.invoice.count({ where: { status: { in: [...OUTSTANDING_STATUSES] } } }),
+      // What is owed, not what was billed: summing totalAmount left a part-paid
+      // invoice contributing its full value to outstanding AR.
+      prisma.invoice.aggregate({ _sum: { outstandingBalance: true }, where: { status: { in: [...OUTSTANDING_STATUSES] } } }),
       prisma.invoice.aggregate({ _sum: { totalAmount: true }, where: { status: 'PAID', paidAt: { gte: monthStart } } }),
       prisma.invoice.count({ where: { status: 'OVERDUE' } }),
       prisma.requisition.count({ where: { status: 'SUBMITTED' } }),
@@ -444,7 +447,7 @@ class DashboardService {
       role:  'ACCOUNTS_OFFICER',
       stats: {
         unpaidInvoices,
-        totalOutstanding: outstandingAgg._sum.totalAmount ?? 0,
+        totalOutstanding: outstandingAgg._sum.outstandingBalance ?? 0,
         paidThisMonth:    paidAgg._sum.totalAmount ?? 0,
         overdueInvoices:  overdueCount,
         pendingRequisitions,
@@ -582,7 +585,7 @@ class DashboardService {
       await Promise.all([
         prisma.site.count({ where: { clientId } }),
         prisma.contract.count({ where: { clientId, status: { in: ['ACTIVE', 'EXPIRING'] } } }),
-        prisma.invoice.count({ where: { clientId, status: { in: ['PENDING', 'OVERDUE'] } } }),
+        prisma.invoice.count({ where: { clientId, status: { in: [...OUTSTANDING_STATUSES] } } }),
         prisma.clientComplaint.count({ where: { clientId, status: { in: ['OPEN', 'IN_PROGRESS', 'UNDER_INVESTIGATION'] } } }),
         prisma.serviceRequest.count({ where: { clientId, status: { in: ['PENDING', 'IN_PROGRESS'] } } }),
         prisma.invoice.findMany({ where: { clientId }, orderBy: { createdAt: 'desc' }, take: 5 }),

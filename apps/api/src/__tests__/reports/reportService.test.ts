@@ -97,7 +97,9 @@ describe('reportService.getDirectorDashboard()', () => {
   it('maps aggregate values into the finance section correctly', async () => {
     mp.invoice.aggregate
       .mockResolvedValueOnce({ _sum: { totalAmount: 8_000_000 } })  // monthlyRevenue (PAID)
-      .mockResolvedValueOnce({ _sum: { totalAmount: 2_000_000 } }); // outstandingAR (PENDING/OVERDUE)
+      // outstandingAR sums what is owed, so a part-paid invoice reduces it by
+      // the amount paid rather than dropping out of the figure entirely.
+      .mockResolvedValueOnce({ _sum: { outstandingBalance: 2_000_000 } });
 
     const stats = await reportService.getDirectorDashboard();
 

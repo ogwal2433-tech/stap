@@ -209,12 +209,16 @@ describe('invoiceService.recordManualPayment()', () => {
 describe('invoiceService.getARAgingReport()', () => {
   it('buckets invoices correctly', async () => {
     const now = new Date();
-    const makeInv = (daysAgo: number, amount: number) => ({
+    // `paid` defaults to nothing owed against the total, so a bucket reflects
+    // what is still owed rather than what was billed.
+    const makeInv = (daysAgo: number, amount: number, paid = 0) => ({
       ...MOCK_INVOICE,
       id: `inv-${daysAgo}`,
       totalAmount: amount,
+      paidAmount: paid,
+      outstandingBalance: amount - paid,
       dueDate: new Date(now.getTime() - daysAgo * 86_400_000),
-      status: daysAgo > 0 ? 'OVERDUE' : 'PENDING',
+      status: paid > 0 ? 'PARTIALLY_PAID' : daysAgo > 0 ? 'OVERDUE' : 'PENDING',
       payments: [],
     });
 
@@ -230,6 +234,34 @@ describe('invoiceService.getARAgingReport()', () => {
     expect(report.buckets.days31_60).toBe(300000);
     expect(report.buckets.days61_90).toBe(200000);
     expect(report.buckets.over90).toBe(100000);
+  });
+
+  it('ages what is still owed, not what was billed', async () => {
+    const now = new Date();
+    // Half settled: the report should show the remaining 250,000, not 500,000.
+    mp.invoice.findMany.mockResolvedValue([{
+      ...MOCK_INVOICE,
+      id: 'inv-part',
+      totalAmount: 500000,
+      paidAmount: 250000,
+      outstandingBalance: 250000,
+      dueDate: new Date(now.getTime() - 45 * 86_400_000),
+      status: 'PARTIALLY_PAID',
+      payments: [],
+    }]);
+
+    const report = await invoiceService.getARAgingReport();
+    expect(report.buckets.total).toBe(250000);
+    expect(report.buckets.days31_60).toBe(250000);
+  });
+
+  it('still counts a part-paid invoice as outstanding', async () => {
+    await invoiceService.getARAgingReport();
+    // PARTIALLY_PAID has to be in the filter, or a part payment drops the
+    // invoice out of the ageing report altogether instead of reducing it.
+    const where = mp.invoice.findMany.mock.calls.at(-1)[0].where;
+    expect(where.status.in).toContain('PARTIALLY_PAID');
+    expect(where.status.in).toEqual(expect.arrayContaining(['PENDING', 'OVERDUE']));
   });
 
   it('auto-marks overdue invoices', async () => {

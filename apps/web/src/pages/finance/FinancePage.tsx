@@ -159,9 +159,14 @@ function InvoicesTab() {
   });
 
   const sumInvoiced = totalInvoiced.reduce((s, i) => s + i.totalAmount, 0);
-  const sumPaid     = totalInvoiced.filter((i) => i.status === 'PAID').reduce((s, i) => s + i.totalAmount, 0);
+  // Both figures read the per-invoice balances rather than the invoice total.
+  // Summing totalAmount meant a part payment moved neither tile: the invoice
+  // still counted in full towards Outstanding, and contributed nothing to Paid
+  // because its status was PARTIALLY_PAID rather than PAID.
+  const sumPaid     = totalInvoiced.filter((i) => i.status !== 'CANCELLED')
+    .reduce((s, i) => s + (i.paidAmount ?? 0), 0);
   const outstanding = totalInvoiced.filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED')
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .reduce((s, i) => s + (i.outstandingBalance ?? i.totalAmount), 0);
   const overdueCount = totalInvoiced.filter((i) => i.status === 'OVERDUE').length;
 
   return (

@@ -41,7 +41,14 @@ export function useRecordPayment() {
   return useMutation({
     mutationFn: ({ invoiceId, ...data }: RecordPaymentInput & { invoiceId: string }) =>
       invoicesApi.recordPayment(invoiceId, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      // A payment moves the ageing report and the dashboard's outstanding
+      // figure too; without these they kept showing the pre-payment balance
+      // until something else happened to refetch them.
+      qc.invalidateQueries({ queryKey: ['ar-aging'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }
 

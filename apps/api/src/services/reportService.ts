@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import cron from 'node-cron';
 import prisma from '../db/prisma';
+import { OUTSTANDING_STATUSES } from './invoiceService';
 import { QueueService } from '../jobs/QueueService';
 import type { DirectorDashboardStats, ScheduledReportInput } from '@stap/shared';
 
@@ -81,8 +82,11 @@ class ReportService {
         where: { status: 'PAID', paidAt: { gte: startOfMonth(now), lte: endOfMonth(now) } },
       }),
       prisma.invoice.aggregate({
-        _sum: { totalAmount: true },
-        where: { status: { in: ['PENDING', 'OVERDUE'] } },
+        // outstandingBalance, not totalAmount — a part-paid invoice owes the
+        // remainder, and PARTIALLY_PAID has to be in the filter or it drops out
+        // of the figure altogether.
+        _sum: { outstandingBalance: true },
+        where: { status: { in: [...OUTSTANDING_STATUSES] } },
       }),
       prisma.payrollRun.aggregate({
         _sum: { totalNet: true },
@@ -159,7 +163,7 @@ class ReportService {
       },
       finance: {
         monthlyRevenue:       monthlyRevenueAgg._sum.totalAmount ?? 0,
-        outstandingAR:        outstandingARAgg._sum.totalAmount  ?? 0,
+        outstandingAR:        outstandingARAgg._sum.outstandingBalance ?? 0,
         payrollCostThisMonth: payrollCostAgg._sum.totalNet       ?? 0,
         overdueInvoices,
       },
@@ -264,7 +268,7 @@ class ReportService {
 
   async generateARAgingExcel(): Promise<Buffer> {
     const invoices = await prisma.invoice.findMany({
-      where:   { status: { in: ['PENDING', 'OVERDUE'] } },
+      where:   { status: { in: [...OUTSTANDING_STATUSES] } },
       include: { client: { select: { clientName: true } }, payments: true },
       orderBy: { dueDate: 'asc' },
     });

@@ -1,5 +1,5 @@
 import prisma from '../db/prisma';
-import { recomputeInvoiceBalance } from './invoiceService';
+import { recomputeInvoiceBalance, OUTSTANDING_STATUSES } from './invoiceService';
 import {
   initiateCollection,
   checkPaymentStatus,
@@ -22,7 +22,9 @@ export async function initiateInvoicePayment(params: {
     include: { client: { select: { contactPerson: true } } },
   });
 
-  if (!['PENDING', 'OVERDUE'].includes(invoice.status)) {
+  // PARTIALLY_PAID is payable: a client who settled half by mobile money was
+  // refused when paying the rest the same way.
+  if (!(OUTSTANDING_STATUSES as readonly string[]).includes(invoice.status)) {
     throw new Error(`Invoice is already ${invoice.status}`);
   }
 

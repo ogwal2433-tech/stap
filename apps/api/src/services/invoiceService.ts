@@ -90,6 +90,17 @@ function formatPayment(p: any): PaymentResponse {
  * balance raises a carry-forward for the client's next invoice; clearing the
  * balance removes it.
  */
+/**
+ * Statuses that still owe money.
+ *
+ * PARTIALLY_PAID belongs here and was missing everywhere it mattered: the
+ * moment a part payment landed, the invoice left the PENDING/OVERDUE filters
+ * these aggregates used, so it dropped out of outstanding figures entirely
+ * rather than by the amount paid. Anything that reports what is owed should
+ * filter on this and sum `outstandingBalance`, never `totalAmount`.
+ */
+export const OUTSTANDING_STATUSES = ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'] as const;
+
 export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
   paidAmount: number;
   outstandingBalance: number;
@@ -617,7 +628,7 @@ class InvoiceService {
     });
 
     const invoices = await prisma.invoice.findMany({
-      where:   { status: { in: ['PENDING', 'OVERDUE'] } },
+      where:   { status: { in: [...OUTSTANDING_STATUSES] } },
       include: { client: true, contract: true, payments: true },
       orderBy: { dueDate: 'asc' },
     });
@@ -626,12 +637,15 @@ class InvoiceService {
 
     for (const inv of invoices) {
       const daysOverdue = Math.floor((now.getTime() - inv.dueDate.getTime()) / 86_400_000);
-      buckets.total += inv.totalAmount;
-      if (daysOverdue <= 0)       buckets.current   += inv.totalAmount;
-      else if (daysOverdue <= 30) buckets.current   += inv.totalAmount;
-      else if (daysOverdue <= 60) buckets.days31_60 += inv.totalAmount;
-      else if (daysOverdue <= 90) buckets.days61_90 += inv.totalAmount;
-      else                         buckets.over90    += inv.totalAmount;
+      // What is still owed, not what was billed — ageing the full total kept a
+      // part-paid invoice in the report at its original size.
+      const owed = inv.outstandingBalance;
+      buckets.total += owed;
+      if (daysOverdue <= 0)       buckets.current   += owed;
+      else if (daysOverdue <= 30) buckets.current   += owed;
+      else if (daysOverdue <= 60) buckets.days31_60 += owed;
+      else if (daysOverdue <= 90) buckets.days61_90 += owed;
+      else                         buckets.over90    += owed;
     }
 
     return { invoices: invoices.map((i) => formatInvoice(i)), buckets };
