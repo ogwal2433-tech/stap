@@ -168,7 +168,7 @@ class DeploymentService {
         data: toCreate.map(({ guardId, date }) => ({
           guardId,
           siteId:                data.siteId,
-          shiftType:             data.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
+          shiftType:             data.shiftType,
           date,
           supervisorId:          data.supervisorId,
           deploymentType:        data.deploymentType ?? 'UNARMED',
@@ -184,7 +184,7 @@ class DeploymentService {
         data: toCreate.map(({ guardId, date }) => ({
           guardId,
           siteId:       data.siteId,
-          shiftType:    data.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
+          shiftType:    data.shiftType,
           startDate:    date,
           supervisorId: data.supervisorId,
         })),
@@ -659,7 +659,7 @@ class DeploymentService {
         zone: d.site.zone ? { id: d.site.zone.id, name: d.site.zone.name } : null,
       },
       supervisor: { id: d.supervisor.id, name: d.supervisor.name },
-      shiftType: d.shiftType as 'DAY' | 'NIGHT' | 'FULL_24',
+      shiftType: d.shiftType,
       date: d.date instanceof Date ? d.date.toISOString() : d.date,
       createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
       isReplacement:     d.isReplacement     ?? false,
@@ -1120,7 +1120,7 @@ class DeploymentService {
         if (sameDay) {
           await prisma.deployment.update({
             where: { id: sameDay.id },
-            data:  { shiftType: shiftCode as 'DAY' | 'NIGHT' | 'FULL_24' },
+            data:  { shiftType: shiftCode },
           });
           result.updated++;
         } else {
@@ -1129,7 +1129,7 @@ class DeploymentService {
               guardId:   row.guardId,
               siteId:    row.siteId,
               date,
-              shiftType: shiftCode as 'DAY' | 'NIGHT' | 'FULL_24',
+              shiftType: shiftCode,
               supervisorId,
             },
           });

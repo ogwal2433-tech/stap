@@ -113,12 +113,6 @@ enum AttendanceStatus {
   AWOL
 }
 
-enum ShiftType {
-  DAY
-  NIGHT
-  FULL_24
-}
-
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -437,7 +431,10 @@ model DeploymentHistory {
   siteId       String
   startDate    DateTime
   endDate      DateTime?
-  shiftType    ShiftType
+  /// A ShiftTypeConfig.code. Was a fixed enum, which could not hold the shift
+  /// types administrators add from Settings — OVERTIME shipped in the seed and
+  /// was already unstorable.
+  shiftType    String
   supervisorId String
   createdAt    DateTime  @default(now())
 
@@ -847,7 +844,9 @@ model Deployment {
   id                    String    @id @default(cuid())
   guardId               String
   siteId                String
-  shiftType             ShiftType
+  /// A ShiftTypeConfig.code, validated against the active list on create rather
+  /// than by the column, so a new shift type works the day it is added.
+  shiftType             String
   date                  DateTime
   supervisorId          String
   deploymentType        String    @default("UNARMED")

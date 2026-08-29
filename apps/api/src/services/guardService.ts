@@ -9,7 +9,6 @@ import { siteService } from './siteService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, guardStatusLabel, EXITED_STATUSES, type UserRole, type GuardEmploymentStatus } from '@stap/shared';
 import { generateGuardId } from '../lib/systemId';
-import type { ShiftType } from '@prisma/client';
 import type {
   CreateGuardInput,
   UpdateGuardInput,
@@ -1034,7 +1033,9 @@ class GuardService {
     // The new posting runs on whatever shift the destination site deploys on,
     // not an assumed day shift.
     const toSiteShift = await siteService.getShift(data.toSiteId);
-    const newShiftType = (toSiteShift.shift ?? 'DAY') as ShiftType;
+    // A ShiftTypeConfig code, not an enum member — the site's configured shift
+    // if it has one, falling back to DAY.
+    const newShiftType = toSiteShift.shift ?? 'DAY';
 
     await prisma.deploymentHistory.create({
       data: {
@@ -1103,7 +1104,7 @@ class GuardService {
     fromSiteId:    string;
     toSiteId:      string;
     effectiveDate: Date;
-    shiftType:     ShiftType;
+    shiftType:     string;
   }): Promise<{ deployments: number; attendance: number; attendanceDropped: number }> {
     const from = new Date(args.effectiveDate);
     from.setUTCHours(0, 0, 0, 0);
