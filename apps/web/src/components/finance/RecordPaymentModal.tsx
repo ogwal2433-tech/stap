@@ -1,18 +1,31 @@
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRecordPayment } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
 import type { InvoiceResponse } from '@stap/shared';
+import { getApiErrorMessage } from '../../lib/api';
 
-const Schema = z.object({
-  amountPaid:      z.coerce.number().int().positive('Amount must be positive'),
-  mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
-  referenceNumber: z.string().optional(),
-});
+/**
+ * Built per invoice so the cap is the balance actually owed. The API rejects an
+ * overpayment too — this only saves the round trip and names the limit while
+ * the number is being typed.
+ */
+const makeSchema = (outstanding: number) =>
+  z.object({
+    amountPaid: z.coerce
+      .number()
+      .int()
+      .positive('Amount must be positive')
+      .max(outstanding, `Cannot exceed the outstanding balance of UGX ${outstanding.toLocaleString()}`),
+    mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
+    referenceNumber: z.string().optional(),
+  });
 
-type FormValues = z.infer<typeof Schema>;
+type FormValues = z.infer<ReturnType<typeof makeSchema>>;
+
+const ugx = (n: number) => `UGX ${n.toLocaleString()}`;
 
 interface Props {
   invoice: InvoiceResponse;
@@ -23,22 +36,34 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
   const { showToast } = useToast();
   const recordPayment = useRecordPayment();
 
+  // The balance owed, from the invoice record — not the invoice total, which is
+  // what this panel used to show under an "Outstanding" label.
+  const outstanding = invoice.outstandingBalance ?? invoice.totalAmount;
+  const alreadyPaid = invoice.paidAmount ?? 0;
+
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    resolver: zodResolver(Schema),
+    resolver: zodResolver(makeSchema(outstanding)),
     defaultValues: { mode: 'MOBILE_MONEY' },
   });
+
+  // What the invoice will owe once this payment lands, updated as it is typed.
+  const entered = Number(useWatch({ control, name: 'amountPaid' })) || 0;
+  const remaining = Math.max(0, outstanding - entered);
 
   const onSubmit = async (values: FormValues) => {
     try {
       await recordPayment.mutateAsync({ invoiceId: invoice.id, ...values });
       showToast('Payment recorded', 'success');
       onClose();
-    } catch {
-      showToast('Failed to record payment', 'danger');
+    } catch (err) {
+      // The API is the authority on the balance — show what it said rather than
+      // a generic failure, so an overpayment explains itself.
+      showToast(getApiErrorMessage(err), 'danger');
     }
   };
 
@@ -49,14 +74,36 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
       </Modal.Header>
       <Form onSubmit={handleSubmit(onSubmit)}>
         <Modal.Body>
-          <div className="mb-3 p-2 rounded bg-light small text-muted">
-            Outstanding: <strong className="text-dark">UGX {invoice.totalAmount.toLocaleString()}</strong>
+          <div className="mb-3 p-2 rounded bg-light small">
+            <div className="d-flex justify-content-between text-muted">
+              <span>Invoice total</span>
+              <span className="text-dark">{ugx(invoice.totalAmount)}</span>
+            </div>
+            <div className="d-flex justify-content-between text-muted">
+              <span>Already paid</span>
+              <span style={{ color: '#1E8449' }}>{ugx(alreadyPaid)}</span>
+            </div>
+            <div className="d-flex justify-content-between fw-bold mt-1 pt-1 border-top">
+              <span>Outstanding</span>
+              <span style={{ color: outstanding > 0 ? '#C0392B' : '#1E8449' }}>{ugx(outstanding)}</span>
+            </div>
+            {entered > 0 && entered <= outstanding && (
+              <div className="d-flex justify-content-between mt-1 pt-1 border-top">
+                <span>Remaining after this payment</span>
+                <span className="fw-bold" style={{ color: remaining === 0 ? '#1E8449' : '#E8701A' }}>
+                  {remaining === 0 ? 'Settled in full' : ugx(remaining)}
+                </span>
+              </div>
+            )}
           </div>
           <Row className="g-3">
             <Col md={12}>
               <Form.Group>
                 <Form.Label>Amount Paid (UGX) <span className="text-danger">*</span></Form.Label>
                 <Form.Control
+                  // No `max` attribute: it makes the browser block submission
+                  // with its own tooltip, which suppresses the message below
+                  // naming the actual balance. Zod enforces the same limit.
                   type="number" min={1}
                   {...register('amountPaid', { valueAsNumber: true })}
                   isInvalid={!!errors.amountPaid}

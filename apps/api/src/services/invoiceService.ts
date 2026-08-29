@@ -498,10 +498,25 @@ class InvoiceService {
     recordedBy: string,
   ): Promise<PaymentResponse> {
     const invoice = await prisma.invoice.findUnique({
-      where: { id: data.invoiceId },
-      select: { totalAmount: true },
+      where:  { id: data.invoiceId },
+      select: { totalAmount: true, outstandingBalance: true, status: true, invoiceNumber: true },
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
+
+    if (invoice.status === 'PAID' || invoice.outstandingBalance <= 0) {
+      throw new AppError(`Invoice ${invoice.invoiceNumber} is already settled.`, 400);
+    }
+
+    // Nothing rejected an overpayment before. The excess was accepted, and
+    // recomputeInvoiceBalance floors the balance at zero, so it vanished
+    // without a trace instead of failing or being recorded as a credit.
+    if (data.amountPaid > invoice.outstandingBalance) {
+      throw new AppError(
+        `Payment of UGX ${data.amountPaid.toLocaleString()} exceeds the outstanding balance ` +
+        `of UGX ${invoice.outstandingBalance.toLocaleString()} on ${invoice.invoiceNumber}.`,
+        400,
+      );
+    }
 
     const payment = await prisma.payment.create({
       data: {

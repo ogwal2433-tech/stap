@@ -28,6 +28,10 @@ export async function initiateInvoicePayment(params: {
     throw new Error(`Invoice is already ${invoice.status}`);
   }
 
+  // Charge what is still owed, not the invoice total. A part-paid invoice would
+  // otherwise bill the client the whole original amount a second time.
+  const amountDue = invoice.outstandingBalance > 0 ? invoice.outstandingBalance : invoice.totalAmount;
+
   const normPhone  = normalisePhone(params.phone);
   const network    = detectNetwork(normPhone);
   const extReference = generateExtReference();
@@ -39,7 +43,7 @@ export async function initiateInvoicePayment(params: {
       extReference,
       phone:       normPhone,
       network,
-      amountPaid:  invoice.totalAmount,
+      amountPaid:  amountDue,
       status:      'PENDING',
       initiatedBy: params.initiatedBy,
     },
@@ -49,7 +53,7 @@ export async function initiateInvoicePayment(params: {
   try {
     const result = await initiateCollection({
       phone:        normPhone,
-      amount:       invoice.totalAmount,
+      amount:       amountDue,
       network,
       accountName:  invoice.client.contactPerson,
       extReference,

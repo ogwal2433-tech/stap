@@ -48,6 +48,7 @@ interface Props {
 }
 
 export default function PayInvoiceModal({ invoice, onClose }: Props) {
+  const amountDue = invoice.outstandingBalance ?? invoice.totalAmount;
   const { showToast } = useToast();
   const qc            = useQueryClient();
   const initiateMut   = useInitiatePayment();
@@ -109,7 +110,18 @@ export default function PayInvoiceModal({ invoice, onClose }: Props) {
             <div className="mb-3 p-3 rounded" style={{ background: '#f8f9fa' }}>
               <div className="small text-muted">Invoice</div>
               <div className="fw-semibold">{invoice.invoiceNumber} — {invoice.clientName}</div>
-              <div className="fw-bold mt-1" style={{ color: NAVY }}>UGX {invoice.totalAmount.toLocaleString()}</div>
+              {/* The amount that will actually be collected: the balance owed,
+                  not the invoice total. A part-paid invoice was quoting — and
+                  charging — the whole original amount a second time. */}
+              <div className="fw-bold mt-1" style={{ color: NAVY }}>UGX {amountDue.toLocaleString()}</div>
+              {(invoice.paidAmount ?? 0) > 0 && (
+                <div className="small text-muted">
+                  of UGX {invoice.totalAmount.toLocaleString()} total ·{' '}
+                  <span style={{ color: '#1E8449' }}>
+                    UGX {(invoice.paidAmount ?? 0).toLocaleString()} already paid
+                  </span>
+                </div>
+              )}
             </div>
 
             <Form.Group>
@@ -160,7 +172,7 @@ export default function PayInvoiceModal({ invoice, onClose }: Props) {
                 <div style={{ fontSize: '3rem' }}>✅</div>
                 <h5 className="fw-bold mt-2" style={{ color: '#27ae60' }}>Payment Successful</h5>
                 <p className="small text-muted">
-                  UGX {invoice.totalAmount.toLocaleString()} received. Invoice {invoice.invoiceNumber} is now marked as PAID.
+                  UGX {amountDue.toLocaleString()} received. Invoice {invoice.invoiceNumber} is now marked as PAID.
                 </p>
               </>
             ) : (
