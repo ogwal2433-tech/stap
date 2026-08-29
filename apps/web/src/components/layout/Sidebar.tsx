@@ -89,7 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Clients & Sites',
     items: [
       { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] , permission: 'clients.view'},
-      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'sites.view' },
+      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'roster.view' },
       { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] , permission: 'marketing.view'},
       { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] , permission: 'complaints.view'},
       { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] , permission: 'service_requests.view'},

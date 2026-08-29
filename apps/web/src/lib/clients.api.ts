@@ -63,22 +63,27 @@ export const clientsApi = {
       .then((r) => r.data.data);
   },
 
+  /**
+   * Reads go to /sites, which is gated on sites.view rather than on the client
+   * roles — a Trainer deploying a firearm needs the site list and has no client
+   * access. Site writes and incidents stay under /clients below.
+   */
   getAllSites(params?: { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string }): Promise<PaginatedResponse<SiteResponse>> {
     return api
-      .get<{ success: boolean } & PaginatedResponse<SiteResponse>>('/clients/sites/all', { params })
+      .get<{ success: boolean } & PaginatedResponse<SiteResponse>>('/sites', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
   },
 
   getSite(siteId: string): Promise<SiteResponse> {
     return api
-      .get<{ success: boolean; data: SiteResponse }>(`/clients/sites/${siteId}`)
+      .get<{ success: boolean; data: SiteResponse }>(`/sites/${siteId}`)
       .then((r) => r.data.data);
   },
 
   /** The shift a site deploys on — fills the deployment sheet's Shift column. */
   getSiteShift(siteId: string): Promise<SiteShiftResponse> {
     return api
-      .get<{ success: boolean; data: SiteShiftResponse }>(`/clients/sites/${siteId}/shift`)
+      .get<{ success: boolean; data: SiteShiftResponse }>(`/sites/${siteId}/shift`)
       .then((r) => r.data.data);
   },
 

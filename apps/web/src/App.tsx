@@ -153,9 +153,9 @@ function App() {
               <Route path="/requisitions" element={<L><PermissionGuard permission="requisitions.view" fallback={<PermissionDenied permission="requisitions.view" />}><RequisitionsPage /></PermissionGuard></L>} />
 
               {/* Clients */}
-              <Route path="/clients"          element={<L><ClientsListPage /></L>} />
+              <Route path="/clients"          element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientsListPage /></PermissionGuard></L>} />
               <Route path="/clients/new"      element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
-              <Route path="/clients/:id"      element={<L><ClientDetailPage /></L>} />
+              <Route path="/clients/:id"      element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientDetailPage /></PermissionGuard></L>} />
               <Route path="/clients/:id/edit" element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
 
               {/* Complaints */}
@@ -178,8 +178,8 @@ function App() {
               <Route path="/inventory" element={<L><PermissionGuard permission="inventory.view" fallback={<PermissionDenied permission="inventory.view" />}><InventoryPage /></PermissionGuard></L>} />
 
               {/* Zones */}
-              <Route path="/zones"    element={<L><PermissionGuard permission="sites.view" fallback={<PermissionDenied permission="sites.view" />}><ZonesPage /></PermissionGuard></L>} />
-              <Route path="/zones/:id" element={<L><PermissionGuard permission="sites.view" fallback={<PermissionDenied permission="sites.view" />}><ZoneDetailPage /></PermissionGuard></L>} />
+              <Route path="/zones"    element={<L><PermissionGuard permission="roster.view" fallback={<PermissionDenied permission="roster.view" />}><ZonesPage /></PermissionGuard></L>} />
+              <Route path="/zones/:id" element={<L><PermissionGuard permission="roster.view" fallback={<PermissionDenied permission="roster.view" />}><ZoneDetailPage /></PermissionGuard></L>} />
 
               {/* Settings */}
               <Route path="/settings" element={<L><PermissionGuard permission="settings.view" fallback={<PermissionDenied permission="settings.view" />}><SettingsPage /></PermissionGuard></L>} />

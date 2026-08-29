@@ -93,6 +93,8 @@ import { siteService } from '../services/siteService';
 import { incidentService } from '../services/incidentService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
@@ -114,7 +116,11 @@ const router: IRouter = Router();
 // All client routes require authentication
 router.use(authenticate);
 
-// Internal staff roles (excludes GUARD and CLIENT — already the case for INTERNAL_ROLES)
+// Internal staff roles (excludes GUARD and CLIENT — already the case for INTERNAL_ROLES).
+// Still used by the site sub-routes below, which are about a site rather than
+// the client that owns it. The client list and detail moved onto CLIENTS_VIEW:
+// they are the Clients module, so revoking that permission has to close them —
+// a role list here meant revoking it only hid the nav item.
 const STAFF_ROLES = INTERNAL_ROLES as UserRole[];
 
 // Roles that can create/edit clients
@@ -248,7 +254,7 @@ router.post(
 // ── GET / — list clients ───────────────────────────────────────────────────────
 router.get(
   '/',
-  requireRole(...STAFF_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
   validateQuery(ClientListQuerySchema),
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as import('@stap/shared').ClientListQuery;
@@ -271,7 +277,7 @@ router.post(
 // ── GET /:id — get client ──────────────────────────────────────────────────────
 router.get(
   '/:id',
-  requireRole(...STAFF_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
   asyncHandler(async (req, res) => {
     const client = await clientService.getById(req.params.id);
     res.status(200).json({ success: true, data: client });

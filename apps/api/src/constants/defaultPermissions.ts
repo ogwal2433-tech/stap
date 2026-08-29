@@ -51,6 +51,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   // the permission matrix.
   ADMINISTRATOR: [
     P.GUARDS_VIEW, P.CLIENTS_VIEW, P.SITES_VIEW,
+    // Zones are organised for rostering, so the page moved onto roster.view.
+    // Without this an Administrator would lose the zones page they already had.
+    P.ROSTER_VIEW,
     P.STAFF_VIEW, P.STAFF_CREATE, P.STAFF_EDIT, P.STAFF_DEACTIVATE,
     P.SETTINGS_VIEW, P.SETTINGS_EDIT, P.SYSTEM_ERRORS, P.AUDIT_LOG,
     P.ROLES_MANAGE,
@@ -111,12 +114,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.GUARDS_VIEW, P.GUARDS_DOCUMENTS,
     P.GUNS_VIEW, P.GUNS_REGISTER, P.GUNS_DEPLOY, P.GUNS_WITHDRAW,
     P.GUNS_TRANSFER,
+    // Names the site a firearm is deployed to. Deliberately paired with the
+    // absence of CLIENTS_VIEW below: the site is what the armoury needs, the
+    // client that owns it is not.
+    P.SITES_VIEW,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.HR_VIEW, P.HR_LETTERS,
     P.REPORTS_VIEW,
-    // Reconciled with the pages this role already reaches, so moving the nav
-    // and route guards onto permissions does not take access away.
-    P.CLIENTS_VIEW, P.COMPLAINTS_VIEW,
+    P.COMPLAINTS_VIEW,
   ],
 
   // Everything marketing: every lead, targets, bids, all reports. Also
