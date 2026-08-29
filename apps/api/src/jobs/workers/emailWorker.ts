@@ -22,8 +22,10 @@ export const emailWorker = new Worker<EmailJobData>(
 
     // Throw rather than return: an unconfigured mailer must leave the job in
     // the queue to retry after credentials are set, not silently succeed.
-    if (!mailerConfigured()) {
-      throw new Error('SMTP is not configured — set SMTP_USER and SMTP_PASS');
+    // Awaited: the check resolves settings from the database now, and a bare
+    // Promise is always truthy — the guard would never fire.
+    if (!(await mailerConfigured())) {
+      throw new Error('SMTP is not configured — set it in Settings → Integrations');
     }
 
     const html = renderEmail(template, subject, data ?? {});

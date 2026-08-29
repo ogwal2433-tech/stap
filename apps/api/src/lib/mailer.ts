@@ -1,55 +1,40 @@
 import nodemailer from 'nodemailer';
 import { COMPANY_NAME } from '@stap/shared';
-
-const SMTP_HOST = process.env.SMTP_HOST ?? 'sandbox.smtp.mailtrap.io';
-const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? '2525', 10);
+import { smtpConfig } from '../services/integrationSettings';
 
 /**
- * Implicit TLS on 465, STARTTLS everywhere else.
+ * Built per send from the settings resolver rather than once at import.
  *
- * Getting this wrong does not degrade — it hangs. A client that speaks plain
- * SMTP to an implicit-TLS port waits for a greeting that never arrives, and the
- * send times out rather than reporting a configuration problem. SMTP_SECURE
- * overrides for providers that put implicit TLS on a non-standard port.
+ * A transporter created at module load pins whatever .env held at boot, which
+ * is why changing mail settings used to need a restart. The resolver caches for
+ * a minute and is cleared on save, so this costs a map lookup and picks up a
+ * change immediately.
  */
-const SMTP_SECURE = process.env.SMTP_SECURE
-  ? process.env.SMTP_SECURE === 'true'
-  : SMTP_PORT === 465;
+async function transport() {
+  const cfg = await smtpConfig();
+  return {
+    transporter: nodemailer.createTransport({
+      host:   cfg.host,
+      port:   cfg.port,
+      secure: cfg.secure,
+      auth:   { user: cfg.auth.user, pass: cfg.auth.pass },
+    }),
+    from: cfg.from,
+    configured: Boolean(cfg.host && cfg.auth.user && cfg.auth.pass),
+  };
+}
 
-/**
- * The envelope sender.
- *
- * Must be the mailbox SMTP_USER authenticates as, or an alias of it. Providers
- * reject a From on a domain the session has not authenticated for — Titan
- * answers 550 — and anything that slips through fails SPF and DKIM at the
- * recipient, so it lands in spam rather than bouncing. Defaults to SMTP_USER
- * for that reason: the address that logged in is the one address always
- * allowed to send.
- */
-const SMTP_FROM = process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@stapsecurity.co.ug';
-
-export const transporter = nodemailer.createTransport({
-  host:   SMTP_HOST,
-  port:   SMTP_PORT,
-  secure: SMTP_SECURE,
-  auth: {
-    user: process.env.SMTP_USER ?? '',
-    pass: process.env.SMTP_PASS ?? '',
-  },
-});
-
-/** True once credentials are configured — lets callers skip work that would fail. */
-export const mailerConfigured = (): boolean =>
-  Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+/** True once a host, user and password resolve from either source. */
+export const mailerConfigured = async (): Promise<boolean> => (await transport()).configured;
 
 /**
  * Confirms the host is reachable and the credentials are accepted, without
- * sending anything. Called at worker start so a bad password shows up in the
- * logs on deploy rather than silently swallowing every queued mail.
+ * sending anything. Used by the worker at start-up and by the Test button.
  */
 export async function verifyMailer(): Promise<{ ok: boolean; error?: string }> {
-  if (!mailerConfigured()) {
-    return { ok: false, error: 'SMTP_USER and SMTP_PASS are not set' };
+  const { transporter, configured } = await transport();
+  if (!configured) {
+    return { ok: false, error: 'SMTP is not configured. Set it in Settings → Integrations.' };
   }
   try {
     await transporter.verify();
@@ -66,11 +51,15 @@ export async function sendEmail(opts: {
   text?:        string;
   attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 }) {
+  const { transporter, from, configured } = await transport();
+  if (!configured) {
+    throw new Error('SMTP is not configured. Set it in Settings → Integrations.');
+  }
   return transporter.sendMail({
     // The company, not the platform: recipients are its guards and clients, and
     // a display name that does not match the sending domain reads as spoofing
     // to both people and spam filters.
-    from:        `"${COMPANY_NAME}" <${SMTP_FROM}>`,
+    from:        `"${COMPANY_NAME}" <${from}>`,
     to:          opts.to,
     subject:     opts.subject,
     html:        opts.html,

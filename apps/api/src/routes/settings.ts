@@ -181,6 +181,11 @@ import {
   UpdateUserSchema,
   ResetPasswordSchema,
 } from '@stap/shared';
+import { SETTINGS_GROUPS, type SettingsGroup } from '../constants/settingsConfig';
+import { groupView, saveGroup, xcelConfig } from '../services/integrationSettings';
+import { verifyMailer } from '../lib/mailer';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 
 const router: IRouter = Router();
 
@@ -514,6 +519,122 @@ router.delete(
   asyncHandler(async (req, res) => {
     await shiftTypeService.deleteShiftType(req.params.id, req.user!.userId);
     res.json({ success: true });
+  }),
+);
+
+
+// ── Integrations ──────────────────────────────────────────────────────────────
+// SMTP and payment-gateway credentials, editable without a redeploy. Reads need
+// settings.view; writes and connection tests need settings.edit, because a test
+// exercises the credentials themselves.
+
+router.get(
+  '/integrations',
+  requirePermission(PERMISSIONS.SETTINGS_VIEW),
+  asyncHandler(async (_req, res) => {
+    const groups = await Promise.all(
+      (Object.keys(SETTINGS_GROUPS) as SettingsGroup[]).map(async (group) => ({
+        group,
+        ...SETTINGS_GROUPS[group],
+        settings: await groupView(group),
+      })),
+    );
+    res.json({ success: true, data: groups });
+  }),
+);
+
+router.get(
+  '/integrations/:group',
+  requirePermission(PERMISSIONS.SETTINGS_VIEW),
+  asyncHandler(async (req, res) => {
+    const group = req.params.group as SettingsGroup;
+    if (!(group in SETTINGS_GROUPS)) throw new AppError(`Unknown settings group "${group}".`, 400);
+    res.json({ success: true, data: await groupView(group) });
+  }),
+);
+
+router.post(
+  '/integrations/:group',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const group = req.params.group as SettingsGroup;
+    if (!(group in SETTINGS_GROUPS)) throw new AppError(`Unknown settings group "${group}".`, 400);
+
+    const { settings } = req.body as { settings?: Array<{ key: string; value: string }> };
+    if (!Array.isArray(settings)) {
+      throw new AppError('Body must be { settings: [{ key, value }] }.', 400);
+    }
+
+    const result = await saveGroup(group, settings, req.user!.userId);
+    res.json({
+      success: true,
+      data:    result,
+      message: `${result.saved.length} setting(s) saved.`,
+    });
+  }),
+);
+
+/** Opens a connection with the saved credentials without sending anything. */
+router.post(
+  '/integrations/smtp/test',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (_req, res) => {
+    const { ok, error } = await verifyMailer();
+    res.json({
+      success: true,
+      data: {
+        success: ok,
+        message: ok ? 'Connected and the credentials were accepted.' : error,
+      },
+    });
+  }),
+);
+
+/**
+ * Reaches the gateway with the saved credentials. A 401 or 403 back is a
+ * definite answer — the endpoint is right and the key is wrong — so it is
+ * reported as a failure with that distinction rather than as a network error.
+ */
+router.post(
+  '/integrations/xcel/test',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (_req, res) => {
+    const cfg = await xcelConfig();
+    if (!cfg.apiKey || !cfg.merchantId) {
+      res.json({
+        success: true,
+        data: { success: false, message: 'API key and merchant ID are not set.' },
+      });
+      return;
+    }
+    try {
+      const r = await fetch(`${cfg.baseUrl}/api/v1/health`, {
+        headers: { 'x-api-key': cfg.apiKey, 'x-merchant-id': cfg.merchantId },
+        signal:  AbortSignal.timeout(10_000),
+      });
+      // Any answer proves the endpoint resolves and is listening. Only a 401 or
+      // 403 says anything about the credentials; a 404 means this build guessed
+      // at a health path the gateway does not publish, which is not a failure of
+      // the configuration and should not be reported as one.
+      const rejected = r.status === 401 || r.status === 403;
+      res.json({
+        success: true,
+        data: {
+          success: !rejected,
+          message: rejected
+            ? `Reached ${cfg.baseUrl}, but it rejected the credentials (${r.status}). Check the API key and merchant ID.`
+            : r.ok
+              ? `Reached ${cfg.baseUrl} and the credentials were accepted.`
+              : `Reached ${cfg.baseUrl} — it answered ${r.status} to the health probe, which it may not publish. ` +
+                `The endpoint resolves; the credentials are only confirmed by a real payment.`,
+        },
+      });
+    } catch (err) {
+      res.json({
+        success: true,
+        data: { success: false, message: `Could not reach ${cfg.baseUrl}: ${(err as Error).message}` },
+      });
+    }
   }),
 );
 

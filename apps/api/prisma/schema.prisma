@@ -1611,6 +1611,21 @@ model SystemSetting {
   dataType  String   @default("string")
   updatedBy String?
   updatedAt DateTime @updatedAt
+
+  // ── Integration settings ────────────────────────────────────────────────────
+  // Added for the credentials that used to live only in .env. The existing rows
+  // predate these and keep the defaults, so nothing that reads the table today
+  // has to change.
+
+  /// Whether `value` holds ciphertext rather than the setting itself. Set from
+  /// the definition in settingsConfig.ts, never from the request.
+  isEncrypted Boolean @default(false)
+  /// Help text under the field on the Integrations page.
+  description String?
+  /// How the field is rendered: text | password | number | toggle | email | url
+  inputType   String  @default("text")
+  /// Whether the integration is incomplete without it.
+  isRequired  Boolean @default(false)
 }
 
 model GuardRank {

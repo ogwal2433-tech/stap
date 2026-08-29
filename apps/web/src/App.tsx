@@ -45,6 +45,7 @@ const HRPage                       = lazy(() => import('@/pages/hr/HRPage'));
 const InventoryPage                = lazy(() => import('@/pages/inventory/InventoryPage'));
 const SettingsPage                 = lazy(() => import('@/pages/settings/SettingsPage'));
 const RolesPermissionsPage         = lazy(() => import('@/pages/settings/RolesPermissionsPage'));
+const IntegrationsPage             = lazy(() => import('@/pages/settings/IntegrationsPage'));
 const ZonesPage                    = lazy(() => import('@/pages/zones/ZonesPage'));
 const ZoneDetailPage               = lazy(() => import('@/pages/zones/ZoneDetailPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
@@ -185,6 +186,7 @@ function App() {
               <Route path="/settings" element={<L><PermissionGuard permission="settings.view" fallback={<PermissionDenied permission="settings.view" />}><SettingsPage /></PermissionGuard></L>} />
               <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
               <Route path="/settings/roles" element={<L><PermissionGuard permission="roles.manage" fallback={<PermissionDenied permission="roles.manage" />}><RolesPermissionsPage /></PermissionGuard></L>} />
+              <Route path="/settings/integrations" element={<L><PermissionGuard permission="settings.edit" fallback={<PermissionDenied permission="settings.edit" />}><IntegrationsPage /></PermissionGuard></L>} />
 
               {/* Staff directory */}
               <Route path="/staff" element={<L><PermissionGuard permission="staff.view" fallback={<PermissionDenied permission="staff.view" />}><StaffPage /></PermissionGuard></L>} />

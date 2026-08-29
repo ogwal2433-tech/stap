@@ -2,6 +2,8 @@ import { PrismaClient, Role, UserStatus } from '@prisma/client';
 import { HR_LETTER_TEMPLATES } from './hrLetterTemplates';
 import { PERMISSIONS, permissionModule, permissionName } from '../constants/permissions';
 import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
+import { SETTINGS_CONFIG } from '../constants/settingsConfig';
+import { encrypt, isEncryptionConfigured } from '../lib/settingsEncryption';
 import bcrypt from 'bcryptjs';
 
 function fmtId(prefix: string, n: number): string {
@@ -98,6 +100,51 @@ async function main() {
     users[seed.role] = user;
     console.log(`✅ User created: ${user.name} (${user.role})`);
   }
+
+  // ── Integration settings ────────────────────────────────────────────────────
+  //
+  // Lifts SMTP and gateway credentials out of .env into the database once, so
+  // they become editable from Settings → Integrations. A key already saved is
+  // left alone: the database is the source of truth from that point on, and a
+  // re-seed must not undo a change made in the UI or revive a rotated secret.
+
+  console.log('🔌 Migrating integration settings from .env...');
+  let migrated = 0;
+  let skippedSecrets = 0;
+
+  for (const def of SETTINGS_CONFIG) {
+    const fromEnv = process.env[def.envFallback];
+    if (!fromEnv) continue;
+
+    const existing = await prisma.systemSetting.findUnique({ where: { key: def.key } });
+    if (existing) continue;
+
+    if (def.isEncrypted && !isEncryptionConfigured()) {
+      skippedSecrets++;
+      continue;
+    }
+
+    await prisma.systemSetting.create({
+      data: {
+        key:         def.key,
+        value:       def.isEncrypted ? encrypt(fromEnv) : fromEnv,
+        label:       def.label,
+        group:       def.group,
+        dataType:    def.inputType === 'number' ? 'number' : def.inputType === 'toggle' ? 'boolean' : 'string',
+        description: def.description,
+        inputType:   def.inputType,
+        isRequired:  def.isRequired,
+        isEncrypted: def.isEncrypted,
+      },
+    });
+    migrated++;
+    console.log(`   ✅ ${def.key}${def.isEncrypted ? ' (encrypted)' : ''}`);
+  }
+
+  if (skippedSecrets > 0) {
+    console.log(`   ⚠️  ${skippedSecrets} secret(s) left in .env — SETTINGS_ENCRYPTION_KEY is not set.`);
+  }
+  console.log(`✅ ${migrated} integration setting(s) migrated; the rest already had values or none in .env`);
 
   // ── Permissions ─────────────────────────────────────────────────────────────
   //

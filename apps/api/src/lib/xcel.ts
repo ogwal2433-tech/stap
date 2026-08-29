@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { xcelConfig } from '../services/integrationSettings';
 
 const MTN_PREFIXES    = ['77', '78', '76', '39'];
 const AIRTEL_PREFIXES = ['70', '75', '74'];
@@ -21,22 +22,34 @@ export function generateExtReference(): string {
   return `STAP-${Date.now()}-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
-function baseUrl(): string {
-  return (process.env.XCEL_BASE_URL ?? 'https://sandbox-api.xcelapp.com').replace(/\/$/, '');
+/**
+ * Endpoint and credentials come from the settings resolver — database first,
+ * .env second — rather than being read from the environment at each call. That
+ * is what lets a key be rotated from the Settings page without a redeploy.
+ */
+async function baseUrl(): Promise<string> {
+  return (await xcelConfig()).baseUrl;
 }
 
-function authHeaders(): Record<string, string> {
+async function authHeaders(): Promise<Record<string, string>> {
+  const cfg = await xcelConfig();
+  if (!cfg.apiKey || !cfg.merchantId) {
+    throw new Error(
+      'The XCEL payment gateway is not configured. Set the API key and merchant ID in ' +
+      'Settings → Integrations.',
+    );
+  }
   return {
-    'x-api-key':     process.env.XCEL_API_KEY ?? '',
-    'x-merchant-id': process.env.XCEL_MERCHANT_ID ?? '',
+    'x-api-key':     cfg.apiKey,
+    'x-merchant-id': cfg.merchantId,
     'Content-Type':  'application/json',
   };
 }
 
 async function xcelPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
+  const res = await fetch(`${await baseUrl()}${path}`, {
     method:  'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body:    JSON.stringify(body),
     signal:  AbortSignal.timeout(30_000),
   });
@@ -48,8 +61,8 @@ async function xcelPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function xcelGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    headers: authHeaders(),
+  const res = await fetch(`${await baseUrl()}${path}`, {
+    headers: await authHeaders(),
     signal:  AbortSignal.timeout(30_000),
   });
   if (!res.ok) {

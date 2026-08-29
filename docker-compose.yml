@@ -61,6 +61,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
       XCEL_API_KEY: ${XCEL_API_KEY}
       XCEL_MERCHANT_ID: ${XCEL_MERCHANT_ID}
       XCEL_BASE_URL: ${XCEL_BASE_URL}
@@ -105,6 +106,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
     volumes:
       - uploads:/app/public/uploads
     networks:
