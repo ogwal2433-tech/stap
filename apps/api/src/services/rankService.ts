@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { writeAuditLog } from '../lib/auditLog';
 import { AppError, NotFoundError } from '../errors/AppError';
 import type {
   GuardRankResponse,
@@ -46,14 +47,12 @@ class RankService {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_CREATED',
         entity:   'guardRank',
         entityId: rank.id,
         newValue: { name: rank.name },
-      },
-    });
+      });
 
     return fmt(rank);
   }
@@ -76,15 +75,13 @@ class RankService {
 
     const updated = await prisma.guardRank.update({ where: { id }, data });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_UPDATED',
         entity:   'guardRank',
         entityId: id,
         oldValue: { name: existing.name, isActive: existing.isActive },
         newValue: data,
-      },
-    });
+      });
 
     return fmt(updated);
   }
@@ -102,14 +99,12 @@ class RankService {
       data:  { isActive: false },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_DEACTIVATED',
         entity:   'guardRank',
         entityId: id,
         newValue: { guardsCurrentlyWithRank: guardsWithRank },
-      },
-    });
+      });
 
     return { rank: fmt(updated), guardsWithRank };
   }
@@ -123,14 +118,12 @@ class RankService {
       data:  { isActive: true },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_ACTIVATED',
         entity:   'guardRank',
         entityId: id,
         newValue: { name: rank.name },
-      },
-    });
+      });
 
     return fmt(updated);
   }
@@ -149,14 +142,12 @@ class RankService {
 
     await prisma.guardRank.delete({ where: { id } });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_DELETED',
         entity:   'guardRank',
         entityId: id,
         oldValue: { name: rank.name },
-      },
-    });
+      });
   }
 
   async reorderRanks(orderedIds: string[]): Promise<GuardRankResponse[]> {
@@ -191,8 +182,7 @@ class RankService {
       data: { salaryRate: newSalary },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'RANK_SALARY_BULK_UPDATE',
         entity:   'guard',
         entityId: rankId,
@@ -202,8 +192,7 @@ class RankService {
           guardsUpdated: result.count,
           updatedBy,
         },
-      },
-    });
+      });
 
     return { updatedCount: result.count };
   }

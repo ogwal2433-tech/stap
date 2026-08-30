@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { writeAuditLog } from '../lib/auditLog';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { AppError, NotFoundError } from '../errors/AppError';
@@ -392,8 +393,7 @@ class ComplaintService {
         entityType: 'complaint',
         entityId:   complaintId,
       }),
-      prisma.auditLog.create({
-        data: {
+      writeAuditLog({
           action:   'COMPLAINT_ASSIGNED',
           entity:   'clientComplaint',
           entityId: complaintId,
@@ -401,8 +401,7 @@ class ComplaintService {
             receivedBy: receiver.name,
             assignedTo: assignee.name,
           },
-        },
-      }),
+        }),
     ]);
 
     return sanitiseComplaint(updated);
@@ -477,14 +476,12 @@ class ComplaintService {
       include: INCLUDE,
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'COMPLAINT_STATUS_UPDATED',
         entity:   'clientComplaint',
         entityId: complaintId,
         newValue: { status: data.status, updatedBy: actingUserId, actionTaken },
-      },
-    });
+      });
 
     return sanitiseComplaint(updated);
   }

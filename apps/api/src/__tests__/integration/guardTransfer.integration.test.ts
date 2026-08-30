@@ -41,7 +41,10 @@ async function nukeTestData() {
   }
   await prisma.site.deleteMany({ where: { siteName: { in: [SITE_NAME, SITE_NAME_2] } } });
   await prisma.client.deleteMany({ where: { clientName: CLIENT_NAME } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' } } });
+  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // the users other integration files were mid-run against — vitest runs files in
+  // parallel — and their next audited write failed on AuditLog_userId_fkey.
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'gtransfer.', endsWith: '@stap.test' } } });
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────────

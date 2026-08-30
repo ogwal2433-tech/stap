@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import prisma from '../db/prisma';
+import { writeAuditLog } from '../lib/auditLog';
 import { generateIdCardPdf } from '../lib/idCard/generateIdCardPdf';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
@@ -914,8 +915,7 @@ class GuardService {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'GUARD_REINSTATED',
         entity:   'guard',
         entityId: guardId,
@@ -932,8 +932,7 @@ class GuardService {
           incrementCount:        0,
           reason,
         },
-      },
-    });
+      });
 
     await notificationService.sendToRole({
       role:    ROLES.OPERATIONS_SUPERVISOR,
@@ -1066,8 +1065,7 @@ class GuardService {
       message: `Guard ${guard.firstName} ${guard.lastName} has been transferred to ${toSite.siteName}. Reason: ${data.reason}`,
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         action:   'GUARD_TRANSFERRED',
         entity:   'guard',
         entityId: guardId,
@@ -1083,8 +1081,7 @@ class GuardService {
           attendanceMoved:  moved.attendance,
           attendanceDropped: moved.attendanceDropped,
         },
-      },
-    });
+      });
 
     return this.mapTransferResponse(transfer);
   }
@@ -1244,16 +1241,14 @@ class GuardService {
       }),
     ]);
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         userId:   promotedById,
         action:   'GUARD_PROMOTED',
         entity:   'guard',
         entityId: guardId,
         oldValue: { rank: guard.rank, salaryRate: fromSalary },
         newValue: { rank: targetRank.name, salaryRate: toSalary, increment: toSalary - fromSalary },
-      },
-    });
+      });
 
     await notificationService.sendToRoles([ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER], {
       type:       'SYSTEM',
@@ -1362,14 +1357,12 @@ class GuardService {
         message: `Guard ${guard.firstName} ${guard.lastName} has completed their probation period and is now Confirmed.`,
       });
 
-      await prisma.auditLog.create({
-        data: {
+      await writeAuditLog({
           action:   'PROBATION_COMPLETED',
           entity:   'guard',
           entityId: guard.id,
           newValue: { probationStatus: 'CONFIRMED' },
-        },
-      });
+        });
 
       console.log(`✅ Probation confirmed: ${guard.firstName} ${guard.lastName}`);
     }
@@ -1542,15 +1535,13 @@ class GuardService {
         message: `Guard ${guard.firstName} ${guard.lastName}'s salary has been incremented from UGX ${guard.salaryRate.toLocaleString()} to UGX ${newSalary.toLocaleString()}.`,
       });
 
-      await prisma.auditLog.create({
-        data: {
+      await writeAuditLog({
           action:   'SALARY_INCREMENTED',
           entity:   'guard',
           entityId: guard.id,
           oldValue: { salaryRate: guard.salaryRate },
           newValue: { salaryRate: newSalary, increment },
-        },
-      });
+        });
 
       console.log(`✅ Salary incremented: ${guard.firstName} ${guard.lastName} — UGX ${guard.salaryRate} → ${newSalary}`);
     }

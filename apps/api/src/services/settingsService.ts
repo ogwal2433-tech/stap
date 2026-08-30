@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
+import { writeAuditLog } from '../lib/auditLog';
 import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
@@ -313,15 +314,13 @@ class SettingsService {
       data: { ...data, code, defaultAmount: data.defaultAmount ?? null, isAutomatic: false },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         userId:   createdBy,
         action:   'DEDUCTION_TYPE_CREATED',
         entity:   'deductionType',
         entityId: type.id,
         newValue: { name: type.name, code: type.code },
-      },
-    });
+      });
 
     return fmtDeductionType(type);
   }
@@ -344,16 +343,14 @@ class SettingsService {
       data: { ...data, defaultAmount: 'defaultAmount' in data ? (data.defaultAmount ?? null) : undefined },
     });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         userId:   updatedBy,
         action:   'DEDUCTION_TYPE_UPDATED',
         entity:   'deductionType',
         entityId: id,
         oldValue: { name: existing.name, defaultAmount: existing.defaultAmount },
         newValue: data,
-      },
-    });
+      });
 
     return fmtDeductionType(updated);
   }
@@ -369,15 +366,13 @@ class SettingsService {
 
     const updated = await prisma.deductionType.update({ where: { id }, data: { isActive: false } });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         userId:   deactivatedBy,
         action:   'DEDUCTION_TYPE_DEACTIVATED',
         entity:   'deductionType',
         entityId: id,
         newValue: { pendingDeductionsOfThisType: recentCount },
-      },
-    });
+      });
 
     return fmtDeductionType(updated);
   }
@@ -404,15 +399,13 @@ class SettingsService {
 
     await prisma.deductionType.delete({ where: { id } });
 
-    await prisma.auditLog.create({
-      data: {
+    await writeAuditLog({
         userId:   deletedBy,
         action:   'DEDUCTION_TYPE_DELETED',
         entity:   'deductionType',
         entityId: id,
         oldValue: { name: type.name, code: type.code },
-      },
-    });
+      });
   }
 
   async reorderDeductionTypes(orderedIds: string[]): Promise<DeductionTypeResponse[]> {

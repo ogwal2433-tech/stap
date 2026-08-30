@@ -23,7 +23,10 @@ async function nukeTestData() {
   await prisma.guardRank.deleteMany({
     where: { name: { in: [TEST_RANK_NAME, TEST_RANK_NAME_2] } },
   });
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' } } });
+  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // the users other integration files were mid-run against — vitest runs files in
+  // parallel — and their next audited write failed on AuditLog_userId_fkey.
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'ranks.', endsWith: '@stap.test' } } });
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────────

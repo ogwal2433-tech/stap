@@ -26,7 +26,10 @@ async function nukeTestData() {
   await prisma.deductionType.deleteMany({
     where: { code: { in: [TEST_TYPE_CODE, TEST_TYPE_CODE2, 'INTEGRATION_AUTO_DT', 'INTEGRATION_TEST_DT_USED'] } },
   });
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' } } });
+  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // the users other integration files were mid-run against — vitest runs files in
+  // parallel — and their next audited write failed on AuditLog_userId_fkey.
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'dtypes.', endsWith: '@stap.test' } } });
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────────

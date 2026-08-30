@@ -32,7 +32,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' } } });
+  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // the users other integration files were mid-run against — vitest runs files in
+  // parallel — and their next audited write failed on AuditLog_userId_fkey.
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'it.', endsWith: '@stap.test' } } });
 });
 
 describe('POST /api/v1/auth/login', () => {
