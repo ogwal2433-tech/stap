@@ -5,12 +5,17 @@ echo "🗄️  Running database migrations..."
 
 cd /app/apps/api
 
-# If the enum-fix migration is stuck in "failed" state, mark it as rolled-back
-# so Prisma will re-apply it. The SQL uses IF EXISTS/IF NOT EXISTS guards and
-# is idempotent — re-running is safe.
-npx prisma migrate resolve \
-  --rolled-back 20260602000001_fix_shift_type_enum \
-  --schema /app/apps/api/prisma/schema.prisma 2>/dev/null || true
+# A one-time unblock for 20260602000001 used to live here: every boot marked it
+# rolled back so Prisma would re-apply it. It was a no-op on a healthy database
+# — resolve refuses a migration that is not in a failed state, and the error was
+# swallowed — but it is not safe to keep now that 20260829000002 has landed.
+#
+# 20260602000001 rewrites shiftType values it does not recognise to 'DAY' and
+# converts the columns back to the ShiftType enum. Since 20260829000002 those
+# columns hold configurable codes, so re-running it would silently flatten every
+# custom shift — OVERTIME included — across the deployment roster and undo the
+# very change that allowed them. A migration that fails should stop the boot and
+# be resolved deliberately, not be cleared on a schedule.
 
 npx prisma migrate deploy --schema /app/apps/api/prisma/schema.prisma
 
