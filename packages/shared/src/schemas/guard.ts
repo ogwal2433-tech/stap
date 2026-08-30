@@ -113,6 +113,10 @@ export const CreateGuardSchema = z.object({
   spouseWorkplace:         z.string().max(200).optional(),
   spouseTelephone:         z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
   preferredPaymentContact: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  /// Overrides the network inferred from the number's prefix.
+  mobileNetwork:           z.enum(['MTN', 'AIRTEL']).optional().nullable(),
+  /// The name registered on the wallet, when it differs from the legal name.
+  momoAccountName:         z.string().max(120).optional().nullable(),
 
   // ── Section A: Address ────────────────────────────────────────────────────────
   village:   z.string().max(100).optional(),
@@ -353,6 +357,8 @@ export interface GuardResponse {
   spouseWorkplace:         string | null;
   spouseTelephone:         string | null;
   preferredPaymentContact: string | null;
+  mobileNetwork:           string | null;
+  momoAccountName:         string | null;
 
   // ── Section A Address ─────────────────────────────────────────────────────────
   village:   string | null;
@@ -533,6 +539,8 @@ export const BulkImportRowSchema = z.object({
   previousEmployer:        z.string().max(200).optional(),
   previousPosition:        z.string().max(200).optional(),
   preferredPaymentContact: z.string().max(20).optional(),
+  mobileNetwork:           z.enum(['MTN', 'AIRTEL']).optional().nullable(),
+  momoAccountName:         z.string().max(120).optional().nullable(),
 });
 
 export type BulkImportRow = z.infer<typeof BulkImportRowSchema>;

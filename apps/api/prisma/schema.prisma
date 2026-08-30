@@ -250,6 +250,13 @@ model Guard {
   spouseWorkplace         String?
   spouseTelephone         String?
   preferredPaymentContact String? // MoMo number for salary disbursement
+  /// Overrides the network inferred from the number's prefix. Detection throws
+  /// on a prefix it does not know, and operators add ranges faster than this
+  /// list is updated, so an explicit value is the escape hatch.
+  mobileNetwork           String? // AIRTEL | MTN
+  /// The name registered on the mobile money account, when it differs from the
+  /// guard's legal name. Sent as account_name, which the gateway may check.
+  momoAccountName         String?
   rank                    String    @default("GUARD") // GUARD | SENIOR_GUARD | CORPORAL | SERGEANT | SUPERVISOR
   contractType            String    @default("PERMANENT") // TEMPORARY | PERMANENT
   probationStatus         String    @default("ON_PROBATION") // ON_PROBATION | CONFIRMED

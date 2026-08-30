@@ -105,6 +105,32 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
     inputType: 'url', isEncrypted: false, isRequired: false,
     envFallback: 'XCEL_PARTNER_BASE_URL',
   },
+  {
+    key: 'xcel.dlCodeBaseUrl', group: 'xcel', label: 'Dynamic-link base URL',
+    description: 'Where the OTP/dynamic-link code is generated. A disbursement needs a dl_code before it can be sent.',
+    inputType: 'url', isEncrypted: false, isRequired: false,
+    placeholder: 'https://sandbox-api.xcelapp.com/esa-api/api',
+    envFallback: 'XCEL_DL_CODE_BASE_URL',
+  },
+  {
+    key: 'xcel.configPreset', group: 'xcel', label: 'Config preset',
+    description: 'config_preset sent when generating the dynamic link. Supplied by XCEL with the partner account.',
+    inputType: 'text', isEncrypted: false, isRequired: false,
+    envFallback: 'XCEL_CONFIG_PRESET',
+  },
+  {
+    key: 'xcel.merchantAccount', group: 'xcel', label: 'Merchant account',
+    description: 'The account debited for disbursements — sent as payerId on the dynamic link. Falls back to the Partner ID when unset.',
+    inputType: 'text', isEncrypted: false, isRequired: false,
+    envFallback: 'XCEL_MERCHANT_ACCOUNT',
+  },
+  {
+    key: 'xcel.disbursementPath', group: 'xcel', label: 'Disbursement path',
+    description: 'Path appended to the partner base URL when sending a salary payment. Configurable because XCEL exposes more than one surface for this and which one an account may use varies.',
+    inputType: 'text', isEncrypted: false, isRequired: false,
+    placeholder: '/external/payment/momo',
+    envFallback: 'XCEL_DISBURSEMENT_PATH',
+  },
 ];
 
 export const SETTINGS_GROUPS = {

@@ -333,8 +333,10 @@ class PayrollService {
       const payAmount = payslip.hrAdjustedAmount ?? payslip.netSalary;
 
       try {
-        const phone   = xcel.normalisePhone(payslip.guard.preferredPaymentContact ?? payslip.guard.phone);
-        const network = xcel.detectNetwork(phone);
+        const phone = xcel.normalisePhone(payslip.guard.preferredPaymentContact ?? payslip.guard.phone);
+          // The guard's own setting wins. Detection reads the prefix and throws
+          // on a range it does not know, which would fail an otherwise valid number.
+          const network = payslip.guard.mobileNetwork || xcel.detectNetwork(phone);
 
         const dlCode = await xcelPartner.generateDynamicLinkOtp({
           amount:     payAmount,
@@ -350,7 +352,9 @@ class PayrollService {
           dlCode,
           bankCode:    network,
           accountNum:  phone,
-          accountName: `${payslip.guard.firstName} ${payslip.guard.lastName}`,
+          // What the wallet is registered as, which need not be the legal name.
+            accountName: payslip.guard.momoAccountName
+              || `${payslip.guard.firstName} ${payslip.guard.lastName}`,
           description: `STAP Security - Salary ${run.month}/${run.year}`,
           receiverFirstName: payslip.guard.firstName,
           receiverLastName:  payslip.guard.lastName,

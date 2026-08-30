@@ -228,6 +228,8 @@ class GuardService {
         spouseWorkplace:         guardFields.spouseWorkplace,
         spouseTelephone:         guardFields.spouseTelephone,
         preferredPaymentContact: guardFields.preferredPaymentContact,
+        mobileNetwork:           guardFields.mobileNetwork,
+        momoAccountName:         guardFields.momoAccountName,
         // Section A Address
         village:   guardFields.village,
         parish:    guardFields.parish,
@@ -746,6 +748,8 @@ class GuardService {
       spouseWorkplace:         guard.spouseWorkplace ?? null,
       spouseTelephone:         guard.spouseTelephone ?? null,
       preferredPaymentContact: guard.preferredPaymentContact ?? null,
+      mobileNetwork:           guard.mobileNetwork ?? null,
+      momoAccountName:         guard.momoAccountName ?? null,
 
       // Address
       village:   guard.village ?? null,

@@ -95,6 +95,7 @@ export async function smtpConfig(): Promise<{
 export async function xcelConfig(): Promise<{
   baseUrl: string; apiKey: string; merchantId: string;
   webhookUrl: string; partnerId: string; partnerApiKey: string; partnerBaseUrl: string;
+  dlCodeBaseUrl: string; configPreset: string; merchantAccount: string; disbursementPath: string;
 }> {
   const all = await resolveAll();
   const get = (k: string) => all.get(k)?.value ?? '';
@@ -105,7 +106,14 @@ export async function xcelConfig(): Promise<{
     webhookUrl:     get('xcel.webhookUrl'),
     partnerId:      get('xcel.partnerId'),
     partnerApiKey:  get('xcel.partnerApiKey'),
-    partnerBaseUrl: get('xcel.partnerBaseUrl').replace(/\/$/, ''),
+    partnerBaseUrl: (get('xcel.partnerBaseUrl') || 'https://sandbox-api.xcelapp.com/xas/v1').replace(/\/$/, ''),
+    dlCodeBaseUrl:  (get('xcel.dlCodeBaseUrl') || 'https://sandbox-api.xcelapp.com/esa-api/api').replace(/\/$/, ''),
+    configPreset:   get('xcel.configPreset'),
+    // The account debited. Falls back to the partner id, which is what the
+    // code sent before this setting existed and is the same value on accounts
+    // where XCEL issues one identifier for both.
+    merchantAccount: get('xcel.merchantAccount') || get('xcel.partnerId'),
+    disbursementPath: get('xcel.disbursementPath') || '/external/payment/momo',
   };
 }
 

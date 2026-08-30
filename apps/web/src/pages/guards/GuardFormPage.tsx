@@ -203,6 +203,11 @@ export default function GuardFormPage() {
         spouseWorkplace: existing.spouseWorkplace ?? undefined,
         spouseTelephone: existing.spouseTelephone ?? undefined,
         preferredPaymentContact: existing.preferredPaymentContact ?? undefined,
+        // The response types it as a plain string; the form only offers the two
+        // the schema accepts, so anything else is treated as unset.
+        mobileNetwork:           (existing.mobileNetwork === 'MTN' || existing.mobileNetwork === 'AIRTEL')
+          ? existing.mobileNetwork : undefined,
+        momoAccountName:         existing.momoAccountName ?? undefined,
         // Address
         village: existing.village ?? undefined,
         parish:  existing.parish ?? undefined,
@@ -636,6 +641,27 @@ export default function GuardFormPage() {
                   <Form.Control.Feedback type="invalid">{errors.preferredPaymentContact?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
+                {/* Both optional. The network is read from the number's prefix
+                    and the account name from the legal name; set these only when
+                    that guess is wrong, which is what fails a salary payment. */}
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label>Mobile Network</Form.Label>
+                    <Form.Select {...register('mobileNetwork')}>
+                      <option value="">Detect from number</option>
+                      <option value="MTN">MTN</option>
+                      <option value="AIRTEL">Airtel</option>
+                    </Form.Select>
+                    <Form.Text className="text-muted">Only if the prefix is not recognised.</Form.Text>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label>MoMo Account Name</Form.Label>
+                    <Form.Control {...register('momoAccountName')} placeholder="Name registered on the wallet" />
+                    <Form.Text className="text-muted">Only if it differs from the name above.</Form.Text>
+                  </Form.Group>
+                </Col>
             </Row>
 
             {/* Row 7: National ID | NSSF | TIN */}
