@@ -16,6 +16,13 @@ export async function initiateInvoicePayment(params: {
   invoiceId:   string;
   phone:       string;
   initiatedBy: string;
+  /**
+   * The payer's network, when they told us. Detection reads the number's prefix
+   * and throws on a range it does not know, which refuses an otherwise valid
+   * number — a new MTN or Airtel range, or a ported one, is enough. Given a
+   * value, we trust it over the prefix.
+   */
+  network?:    'MTN' | 'AIRTEL';
 }): Promise<{ extReference: string; network: string; status: string }> {
   const invoice = await prisma.invoice.findUniqueOrThrow({
     where:   { id: params.invoiceId },
@@ -33,7 +40,7 @@ export async function initiateInvoicePayment(params: {
   const amountDue = invoice.outstandingBalance > 0 ? invoice.outstandingBalance : invoice.totalAmount;
 
   const normPhone  = normalisePhone(params.phone);
-  const network    = detectNetwork(normPhone);
+  const network    = params.network ?? detectNetwork(normPhone);
   const extReference = generateExtReference();
 
   // Create PENDING record BEFORE calling XCEL to avoid orphaned transactions

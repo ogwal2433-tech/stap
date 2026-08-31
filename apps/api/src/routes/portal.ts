@@ -48,12 +48,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { invoiceService } from '../services/invoiceService';
+import { invoiceService, OUTSTANDING_STATUSES } from '../services/invoiceService';
 import { complaintService } from '../services/complaintService';
 import { serviceRequestService } from '../services/serviceRequestService';
 import { notificationService } from '../services/notificationService';
 import { AppError } from '../errors/AppError';
-import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema, AcknowledgeNoticeSchema } from '@stap/shared';
+import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema, AcknowledgeNoticeSchema,
+         InitiatePortalPaymentSchema, type InitiatePortalPaymentInput } from '@stap/shared';
+import { initiateInvoicePayment } from '../services/paymentService';
 import prisma from '../db/prisma';
 
 const router = Router();
@@ -118,16 +120,73 @@ router.get(
 );
 
 // GET /portal/invoices/:id/pay
-router.get(
+// POST /portal/invoices/:id/pay
+//
+// A POST, and no longer a GET: it moves money, so it must not be something a
+// prefetch or a refresh can fire.
+//
+// Routed through the same XCEL collection the staff path uses rather than the
+// old Yo! call, which prompted the client record's stored contact number for
+// the invoice total. The payer is often not that number, and on a part-paid
+// invoice the total is not what is owed. It also wrote no InvoicePayment row,
+// so the webhook — which reconciles on extReference — had nothing to match and
+// a completed payment was never credited.
+router.post(
   '/invoices/:id/pay',
+  validate(InitiatePortalPaymentSchema),
   asyncHandler(async (req, res) => {
     const clientId = (req as any).clientId as string;
     const invoice  = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+
+    // Same 404 whether the invoice is missing or another client's, so the
+    // endpoint cannot be used to discover which invoice IDs exist.
     if (!invoice || invoice.clientId !== clientId) {
       throw new AppError('Invoice not found', 404);
     }
-    const data = await invoiceService.initiateYoPayment(req.params.id);
-    res.json({ success: true, data });
+    if (!(OUTSTANDING_STATUSES as readonly string[]).includes(invoice.status)) {
+      throw new AppError(
+        invoice.status === 'PAID'
+          ? 'This invoice has already been paid in full.'
+          : `An invoice with status "${invoice.status}" cannot be paid.`,
+        400,
+      );
+    }
+
+    const { phone, network } = req.body as InitiatePortalPaymentInput;
+
+    let result;
+    try {
+      result = await initiateInvoicePayment({
+        invoiceId:   invoice.id,
+        phone,
+        network,
+        initiatedBy: req.user!.userId,
+      });
+    } catch (err) {
+      // normalisePhone and detectNetwork throw on input they cannot read. That
+      // is the payer's typing, not a server fault, so it must not surface as a
+      // 500 — and the message names what to correct.
+      const message = (err as Error).message ?? '';
+      if (/Unrecognised phone format|Cannot determine network/.test(message)) {
+        throw new AppError(
+          'That mobile money number was not recognised. Enter it as 07XXXXXXXX ' +
+          'or 2567XXXXXXXX, and pick your network.',
+          400,
+        );
+      }
+      throw err;
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        reference: result.extReference,
+        network:   result.network,
+        status:    result.status,
+        amount:    invoice.outstandingBalance > 0 ? invoice.outstandingBalance : invoice.totalAmount,
+        message:   'Payment initiated. Approve the prompt on your phone to complete it.',
+      },
+    });
   }),
 );
 

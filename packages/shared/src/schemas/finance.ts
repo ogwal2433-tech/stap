@@ -271,3 +271,19 @@ export const AddFeeIncrementSchema = z.object({
 });
 
 export type AddFeeIncrementInput = z.infer<typeof AddFeeIncrementSchema>;
+
+/**
+ * A client initiating mobile money payment on their own invoice from the portal.
+ *
+ * The phone is whatever the payer typed — the server normalises `07…` and
+ * `2567…` and rejects anything else, so it is not constrained here beyond a
+ * length that cannot be a slip. Network is optional: the server reads it from
+ * the number's prefix when it is not given, and only the two networks the XCEL
+ * collection API accepts are allowed.
+ */
+export const InitiatePortalPaymentSchema = z.object({
+  phone:   z.string().min(9, 'Enter the mobile money number').max(20),
+  network: z.enum(['MTN', 'AIRTEL']).optional(),
+});
+
+export type InitiatePortalPaymentInput = z.infer<typeof InitiatePortalPaymentSchema>;

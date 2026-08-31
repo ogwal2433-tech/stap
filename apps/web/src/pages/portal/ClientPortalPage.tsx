@@ -7,9 +7,15 @@ import { useToast } from '../../context/ToastContext';
 import { dashboardApi } from '../../lib/dashboard.api';
 import RoleDashboard from '../dashboard/RoleDashboard';
 import AcknowledgeNoticeModal from '../../components/portal/AcknowledgeNoticeModal';
-import type { ComplaintResponse } from '@stap/shared';
+import PayInvoiceModal from '../../components/portal/PayInvoiceModal';
+import type { ComplaintResponse, InvoiceResponse } from '@stap/shared';
 
-const STA_BADGE: Record<string, string> = { PENDING: 'warning', OVERDUE: 'danger', PAID: 'success' };
+const STA_BADGE: Record<string, string> = {
+  PENDING: 'warning', OVERDUE: 'danger', PAID: 'success', PARTIALLY_PAID: 'info',
+};
+
+/** The statuses the server will accept a payment against. */
+const PAYABLE = ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'];
 const COMP_BADGE: Record<string, string> = { OPEN: 'danger', IN_PROGRESS: 'warning', RESOLVED: 'success' };
 
 function is403(err: unknown): boolean {
@@ -49,7 +55,8 @@ export default function ClientPortalPage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data: invoicesRes, isLoading: loadInvoices, isError: invoicesIsError, error: invoicesErr } = useQuery({
+  const { data: invoicesRes, isLoading: loadInvoices, isError: invoicesIsError, error: invoicesErr,
+          refetch: refetchInvoices } = useQuery({
     queryKey: ['portal-invoices'],
     queryFn:  portalApi.getInvoices,
   });
@@ -120,6 +127,7 @@ export default function ClientPortalPage() {
   const [compError, setCompError] = useState<string | null>(null);
   /** The notice the client is acknowledging, if any. */
   const [ackNotice, setAckNotice] = useState<ComplaintResponse | null>(null);
+  const [payInvoice, setPayInvoice] = useState<InvoiceResponse | null>(null);
 
   const submitComplaint = useMutation({
     mutationFn: () => portalApi.submitComplaint({
@@ -233,20 +241,19 @@ export default function ClientPortalPage() {
                       <td className="small text-muted">
                         {new Date(inv.periodStart).toLocaleDateString('en-UG')} — {new Date(inv.periodEnd).toLocaleDateString('en-UG')}
                       </td>
-                      <td>UGX {inv.totalAmount.toLocaleString()}</td>
+                      <td>
+                        UGX {inv.totalAmount.toLocaleString()}
+                        {inv.paidAmount > 0 && (
+                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            UGX {inv.outstandingBalance.toLocaleString()} outstanding
+                          </div>
+                        )}
+                      </td>
                       <td>{new Date(inv.dueDate).toLocaleDateString('en-UG')}</td>
                       <td><Badge bg={STA_BADGE[inv.status] ?? 'secondary'}>{inv.status}</Badge></td>
                       <td>
-                        {(inv.status === 'PENDING' || inv.status === 'OVERDUE') && (
-                          <Button
-                            size="sm" variant="success"
-                            onClick={() => {
-                              showToast('You will be redirected to the payment portal after loading…', 'info');
-                              portalApi.payInvoice(inv.id)
-                                .then(() => showToast('Payment initiated. Refresh page to check status.', 'success'))
-                                .catch(() => showToast('Payment initiation failed', 'danger'));
-                            }}
-                          >
+                        {PAYABLE.includes(inv.status) && (
+                          <Button size="sm" variant="success" onClick={() => setPayInvoice(inv)}>
                             Pay Now
                           </Button>
                         )}
@@ -637,6 +644,15 @@ export default function ClientPortalPage() {
           notice={ackNotice}
           onClose={() => setAckNotice(null)}
           onSuccess={() => { refetchNotices(); }}
+        />
+      )}
+
+      {payInvoice && (
+        <PayInvoiceModal
+          show
+          invoice={payInvoice}
+          onClose={() => setPayInvoice(null)}
+          onSuccess={() => { refetchInvoices(); }}
         />
       )}
     </Container>

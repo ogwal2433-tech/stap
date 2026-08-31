@@ -16,6 +16,14 @@ export interface DeployedGuard {
   date:       string;
 }
 
+export interface PortalPaymentResult {
+  reference: string;
+  network:   string;
+  status:    string;
+  amount:    number;
+  message:   string;
+}
+
 export const portalApi = {
   getOverview(): Promise<PortalOverview> {
     return api.get('/portal/overview').then(r => r.data.data);
@@ -29,8 +37,8 @@ export const portalApi = {
     return api.get(`/portal/invoices/${id}`).then(r => r.data.data);
   },
 
-  payInvoice(id: string): Promise<{ paymentRef: string; status: string }> {
-    return api.get(`/portal/invoices/${id}/pay`).then(r => r.data.data);
+  payInvoice(id: string, body: { phone: string; network?: 'MTN' | 'AIRTEL' }): Promise<PortalPaymentResult> {
+    return api.post(`/portal/invoices/${id}/pay`, body).then(r => r.data.data);
   },
 
   getDeployedGuards(): Promise<DeployedGuard[]> {
