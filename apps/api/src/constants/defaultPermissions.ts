@@ -44,6 +44,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.REPORTS_VIEW, P.REPORTS_EXPORT,
     P.STAFF_VIEW, P.STAFF_CREATE, P.STAFF_EDIT, P.STAFF_DEACTIVATE,
     P.SETTINGS_VIEW, P.SETTINGS_EDIT, P.SYSTEM_ERRORS, P.AUDIT_LOG,
+    P.SHIFT_REPORT_VIEW, P.SHIFT_REPORT_ACKNOWLEDGE,
   ],
 
   // Runs the system rather than the business: accounts, settings, diagnostics.
@@ -80,6 +81,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // Reconciled with the pages this role already reaches, so moving the nav
     // and route guards onto permissions does not take access away.
     P.GUNS_VIEW,
+    P.SHIFT_REPORT_VIEW,
   ],
 
   FIELD_SUPERVISOR: [
@@ -114,6 +116,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.SERVICE_REQUESTS_VIEW, P.SERVICE_REQUESTS_RESPOND,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW,
+    // Writes the end-of-shift handover and reads back what the previous shift
+    // left. Acknowledging is a manager's, so it is not here.
+    P.SHIFT_REPORT_VIEW, P.SHIFT_REPORT_CREATE,
   ],
 
   TRAINER: [

@@ -49,6 +49,8 @@ const IntegrationsPage             = lazy(() => import('@/pages/settings/Integra
 const ZonesPage                    = lazy(() => import('@/pages/zones/ZonesPage'));
 const ZoneDetailPage               = lazy(() => import('@/pages/zones/ZoneDetailPage'));
 const ClientPortalPage             = lazy(() => import('@/pages/portal/ClientPortalPage'));
+const ShiftReportsListPage         = lazy(() => import('@/pages/controlRoom/ShiftReportsListPage'));
+const ShiftHandoverPage            = lazy(() => import('@/pages/controlRoom/ShiftHandoverPage'));
 const SystemErrorsPage             = lazy(() => import('@/pages/admin/SystemErrorsPage'));
 const AuditLogPage                 = lazy(() => import('@/pages/admin/AuditLogPage'));
 const StaffPage                    = lazy(() => import('@/pages/staff/StaffPage'));
@@ -164,6 +166,9 @@ function App() {
               <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
 
               {/* Service requests raised by clients */}
+              <Route path="/control-room/shift-reports" element={<L><PermissionGuard permission="shift_report.view" fallback={<PermissionDenied permission="shift_report.view" />}><ShiftReportsListPage /></PermissionGuard></L>} />
+              <Route path="/control-room/shift-report/new" element={<L><PermissionGuard permission="shift_report.create" fallback={<PermissionDenied permission="shift_report.create" />}><ShiftHandoverPage /></PermissionGuard></L>} />
+              <Route path="/control-room/shift-report/:id" element={<L><PermissionGuard permission="shift_report.view" fallback={<PermissionDenied permission="shift_report.view" />}><ShiftHandoverPage /></PermissionGuard></L>} />
               <Route path="/service-requests" element={<L><PermissionGuard permission="service_requests.view" fallback={<PermissionDenied permission="service_requests.view" />}><StaffServiceRequestsPage /></PermissionGuard></L>} />
 
               {/* Reports */}

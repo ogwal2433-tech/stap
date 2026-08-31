@@ -69,6 +69,11 @@ export const PERMISSIONS = {
   SERVICE_REQUESTS_VIEW:    'service_requests.view',
   SERVICE_REQUESTS_RESPOND: 'service_requests.respond',
 
+  // ── Control room shift handover ─────────────────────────────────────────────
+  SHIFT_REPORT_VIEW:        'shift_report.view',
+  SHIFT_REPORT_CREATE:      'shift_report.create',
+  SHIFT_REPORT_ACKNOWLEDGE: 'shift_report.acknowledge',
+
   // ── Inventory ───────────────────────────────────────────────────────────────
   INVENTORY_VIEW:   'inventory.view',
   INVENTORY_ISSUE:  'inventory.issue',

@@ -194,11 +194,14 @@ model User {
   resolvedErrors          SystemError[]           @relation("ErrorResolver")
   guardPromotions         GuardPromotion[]        @relation("GuardPromotedBy")
 
-  submittedAccountability RequisitionAccountability[] @relation("AccountabilitySubmitter")
-  adminAccountability     RequisitionAccountability[] @relation("AccountabilityAdmin")
-  hrAccountability        RequisitionAccountability[] @relation("AccountabilityHR")
-  directorAccountability  RequisitionAccountability[] @relation("AccountabilityDirector")
-  fundDispatches          FundDispatch[]              @relation("FundDispatchedBy")
+  submittedAccountability  RequisitionAccountability[] @relation("AccountabilitySubmitter")
+  adminAccountability      RequisitionAccountability[] @relation("AccountabilityAdmin")
+  hrAccountability         RequisitionAccountability[] @relation("AccountabilityHR")
+  directorAccountability   RequisitionAccountability[] @relation("AccountabilityDirector")
+  fundDispatches           FundDispatch[]              @relation("FundDispatchedBy")
+  shiftReportsAsController ShiftHandoverReport[]       @relation("ShiftController")
+  shiftReportsAsIncoming   ShiftHandoverReport[]       @relation("IncomingController")
+  acknowledgedShiftReports ShiftHandoverReport[]       @relation("ShiftReportAcknowledger")
 
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
@@ -1757,4 +1760,72 @@ model RolePermission {
 
   @@unique([role, permissionId])
   @@index([role])
+}
+
+/// The Control Room's end-of-shift handover, as the paper form is laid out.
+///
+/// The seven sections are stored as JSON rather than seven child tables. They
+/// are filled in and read back as one document and never queried across — no
+/// report asks "which sites had challenges last month", it asks for a shift's
+/// sheet. Rows are also free text on paper (a site named in prose, a guard who
+/// has no record yet), so foreign keys would reject what the controller
+/// actually needs to write down at 6am.
+model ShiftHandoverReport {
+  id       String  @id @default(cuid())
+  /// SHR-YYYY-NNN, issued per calendar year.
+  systemId String? @unique
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  date         DateTime
+  /// DAY | NIGHT
+  shift        String
+  controllerId String
+  controller   User     @relation("ShiftController", fields: [controllerId], references: [id], onDelete: Restrict)
+  /// "06:00" — the shift's clock times, not timestamps.
+  timeFrom     String
+  timeTo       String
+
+  // ── The seven sections ──────────────────────────────────────────────────────
+  /// [{ label, number, siteDetails }]
+  deploymentRows    Json
+  deploymentRemarks String? @db.Text
+  /// [{ time, site, incident, staffResponding, status }]
+  incidents         Json
+  /// [{ zone, physicalCount, phoneCount, challenges }]
+  supervisionRows   Json
+  /// [{ time, clientSite, issueRaised, staffResponsible }]
+  clientComms       Json
+  /// [{ zone, numGuns, numBullets, status }]
+  gunsDeployed      Json
+  /// [{ site, guardName, issue, actionTakenBy }]
+  disciplineIssues  Json
+
+  // ── Section 7: summary ──────────────────────────────────────────────────────
+  totalIncidents    Int     @default(0)
+  totalClientCalls  Int     @default(0)
+  totalAbsentees    Int     @default(0)
+  totalReplacements Int     @default(0)
+  majorIssue        String? @db.Text
+
+  // ── Handover sign-off ───────────────────────────────────────────────────────
+  // Names are free text: the incoming controller may not hold an account, and
+  // the paper form is signed by whoever is physically there.
+  outgoingControllerName String?
+  outgoingTime           String?
+  incomingControllerName String?
+  incomingTime           String?
+  incomingControllerId   String?
+  incomingController     User?   @relation("IncomingController", fields: [incomingControllerId], references: [id], onDelete: SetNull)
+
+  /// DRAFT | SUBMITTED | ACKNOWLEDGED
+  status             String    @default("DRAFT")
+  acknowledgedAt     DateTime?
+  acknowledgedById   String?
+  acknowledgedByUser User?     @relation("ShiftReportAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date, shift])
+  @@index([status])
 }

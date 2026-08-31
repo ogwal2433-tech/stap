@@ -247,6 +247,8 @@ class DashboardService {
       pendingRequisitions,
       activeComplaints,
       unassignedComplaints,
+      shiftReportsToday,
+      shiftReportsAwaitingAck,
     ] = await Promise.all([
       prisma.clientComplaint.count({ where: { status: { in: ['OPEN', 'UNDER_INVESTIGATION'] } } }),
       prisma.clientComplaint.count({ where: { status: 'UNDER_INVESTIGATION' } }),
@@ -271,6 +273,11 @@ class DashboardService {
         orderBy: { createdAt: 'desc' },
         take:    5,
       }),
+      // Handovers written for today, whichever controller wrote them — the
+      // Control Room is one desk, and the incoming shift needs to see whether
+      // the outgoing one has filed yet.
+      prisma.shiftHandoverReport.count({ where: { date: { gte: today } } }),
+      prisma.shiftHandoverReport.count({ where: { status: 'SUBMITTED' } }),
     ]);
 
     return {
@@ -284,6 +291,8 @@ class DashboardService {
         activeGuards,
         activeClients,
         pendingRequisitions,
+        shiftReportsToday,
+        shiftReportsAwaitingAck,
       },
       feeds: {
         activeComplaints: activeComplaints.map(c => ({

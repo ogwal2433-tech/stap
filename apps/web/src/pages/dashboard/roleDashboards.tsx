@@ -142,6 +142,8 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'activeGuards',        label: 'Active Guards',      icon: '👮', colour: 'teal',  linkTo: '/guards' },
       { key: 'activeClients',       label: 'Active Clients',     icon: '🏢', colour: 'navy',  linkTo: '/clients' },
       { key: 'pendingRequisitions', label: 'Pending Requisitions', icon: '📝', colour: alertWhenAny, linkTo: '/requisitions' },
+      { key: 'shiftReportsToday', label: 'Shift Reports Today', icon: '📑', colour: 'navy', linkTo: '/control-room/shift-reports' },
+      { key: 'shiftReportsAwaitingAck', label: 'Awaiting Acknowledgement', icon: '⏳', colour: alertWhenAny, linkTo: '/control-room/shift-reports?status=SUBMITTED' },
     ],
     feeds: [
       { key: 'unassignedComplaints', title: 'Needs Assignment', icon: '⚠️', emptyText: 'Everything is assigned', linkTo: '/complaints' },

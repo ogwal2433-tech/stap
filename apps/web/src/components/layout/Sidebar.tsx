@@ -78,7 +78,8 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] , permission: 'attendance.view'},
       { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] , permission: 'guns.view'},
       { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
-    ],
+      { icon: 'bi-clipboard-check-fill', label: 'Shift Reports', to: '/control-room/shift-reports', permission: 'shift_report.view' },
+    ]
   },
   {
     id:    'clients',
@@ -141,6 +142,7 @@ const NOTIFICATION_ITEM: NavItem = {
 const ALL_NAV_PATHS = new Set([
   '/dashboard', '/guards', '/attendance', '/checkin',
   '/clients', '/zones', '/complaints', '/service-requests',
+  '/control-room/shift-reports',
   '/finance', '/inventory', '/requisitions',
   '/hr', '/reports', '/settings', '/settings/roles', '/settings/integrations', '/staff', '/notifications', '/guns', '/marketing',
   '/guards/dashboard', '/guards/import',
