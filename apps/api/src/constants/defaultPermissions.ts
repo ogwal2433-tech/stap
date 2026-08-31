@@ -61,6 +61,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // Reconciled with the pages this role already reaches, so moving the nav
     // and route guards onto permissions does not take access away.
     P.ATTENDANCE_VIEW, P.COMPLAINTS_VIEW, P.INVENTORY_VIEW, P.REQUISITIONS_VIEW, P.SERVICE_REQUESTS_VIEW,
+    // The old service-request guard was a role list this role was on, so it
+    // could already reply. Stating it keeps that true now the route asks for
+    // the permission instead.
+    P.SERVICE_REQUESTS_RESPOND,
   ],
 
   OPERATIONS_SUPERVISOR: [
@@ -93,7 +97,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.FINANCE_VIEW, P.INVOICES_VIEW, P.INVOICES_CREATE, P.INVOICES_EDIT,
     P.INVOICES_PRINT, P.PAYMENTS_VIEW, P.PAYMENTS_RECORD,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE, P.REQUISITIONS_DISPATCH,
-    P.SERVICE_REQUESTS_VIEW,
+    // Replies to a client's service request as well as reading them: this role
+    // is often the one that answers a billing or supply query.
+    P.SERVICE_REQUESTS_VIEW, P.SERVICE_REQUESTS_RESPOND,
     P.REPORTS_VIEW, P.REPORTS_EXPORT,
     // Reconciled with the pages this role already reaches, so moving the nav
     // and route guards onto permissions does not take access away.

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Badge, Nav, Offcanvas } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
 import { useSystemErrorStats } from '../../hooks/useSystemErrors';
 import { serviceRequestsApi } from '../../lib/serviceRequests.api';
@@ -29,11 +29,6 @@ const ERROR_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINI
 const NON_GUARD_INTERNAL = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD);
 // Firearms are the Trainer's to issue; Operations can see what is on its sites.
 const MARKETING_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
-// Who answers what clients ask for. Mirrors the /service-requests router.
-const SERVICE_REQUEST_ROLES = [
-  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR,
-  ROLES.CONTROL_ROOM, ROLES.ADMINISTRATOR,
-];
 const GUN_VIEW_ROLES = [
   ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
@@ -48,10 +43,12 @@ interface NavItem {
    * Permission that decides whether this item is shown. Where present it
    * replaces `roles`, so granting it in the Roles & Permissions page makes the
    * item appear without a code change. `roles` stays for the few items that
-   * have no permission of their own (Dashboard, Check-in, Notifications).
+   * have no permission of their own (Dashboard, Check-in, Notifications), and
+   * is omitted entirely where a permission governs the item — keeping a role
+   * list beside one only invites the two to drift apart.
    */
   permission?: string;
-  roles: UserRole[];
+  roles?: UserRole[];
 }
 
 interface NavGroup {
@@ -92,7 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'roster.view' },
       { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] , permission: 'marketing.view'},
       { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] , permission: 'complaints.view'},
-      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', roles: SERVICE_REQUEST_ROLES as UserRole[] , permission: 'service_requests.view'},
+      { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', permission: 'service_requests.view'},
     ],
   },
   {
@@ -175,7 +172,7 @@ function NavGate({ item, children }: { item: NavItem; children: React.ReactNode 
   if (item.permission) {
     return <PermissionGuard permission={item.permission}>{children}</PermissionGuard>;
   }
-  return <RoleGuard allowedRoles={item.roles}>{children}</RoleGuard>;
+  return <RoleGuard allowedRoles={item.roles ?? []}>{children}</RoleGuard>;
 }
 
 interface NavContentProps {
@@ -407,7 +404,10 @@ function NavContent({ onNavigate }: NavContentProps) {
   const openErrorCount = (errorStats?.openCritical ?? 0) + (errorStats?.openError ?? 0);
 
   // Unanswered client requests, so staff see them without opening the page.
-  const canSeeServiceRequests = !!user && (SERVICE_REQUEST_ROLES as string[]).includes(user.role);
+  // The same permission the nav item and the route ask for. Reading a role
+  // list here instead left the Accounts Officer seeing the page but never its
+  // pending count, because the query behind the badge was switched off.
+  const canSeeServiceRequests = useHasPermission('service_requests.view');
   const { data: srSummary } = useQuery({
     queryKey:        ['sr-summary'],
     queryFn:         serviceRequestsApi.getSummary,
@@ -441,7 +441,7 @@ function NavContent({ onNavigate }: NavContentProps) {
       }}>
         {/* Standalone: Dashboard */}
         {STANDALONE_ITEMS.map(item => (
-          <RoleGuard key={item.to} allowedRoles={item.roles}>
+          <RoleGuard key={item.to} allowedRoles={item.roles ?? []}>
             <NavItemLink item={item} onNavigate={onNavigate} />
           </RoleGuard>
         ))}
@@ -467,7 +467,7 @@ function NavContent({ onNavigate }: NavContentProps) {
         <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '6px 10px' }} />
 
         {/* Standalone: Notifications */}
-        <RoleGuard allowedRoles={NOTIFICATION_ITEM.roles}>
+        <RoleGuard allowedRoles={NOTIFICATION_ITEM.roles ?? []}>
           <NavItemLink item={NOTIFICATION_ITEM} onNavigate={onNavigate} unreadBadge={unreadCount} />
         </RoleGuard>
       </div>
