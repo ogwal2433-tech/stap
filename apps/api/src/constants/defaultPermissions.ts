@@ -82,6 +82,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // and route guards onto permissions does not take access away.
     P.GUNS_VIEW,
     P.SHIFT_REPORT_VIEW,
+    P.CHECKIN_PERFORM,
   ],
 
   FIELD_SUPERVISOR: [
@@ -92,6 +93,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // Reconciled with the pages this role already reaches, so moving the nav
     // and route guards onto permissions does not take access away.
     P.CLIENTS_VIEW, P.COMPLAINTS_VIEW, P.REQUISITIONS_VIEW,
+    // Held by exactly the roles the check-in screen was hardcoded to before
+    // it moved onto a permission, so the move takes nothing away.
+    P.CHECKIN_PERFORM,
   ],
 
   ACCOUNTS_OFFICER: [

@@ -134,7 +134,7 @@ function App() {
               <Route path="/attendance"           element={<L><PermissionGuard permission="attendance.view" fallback={<PermissionDenied permission="attendance.view" />}><AttendancePage /></PermissionGuard></L>} />
               <Route path="/attendance/deployment-sheet" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><DeploymentSheetPage /></RoleGuard></L>} />
               <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
-              <Route path="/checkin"              element={<L><RoleGuard allowedRoles={[ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><CheckinPage /></RoleGuard></L>} />
+              <Route path="/checkin"              element={<L><PermissionGuard permission="checkin.perform" fallback={<PermissionDenied permission="checkin.perform" />}><CheckinPage /></PermissionGuard></L>} />
 
               {/* Finance */}
               <Route path="/finance" element={<L><PermissionGuard permission="finance.view" fallback={<PermissionDenied permission="finance.view" />}><FinancePage /></PermissionGuard></L>} />

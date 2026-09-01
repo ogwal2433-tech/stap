@@ -71,6 +71,8 @@ import { attendanceService } from '../services/attendanceService';
 import { guardDocumentUpload } from '../config/multer';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../errors/AppError';
@@ -252,7 +254,7 @@ router.get(
 // ── POST /checkin — supervisor site check-in ──────────────────────────────────
 router.post(
   '/checkin',
-  requireRole(ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR),
+  requirePermission(PERMISSIONS.CHECKIN_PERFORM),
   guardDocumentUpload.single('photo'),
   asyncHandler(async (req, res) => {
     // Parse body (may come as JSON or multipart)

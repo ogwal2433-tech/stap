@@ -36,6 +36,8 @@ export const PERMISSIONS = {
   ROSTER_BUILD:    'roster.build',
   ROSTER_EDIT:     'roster.edit',
   ATTENDANCE_VIEW: 'attendance.view',
+  /// Submitting a site check-in from the supervisor's phone.
+  CHECKIN_PERFORM:  'checkin.perform',
   ATTENDANCE_EDIT: 'attendance.edit',
 
   // ── Finance ─────────────────────────────────────────────────────────────────

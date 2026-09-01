@@ -43,7 +43,8 @@ interface NavItem {
    * Permission that decides whether this item is shown. Where present it
    * replaces `roles`, so granting it in the Roles & Permissions page makes the
    * item appear without a code change. `roles` stays for the few items that
-   * have no permission of their own (Dashboard, Check-in, Notifications), and
+   * have no permission of their own (Dashboard and Notifications, which
+   * everyone signed in can reach), and
    * is omitted entirely where a permission governs the item — keeping a role
    * list beside one only invites the two to drift apart.
    */
@@ -77,7 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] , permission: 'guards.view'},
       { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] , permission: 'attendance.view'},
       { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] , permission: 'guns.view'},
-      { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    roles: [ROLES.FIELD_SUPERVISOR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[] },
+      { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    permission: 'checkin.perform' },
       { icon: 'bi-clipboard-check-fill', label: 'Shift Reports', to: '/control-room/shift-reports', permission: 'shift_report.view' },
     ]
   },
