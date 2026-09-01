@@ -81,6 +81,7 @@ class DashboardService {
       guardsNeedingAttention,
       pendingServiceRequests,
       activeStaff,
+      failedJobs,
     ] = await Promise.all([
       prisma.guard.count(),
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
@@ -114,6 +115,9 @@ class DashboardService {
       // Internal accounts only — guards and client portal logins are counted
       // elsewhere and would drown the staff head-count.
       prisma.user.count({ where: { status: 'ACTIVE', role: { notIn: ['GUARD', 'CLIENT'] } } }),
+      // Surfaced on the Director dashboard: a job that stopped working is
+      // invisible otherwise — nothing fails loudly, invoices simply stop.
+      prisma.scheduledJob.count({ where: { lastRunStatus: 'FAILED' } }),
     ]);
 
     void today;
@@ -130,6 +134,7 @@ class DashboardService {
         pendingServiceRequests,
         activeStaff,
         monthlyRevenue: revenueAgg._sum.totalAmount ?? 0,
+        failedJobs,
       },
       feeds: {
         recentComplaints: recentComplaints.map(c => ({

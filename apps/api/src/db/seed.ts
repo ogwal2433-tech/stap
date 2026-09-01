@@ -3,6 +3,7 @@ import { HR_LETTER_TEMPLATES } from './hrLetterTemplates';
 import { PERMISSIONS, permissionModule, permissionName } from '../constants/permissions';
 import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
 import { SETTINGS_CONFIG } from '../constants/settingsConfig';
+import { syncJobRegistry } from '../lib/jobRunner';
 import { encrypt, isEncryptionConfigured } from '../lib/settingsEncryption';
 import bcrypt from 'bcryptjs';
 
@@ -526,6 +527,12 @@ async function main() {
     });
     console.log(`✅ Seeded shift type: ${shift.name}`);
   }
+
+  // Scheduled jobs. The registry is code; this only makes sure a row exists for
+  // each so the Scheduled Jobs page has something to report on. It never
+  // resumes a job an operator paused.
+  const jobCount = await syncJobRegistry();
+  console.log(`✅ Seeded ${jobCount} scheduled jobs`);
 
   console.log('\n🎉 Seed completed successfully!\n');
 }

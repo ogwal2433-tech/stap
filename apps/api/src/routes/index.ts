@@ -21,6 +21,7 @@ import { paymentsRouter } from './payments';
 import { systemErrorsRouter } from './systemErrors';
 import { serviceRequestsRouter } from './serviceRequests';
 import { shiftReportsRouter } from './shiftReports';
+import { scheduledJobsRouter } from './scheduledJobs';
 import { auditLogsRouter } from './auditLogs';
 import { gunsRouter } from './guns';
 import { marketingRouter } from './marketing';
@@ -59,6 +60,7 @@ router.use('/payments', paymentsRouter);
 router.use('/system-errors', systemErrorsRouter);
 router.use('/service-requests', serviceRequestsRouter);
 router.use('/shift-reports', shiftReportsRouter);
+router.use('/scheduled-jobs', scheduledJobsRouter);
 router.use('/audit-logs', auditLogsRouter);
 
 export default router;

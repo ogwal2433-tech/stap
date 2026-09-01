@@ -19,13 +19,11 @@ import { payslipWorker } from './jobs/workers/payslipWorker';
 import { disburseWorker } from './jobs/workers/disburseWorker';
 import { queues } from './jobs/queues';
 import { redisConnection } from './lib/redis';
-import { contractService } from './services/contractService';
-import { invoiceService } from './services/invoiceService';
 import { reportService } from './services/reportService';
-import { inventoryService } from './services/inventoryService';
-import { guardService } from './services/guardService';
 import { runInvoiceEmailJob } from './jobs/invoiceCron';
 import { errorLogger } from './services/errorLogger';
+import { JOB_REGISTRY, JOB_TIMEZONE } from './constants/jobRegistry';
+import { runRegisteredJob, syncJobRegistry } from './lib/jobRunner';
 
 console.log(`⚙️  STAP Worker process started (PID ${process.pid})`);
 
@@ -35,47 +33,28 @@ const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWork
 // Runs only here (a single PM2 instance), not in stap-api (which runs 2
 // cluster instances) — otherwise every job below would fire twice daily.
 
-// Refresh contract statuses daily at 06:00 EAT (Africa/Kampala)
-cron.schedule('0 6 * * *', () => contractService.runStatusRefresh(), {
-  timezone: 'Africa/Kampala',
-});
+// Registered from JOB_REGISTRY rather than written out one by one. The
+// registry holds each job's cron expression and its function, so the schedule
+// the Scheduled Jobs page shows an operator is the schedule that is actually
+// registered here — the two cannot drift.
+//
+// Every run goes through runRegisteredJob, which records it and swallows the
+// error: one failing job must not take the worker down and stop the rest.
+for (const def of JOB_REGISTRY) {
+  cron.schedule(def.cronExpr, () => runRegisteredJob(def.key, 'cron'), {
+    timezone: JOB_TIMEZONE,
+  });
+}
 
-// Auto-generate invoices for active contracts on their billing day
-cron.schedule('0 6 * * *', () => invoiceService.generateAutoInvoices(), {
-  timezone: 'Africa/Kampala',
-});
-
-// Email due/overdue invoices that haven't been sent yet — daily at 07:00 EAT
-cron.schedule('0 7 * * *', () => runInvoiceEmailJob(), {
-  timezone: 'Africa/Kampala',
-});
-// Also run on startup to catch any missed sends
-runInvoiceEmailJob().catch(console.error);
+// Make sure a row exists for each job before anything reports on it, then catch
+// any invoice emails missed while the worker was down.
+syncJobRegistry()
+  .then((n) => console.log(`⏰ ${n} scheduled jobs registered`))
+  .then(() => runInvoiceEmailJob())
+  .catch((err) => console.error('❌ Job registry sync failed:', err));
 
 // Initialise any persisted scheduled reports on startup
 reportService.initScheduledReports();
-
-// Daily low stock check at 07:00 EAT
-cron.schedule('0 7 * * *', () => inventoryService.runLowStockCheck(), {
-  timezone: 'Africa/Kampala',
-});
-
-// Daily probation status check at 06:00 EAT
-cron.schedule('0 6 * * *', async () => {
-  console.log('⏰ Running probation check...');
-  await guardService.runProbationCheck();
-}, { timezone: 'Africa/Kampala' });
-
-// Annual salary increment check — runs every day at 07:00 EAT
-// Applies UGX 20,000 (year 1) or UGX 10,000 (subsequent years) on each guard's contract anniversary
-cron.schedule('0 7 * * *', async () => {
-  console.log('⏰ Running annual salary increments...');
-  try {
-    await guardService.runSalaryIncrements();
-  } catch (err) {
-    console.error('❌ Salary increment cron failed:', err);
-  }
-}, { timezone: 'Africa/Kampala' });
 
 async function gracefulShutdown(signal: string) {
   console.log(`\n⚙️  Worker received ${signal}. Shutting down cleanly...`);

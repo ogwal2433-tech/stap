@@ -200,6 +200,7 @@ model User {
   directorAccountability   RequisitionAccountability[] @relation("AccountabilityDirector")
   fundDispatches           FundDispatch[]              @relation("FundDispatchedBy")
   shiftReportsAsController ShiftHandoverReport[]       @relation("ShiftController")
+  jobsTriggered            JobRunLog[]                 @relation("JobTrigger")
   shiftReportsAsIncoming   ShiftHandoverReport[]       @relation("IncomingController")
   acknowledgedShiftReports ShiftHandoverReport[]       @relation("ShiftReportAcknowledger")
 
@@ -1828,4 +1829,66 @@ model ShiftHandoverReport {
 
   @@index([date, shift])
   @@index([status])
+}
+
+/// A background job the system runs on a schedule, and what it has been doing.
+///
+/// The row is the operator-facing record — whether the job is paused, when it
+/// last ran, how it went. What the job actually *is* stays in code
+/// (jobRegistry.ts); this table never decides which function runs, so a row
+/// invented by hand cannot make the system execute anything.
+model ScheduledJob {
+  id          String  @id @default(cuid())
+  /// Matches a key in jobRegistry.ts. A row whose key is not in the registry
+  /// is shown as unregistered rather than offered a Run button.
+  key         String  @unique
+  name        String
+  description String? @db.Text
+  cronExpr    String
+  cronHuman   String
+  /// invoices | payroll | reports | maintenance | payments
+  category    String  @default("general")
+  /// false = paused. The scheduler still fires; the runner declines to run.
+  isActive    Boolean @default(true)
+
+  lastRunAt       DateTime?
+  /// SUCCESS | FAILED | RUNNING
+  lastRunStatus   String?
+  /// Milliseconds.
+  lastRunDuration Int?
+  lastRunError    String?   @db.Text
+  nextRunAt       DateTime?
+  totalRuns       Int       @default(0)
+  totalFailed     Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs JobRunLog[]
+
+  @@index([category])
+  @@index([lastRunStatus])
+}
+
+/// One execution of a scheduled job.
+model JobRunLog {
+  id              String       @id @default(cuid())
+  jobId           String
+  job             ScheduledJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  startedAt       DateTime     @default(now())
+  finishedAt      DateTime?
+  /// RUNNING | SUCCESS | FAILED | SKIPPED
+  status          String
+  /// Milliseconds.
+  duration        Int?
+  /// Whatever the job returned — { created: n, skipped: n } and the like.
+  result          Json?
+  error           String?      @db.Text
+  /// NULL when the scheduler started it; the user's id when a person did.
+  /// SetNull rather than Cascade: deleting a user must not erase the record
+  /// that a job ran.
+  triggeredBy     String?
+  triggeredByUser User?        @relation("JobTrigger", fields: [triggeredBy], references: [id], onDelete: SetNull)
+
+  @@index([jobId, startedAt])
 }
