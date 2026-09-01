@@ -91,6 +91,15 @@ services:
     container_name: stap-worker
     restart: unless-stopped
     command: ["node", "apps/api/dist/worker.js"]
+    # The image's healthcheck asks an HTTP endpoint whether it is alive. A
+    # worker serves no HTTP, so it would sit permanently unhealthy once it is
+    # genuinely running worker.js. Check the process instead.
+    healthcheck:
+      test: ["CMD-SHELL", "tr -d '\\0' < /proc/1/cmdline | grep -q worker.js"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-stap_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stap_production}

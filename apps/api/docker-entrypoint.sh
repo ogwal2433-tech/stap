@@ -30,5 +30,15 @@ echo "📄  Initialising default letter templates..."
 node apps/api/dist/db/initTemplates.js
 echo "✅ Templates initialised"
 
-echo "🚀 Starting API server..."
-exec node apps/api/dist/index.js
+# Run whatever the container was asked to run, rather than a hardcoded path.
+#
+# This used to end `exec node apps/api/dist/index.js`, which discarded the
+# command compose passes. The worker service asks for worker.js and was silently
+# given the API instead: stap-worker came up listening on 3001, passed the HTTP
+# healthcheck because it really was the API, and no cron job ran anywhere —
+# they are all registered in worker.js.
+#
+# The Dockerfile CMD supplies index.js, so a container started without a command
+# still runs the API exactly as before.
+echo "🚀 Starting: $*"
+exec "$@"
