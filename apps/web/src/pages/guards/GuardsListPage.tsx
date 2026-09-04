@@ -6,6 +6,7 @@ import {
 } from 'react-bootstrap';
 import { useGuardList, useUpdateGuardStatus } from '../../hooks/useGuards';
 import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
@@ -141,7 +142,7 @@ export default function GuardsListPage() {
       <div className="d-flex align-items-center justify-content-between mb-4">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Guards</h4>
         <div className="d-flex gap-2">
-          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+          <PermissionGuard permission="guards.create">
             <Button
               variant="outline-secondary"
               size="sm"
@@ -149,15 +150,15 @@ export default function GuardsListPage() {
             >
               📥 Import
             </Button>
-          </RoleGuard>
-          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+          </PermissionGuard>
+          <PermissionGuard permission="guards.create">
             <Button
               style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
               onClick={() => navigate('/guards/new')}
             >
               + Add Guard
             </Button>
-          </RoleGuard>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -319,6 +320,7 @@ export default function GuardsListPage() {
                   <th>Phone</th>
                   <th>Status</th>
                   <th>Contract</th>
+                  {/* Salary column — finance, no guard permission covers it. */}
                   <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                     <th>Salary</th>
                   </RoleGuard>
@@ -404,6 +406,7 @@ export default function GuardsListPage() {
                         </div>
                       )}
                     </td>
+                    {/* Salary column — finance, no guard permission covers it. */}
                     <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                       <td>UGX {g.salaryRate.toLocaleString()}</td>
                     </RoleGuard>
@@ -415,15 +418,15 @@ export default function GuardsListPage() {
                         <Button variant="outline-primary" onClick={() => navigate(`/guards/${g.id}`)}>
                           View
                         </Button>
-                        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                        <PermissionGuard permission="guards.edit">
                           <Button
                             variant="outline-secondary"
                             onClick={() => navigate(`/guards/${g.id}/edit`)}
                           >
                             Edit
                           </Button>
-                        </RoleGuard>
-                        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+                        </PermissionGuard>
+                        <PermissionGuard permission="guards.edit">
                           <Dropdown as={ButtonGroup}>
                             <Dropdown.Toggle
                               split
@@ -442,7 +445,7 @@ export default function GuardsListPage() {
                               ))}
                             </Dropdown.Menu>
                           </Dropdown>
-                        </RoleGuard>
+                        </PermissionGuard>
                       </ButtonGroup>
                     </td>
                   </tr>

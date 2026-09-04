@@ -13,6 +13,7 @@ import { guardsApi } from '../../lib/guards.api';
 import { lettersApi } from '../../lib/letters.api';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
@@ -407,12 +408,12 @@ export default function GuardDetailPage() {
           )}
         </div>
         <ButtonGroup size="sm">
-          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+          <PermissionGuard permission="guards.edit">
             <Button variant="outline-primary" onClick={() => navigate(`/guards/${id}/edit`)}>
               Edit
             </Button>
-          </RoleGuard>
-          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+          </PermissionGuard>
+          <PermissionGuard permission="guards.edit">
             {guard.employmentStatus === 'SUSPENDED' ? (
               <>
                 <Button
@@ -446,7 +447,9 @@ export default function GuardDetailPage() {
                 </Dropdown.Menu>
               </Dropdown>
             )}
-          </RoleGuard>
+          </PermissionGuard>
+          {/* Stays on roles: the nearest permission is guards.documents, which the
+                       Administrator does not hold, so mapping it would take ID-card printing away. */}
           <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as UserRole[]}>
             <Button
               variant="outline-dark"
@@ -467,7 +470,7 @@ export default function GuardDetailPage() {
             </Button>
           </RoleGuard>
           {guard.employmentStatus === 'ACTIVE' && (
-            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER] as UserRole[]}>
+            <PermissionGuard permission="guards.promote">
               <Button
                 variant="outline-primary"
                 disabled={!guard.rank}
@@ -476,10 +479,10 @@ export default function GuardDetailPage() {
               >
                 Promote
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           )}
           {guard.employmentStatus === 'ACTIVE' && (
-            <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+            <PermissionGuard permission="guards.transfer">
               <Button
                 variant="outline-info"
                 disabled={!activeDeployment}
@@ -488,7 +491,7 @@ export default function GuardDetailPage() {
               >
                 Transfer{!activeDeployment && ' (not deployed)'}
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           )}
           <Button variant="outline-secondary" onClick={() => navigate('/guards')}>
             ← Back
@@ -571,6 +574,7 @@ export default function GuardDetailPage() {
                   Confirmed
                 </Badge>
               )}
+              {/* Salary — see above. */}
               <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
                 <div className="text-muted small">
                   UGX {guard.salaryRate.toLocaleString()} / month
@@ -605,6 +609,7 @@ export default function GuardDetailPage() {
       </div>
 
       {/* Salary increment / service counting card */}
+      {/* Salary is a finance concern, not a guard one, and has no permission of its own. */}
       <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
         <div className="card border-0 shadow-sm mb-3">
           <div className="card-header bg-white fw-bold small d-flex align-items-center justify-content-between" style={{ color: '#1B3A6B' }}>
@@ -692,7 +697,7 @@ export default function GuardDetailPage() {
           <div className="flex-grow-1">
             <strong>National ID not yet provided.</strong> This guard cannot be deployed until their NID is updated.
           </div>
-          <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+          <PermissionGuard permission="guards.edit">
             <Button
               size="sm"
               variant="warning"
@@ -700,7 +705,7 @@ export default function GuardDetailPage() {
             >
               Update NID
             </Button>
-          </RoleGuard>
+          </PermissionGuard>
         </Alert>
       )}
 
@@ -709,11 +714,11 @@ export default function GuardDetailPage() {
         {/* ── Tab 1: Vetting Form ───────────────────────────────────────────── */}
         <Tab eventKey="details" title="Vetting Form">
           <div className="d-flex justify-content-end mb-3">
-            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <PermissionGuard permission="guards.edit">
               <Button size="sm" variant="outline-primary" onClick={() => navigate(`/guards/${id}/edit`)}>
                 Edit Vetting Details
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           </div>
 
           {/* Section A */}
@@ -831,12 +836,14 @@ export default function GuardDetailPage() {
                     </Col>
                   </>
                 )}
-                <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                <PermissionGuard permission="guards.edit">
                   <Col md={4}>
                     <div className="text-muted small">Bank Name</div>
                     <div className={`fw-medium ${!guard.bankName ? 'text-muted fst-italic' : ''}`}>{guard.bankName || 'Not provided'}</div>
                   </Col>
-                </RoleGuard>
+                </PermissionGuard>
+                {/* Director only, deliberately: the bank account number is the one guard field
+                       kept from managers. guards.edit would widen it to them and to HR. */}
                 <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
                   <Col md={4}>
                     <div className="text-muted small">Account Number</div>
@@ -986,7 +993,7 @@ export default function GuardDetailPage() {
         <Tab eventKey="documents" title="Documents">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <span className="text-muted small">{guard._count?.documents ?? 0} document(s)</span>
-            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <PermissionGuard permission="guards.documents">
               <Button
                 size="sm"
                 variant="primary"
@@ -995,7 +1002,7 @@ export default function GuardDetailPage() {
               >
                 Upload Document
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           </div>
           {(guard.documents ?? []).length === 0 ? (
             <Alert variant="light">No documents uploaded yet.</Alert>
@@ -1028,14 +1035,14 @@ export default function GuardDetailPage() {
                         >
                           Download
                         </Button>
-                        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                        <PermissionGuard permission="guards.documents">
                           <Button
                             variant="outline-danger"
                             onClick={() => handleDeleteDoc(doc.id)}
                           >
                             Delete
                           </Button>
-                        </RoleGuard>
+                        </PermissionGuard>
                       </ButtonGroup>
                     </td>
                   </tr>
@@ -1197,11 +1204,11 @@ export default function GuardDetailPage() {
           {/* Action bar */}
           <div className="d-flex justify-content-between align-items-center mb-3">
             <span className="text-muted small">{disciplinaryRecords.length} record(s)</span>
-            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <PermissionGuard permission="hr.disciplinary">
               <Button variant="outline-primary" size="sm" onClick={() => setShowDisciplinaryModal(true)}>
                 <i className="bi bi-plus-lg me-1" />Add Record
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           </div>
 
           {/* Disciplinary records — card list, each with its own linked letters */}
@@ -1223,7 +1230,7 @@ export default function GuardDetailPage() {
                           <span className="text-muted small ms-2">{new Date(d.incidentDate).toLocaleDateString('en-GB')}</span>
                           {d.officer?.name && <span className="text-muted small ms-2">· Officer: {d.officer.name}</span>}
                         </div>
-                        <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+                        <PermissionGuard permission="hr.letters">
                           <Button
                             size="sm"
                             style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
@@ -1232,7 +1239,7 @@ export default function GuardDetailPage() {
                             <i className="bi bi-file-earmark-pdf me-1" />
                             {recordLetters.length === 0 ? 'Generate Letter' : '+ Another Letter'}
                           </Button>
-                        </RoleGuard>
+                        </PermissionGuard>
                       </div>
                       <div className="small mt-2"><strong>Reason:</strong> {d.reason}</div>
                       <div className="small"><strong>Outcome:</strong> {d.outcome}</div>
@@ -1269,7 +1276,7 @@ export default function GuardDetailPage() {
           )}
 
           {/* PDF letters (legacy fire-and-forget system) */}
-          <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+          <PermissionGuard permission="hr.letters">
             {guardLetters.length > 0 && (
               <div className="mt-4">
                 <div className="text-uppercase text-muted fw-semibold mb-2" style={{ fontSize: '0.7rem', letterSpacing: '0.06em' }}>
@@ -1296,14 +1303,14 @@ export default function GuardDetailPage() {
                 </Table>
               </div>
             )}
-          </RoleGuard>
+          </PermissionGuard>
         </Tab>
 
         {/* ── Tab 6: Letters (HR letters — never disciplinary) ──────────────── */}
         <Tab eventKey="letters" title="Letters">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <span className="text-muted small">{hrLetters.length} letter(s)</span>
-            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <PermissionGuard permission="hr.letters">
               <Button
                 size="sm"
                 style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B', color: '#fff' }}
@@ -1311,7 +1318,7 @@ export default function GuardDetailPage() {
               >
                 + Generate Letter
               </Button>
-            </RoleGuard>
+            </PermissionGuard>
           </div>
 
           {hrLetters.length === 0 ? (

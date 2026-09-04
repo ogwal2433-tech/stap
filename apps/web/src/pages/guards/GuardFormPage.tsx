@@ -9,7 +9,7 @@ import {
 import { useGuard, useCreateGuard, useUpdateGuard } from '../../hooks/useGuards';
 import { guardsApi } from '../../lib/guards.api';
 import { useAuth } from '../../context/AuthContext';
-import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
 import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
@@ -876,7 +876,7 @@ export default function GuardFormPage() {
                 </Form.Group>
               </Col>
             </Row>
-            <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+            <PermissionGuard permission="guards.edit">
               <Row className="g-3 mb-3">
                 <Col md={4}>
                   <Form.Group>
@@ -902,7 +902,7 @@ export default function GuardFormPage() {
                   </Form.Group>
                 </Col>
               </Row>
-            </RoleGuard>
+            </PermissionGuard>
           </Card.Body>
         </Card>
 

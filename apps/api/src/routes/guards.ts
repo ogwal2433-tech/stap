@@ -177,6 +177,8 @@ import { uploadService } from '../services/uploadService';
 import { guardDocumentUpload } from '../config/multer';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../errors/AppError';
@@ -235,7 +237,7 @@ router.get(
 // ── POST / — create guard ──────────────────────────────────────────────────────
 router.post(
   '/',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_CREATE),
   validate(CreateGuardSchema),
   asyncHandler(async (req, res) => {
     const guard = await guardService.create(req.body, req.user!.userId);
@@ -293,7 +295,7 @@ router.get(
 // ── GET /import/template — download Excel import template ──────────────────────
 router.get(
   '/import/template',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_CREATE),
   asyncHandler(async (_req, res) => {
     const buffer = await bulkImportService.generateTemplate();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -305,7 +307,7 @@ router.get(
 // ── POST /import — upload and process Excel file ───────────────────────────────
 router.post(
   '/import',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_CREATE),
   importUpload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
@@ -353,7 +355,7 @@ router.get(
 // ── PATCH /:id — update guard ──────────────────────────────────────────────────
 router.patch(
   '/:id',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_EDIT),
   validate(UpdateGuardSchema),
   asyncHandler(async (req, res) => {
     const guard = await guardService.update(req.params.id, req.body, req.user!.userId);
@@ -446,7 +448,7 @@ router.get(
 // ── PUT /:id/vetting-data — replace relatives + associates ────────────────────
 router.put(
   '/:id/vetting-data',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_EDIT),
   validate(GuardVettingDataSchema),
   asyncHandler(async (req, res) => {
     await guardService.updateVettingData(
@@ -462,7 +464,7 @@ router.put(
 // ── POST /:id/photo — upload guard photo ───────────────────────────────────────
 router.post(
   '/:id/photo',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_EDIT),
   guardDocumentUpload.single('photo'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
@@ -485,7 +487,7 @@ router.post(
 // ── POST /:id/documents — upload guard document ────────────────────────────────
 router.post(
   '/:id/documents',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_DOCUMENTS),
   guardDocumentUpload.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError('No file uploaded', 400);
@@ -552,7 +554,7 @@ router.get(
 // ── DELETE /:id/documents/:docId — soft-delete a document ─────────────────────
 router.delete(
   '/:id/documents/:docId',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUARDS_DOCUMENTS),
   asyncHandler(async (req, res) => {
     // Soft delete only — documents are legal records and must not be permanently destroyed
     const doc = await prisma.guardDocument.findFirst({
@@ -581,7 +583,7 @@ router.delete(
 // ── POST /:id/disciplinary — create disciplinary record ────────────────────────
 router.post(
   '/:id/disciplinary',
-  requireRole(...GUARD_WRITE_ROLES),
+  requirePermission(PERMISSIONS.HR_DISCIPLINARY),
   validate(CreateDisciplinarySchema),
   asyncHandler(async (req, res) => {
     const guard = await prisma.guard.findUnique({ where: { id: req.params.id } });

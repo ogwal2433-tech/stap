@@ -119,7 +119,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   // billing: HR needs to know who a guard is and what has happened to them, not
   // what they cost or what a client was charged.
   HR: [
-    P.GUARDS_VIEW, P.GUARDS_EDIT, P.GUARDS_DOCUMENTS, P.GUARDS_PROMOTE,
+    // Creates the guard record as well as maintaining it: HR is the role that
+    // onboards a new guard, and it already sat in GUARD_WRITE_ROLES, which is
+    // what the create route and the Add Guard button read before this.
+    P.GUARDS_VIEW, P.GUARDS_CREATE, P.GUARDS_EDIT, P.GUARDS_DOCUMENTS, P.GUARDS_PROMOTE,
     P.HR_VIEW, P.HR_EDIT, P.HR_LETTERS, P.HR_DISCIPLINARY,
     P.LEAVE_VIEW, P.LEAVE_APPROVE,
     // Read-only: HR reads attendance to answer a leave or discipline question,
