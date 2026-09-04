@@ -47,6 +47,8 @@ class DashboardService {
         return this.getAdminStats();
       case ROLES.CONTROL_ROOM:
         return this.getControlRoomStats();
+      case ROLES.HR:
+        return this.getHRStats();
       case ROLES.MARKETING:
       case ROLES.MARKETING_HEAD:
       case ROLES.SALES:
@@ -318,6 +320,84 @@ class DashboardService {
     };
   }
 
+  // ── HR — headcount, leave, discipline and letters ────────────────────────────
+
+  private async getHRStats(): Promise<DashboardData> {
+    const today      = startOfDay();
+    const monthStart = startOfMonth();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [
+      activeGuards,
+      onLeaveToday,
+      pendingLeave,
+      recentDisciplinary,
+      lettersThisMonth,
+      byRank,
+      pendingLeaveFeed,
+    ] = await Promise.all([
+      prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
+      // Approved leave that covers today, so the figure answers "who is off
+      // right now" rather than "how much leave was booked".
+      prisma.leaveRequest.count({
+        where: { status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today } },
+      }),
+      prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
+      // Terminations and reinstatements are outcomes, not open matters, so they
+      // are left out of a count meant to show what still needs handling.
+      prisma.disciplinaryRecord.count({
+        where: {
+          type:      { notIn: ['TERMINATION', 'REINSTATEMENT'] },
+          createdAt: { gte: thirtyDaysAgo },
+        },
+      }),
+      // generatedAt, not createdAt — this model does not have one.
+      prisma.generatedLetter.count({ where: { generatedAt: { gte: monthStart } } }),
+      prisma.guard.groupBy({
+        by:     ['rank'],
+        where:  { employmentStatus: 'ACTIVE' },
+        _count: { id: true },
+      }),
+      prisma.leaveRequest.findMany({
+        where:   { status: 'PENDING' },
+        include: { guard: { select: { firstName: true, lastName: true, systemId: true } } },
+        orderBy: { startDate: 'asc' },
+        take:    10,
+      }),
+    ]);
+
+    const fmtDate = (d: Date) =>
+      d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
+    return {
+      role:  'HR',
+      stats: {
+        activeGuards,
+        onLeaveToday,
+        pendingLeave,
+        recentDisciplinary,
+        lettersThisMonth,
+      },
+      feeds: {
+        pendingLeave: pendingLeaveFeed.map((l) => ({
+          id:        l.id,
+          primary:   `${l.guard.firstName} ${l.guard.lastName}`,
+          secondary: `${l.guard.systemId ?? '—'} · ${fmtDate(l.startDate)} to ${fmtDate(l.endDate)} · ${l.daysRequested} day${l.daysRequested === 1 ? '' : 's'}`,
+          badge:     l.type,
+        })),
+        guardsByRank: byRank
+          .sort((a, b) => b._count.id - a._count.id)
+          .map((r) => ({
+            id:        r.rank,
+            primary:   r.rank.replace(/_/g, ' '),
+            secondary: `${r._count.id} active guard${r._count.id === 1 ? '' : 's'}`,
+            badge:     String(r._count.id),
+          })),
+      },
+    };
+  }
+
   // ── Marketing — pipeline, bids and target progress ───────────────────────────
 
   private async getMarketingStats(userId: string, role: string): Promise<DashboardData> {
@@ -528,60 +608,6 @@ class DashboardService {
       },
     };
   }
-
-  // ── HR / Trainer / anything else internal ────────────────────────────────────
-
-  private async getHRStats(): Promise<DashboardData> {
-    const monthStart = startOfMonth();
-
-    const [
-      totalGuards,
-      newGuardsThisMonth,
-      pendingLetters,
-      guardsOnLeave,
-      openDisciplinary,
-      recentGuards,
-      pendingLettersList,
-    ] = await Promise.all([
-      prisma.guard.count({ where: { employmentStatus: { in: ['ACTIVE', 'ON_LEAVE'] } } }),
-      prisma.guard.count({ where: { createdAt: { gte: monthStart } } }),
-      prisma.generatedLetter.count({ where: { approvalStatus: 'PENDING' } }),
-      prisma.guard.count({ where: { employmentStatus: 'ON_LEAVE' } }),
-      prisma.guard.count({ where: { employmentStatus: 'SUSPENDED' } }),
-      prisma.guard.findMany({
-        where:   { createdAt: { gte: monthStart } },
-        select:  { id: true, firstName: true, lastName: true, systemId: true, rank: true },
-        orderBy: { createdAt: 'desc' },
-        take:    5,
-      }),
-      prisma.generatedLetter.findMany({
-        where:   { approvalStatus: 'PENDING' },
-        orderBy: { generatedAt: 'desc' },
-        take:    5,
-        select:  { id: true, letterType: true, subjectName: true, approvalStatus: true },
-      }),
-    ]);
-
-    return {
-      role:  'HR',
-      stats: { totalGuards, newGuardsThisMonth, pendingLetters, guardsOnLeave, openDisciplinary },
-      feeds: {
-        recentGuards: recentGuards.map(g => ({
-          id:        g.id,
-          primary:   guardName(g),
-          secondary: g.systemId ?? '—',
-          badge:     g.rank ?? undefined,
-        })),
-        pendingLetters: pendingLettersList.map(l => ({
-          id:        l.id,
-          primary:   l.subjectName ?? 'Letter',
-          secondary: l.letterType.replace(/_/g, ' '),
-          badge:     l.approvalStatus,
-        })),
-      },
-    };
-  }
-
   // ── Client portal ────────────────────────────────────────────────────────────
 
   private async getClientStats(clientId: string | null): Promise<DashboardData> {

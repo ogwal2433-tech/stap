@@ -82,9 +82,10 @@ const router: IRouter = Router();
 router.use(authenticate);
 
 // Roles that may submit requisitions (INTERNAL minus CLIENT and GUARD)
-const REQUISITION_SUBMITTER_ROLES = INTERNAL_ROLES.filter(
-  (r) => r !== ROLES.CLIENT && r !== ROLES.GUARD,
-);
+const REQUISITION_SUBMITTER_ROLES = [
+  ...INTERNAL_ROLES.filter((r) => r !== ROLES.CLIENT && r !== ROLES.GUARD),
+  ROLES.HR,
+];
 
 // ── Requisitions ──────────────────────────────────────────────────────────────
 
@@ -264,7 +265,7 @@ router.post(
 
 router.get(
   '/:id/accountability',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await accountabilityService.getByRequisition(req.params.id);
     res.json({ success: true, data });
@@ -274,7 +275,7 @@ router.get(
 // Submitted by whoever spent the money, so this is open to internal staff.
 router.post(
   '/:id/accountability',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   validate(CreateAccountabilitySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await accountabilityService.submit(req.params.id, req.body.items, req.user!.userId);

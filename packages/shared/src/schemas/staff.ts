@@ -91,6 +91,13 @@ export const ROLE_CONFIG: Record<string, RoleConfig> = {
     colour:      '#E8701A',
     icon:        '🤝',
   },
+
+  HR: {
+    label:       'HR Officer',
+    description: 'Guard HR records, leave, discipline, letters, training and HR reports. No finance, payroll, complaints or marketing.',
+    colour:      '#0F7B6C',
+    icon:        '👤',
+  },
 };
 
 /** Role values the staff directory accepts — the Role enum less GUARD and CLIENT. */
@@ -107,6 +114,7 @@ export const STAFF_ROLE_VALUES = [
   // someone create a new account holding a role nothing grants any more.
   ROLES.MARKETING_HEAD,
   ROLES.SALES,
+  ROLES.HR,
 ] as const;
 
 const StaffRoleEnum = z.enum(STAFF_ROLE_VALUES);

@@ -206,7 +206,9 @@ router.get(
     ROLES.TRAINER,
     ROLES.ACCOUNTS_OFFICER,
     ROLES.MARKETING_HEAD,
-  ROLES.SALES,
+    ROLES.SALES,
+    // Reads attendance to answer a leave or discipline question; never edits it.
+    ROLES.HR,
   ),
   validateQuery(AttendanceQuerySchema),
   asyncHandler(async (req, res) => {

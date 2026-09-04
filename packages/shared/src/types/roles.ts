@@ -38,6 +38,7 @@ export const ROLES = {
   MARKETING: 'MARKETING',
   MARKETING_HEAD: 'MARKETING_HEAD',
   SALES: 'SALES',
+  HR: 'HR',
   GUARD: 'GUARD',
   CLIENT: 'CLIENT',
 } as const;
@@ -57,6 +58,10 @@ export const ROLE_HIERARCHY: UserRole[] = [
   ROLES.TRAINER,
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
+  // A departmental officer, ranked with the others. Absent, indexOf returns -1
+  // and hasMinimumRole fails closed for every threshold — HR would be refused
+  // everywhere that uses it.
+  ROLES.HR,
   ROLES.MARKETING,
   ROLES.MARKETING_HEAD,
   ROLES.SALES,
@@ -93,7 +98,7 @@ export const FINANCE_ROLES: UserRole[] = [
 export const HR_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 /** Roles that can create or modify guard records. */
-export const GUARD_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+export const GUARD_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.HR];
 
 /** Roles with deployment management access. */
 export const DEPLOYMENT_ROLES: UserRole[] = [
@@ -151,6 +156,8 @@ export const DEPLOYMENT_VIEW_ROLES: UserRole[] = [
   ROLES.ASSISTANT_MANAGER,
   ROLES.ACCOUNTS_OFFICER,
   ROLES.CONTROL_ROOM,
+  // Reads attendance to answer leave and discipline questions; never edits it.
+  ROLES.HR,
 ];
 
 /**

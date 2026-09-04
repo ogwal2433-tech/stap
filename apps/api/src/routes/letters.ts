@@ -12,7 +12,7 @@ router.use(authenticate);
 
 // All internal users can generate a letter draft.
 // CLIENT and GUARD are excluded via INTERNAL_ROLES (which omits them).
-const GENERATE_ROLES = INTERNAL_ROLES;
+const GENERATE_ROLES = [...INTERNAL_ROLES, ROLES.HR];
 
 router.post(
   '/',
@@ -28,7 +28,9 @@ router.get(
   '/',
   requireRole(...GENERATE_ROLES),
   asyncHandler(async (req, res) => {
-    const isHR = (HR_ROLES as string[]).includes(req.user!.role);
+    // The HR officer browses every letter, like the managers do; everyone else
+    // sees an unscoped listing limited to what they generated themselves.
+    const isHR = ([...HR_ROLES, ROLES.HR] as string[]).includes(req.user!.role);
     const subjectId = req.query.subjectId as string | undefined;
     // A subjectId-scoped query (e.g. a guard's profile) is its own access
     // boundary — anyone who can view that subject sees all its letters,

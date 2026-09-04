@@ -25,7 +25,7 @@ import { useGuardList } from '../../hooks/useGuards';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const HR_VIEW_ROLES: UserRole[] = [...HR_ROLES, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
+const HR_VIEW_ROLES: UserRole[] = [...HR_ROLES, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR, ROLES.HR];
 
 const STAGE_COLORS: Record<string, string> = {
   APPLICATION_RECEIVED:  '#f8f9fa',
@@ -1091,7 +1091,7 @@ function ApplicantDetailPanel({
                       <div className="fw-semibold">Ready to start training</div>
                       <div>All requirements met.</div>
                       {!['INTERVIEW_SCHEDULED', 'INTERVIEW_DONE', 'OFFER_MADE', 'ACCEPTED', 'ONBOARDING'].includes(a.stage) && (
-                        <RoleGuard allowedRoles={HR_ROLES as UserRole[]}>
+                        <RoleGuard allowedRoles={[...HR_ROLES, ROLES.HR] as UserRole[]}>
                           <Button
                             size="sm"
                             variant="success"
@@ -1196,7 +1196,10 @@ export default function HRPage() {
   const { user } = useAuth();
   // The Trainer runs recruitment, vetting and training; leave and letter
   // templates remain HR's.
-  const isHR = (HR_ROLES as string[]).includes(user?.role ?? '');
+  // HR_ROLES is senior management — it gates payroll elsewhere, so the HR
+  // officer is deliberately not in it. Named here so they still get the leave
+  // and letter-template tabs, which are their own work.
+  const isHR = ([...HR_ROLES, ROLES.HR] as string[]).includes(user?.role ?? '');
   const { showToast } = useToast();
   const approve = useApproveLeave();
 

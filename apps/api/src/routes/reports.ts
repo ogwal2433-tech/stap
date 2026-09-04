@@ -68,7 +68,7 @@ router.use(authenticate);
 // of them, not just Director/Assistant Manager.
 router.get(
   '/dashboard/director',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (_req, res) => {
     const data = await reportService.getDirectorDashboard();
     res.json({ success: true, data });

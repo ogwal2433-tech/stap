@@ -29,6 +29,9 @@ enum Role {
   MARKETING_HEAD
   /// Sales staff. Only the leads assigned to them; no targets, no bids.
   SALES
+  /// HR officer: guard HR records, leave, discipline, letters and HR reports.
+  /// Deliberately no finance, payroll, complaints, marketing or client billing.
+  HR
   GUARD
   CLIENT
 }

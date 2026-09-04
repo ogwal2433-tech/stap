@@ -112,6 +112,24 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.ATTENDANCE_VIEW, P.COMPLAINTS_VIEW, P.GUARDS_VIEW,
   ],
 
+  // The HR officer. Guard records, leave, discipline, letters and the reports
+  // that come off them.
+  //
+  // No finance, invoices, payroll, complaints, marketing, guns or client
+  // billing: HR needs to know who a guard is and what has happened to them, not
+  // what they cost or what a client was charged.
+  HR: [
+    P.GUARDS_VIEW, P.GUARDS_EDIT, P.GUARDS_DOCUMENTS, P.GUARDS_PROMOTE,
+    P.HR_VIEW, P.HR_EDIT, P.HR_LETTERS, P.HR_DISCIPLINARY,
+    P.LEAVE_VIEW, P.LEAVE_APPROVE,
+    // Read-only: HR reads attendance to answer a leave or discipline question,
+    // and reads the staff directory to know who signed something off.
+    P.ATTENDANCE_VIEW, P.STAFF_VIEW,
+    P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
+    P.REPORTS_VIEW, P.REPORTS_EXPORT,
+    P.SETTINGS_VIEW,
+  ],
+
   CONTROL_ROOM: [
     P.GUARDS_VIEW, P.CLIENTS_VIEW, P.SITES_VIEW,
     P.ROSTER_VIEW, P.ATTENDANCE_VIEW,

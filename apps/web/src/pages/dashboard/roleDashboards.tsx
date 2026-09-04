@@ -131,6 +131,21 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     ],
   },
 
+  HR: {
+    caption: 'Headcount, leave and discipline',
+    stats: [
+      { key: 'activeGuards',       label: 'Active Guards',       icon: '👮', colour: 'navy',  linkTo: '/guards' },
+      { key: 'onLeaveToday',       label: 'On Leave Today',      icon: '🏖️', colour: 'teal',  linkTo: '/hr' },
+      { key: 'pendingLeave',       label: 'Leave to Approve',    icon: '⏳', colour: alertWhenAny, linkTo: '/hr' },
+      { key: 'recentDisciplinary', label: 'Disciplinary (30d)',  icon: '⚠️', colour: alertWhenAny, linkTo: '/hr' },
+      { key: 'lettersThisMonth',   label: 'Letters This Month',  icon: '📝', colour: 'navy',  linkTo: '/hr' },
+    ],
+    feeds: [
+      { key: 'pendingLeave', title: 'Leave awaiting approval', icon: '🏖️', emptyText: 'No leave requests waiting', linkTo: '/hr' },
+      { key: 'guardsByRank', title: 'Active guards by rank',   icon: '👮', emptyText: 'No active guards',          linkTo: '/guards' },
+    ],
+  },
+
   CONTROL_ROOM: {
     caption: 'Complaints desk and live operations',
     stats: [
@@ -203,21 +218,6 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
     feeds: [
       { key: 'pipelineStages', title: 'My Pipeline', icon: '🔄', emptyText: 'No leads assigned to you yet', linkTo: '/marketing/prospects' },
       { key: 'recentActivity', title: 'Recent Activity', icon: '🕓', emptyText: 'No pipeline movement yet', linkTo: '/marketing/prospects' },
-    ],
-  },
-
-  HR: {
-    caption: 'People and records',
-    stats: [
-      { key: 'totalGuards',        label: 'Guards on Books',  icon: '👮', colour: 'navy',  linkTo: '/guards' },
-      { key: 'newGuardsThisMonth', label: 'New This Month',   icon: '🆕', colour: 'teal',  linkTo: '/guards' },
-      { key: 'guardsOnLeave',      label: 'On Leave',         icon: '🌴', colour: 'grey',  linkTo: '/guards?status=ON_LEAVE' },
-      { key: 'openDisciplinary',   label: 'Suspended',        icon: '⚠️', colour: alertWhenAny, linkTo: '/guards?status=SUSPENDED' },
-      { key: 'pendingLetters',     label: 'Letters to Approve', icon: '✉️', colour: alertWhenAny, linkTo: '/hr' },
-    ],
-    feeds: [
-      { key: 'recentGuards',   title: 'Recently Added',     icon: '🆕', emptyText: 'No new guards this month', linkTo: '/guards', itemLink: g => `/guards/${g.id}` },
-      { key: 'pendingLetters', title: 'Letters to Approve', icon: '✉️', emptyText: 'Nothing awaiting approval', linkTo: '/hr' },
     ],
   },
 

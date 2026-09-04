@@ -84,6 +84,7 @@ export const PERMISSIONS = {
 
   // ── HR ──────────────────────────────────────────────────────────────────────
   HR_VIEW:         'hr.view',
+  HR_EDIT:         'hr.edit',
   HR_LETTERS:      'hr.letters',
   HR_DISCIPLINARY: 'hr.disciplinary',
   LEAVE_VIEW:      'leave.view',

@@ -201,7 +201,7 @@ router.use(authenticate);
  * and training guards is their brief — but converting an applicant into an
  * employee stays with HR, since that writes a Guard record.
  */
-const RECRUITMENT_ROLES = [...HR_ROLES, ROLES.TRAINER] as const;
+const RECRUITMENT_ROLES = [...HR_ROLES, ROLES.TRAINER, ROLES.HR] as const;
 const RECRUITMENT_VIEW_ROLES = [...RECRUITMENT_ROLES, ROLES.OPERATIONS_SUPERVISOR] as const;
 
 // ── Recruitment ────────────────────────────────────────────────────────────────
@@ -258,7 +258,7 @@ router.get(
 
 router.post(
   '/applicants/:id/convert',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   validate(CreateGuardSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.convertToGuard(req.params.id, req.body, req.user!.userId);
@@ -333,9 +333,10 @@ router.get(
 
 // ── Training ───────────────────────────────────────────────────────────────────
 
-const TRAINING_VIEW_ROLES = INTERNAL_ROLES.filter(
-  (r) => r !== ROLES.GUARD && r !== ROLES.CLIENT,
-);
+const TRAINING_VIEW_ROLES = [
+  ...INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD && r !== ROLES.CLIENT),
+  ROLES.HR,
+];
 
 router.get(
   '/training',
@@ -372,7 +373,7 @@ router.patch(
 
 // ── Leave ──────────────────────────────────────────────────────────────────────
 
-const LEAVE_ROLES = INTERNAL_ROLES.filter((r) => r !== ROLES.CLIENT);
+const LEAVE_ROLES = [...INTERNAL_ROLES.filter((r) => r !== ROLES.CLIENT), ROLES.HR];
 
 router.get(
   '/leave',
@@ -427,7 +428,7 @@ router.get(
 
 router.patch(
   '/leave/:id/approve',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   validate(ApproveLeaveSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.approveLeave(req.params.id, req.body, req.user!.userId);
@@ -439,7 +440,7 @@ router.patch(
 
 router.get(
   '/templates',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   asyncHandler(async (_req, res) => {
     const data = await hrService.listTemplates();
     res.json({ success: true, data });
@@ -448,7 +449,7 @@ router.get(
 
 router.get(
   '/templates/:letterType',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const data = await hrService.getTemplate(req.params.letterType);
     res.json({ success: true, data });
@@ -457,7 +458,7 @@ router.get(
 
 router.put(
   '/templates/:letterType',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   validate(SaveLetterTemplateSchema),
   asyncHandler(async (req, res) => {
     const data = await hrService.saveTemplate(req.body, req.user!.userId);
@@ -467,7 +468,7 @@ router.put(
 
 router.post(
   '/templates/:letterType/preview',
-  requireRole(...HR_ROLES),
+  requireRole(...HR_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const { sampleData } = req.body as { sampleData: Record<string, string> };
     const html = await hrService.previewTemplate(req.params.letterType, sampleData ?? {});

@@ -223,7 +223,7 @@ router.use(authenticate);
 // ── GET / — list guards ────────────────────────────────────────────────────────
 router.get(
   '/',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   validateQuery(GuardListQuerySchema),
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as import('@stap/shared').GuardListQuery;
@@ -256,7 +256,7 @@ router.get(
 // ── GET /payment-slip — printable A4 sheet of 6 payment-details confirmation slips ──
 router.get(
   '/payment-slip',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (_req, res) => {
     const slip = `
       <style>
@@ -343,7 +343,7 @@ router.get(
 // ── GET /:id — get guard by ID ─────────────────────────────────────────────────
 router.get(
   '/:id',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const guard = await guardService.getById(req.params.id, req.user!.role);
     res.status(200).json({ success: true, data: guard });
@@ -411,7 +411,7 @@ router.post(
 // ── GET /:id/transfers — list transfer history for a guard ────────────────────
 router.get(
   '/:id/transfers',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const transfers = await guardService.getTransferHistory(req.params.id);
     res.status(200).json({ success: true, data: transfers });
@@ -436,7 +436,7 @@ router.post(
 // ── GET /:id/promotions — list promotion history for a guard ──────────────────
 router.get(
   '/:id/promotions',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const promotions = await guardService.getPromotionHistory(req.params.id);
     res.status(200).json({ success: true, data: promotions });
@@ -514,7 +514,7 @@ router.post(
 // ── GET /:id/documents — list guard documents ──────────────────────────────────
 router.get(
   '/:id/documents',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const docs = await prisma.guardDocument.findMany({
       where: { guardId: req.params.id, deletedAt: null },
@@ -634,7 +634,7 @@ router.post(
 // ── GET /:id/disciplinary — list disciplinary records for a guard ──────────────
 router.get(
   '/:id/disciplinary',
-  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR),
+  requireRole(...HR_ROLES, ROLES.OPERATIONS_SUPERVISOR, ROLES.HR),
   asyncHandler(async (req, res) => {
     const records = await prisma.disciplinaryRecord.findMany({
       where: { guardId: req.params.id },
@@ -684,7 +684,7 @@ router.get(
 // records from the retired fire-and-forget PDF system.
 router.get(
   '/:id/letters',
-  requireRole(...INTERNAL_ROLES),
+  requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (req, res) => {
     const docs = await prisma.guardDocument.findMany({
       where: {
