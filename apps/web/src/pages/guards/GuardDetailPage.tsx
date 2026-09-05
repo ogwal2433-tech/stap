@@ -532,7 +532,9 @@ export default function GuardDetailPage() {
               <div className="text-muted small mb-1">
                 NIN: {guard.nationalId ?? <span className="text-warning fw-semibold">Pending</span>}
               </div>
-              <div className="text-muted small">{guard.phone}</div>
+              <div className="text-muted small">
+                {guard.phone ?? <span className="fst-italic">No phone on record</span>}
+              </div>
             </Col>
             <Col xs="auto" className="text-end">
               <Badge
@@ -605,6 +607,30 @@ export default function GuardDetailPage() {
               </div>
             </Col>
           </Row>
+
+          {(() => {
+            // Phone, next of kin and the NIN are optional, so a guard can be
+            // registered from a paper form before those are to hand. Saying which
+            // are missing is what turns "incomplete" into something someone can act
+            // on when the guard next comes in.
+            const missing = [
+              !guard.nationalId     && 'National ID',
+              !guard.phone          && 'phone number',
+              !guard.nextOfKinName  && 'next of kin',
+              !guard.nextOfKinPhone && 'next of kin phone',
+            ].filter(Boolean) as string[];
+            if (!missing.length) return null;
+            return (
+              <div style={{
+                background: '#FEF9E7', borderLeft: '3px solid #F2AA20',
+                borderRadius: '0.375rem', padding: '8px 12px',
+                fontSize: '0.78rem', color: '#856404', marginTop: 12,
+              }}>
+                Still to be recorded for this guard: {missing.join(', ')}. Add them from
+                Edit once the documents are available.
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -949,11 +975,15 @@ export default function GuardDetailPage() {
                 </Col>
                 <Col md={4}>
                   <div className="text-muted small">Next of Kin Name</div>
-                  <div className="fw-medium">{guard.nextOfKinName}</div>
+                  <div className={`fw-medium ${!guard.nextOfKinName ? 'text-muted fst-italic' : ''}`}>
+                    {guard.nextOfKinName || 'Not provided'}
+                  </div>
                 </Col>
                 <Col md={4}>
                   <div className="text-muted small">Next of Kin Phone</div>
-                  <div className="fw-medium">{guard.nextOfKinPhone}</div>
+                  <div className={`fw-medium ${!guard.nextOfKinPhone ? 'text-muted fst-italic' : ''}`}>
+                    {guard.nextOfKinPhone || 'Not provided'}
+                  </div>
                 </Col>
               </Row>
             </div>

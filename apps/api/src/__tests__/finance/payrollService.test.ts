@@ -238,6 +238,24 @@ describe('payrollService.disburse()', () => {
     );
   });
 
+  it('fails a guard with no number instead of sending null to XCEL', async () => {
+    // Phone became optional on a guard, so a payslip can reach disbursement with
+    // nothing to pay to. It must name the guard rather than surface a format error.
+    mp.payslip.findMany.mockResolvedValue([{
+      ...MOCK_PAYSLIP,
+      guard: { ...MOCK_PAYSLIP.guard, phone: null, preferredPaymentContact: null },
+    }]);
+
+    await payrollService.disburse('run-1', 'director-1');
+
+    expect(mxcelPartner.generateDynamicLinkOtp).not.toHaveBeenCalled();
+    const call = mp.payslip.update.mock.calls.find(
+      (c: any) => c[0].data?.disbursementStatus === 'FAILED',
+    );
+    expect(call).toBeDefined();
+    expect(call[0].data.disbursementFailureReason).toMatch(/No mobile money number on record/);
+  });
+
   it('marks payslip SENT with the XCEL reference on success', async () => {
     await payrollService.disburse('run-1', 'director-1');
     expect(mp.payslip.update).toHaveBeenCalledWith(

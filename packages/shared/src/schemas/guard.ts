@@ -85,12 +85,17 @@ export const CreateGuardSchema = z.object({
   firstName:     z.string().min(1).max(100),
   lastName:      z.string().min(1).max(100),
   otherNames:    z.string().max(100).optional(),
-  nationalId:    z.string().min(1).max(50).optional(),
+  nationalId:    z.string().min(1).max(50).optional().nullable(),
   isIncompleteNID: z.boolean().default(false).optional(),
-  phone:         z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
+  // Optional: a guard is often registered from a paper form before they have
+  // produced a phone number or named a next of kin, and refusing the record
+  // until then means the guard exists on paper and nowhere else. The format
+  // check still applies to a value that is given — optional means "may be
+  // absent", not "may be anything".
+  phone:         z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable(),
   dateOfBirth:   z.string().datetime(),
-  nextOfKinName: z.string().min(1).max(100),
-  nextOfKinPhone:z.string().regex(/^\+?[0-9]{10,15}$/),
+  nextOfKinName: z.string().min(1).max(100).optional().nullable(),
+  nextOfKinPhone:z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable(),
   bankName:      z.string().max(100).optional(),
   accountNumber: z.string().max(50).optional(),
   salaryRate:    z.number().int().positive().describe('Monthly salary in UGX'),
@@ -320,11 +325,11 @@ export interface GuardResponse {
   fullName:    string;
   nationalId:  string | null;
   isIncompleteNID: boolean;
-  phone:       string;
+  phone:       string | null;
   photoUrl:    string | null;
   dateOfBirth: string;
-  nextOfKinName:  string;
-  nextOfKinPhone: string;
+  nextOfKinName:  string | null;
+  nextOfKinPhone: string | null;
   bankName:       string | null;
   /**
    * Only returned in single-record GET responses for DIRECTOR and

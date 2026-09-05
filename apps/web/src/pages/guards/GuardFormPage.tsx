@@ -628,7 +628,7 @@ export default function GuardFormPage() {
             <Row className="g-3 mb-3">
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Phone Number *</Form.Label>
+                  <Form.Label>Phone Number <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
                   <Form.Control {...register('phone')} isInvalid={!!errors.phone} placeholder="+256 7XX XXX XXX" />
                   <Form.Control.Feedback type="invalid">{errors.phone?.message}</Form.Control.Feedback>
                 </Form.Group>
@@ -1010,14 +1010,14 @@ export default function GuardFormPage() {
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Next of Kin Name *</Form.Label>
+                  <Form.Label>Next of Kin Name <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
                   <Form.Control {...register('nextOfKinName')} isInvalid={!!errors.nextOfKinName} />
                   <Form.Control.Feedback type="invalid">{errors.nextOfKinName?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Next of Kin Phone *</Form.Label>
+                  <Form.Label>Next of Kin Phone <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
                   <Form.Control {...register('nextOfKinPhone')} isInvalid={!!errors.nextOfKinPhone} placeholder="+256..." />
                   <Form.Control.Feedback type="invalid">{errors.nextOfKinPhone?.message}</Form.Control.Feedback>
                 </Form.Group>

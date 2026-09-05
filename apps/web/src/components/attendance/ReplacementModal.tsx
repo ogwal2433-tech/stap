@@ -47,7 +47,7 @@ export default function ReplacementModal({ show, absentDeployment, onClose, onSu
       return (
         g.fullName.toLowerCase().includes(q) ||
         (g.systemId ?? '').toLowerCase().includes(q) ||
-        g.phone.includes(q)
+        (g.phone ?? '').includes(q)
       );
     })
     .filter(g => allowDeployed ? true : (!g.alreadyDeployed || selectedGuardId === g.id));

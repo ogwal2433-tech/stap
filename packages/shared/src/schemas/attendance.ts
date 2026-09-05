@@ -227,7 +227,8 @@ export interface GuardAvailabilityResponse {
   firstName:       string;
   lastName:        string;
   fullName:        string;
-  phone:           string;
+  /** Optional on a guard, so it can be absent here too. */
+  phone:           string | null;
   photoUrl:        string | null;
   rank:            string | null;
   alreadyDeployed: boolean;

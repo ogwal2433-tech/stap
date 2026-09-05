@@ -127,7 +127,8 @@ export interface ZoneRosterGuard {
   fullName:        string;
   rank:            string | null;
   photoUrl:        string | null;
-  phone:           string;
+  /** Optional on a guard, so it can be absent here too. */
+  phone:           string | null;
   alreadyDeployed: boolean;
 }
 

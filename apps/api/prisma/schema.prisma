@@ -229,11 +229,11 @@ model Guard {
   /// this column — it is retained only so existing rows are not disturbed, and
   /// should be dropped once no deployment is reading it.
   onLeave           Boolean          @default(false)
-  phone             String
+  phone             String?
   photoUrl          String?
   dateOfBirth       DateTime
-  nextOfKinName     String
-  nextOfKinPhone    String
+  nextOfKinName     String?
+  nextOfKinPhone    String?
   bankName          String?
   accountNumber     String?
   salaryRate        Int

@@ -332,8 +332,27 @@ class PayrollService {
 
       const payAmount = payslip.hrAdjustedAmount ?? payslip.netSalary;
 
+      // Phone is optional on a guard now, so a record can reach payroll with no
+      // number at all. Caught here rather than left to normalisePhone, which
+      // would report "Unrecognised phone format: null" — true, but no help to
+      // whoever has to go and find the number.
+      const payToNumber = payslip.guard.preferredPaymentContact ?? payslip.guard.phone;
+      if (!payToNumber) {
+        await prisma.payslip.update({
+          where: { id: payslip.id },
+          data: {
+            disbursementStatus:        'FAILED',
+            disbursementFailureReason:
+              `No mobile money number on record for ${payslip.guard.firstName} ${payslip.guard.lastName}. `
+              + 'Add a phone number or a preferred payment contact to their profile.',
+          },
+        });
+        failedCount++;
+        continue;
+      }
+
       try {
-        const phone = xcel.normalisePhone(payslip.guard.preferredPaymentContact ?? payslip.guard.phone);
+        const phone = xcel.normalisePhone(payToNumber);
           // The guard's own setting wins. Detection reads the prefix and throws
           // on a range it does not know, which would fail an otherwise valid number.
           const network = payslip.guard.mobileNetwork || xcel.detectNetwork(phone);
