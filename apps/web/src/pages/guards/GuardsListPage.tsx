@@ -4,6 +4,8 @@ import {
   Alert, Badge, Button, ButtonGroup, Col, Dropdown, Form,
   Pagination, Row, Spinner, Table,
 } from 'react-bootstrap';
+import { useQuery } from '@tanstack/react-query';
+import { guardsApi } from '../../lib/guards.api';
 import { useGuardList, useUpdateGuardStatus } from '../../hooks/useGuards';
 import RoleGuard from '../../components/RoleGuard';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -58,11 +60,17 @@ export default function GuardsListPage() {
   const [contractType, setContractType] = useState('');
   const [probationStatus, setProbationStatus] = useState('');
   const [nidFilter, setNidFilter] = useState('');   // '' | 'true'
+  const [idType, setIdType] = useState('');         // '' | a GUARD_ID_TYPES value | 'NONE'
   const [onLeave, setOnLeave] = useState('');        // '' | 'true'
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'createdAt' | 'salaryRate'>('createdAt');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
+
+  const { data: idStats } = useQuery({
+    queryKey: ['guard-id-stats'],
+    queryFn:  guardsApi.idStats,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -78,6 +86,7 @@ export default function GuardsListPage() {
     contractType:    contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
     probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
     isIncompleteNID: nidFilter === 'true' ? true : undefined,
+    idType:          idType || undefined,
     onLeave:         onLeave === 'true' ? true : undefined,
     sortBy,
     sortOrder: 'desc',
@@ -161,6 +170,61 @@ export default function GuardsListPage() {
           </PermissionGuard>
         </div>
       </div>
+
+      {/* How the workforce is documented. Sits above the filters because the
+          figure most people come here for is how many guards still have no
+          document at all. */}
+      {idStats && (
+        <div style={{
+          background: '#F2F4F7', border: '1px solid #e9ecef',
+          borderRadius: '0.75rem', padding: '12px 16px', marginBottom: 16,
+        }}>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <span className="fw-bold small" style={{ color: '#1B3A6B' }}>
+              Identification on file — {idStats.total} active guards
+            </span>
+            {idStats.noId > 0 && (
+              <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
+                {idStats.noId} without any document
+              </Badge>
+            )}
+          </div>
+          <Row className="g-2">
+            {[
+              { key: 'OWN_ID',         label: 'Own National ID',  n: idStats.ownId,      pct: idStats.ownIdPct,      colour: '#1B3A6B', bg: '#EBF5FB', icon: '\u{1FAAA}' },
+              { key: 'RELATIVE_ID',    label: "Relative's ID",    n: idStats.relativeId, pct: idStats.relativeIdPct, colour: '#0F7B6C', bg: '#E8F8F5', icon: '\u{1F46A}' },
+              { key: 'OTHER_DOCUMENT', label: 'Other document',   n: idStats.otherDoc,   pct: idStats.otherDocPct,   colour: '#E8701A', bg: '#FEF9E7', icon: '\u{1F4C4}' },
+              { key: 'NONE',           label: 'Not provided',     n: idStats.noId,       pct: idStats.noIdPct,       colour: '#6c757d', bg: '#F8F9FA', icon: '\u2B1C' },
+            ].map((s2) => (
+              <Col xs={6} md={3} key={s2.key}>
+                <button
+                  type="button"
+                  onClick={() => { setIdType(idType === s2.key ? '' : s2.key); setPage(1); }}
+                  title={idType === s2.key ? 'Clear this filter' : `Show only these guards`}
+                  style={{
+                    width: '100%', textAlign: 'left', background: s2.bg,
+                    border: `1px solid ${idType === s2.key ? s2.colour : 'transparent'}`,
+                    borderLeft: `3px solid ${s2.colour}`,
+                    borderRadius: '0.5rem', padding: '8px 10px', cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: s2.colour }}>
+                    {s2.icon} {s2.n}
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '0.7rem' }}>{s2.label}</div>
+                  <div style={{ fontSize: '0.66rem', fontWeight: 600, color: s2.colour }}>{s2.pct}%</div>
+                </button>
+              </Col>
+            ))}
+          </Row>
+          <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 10 }}>
+            {[
+              { pct: idStats.ownIdPct, c: '#1B3A6B' }, { pct: idStats.relativeIdPct, c: '#0F7B6C' },
+              { pct: idStats.otherDocPct, c: '#E8701A' }, { pct: idStats.noIdPct, c: '#ced4da' },
+            ].map((b, i) => <div key={i} style={{ width: `${b.pct}%`, background: b.c }} />)}
+          </div>
+        </div>
+      )}
 
       {/* Filter row 1: Search + Status + Sort + Limit */}
       <Row className="g-2 mb-2">

@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
-import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_ID_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
 import ContractDurationPicker from '../../components/common/ContractDurationPicker';
 
@@ -168,7 +168,6 @@ export default function GuardFormPage() {
       hasDisability: false,
       takesAlcohol: false,
       hasAllergies: false,
-      isIncompleteNID: false,
     },
   });
 
@@ -196,7 +195,11 @@ export default function GuardFormPage() {
         educationLevel:  (existing.educationLevel as any) ?? undefined,
         rank:            (existing.rank as any) ?? 'GUARD',
         contractType:    (existing.contractType as any) ?? 'PERMANENT',
-        isIncompleteNID: existing.isIncompleteNID ?? false,
+        idType:           (existing.idType as never) ?? undefined,
+        relativeIdName:   existing.relativeIdName ?? undefined,
+        relativeIdNumber: existing.relativeIdNumber ?? undefined,
+        otherDocType:     existing.otherDocType ?? undefined,
+        otherDocNumber:   existing.otherDocNumber ?? undefined,
         registeredNames: existing.registeredNames ?? undefined,
         maritalStatus:   (existing.maritalStatus as any) ?? undefined,
         spouseName:      existing.spouseName ?? undefined,
@@ -293,7 +296,9 @@ export default function GuardFormPage() {
   const maritalStatus    = watch('maritalStatus');
   const hasDisability    = watch('hasDisability');
   const hasAllergies     = watch('hasAllergies');
-  const isIncompleteNID  = watch('isIncompleteNID');
+  // Derived on the server from whether a document is actually recorded, so the
+  // form no longer carries a "pending" checkbox that could disagree with it.
+  const idType = watch('idType');
   const watchedRank      = watch('rank');
 
   // Auto-fill salary when rank is selected in create mode
@@ -664,31 +669,101 @@ export default function GuardFormPage() {
                 </Col>
             </Row>
 
-            {/* Row 7: National ID | NSSF | TIN */}
+            {/* Row 7: Identification | NSSF | TIN */}
             <Row className="g-3 mb-3">
-              <Col md={4}>
+              <Col md={12}>
                 <Form.Group>
-                  <Form.Label>National ID (NIN)</Form.Label>
-                  <Form.Control
-                    {...register('nationalId')}
-                    isInvalid={!!errors.nationalId}
-                    placeholder="CM90210..."
-                    disabled={!!isIncompleteNID}
-                  />
-                  <Form.Control.Feedback type="invalid">{errors.nationalId?.message}</Form.Control.Feedback>
-                  <Form.Check
-                    className="mt-1"
-                    type="checkbox"
-                    id="isIncompleteNID"
-                    label="National ID not yet available — save as pending"
-                    {...register('isIncompleteNID')}
-                    onChange={(e) => {
-                      setValue('isIncompleteNID', e.target.checked);
-                      if (e.target.checked) setValue('nationalId', undefined);
-                    }}
-                  />
+                  <Form.Label>
+                    Identification Document
+                    <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span>
+                  </Form.Label>
+
+                  {/* Choosing a type clears the others, so a guard cannot end up
+                      carrying half of one document and half of another. */}
+                  <div className="d-flex gap-2 flex-wrap mb-2">
+                    {([{ value: null, label: 'Not provided', icon: '⬜', colour: '#6c757d' },
+                       ...GUARD_ID_TYPES] as { value: string | null; label: string; icon: string; colour: string }[])
+                      .map((t) => {
+                        const active = (idType ?? null) === t.value;
+                        return (
+                          <button
+                            key={t.value ?? 'none'}
+                            type="button"
+                            onClick={() => {
+                              setValue('idType', t.value as never);
+                              setValue('nationalId', undefined);
+                              setValue('relativeIdName', undefined);
+                              setValue('relativeIdNumber', undefined);
+                              setValue('otherDocType', undefined);
+                              setValue('otherDocNumber', undefined);
+                            }}
+                            style={{
+                              padding: '7px 13px',
+                              border: `2px solid ${active ? t.colour : '#e9ecef'}`,
+                              borderRadius: '0.5rem',
+                              background: active ? `${t.colour}14` : 'white',
+                              color: active ? t.colour : '#6c757d',
+                              fontWeight: active ? 600 : 400,
+                              fontSize: '0.82rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {t.icon} {t.label}
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  {idType === 'OWN_ID' && (
+                    <div style={{ background: '#EBF5FB', border: '1px solid #D6E0F0', borderRadius: '0.5rem', padding: '12px 14px' }}>
+                      <Form.Label className="small fw-bold">National ID number</Form.Label>
+                      <Form.Control {...register('nationalId')} isInvalid={!!errors.nationalId} placeholder="CM90210..." />
+                      <Form.Control.Feedback type="invalid">{errors.nationalId?.message}</Form.Control.Feedback>
+                    </div>
+                  )}
+
+                  {idType === 'RELATIVE_ID' && (
+                    <div style={{ background: '#E8F8F5', border: '1px solid #A9DFBF', borderRadius: '0.5rem', padding: '12px 14px' }}>
+                      <Row className="g-2">
+                        <Col md={6}>
+                          <Form.Label className="small fw-bold">Relative's full name</Form.Label>
+                          <Form.Control {...register('relativeIdName')} isInvalid={!!errors.relativeIdName} placeholder="e.g. Mary Nakato" />
+                          <Form.Control.Feedback type="invalid">{errors.relativeIdName?.message}</Form.Control.Feedback>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label className="small fw-bold">
+                            Relative's ID number
+                            <span className="text-muted fw-normal ms-1">(optional)</span>
+                          </Form.Label>
+                          <Form.Control {...register('relativeIdNumber')} placeholder="CF90210..." />
+                        </Col>
+                      </Row>
+                    </div>
+                  )}
+
+                  {idType === 'OTHER_DOCUMENT' && (
+                    <div style={{ background: '#FEF9E7', border: '1px solid #F9E79F', borderRadius: '0.5rem', padding: '12px 14px' }}>
+                      <Row className="g-2">
+                        <Col md={6}>
+                          <Form.Label className="small fw-bold">Document type</Form.Label>
+                          <Form.Control {...register('otherDocType')} isInvalid={!!errors.otherDocType} placeholder="e.g. Student ID, Passport" />
+                          <Form.Control.Feedback type="invalid">{errors.otherDocType?.message}</Form.Control.Feedback>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label className="small fw-bold">
+                            Document number
+                            <span className="text-muted fw-normal ms-1">(optional)</span>
+                          </Form.Label>
+                          <Form.Control {...register('otherDocNumber')} placeholder="e.g. STU/2024/001" />
+                        </Col>
+                      </Row>
+                    </div>
+                  )}
                 </Form.Group>
               </Col>
+            </Row>
+
+            <Row className="g-3 mb-3">
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>NSSF Number</Form.Label>

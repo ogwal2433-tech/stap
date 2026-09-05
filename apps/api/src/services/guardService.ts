@@ -8,7 +8,8 @@ import { notificationService } from './notificationService';
 import { settingsService } from './settingsService';
 import { siteService } from './siteService';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { ROLES, guardStatusLabel, EXITED_STATUSES, type UserRole, type GuardEmploymentStatus } from '@stap/shared';
+import { ROLES, guardStatusLabel, EXITED_STATUSES, hasUsableId, idSummary,
+  type UserRole, type GuardEmploymentStatus } from '@stap/shared';
 import { generateGuardId } from '../lib/systemId';
 import type {
   CreateGuardInput,
@@ -38,7 +39,7 @@ class GuardService {
     query: GuardListQuery,
     requestingUserRole: UserRole,
   ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, rank, contractType, probationStatus, nidStatus, isIncompleteNID, onLeave, sortBy, sortOrder } = query;
+    const { page, limit, search, status, rank, contractType, probationStatus, nidStatus, idType, isIncompleteNID, onLeave, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
@@ -57,6 +58,13 @@ class GuardService {
 
     if (probationStatus) {
       where.probationStatus = probationStatus;
+    }
+
+    // 'NONE' is how the UI asks for guards with no document at all.
+    if (idType === 'NONE') {
+      where.idType = null;
+    } else if (idType) {
+      where.idType = idType;
     }
 
     if (nidStatus === 'PENDING') {
@@ -202,6 +210,11 @@ class GuardService {
         lastName:    guardFields.lastName,
         otherNames:  guardFields.otherNames,
         nationalId:  guardFields.nationalId,
+        idType:           guardFields.idType ?? null,
+        relativeIdName:   guardFields.relativeIdName ?? null,
+        relativeIdNumber: guardFields.relativeIdNumber ?? null,
+        otherDocType:     guardFields.otherDocType ?? null,
+        otherDocNumber:   guardFields.otherDocNumber ?? null,
         phone:       guardFields.phone,
         dateOfBirth: new Date(guardFields.dateOfBirth),
         nextOfKinName:  guardFields.nextOfKinName,
@@ -219,7 +232,11 @@ class GuardService {
         educationLevel:          guardFields.educationLevel,
         rank:                    guardFields.rank ?? 'GUARD',
         contractType:            guardFields.contractType ?? 'PERMANENT',
-        isIncompleteNID:         !guardFields.nationalId,
+        // Not "has no NIN" — "has nothing that identifies them". This flag blocks
+        // deployment, so keying it to the national ID would leave a guard on a
+        // relative's card or a student document undeployable, which is the exact
+        // situation the other types exist to solve.
+        isIncompleteNID:         !hasUsableId(guardFields),
         probationStatus:         'ON_PROBATION',
         probationEndDate:        data.probationEndDate ? new Date(data.probationEndDate) : undefined,
         registeredNames:         guardFields.registeredNames,
@@ -345,6 +362,24 @@ class GuardService {
     if (guardFields.otherNames !== undefined)   updateData.otherNames   = guardFields.otherNames;
     if (guardFields.nationalId !== undefined)   updateData.nationalId   = guardFields.nationalId ?? null;
     // Explicit flag from form, or auto-clear when an NID is now being provided
+    // Any change to the identification re-derives whether the guard counts as
+    // documented, so adding a relative's card to an existing record is what
+    // makes them deployable rather than a separate step someone must remember.
+    for (const f of ['idType', 'relativeIdName', 'relativeIdNumber', 'otherDocType', 'otherDocNumber'] as const) {
+      if ((guardFields as Record<string, unknown>)[f] !== undefined) {
+        updateData[f] = (guardFields as Record<string, unknown>)[f] as never;
+      }
+    }
+    if (['idType', 'nationalId', 'relativeIdName', 'otherDocType']
+      .some((f) => (guardFields as Record<string, unknown>)[f] !== undefined)) {
+      updateData.isIncompleteNID = !hasUsableId({
+        idType:         (updateData.idType         ?? existing.idType) as string | null,
+        nationalId:     (updateData.nationalId     ?? existing.nationalId) as string | null,
+        relativeIdName: (updateData.relativeIdName ?? existing.relativeIdName) as string | null,
+        otherDocType:   (updateData.otherDocType   ?? existing.otherDocType) as string | null,
+      });
+    }
+
     if ((guardFields as Record<string, unknown>).isIncompleteNID !== undefined) {
       updateData.isIncompleteNID = (guardFields as Record<string, unknown>).isIncompleteNID as boolean;
     } else if (guardFields.nationalId && existing.isIncompleteNID) {
@@ -660,6 +695,35 @@ class GuardService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /**
+   * How the active workforce is documented.
+   *
+   * Counts only ACTIVE guards: an exited guard's paperwork is history, and
+   * including them would make the figures answer a question nobody asked.
+   */
+  async getIdStats() {
+    const where = { employmentStatus: 'ACTIVE' as const };
+    const [total, ownId, relativeId, otherDoc] = await Promise.all([
+      prisma.guard.count({ where }),
+      prisma.guard.count({ where: { ...where, idType: 'OWN_ID' } }),
+      prisma.guard.count({ where: { ...where, idType: 'RELATIVE_ID' } }),
+      prisma.guard.count({ where: { ...where, idType: 'OTHER_DOCUMENT' } }),
+    ]);
+    // Whatever is left is undocumented — derived rather than counted separately,
+    // so the four figures always add up to the total even if a row carries an
+    // idType this build does not know.
+    const noId = total - ownId - relativeId - otherDoc;
+    const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+
+    return {
+      total, ownId, relativeId, otherDoc, noId,
+      ownIdPct:      pct(ownId),
+      relativeIdPct: pct(relativeId),
+      otherDocPct:   pct(otherDoc),
+      noIdPct:       pct(noId),
+    };
+  }
+
   sanitiseGuard(guard: any, role?: UserRole, listMode = false): GuardResponse {
     const showAccountNumber = !listMode && role && ACCOUNT_VISIBLE_ROLES.includes(role);
 
@@ -694,7 +758,14 @@ class GuardService {
       lastName:  guard.lastName,
       otherNames:guard.otherNames ?? null,
       fullName,
-      nationalId: guard.nationalId ?? null,
+      idType:           guard.idType ?? null,
+      nationalId:       guard.nationalId ?? null,
+      relativeIdName:   guard.relativeIdName ?? null,
+      relativeIdNumber: guard.relativeIdNumber ?? null,
+      otherDocType:     guard.otherDocType ?? null,
+      otherDocNumber:   guard.otherDocNumber ?? null,
+      // Built once here so a list, a profile and a print all say the same thing.
+      idSummary:        idSummary(guard),
       isIncompleteNID: guard.isIncompleteNID ?? false,
       phone:     guard.phone,
       photoUrl:  guard.photoUrl ?? null,

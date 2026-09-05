@@ -80,12 +80,92 @@ export function guardStatusLabel(status: string): string {
 
 // ── Input schemas (Zod) ────────────────────────────────────────────────────────
 
-export const CreateGuardSchema = z.object({
+/**
+ * How a guard is identified.
+ *
+ * Not everyone holds a national ID. A guard may be vouched for by a relative's
+ * card, or by an academic or church document, and refusing those meant turning
+ * away people who could otherwise work.
+ */
+export const GUARD_ID_TYPES = [
+  {
+    value:       'OWN_ID',
+    label:       'Own National ID',
+    description: 'The guard holds their own national ID card',
+    icon:        '\u{1FAAA}',
+    colour:      '#1B3A6B',
+  },
+  {
+    value:       'RELATIVE_ID',
+    label:       "Relative's National ID",
+    description: "Identified by a family member's national ID card",
+    icon:        '\u{1F46A}',
+    colour:      '#0F7B6C',
+  },
+  {
+    value:       'OTHER_DOCUMENT',
+    label:       'Other / Academic Document',
+    description: 'A student card, baptism certificate, passport or similar',
+    icon:        '\u{1F4C4}',
+    colour:      '#E8701A',
+  },
+] as const;
+
+export const GUARD_ID_TYPE_VALUES = ['OWN_ID', 'RELATIVE_ID', 'OTHER_DOCUMENT'] as const;
+export type GuardIdType = (typeof GUARD_ID_TYPE_VALUES)[number];
+
+export const guardIdTypeConfig = (value: string | null | undefined) =>
+  GUARD_ID_TYPES.find((t) => t.value === value);
+
+/**
+ * True when the chosen document actually carries the detail that identifies the
+ * guard. A type with nothing filled in is a selection, not identification.
+ */
+export function hasUsableId(g: {
+  idType?: string | null; nationalId?: string | null;
+  relativeIdName?: string | null; otherDocType?: string | null;
+}): boolean {
+  switch (g.idType) {
+    case 'OWN_ID':         return !!g.nationalId?.trim();
+    case 'RELATIVE_ID':    return !!g.relativeIdName?.trim();
+    case 'OTHER_DOCUMENT': return !!g.otherDocType?.trim();
+    default:               return false;
+  }
+}
+
+/** One line describing a guard's identification, for a list or a profile. */
+export function idSummary(g: {
+  idType?: string | null; nationalId?: string | null;
+  relativeIdName?: string | null; relativeIdNumber?: string | null;
+  otherDocType?: string | null; otherDocNumber?: string | null;
+}): string {
+  switch (g.idType) {
+    case 'OWN_ID':
+      return g.nationalId ? `Own ID: ${g.nationalId}` : 'Own ID — number not recorded';
+    case 'RELATIVE_ID':
+      return g.relativeIdName
+        ? `Relative (${g.relativeIdName})${g.relativeIdNumber ? `: ${g.relativeIdNumber}` : ''}`
+        : "Relative's ID — name not recorded";
+    case 'OTHER_DOCUMENT':
+      return g.otherDocType
+        ? `${g.otherDocType}${g.otherDocNumber ? `: ${g.otherDocNumber}` : ''}`
+        : 'Other document — type not recorded';
+    default:
+      return 'Not provided';
+  }
+}
+
+const GuardFieldsSchema = z.object({
   // Existing required fields
   firstName:     z.string().min(1).max(100),
   lastName:      z.string().min(1).max(100),
   otherNames:    z.string().max(100).optional(),
-  nationalId:    z.string().min(1).max(50).optional().nullable(),
+  idType:           z.enum(GUARD_ID_TYPE_VALUES).optional().nullable(),
+  nationalId:       z.string().min(1).max(50).optional().nullable(),
+  relativeIdName:   z.string().max(100).optional().nullable(),
+  relativeIdNumber: z.string().max(50).optional().nullable(),
+  otherDocType:     z.string().max(100).optional().nullable(),
+  otherDocNumber:   z.string().max(50).optional().nullable(),
   isIncompleteNID: z.boolean().default(false).optional(),
   // Optional: a guard is often registered from a paper form before they have
   // produced a phone number or named a next of kin, and refusing the record
@@ -196,8 +276,36 @@ export const CreateGuardSchema = z.object({
   }).optional(),
 });
 
+/**
+ * Picking a document type without its identifying detail is a selection, not
+ * identification — the record would show a guard as documented while carrying
+ * nothing that names them. Applied to create and to update alike, so an edit
+ * cannot leave a guard in that state either.
+ */
+function checkIdentification(
+  d: { idType?: string | null; relativeIdName?: string | null; otherDocType?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  if (d.idType === 'RELATIVE_ID' && !d.relativeIdName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['relativeIdName'],
+      message: "Whose ID is it? Give the relative's name.",
+    });
+  }
+  if (d.idType === 'OTHER_DOCUMENT' && !d.otherDocType?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['otherDocType'],
+      message: 'Name the document — a student card, a passport, and so on.',
+    });
+  }
+}
+
+export const CreateGuardSchema = GuardFieldsSchema.superRefine(checkIdentification);
+
 /** All fields optional — used for PATCH updates. */
-export const UpdateGuardSchema = CreateGuardSchema.partial();
+export const UpdateGuardSchema = GuardFieldsSchema.partial().superRefine(checkIdentification);
 
 export const GuardStatusSchema = z.object({
   status: GuardEmploymentStatusSchema,
@@ -227,6 +335,8 @@ export const PromoteGuardSchema = z.object({
 });
 
 export const GuardListQuerySchema = z.object({
+  /** A GUARD_ID_TYPES value, or 'NONE' for guards with no document. */
+  idType:    z.string().optional(),
   page:      z.coerce.number().int().positive().default(1),
   limit:     z.coerce.number().int().min(1).max(500).default(20),
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
@@ -323,7 +433,14 @@ export interface GuardResponse {
   otherNames:  string | null;
   /** Computed: firstName + otherNames (if any) + lastName */
   fullName:    string;
-  nationalId:  string | null;
+  idType:           string | null;
+  nationalId:       string | null;
+  relativeIdName:   string | null;
+  relativeIdNumber: string | null;
+  otherDocType:     string | null;
+  otherDocNumber:   string | null;
+  /** One line describing the identification, ready to display. */
+  idSummary:        string;
   isIncompleteNID: boolean;
   phone:       string | null;
   photoUrl:    string | null;

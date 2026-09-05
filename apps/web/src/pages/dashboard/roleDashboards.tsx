@@ -139,6 +139,10 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
       { key: 'pendingLeave',       label: 'Leave to Approve',    icon: '⏳', colour: alertWhenAny, linkTo: '/hr' },
       { key: 'recentDisciplinary', label: 'Disciplinary (30d)',  icon: '⚠️', colour: alertWhenAny, linkTo: '/hr' },
       { key: 'lettersThisMonth',   label: 'Letters This Month',  icon: '📝', colour: 'navy',  linkTo: '/hr' },
+      { key: 'guardsOwnId',      label: 'On Own National ID', icon: '🪪', colour: 'navy',  linkTo: '/guards?idType=OWN_ID' },
+      { key: 'guardsRelativeId', label: "On a Relative's ID",  icon: '👪', colour: 'teal',  linkTo: '/guards?idType=RELATIVE_ID' },
+      { key: 'guardsOtherDoc',   label: 'On Other Documents', icon: '📄', colour: 'navy',  linkTo: '/guards?idType=OTHER_DOCUMENT' },
+      { key: 'guardsNoId',       label: 'No ID Document',     icon: '⬜', colour: alertWhenAny, linkTo: '/guards?idType=NONE' },
     ],
     feeds: [
       { key: 'pendingLeave', title: 'Leave awaiting approval', icon: '🏖️', emptyText: 'No leave requests waiting', linkTo: '/hr' },

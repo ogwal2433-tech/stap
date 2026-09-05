@@ -1,3 +1,8 @@
+export interface GuardIdStats {
+  total: number; ownId: number; relativeId: number; otherDoc: number; noId: number;
+  ownIdPct: number; relativeIdPct: number; otherDocPct: number; noIdPct: number;
+}
+
 import api from './api';
 import type {
   GuardResponse,
@@ -119,6 +124,10 @@ export const guardsApi = {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data.data);
+  },
+
+  idStats(): Promise<GuardIdStats> {
+    return api.get<{ success: boolean; data: GuardIdStats }>('/guards/id-stats').then((r) => r.data.data);
   },
 
   getDashboardStats(): Promise<GuardDashboardStats> {

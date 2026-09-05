@@ -245,6 +245,16 @@ router.post(
   }),
 );
 
+// ── GET /id-stats — how the active workforce is documented ────────────────────
+// Declared before /:id so the literal path is not read as a guard id.
+router.get(
+  '/id-stats',
+  requirePermission(PERMISSIONS.GUARDS_VIEW),
+  asyncHandler(async (_req, res) => {
+    res.status(200).json({ success: true, data: await guardService.getIdStats() });
+  }),
+);
+
 // ── GET /dashboard — guard KPI dashboard ──────────────────────────────────────
 router.get(
   '/dashboard',

@@ -222,7 +222,25 @@ model Guard {
   firstName         String
   lastName          String
   otherNames        String?
+  /// Which document the guard is identified by.
+  /// OWN_ID | RELATIVE_ID | OTHER_DOCUMENT — null means none has been given.
+  idType            String?
+  /// The guard's own NIN, when idType is OWN_ID. Unique: two guards cannot hold
+  /// the same national ID.
   nationalId        String?          @unique
+  /// Whose ID it is, when the guard is identified by a relative's.
+  relativeIdName    String?
+  /// The relative's NIN. Deliberately not unique — siblings working here are
+  /// identified by the same parent's card, and a unique index would let the
+  /// first one registered lock the rest out.
+  relativeIdNumber  String?
+  /// What the document is, when it is neither of the above: a student card, a
+  /// baptism certificate, a passport.
+  otherDocType      String?
+  otherDocNumber    String?
+  /// No usable identification on file. Blocks deployment, so it now means "no
+  /// document of any kind", not "no NIN" — a guard on a relative's card or an
+  /// academic document is documented and may work.
   isIncompleteNID   Boolean          @default(false)
   /// @deprecated Superseded by employmentStatus = ON_LEAVE, which is the single
   /// source of truth for whether a guard is deployable. Nothing has ever written

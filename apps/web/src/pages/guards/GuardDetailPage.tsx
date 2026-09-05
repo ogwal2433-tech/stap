@@ -31,6 +31,7 @@ import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
   GUARD_STATUS_CONFIG, guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus,
   type GuardDocumentResponse, type GuardTransferResponse, type GuardPromotionResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
+  guardIdTypeConfig,
 } from '@stap/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
@@ -530,7 +531,11 @@ export default function GuardDetailPage() {
             <Col>
               <h5 className="mb-1 fw-bold">{guard.fullName}</h5>
               <div className="text-muted small mb-1">
-                NIN: {guard.nationalId ?? <span className="text-warning fw-semibold">Pending</span>}
+                {(() => {
+                  const cfg = guardIdTypeConfig(guard.idType);
+                  if (!cfg) return <span className="text-warning fw-semibold">No ID document on file</span>;
+                  return <>{cfg.icon} {guard.idSummary}</>;
+                })()}
               </div>
               <div className="text-muted small">
                 {guard.phone ?? <span className="fst-italic">No phone on record</span>}
@@ -614,7 +619,7 @@ export default function GuardDetailPage() {
             // are missing is what turns "incomplete" into something someone can act
             // on when the guard next comes in.
             const missing = [
-              !guard.nationalId     && 'National ID',
+              !guard.idType         && 'an identification document',
               !guard.phone          && 'phone number',
               !guard.nextOfKinName  && 'next of kin',
               !guard.nextOfKinPhone && 'next of kin phone',
@@ -770,7 +775,18 @@ export default function GuardDetailPage() {
                   ['Phone', guard.phone],
                   ['Preferred Payment Contact', (guard as any).preferredPaymentContact],
                   ['Guard ID Number (SSLG)', guard.systemId],
-                  ['National ID (NIN)', guard.nationalId],
+                  ['Identification', guard.idSummary === 'Not provided' ? null : guard.idSummary],
+                  ...(guard.idType === 'RELATIVE_ID'
+                    ? [['Relative on the ID', guard.relativeIdName],
+                       ["Relative's ID number", guard.relativeIdNumber]] as [string, string | null][]
+                    : []),
+                  ...(guard.idType === 'OTHER_DOCUMENT'
+                    ? [['Document type', guard.otherDocType],
+                       ['Document number', guard.otherDocNumber]] as [string, string | null][]
+                    : []),
+                  ...(guard.idType === 'OWN_ID'
+                    ? [['National ID (NIN)', guard.nationalId]] as [string, string | null][]
+                    : []),
                   ['NSSF Number', (guard as any).nssfNumber],
                   ['TIN Number', (guard as any).tinNumber],
                   ['PSO Certificate', guard.psoCertNumber],

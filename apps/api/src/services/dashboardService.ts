@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { guardService } from './guardService';
 import { OUTSTANDING_STATUSES } from './invoiceService';
 import { ROLES, DEPLOYABLE_STATUSES } from '@stap/shared';
 import { marketingService } from './marketingService';
@@ -336,6 +337,7 @@ class DashboardService {
       lettersThisMonth,
       byRank,
       pendingLeaveFeed,
+      idStats,
     ] = await Promise.all([
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
       // Approved leave that covers today, so the figure answers "who is off
@@ -365,6 +367,9 @@ class DashboardService {
         orderBy: { startDate: 'asc' },
         take:    10,
       }),
+      // Reuses the guard service so the dashboard and the guard list cannot
+      // disagree about how many guards are documented.
+      guardService.getIdStats(),
     ]);
 
     const fmtDate = (d: Date) =>
@@ -378,6 +383,10 @@ class DashboardService {
         pendingLeave,
         recentDisciplinary,
         lettersThisMonth,
+        guardsOwnId:      idStats.ownId,
+        guardsRelativeId: idStats.relativeId,
+        guardsOtherDoc:   idStats.otherDoc,
+        guardsNoId:       idStats.noId,
       },
       feeds: {
         pendingLeave: pendingLeaveFeed.map((l) => ({
