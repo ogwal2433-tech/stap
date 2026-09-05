@@ -17,6 +17,7 @@ import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
+import { useHasPermission } from '../../context/AuthContext';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -57,13 +58,14 @@ const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, R
 const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 export default function ClientDetailPage() {
+  const canSeeContracts = useHasPermission('contracts.view');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
 
   const { data: client, isLoading, isError, refetch } = useClient(id ?? '');
   const { data: sites, refetch: refetchSites } = useClientSites(id ?? '');
-  const { data: contracts, refetch: refetchContracts } = useClientContracts(id ?? '');
+  const { data: contracts, refetch: refetchContracts } = useClientContracts(id ?? '', canSeeContracts);
   const { data: complaintsData, isLoading: complaintsLoading, refetch: refetchComplaints } = useClientComplaints(id ?? '');
   const archiveClient = useArchiveClient();
   const deleteSite = useDeleteSite();
@@ -203,7 +205,9 @@ export default function ClientDetailPage() {
                   {LEAD_STATUSES[(client as any).leadStatus as keyof typeof LEAD_STATUSES] ?? (client as any).leadStatus}
                 </Badge>
               )}
-              <div className="text-muted small">Billing: {client.billingTerms} days</div>
+              {canSeeContracts && (
+                <div className="text-muted small">Billing: {client.billingTerms} days</div>
+              )}
               {(client as any).vatRegistered && (
                 <div className="text-muted small">
                   VAT: {(client as any).vatRate ?? 18}%
@@ -225,9 +229,13 @@ export default function ClientDetailPage() {
               <Row className="g-3">
                 {[
                   { label: 'Physical Address', value: client.physicalAddress },
-                  { label: 'Billing Address',  value: client.billingAddress ?? '—' },
-                  { label: 'Contract Status',  value: client.contractStatus },
-                  { label: 'Billing Terms',    value: `${client.billingTerms} days` },
+                  // Payment terms belong with the contract, so they follow the
+                  // same permission rather than sitting on the profile in clear.
+                  ...(canSeeContracts
+                    ? [{ label: 'Billing Address', value: client.billingAddress ?? '—' },
+                       { label: 'Contract Status', value: client.contractStatus },
+                       { label: 'Billing Terms',   value: `${client.billingTerms} days` }]
+                    : [{ label: 'Contract Status', value: client.contractStatus }]),
                   { label: 'Date Added',       value: new Date(client.createdAt).toLocaleDateString() },
                   { label: 'Last Updated',     value: new Date(client.updatedAt).toLocaleDateString() },
                 ].map(({ label, value }) => (
@@ -475,7 +483,10 @@ export default function ClientDetailPage() {
           )}
         </Tab>
 
-        {/* Tab 3 — Contracts */}
+        {/* Tab 3 — Contracts. Hidden without contracts.view: this tab carries the
+            per-guard rates and the monthly value, which the Control Room must
+            not see even though it works the same client's sites daily. */}
+        {canSeeContracts && (
         <Tab eventKey="contracts" title={`Contracts (${contracts?.length ?? 0})`}>
           {/* Expiring warning */}
           {contracts && contracts.filter((c) => c.daysRemaining <= 30 && c.status !== 'EXPIRED' && c.status !== 'DRAFT').length > 0 && (
@@ -611,6 +622,7 @@ export default function ClientDetailPage() {
             </Table>
           )}
         </Tab>
+        )}
 
         {/* Tab 4 — Complaints */}
         <Tab eventKey="complaints" title={`Complaints (${complaintsLoading ? '…' : complaints.length})`}>

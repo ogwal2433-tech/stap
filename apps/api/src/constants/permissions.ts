@@ -27,6 +27,14 @@ export const PERMISSIONS = {
   CLIENTS_DELETE: 'clients.delete',
 
   // ── Sites ───────────────────────────────────────────────────────────────────
+  // ── Contracts ───────────────────────────────────────────────────────────────
+  // Separate from clients on purpose: the Control Room works a client's sites,
+  // complaints and service requests daily but has no business seeing what the
+  // client is charged.
+  CONTRACTS_VIEW:   'contracts.view',
+  CONTRACTS_CREATE: 'contracts.create',
+  CONTRACTS_EDIT:   'contracts.edit',
+
   SITES_VIEW:   'sites.view',
   SITES_CREATE: 'sites.create',
   SITES_EDIT:   'sites.edit',

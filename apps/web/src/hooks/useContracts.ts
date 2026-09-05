@@ -2,11 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractsApi } from '../lib/contracts.api';
 import type { CreateContractInput, UpdateContractInput } from '@stap/shared';
 
-export function useClientContracts(clientId: string) {
+/**
+ * `enabled` also takes the caller's permission, because hiding the Contracts tab
+ * does not stop this hook running — a role without contracts.view would fire a
+ * request on every client page and collect a 403 it can do nothing about.
+ */
+export function useClientContracts(clientId: string, enabled = true) {
   return useQuery({
     queryKey: ['contracts', clientId],
     queryFn: () => contractsApi.listByClient(clientId),
-    enabled: Boolean(clientId),
+    enabled: Boolean(clientId) && enabled,
   });
 }
 

@@ -64,6 +64,8 @@ import { Router, type IRouter } from 'express';
 import { contractService } from '../services/contractService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../errors/AppError';
@@ -80,17 +82,7 @@ router.use(authenticate);
 // ── GET / — list contracts ─────────────────────────────────────────────────────
 router.get(
   '/',
-  requireRole(
-    ROLES.DIRECTOR,
-    ROLES.ASSISTANT_MANAGER,
-    ROLES.ADMINISTRATOR,
-    ROLES.OPERATIONS_SUPERVISOR,
-    ROLES.FIELD_SUPERVISOR,
-    ROLES.TRAINER,
-    ROLES.ACCOUNTS_OFFICER,
-    ROLES.MARKETING_HEAD,
-  ROLES.SALES,
-  ),
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
   asyncHandler(async (req, res) => {
     const { clientId, status, page, limit } = req.query as Record<string, string | undefined>;
     const result = await contractService.listAll({
@@ -107,7 +99,7 @@ router.get(
 // Must be before /:id to avoid route collision
 router.get(
   '/expiring',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
   asyncHandler(async (req, res) => {
     const days = req.query.days ? parseInt(String(req.query.days), 10) : 30;
     const contracts = await contractService.getExpiringContracts(days);
@@ -118,7 +110,7 @@ router.get(
 // ── POST / — create contract ───────────────────────────────────────────────────
 router.post(
   '/',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requirePermission(PERMISSIONS.CONTRACTS_CREATE),
   validate(CreateContractSchema),
   asyncHandler(async (req, res) => {
     const contract = await contractService.create(req.body, req.user!.userId);
@@ -129,17 +121,7 @@ router.post(
 // ── GET /:id — get contract by ID ─────────────────────────────────────────────
 router.get(
   '/:id',
-  requireRole(
-    ROLES.DIRECTOR,
-    ROLES.ASSISTANT_MANAGER,
-    ROLES.ADMINISTRATOR,
-    ROLES.OPERATIONS_SUPERVISOR,
-    ROLES.FIELD_SUPERVISOR,
-    ROLES.TRAINER,
-    ROLES.ACCOUNTS_OFFICER,
-    ROLES.MARKETING_HEAD,
-  ROLES.SALES,
-  ),
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
   asyncHandler(async (req, res) => {
     const contract = await contractService.getById(req.params.id);
     res.status(200).json({ success: true, data: contract });
@@ -149,7 +131,7 @@ router.get(
 // ── PATCH /:id — update contract ──────────────────────────────────────────────
 router.patch(
   '/:id',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requirePermission(PERMISSIONS.CONTRACTS_EDIT),
   validate(UpdateContractSchema),
   asyncHandler(async (req, res) => {
     const contract = await contractService.update(req.params.id, req.body, req.user!.userId);

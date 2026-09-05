@@ -134,13 +134,6 @@ const CLIENT_WRITE_ROLES: UserRole[] = [
 // Roles that can manage client archiving
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
-// Roles that can view sites + all-sites list
-const SITE_VIEW_ROLES: UserRole[] = [
-  ...DEPLOYMENT_ROLES,
-  ROLES.ASSISTANT_MANAGER,
-  ROLES.ACCOUNTS_OFFICER,
-] as UserRole[];
-
 // Roles that can create/edit sites
 const SITE_WRITE_ROLES: UserRole[] = [
   ROLES.DIRECTOR,
@@ -162,7 +155,7 @@ router.get(
 // ── GET /sites/all — all sites across all clients ──────────────────────────────
 router.get(
   '/sites/all',
-  requireRole(...SITE_VIEW_ROLES),
+  requirePermission(PERMISSIONS.SITES_VIEW),
   asyncHandler(async (req, res) => {
     const result = await siteService.listAll(
       req.query as { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string },
@@ -308,7 +301,7 @@ router.patch(
 // ── GET /:clientId/sites — list sites for a client ────────────────────────────
 router.get(
   '/:clientId/sites',
-  requireRole(...SITE_VIEW_ROLES),
+  requirePermission(PERMISSIONS.SITES_VIEW),
   asyncHandler(async (req, res) => {
     const sites = await siteService.listByClient(req.params.clientId);
     res.status(200).json({ success: true, data: sites });
