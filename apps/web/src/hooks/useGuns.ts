@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UpdateGunInput } from '@stap/shared';
 import { gunsApi } from '../lib/guns.api';
 import type {
   RegisterGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
@@ -46,3 +47,19 @@ export const useRegisterGun = () => useGunMutation<RegisterGunInput>(gunsApi.reg
 export const useDeployGun   = () => useGunMutation<DeployGunInput>(gunsApi.deploy);
 export const useWithdrawGun = () => useGunMutation<WithdrawGunInput>(gunsApi.withdraw);
 export const useTransferGun = () => useGunMutation<TransferGunInput>(gunsApi.transfer);
+
+export function useUpdateGun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateGunInput }) => gunsApi.update(id, body),
+    onSuccess:  () => { void qc.invalidateQueries({ queryKey: ['guns'] }); },
+  });
+}
+
+export function useDeleteGun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => gunsApi.remove(id),
+    onSuccess:  () => { void qc.invalidateQueries({ queryKey: ['guns'] }); },
+  });
+}

@@ -2,8 +2,67 @@ import { z } from 'zod';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-export const GUN_TYPES = ['AK-47', 'G3', 'Pistol', 'Shotgun', 'SMG', 'Other'] as const;
-export type GunType = (typeof GUN_TYPES)[number];
+/**
+ * The gun types the company actually holds.
+ *
+ * Stored as the value, shown as the label. gunType stays a plain String in the
+ * database rather than an enum, so a gun registered under an older list — there
+ * is one on 'Pistol' — keeps its type and stays readable instead of failing to
+ * load. New registrations are held to this list at the schema.
+ */
+export const GUN_TYPES = [
+  { value: 'AK-47',            label: 'AK-47' },
+  { value: 'SAR_RIFLE',        label: 'SAR Rifle' },
+  { value: 'RIFLE',            label: 'Rifle' },
+  { value: 'PARDUS_SHORT_GUN', label: 'Pardus Short Gun' },
+  { value: '12_BORE_SG_DB',    label: '12 Bore S/G D/B' },
+  { value: 'A-TAC',            label: 'A-TAC' },
+] as const;
+
+export const GUN_TYPE_VALUES = [
+  'AK-47', 'SAR_RIFLE', 'RIFLE', 'PARDUS_SHORT_GUN', '12_BORE_SG_DB', 'A-TAC',
+] as const;
+export type GunType = (typeof GUN_TYPE_VALUES)[number];
+
+/** Falls back to the stored value, so a legacy type still reads as itself. */
+export const gunTypeLabel = (value: string): string =>
+  GUN_TYPES.find((t) => t.value === value)?.label ?? value;
+
+/**
+ * Who owns the gun, which decides the licence fee.
+ *
+ * The fee and period are derived from this on the server rather than being
+ * accepted from the client — the rate is company policy, not something the
+ * person filling the form should be able to type in.
+ */
+export const GUN_OWNERSHIP = [
+  {
+    value:       'COMPANY',
+    label:       'Company-Owned',
+    fee:         160_000,
+    period:      'YEARLY',
+    periodLabel: 'per year',
+    description: 'UGX 160,000 per year',
+    colour:      '#1B3A6B',
+    icon:        '🏢',
+  },
+  {
+    value:       'GOVERNMENT',
+    label:       'Government-Owned',
+    fee:         20_000,
+    period:      'MONTHLY',
+    periodLabel: 'per month',
+    description: 'UGX 20,000 per month',
+    colour:      '#1E8449',
+    icon:        '🏛️',
+  },
+] as const;
+
+export const GUN_OWNERSHIP_VALUES = ['COMPANY', 'GOVERNMENT'] as const;
+export type GunOwnership = (typeof GUN_OWNERSHIP_VALUES)[number];
+
+export const ownershipConfig = (value: string) =>
+  GUN_OWNERSHIP.find((o) => o.value === value);
 
 export const GUN_CONDITIONS = [
   { value: 'GOOD',         label: '✅ Good' },
@@ -48,15 +107,22 @@ export const ARMOURY_LABEL = '🏛️ Armoury';
 // ── Input schemas ──────────────────────────────────────────────────────────────
 
 export const RegisterGunSchema = z.object({
-  serialNumber:   z.string().min(1, 'Serial number is required').max(60).trim(),
-  gunType:        z.string().min(1, 'Gun type is required').max(60),
-  manufacturer:   z.string().max(100).optional().nullable(),
-  calibre:        z.string().max(40).optional().nullable(),
-  condition:      z.enum(GUN_CONDITION_VALUES).default('GOOD'),
-  currentBullets: z.coerce.number().int().min(0, 'Bullet count cannot be negative').default(0),
-  notes:          z.string().max(1000).optional().nullable(),
+  serialNumber: z.string().min(1, 'Serial number is required').max(60).trim(),
+  gunType:      z.enum(GUN_TYPE_VALUES, { errorMap: () => ({ message: 'Select a gun type' }) }),
+  ownership:    z.enum(GUN_OWNERSHIP_VALUES, { errorMap: () => ({ message: 'Select who owns this gun' }) }),
+  manufacturer: z.string().max(100).optional().nullable(),
+  condition:    z.enum(GUN_CONDITION_VALUES).default('GOOD'),
+  /** Rounds issued with the gun at registration; the current count starts here. */
+  totalBullets: z.coerce.number().int().min(0, 'Bullet count cannot be negative').default(0),
+  notes:        z.string().max(1000).optional().nullable(),
+  // licenceFee and licencePeriod are deliberately absent: the server derives
+  // them from ownership, so the rate cannot be set from the form.
 });
 export type RegisterGunInput = z.infer<typeof RegisterGunSchema>;
+
+/** Every field optional — a partial edit should not have to resend the rest. */
+export const UpdateGunSchema = RegisterGunSchema.partial();
+export type UpdateGunInput = z.infer<typeof UpdateGunSchema>;
 
 /** Armoury → site. */
 export const DeployGunSchema = z.object({
@@ -118,14 +184,26 @@ export interface GunMovementResponse {
 
 export interface GunResponse {
   id:             string;
+  /** GUN-001, issued on registration. */
+  systemId:       string | null;
   serialNumber:   string;
   gunType:        string;
+  /** Resolved label, so a legacy type still displays as itself. */
+  gunTypeLabel:   string;
+  ownership:      string;
+  ownershipLabel: string;
+  /** Derived from ownership on the server; UGX. */
+  licenceFee:     number | null;
+  /** YEARLY | MONTHLY */
+  licencePeriod:  string | null;
   manufacturer:   string | null;
-  calibre:        string | null;
   condition:      GunCondition;
   status:         GunStatus;
   currentSiteId:  string | null;
   currentSiteName: string | null;
+  /** Rounds issued at registration. */
+  totalBullets:   number;
+  /** Rounds held now — falls as they are used, tops back up on a refill. */
   currentBullets: number;
   notes:          string | null;
   registeredBy:   { id: string; name: string } | null;

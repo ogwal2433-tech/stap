@@ -12,7 +12,9 @@ import type {
   GunWithHistory,
   GunInventoryRow,
   GunMovementType,
+  UpdateGunInput,
 } from '@stap/shared';
+import { gunTypeLabel, ownershipConfig } from '@stap/shared';
 
 const GUN_INCLUDE = {
   registeredByUser: { select: { id: true, name: true } },
@@ -25,17 +27,38 @@ const MOVEMENT_INCLUDE = {
   recordedByUser: { select: { id: true, name: true } },
 } as const;
 
+/**
+ * GUN-001, continuing past the highest already issued rather than counting rows
+ * — a deleted gun would otherwise make the next registration reuse an id that
+ * is already written in a movement record.
+ */
+async function nextGunSystemId(): Promise<string> {
+  const last = await prisma.gun.findFirst({
+    where:   { systemId: { startsWith: 'GUN-' } },
+    orderBy: { systemId: 'desc' },
+    select:  { systemId: true },
+  });
+  const n = last?.systemId ? Number(last.systemId.slice(4)) : 0;
+  return `GUN-${String((Number.isFinite(n) ? n : 0) + 1).padStart(3, '0')}`;
+}
+
 function sanitise(gun: any): GunResponse {
   return {
     id:              gun.id,
+    systemId:        gun.systemId ?? null,
     serialNumber:    gun.serialNumber,
     gunType:         gun.gunType,
+    gunTypeLabel:    gunTypeLabel(gun.gunType),
+    ownership:       gun.ownership,
+    ownershipLabel:  ownershipConfig(gun.ownership)?.label ?? gun.ownership,
+    licenceFee:      gun.licenceFee ?? null,
+    licencePeriod:   gun.licencePeriod ?? null,
     manufacturer:    gun.manufacturer ?? null,
-    calibre:         gun.calibre ?? null,
     condition:       gun.condition,
     status:          gun.status,
     currentSiteId:   gun.currentSiteId ?? null,
     currentSiteName: gun.currentSite?.siteName ?? null,
+    totalBullets:    gun.totalBullets,
     currentBullets:  gun.currentBullets,
     notes:           gun.notes ?? null,
     registeredBy:    gun.registeredByUser
@@ -95,15 +118,24 @@ class GunService {
       );
     }
 
+    // Fee and period come from the ownership, never from the request: the rate
+    // is company policy, so a form must not be able to set it.
+    const cfg = ownershipConfig(data.ownership);
+
     const gun = await prisma.gun.create({
       data: {
+        systemId:       await nextGunSystemId(),
         serialNumber,
         gunType:        data.gunType,
+        ownership:      data.ownership,
+        licenceFee:     cfg?.fee ?? null,
+        licencePeriod:  cfg?.period ?? null,
         manufacturer:   data.manufacturer?.trim() || null,
-        calibre:        data.calibre?.trim() || null,
         condition:      data.condition ?? 'GOOD',
         status:         GUN_STATUSES.IN_ARMOURY,
-        currentBullets: data.currentBullets ?? 0,
+        // A gun arrives holding what it was issued with, so both start equal.
+        totalBullets:   data.totalBullets ?? 0,
+        currentBullets: data.totalBullets ?? 0,
         notes:          data.notes?.trim() || null,
         registeredById,
       },
@@ -115,10 +147,123 @@ class GunService {
       action:   'GUN_REGISTERED',
       entity:   'gun',
       entityId: gun.id,
-      newValue: { serialNumber, gunType: gun.gunType, bullets: gun.currentBullets },
+      newValue: {
+        systemId: gun.systemId, serialNumber, gunType: gun.gunType,
+        ownership: gun.ownership, totalBullets: gun.totalBullets,
+      },
     });
 
     return sanitise(gun);
+  }
+
+  /**
+   * Edits a gun's registration details.
+   *
+   * Refused while the gun is out at a site: its serial, type and round count are
+   * what the site's paperwork was written against, and changing them under a
+   * deployment would leave the two disagreeing with no record of which is right.
+   */
+  async updateGun(id: string, data: UpdateGunInput, userId: string): Promise<GunResponse> {
+    const gun = await prisma.gun.findUnique({ where: { id } });
+    if (!gun) throw new NotFoundError('Gun not found');
+
+    if (gun.status === GUN_STATUSES.DEPLOYED) {
+      throw new AppError('This gun is deployed. Withdraw it to the armoury before editing it.', 400);
+    }
+
+    if (data.serialNumber && data.serialNumber.trim() !== gun.serialNumber) {
+      const clash = await prisma.gun.findUnique({ where: { serialNumber: data.serialNumber.trim() } });
+      if (clash) {
+        throw new AppError(`A gun with serial number "${data.serialNumber.trim()}" is already registered.`, 409);
+      }
+    }
+
+    // Re-derived only when ownership actually changes, so an edit that leaves it
+    // alone cannot quietly reprice a licence.
+    const cfg = data.ownership && data.ownership !== gun.ownership
+      ? ownershipConfig(data.ownership)
+      : undefined;
+
+    const updated = await prisma.gun.update({
+      where: { id },
+      data: {
+        ...(data.serialNumber !== undefined ? { serialNumber: data.serialNumber.trim() } : {}),
+        ...(data.gunType      !== undefined ? { gunType: data.gunType } : {}),
+        ...(data.manufacturer !== undefined ? { manufacturer: data.manufacturer?.trim() || null } : {}),
+        ...(data.condition    !== undefined ? { condition: data.condition } : {}),
+        ...(data.notes        !== undefined ? { notes: data.notes?.trim() || null } : {}),
+        ...(cfg ? { ownership: data.ownership, licenceFee: cfg.fee, licencePeriod: cfg.period } : {}),
+        // Re-issuing the gun resets both counts: the edit is stating what it now
+        // holds, and leaving currentBullets behind would show a gun as short of
+        // rounds it was just given.
+        ...(data.totalBullets !== undefined
+          ? { totalBullets: data.totalBullets, currentBullets: data.totalBullets }
+          : {}),
+      },
+      include: GUN_INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId,
+      action:   'GUN_UPDATED',
+      entity:   'gun',
+      entityId: id,
+      oldValue: {
+        serialNumber: gun.serialNumber, gunType: gun.gunType,
+        ownership: gun.ownership, totalBullets: gun.totalBullets,
+      },
+      newValue: {
+        serialNumber: updated.serialNumber, gunType: updated.gunType,
+        ownership: updated.ownership, totalBullets: updated.totalBullets,
+      },
+    });
+
+    return sanitise(updated);
+  }
+
+  /**
+   * Removes a gun, or retires it when it has a history.
+   *
+   * A gun that has been deployed has movement records against it, and those are
+   * the armoury's account of where a weapon has been. Deleting the gun would
+   * cascade them away, so it is retired instead — off the inventory, still
+   * answerable for.
+   */
+  async deleteGun(id: string, userId: string): Promise<{ deleted: boolean; retired: boolean }> {
+    const gun = await prisma.gun.findUnique({
+      where:   { id },
+      include: { movements: { select: { id: true }, take: 1 } },
+    });
+    if (!gun) throw new NotFoundError('Gun not found');
+
+    if (gun.status === GUN_STATUSES.DEPLOYED) {
+      throw new AppError('This gun is deployed. Withdraw it to the armoury before removing it.', 400);
+    }
+
+    if (gun.movements.length > 0) {
+      await prisma.gun.update({ where: { id }, data: { status: GUN_STATUSES.RETIRED } });
+      await QueueService.logAudit({
+        userId,
+        action:   'GUN_RETIRED',
+        entity:   'gun',
+        entityId: id,
+        newValue: {
+          systemId: gun.systemId, serialNumber: gun.serialNumber,
+          reason:   'Removal requested; retired instead to keep its movement history.',
+        },
+      });
+      return { deleted: false, retired: true };
+    }
+
+    await prisma.gun.delete({ where: { id } });
+    await QueueService.logAudit({
+      userId,
+      action:   'GUN_DELETED',
+      entity:   'gun',
+      entityId: id,
+      oldValue: { systemId: gun.systemId, serialNumber: gun.serialNumber, gunType: gun.gunType },
+    });
+    return { deleted: true, retired: false };
   }
 
   /**

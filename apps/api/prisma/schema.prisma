@@ -681,11 +681,22 @@ model MarketingTarget {
 /// history of how it got there lives in GunMovement.
 model Gun {
   id           String  @id @default(cuid())
+  /// GUN-001, issued on registration.
+  systemId     String? @unique
   serialNumber String  @unique
+  /// A GUN_TYPES value. Left a String rather than an enum so a gun registered
+  /// under an older list keeps its type and still loads; new registrations are
+  /// held to the current list by the schema.
   gunType      String
-  // AK-47 | G3 | Pistol | Shotgun | SMG | Other
   manufacturer String?
-  calibre      String?
+
+  /// COMPANY | GOVERNMENT — decides the licence fee below.
+  ownership     String  @default("COMPANY")
+  /// UGX. Derived from ownership on the server, never accepted from the client:
+  /// the rate is company policy, not a form field.
+  licenceFee    Int?
+  /// YEARLY | MONTHLY, derived from ownership alongside the fee.
+  licencePeriod String?
 
   /// GOOD | FAIR | NEEDS_REPAIR | RETIRED
   condition String @default("GOOD")
@@ -695,7 +706,9 @@ model Gun {
   /// Null whenever the gun is in the armoury.
   currentSiteId  String?
   currentSite    Site?   @relation("GunCurrentSite", fields: [currentSiteId], references: [id], onDelete: SetNull)
-  /// Rounds currently held with the gun.
+  /// Rounds issued with the gun at registration.
+  totalBullets   Int     @default(0)
+  /// Rounds held right now — falls as they are used, tops back up on a refill.
   currentBullets Int     @default(0)
 
   notes String?

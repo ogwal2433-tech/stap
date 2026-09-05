@@ -3,7 +3,7 @@ import { GUN_STATUSES, RegisterGunSchema, WithdrawGunSchema } from '@stap/shared
 
 vi.mock('../../db/prisma', () => ({
   default: {
-    gun:         { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    gun:         { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     gunMovement: { findMany: vi.fn(), create: vi.fn() },
     site:        { findUnique: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
@@ -51,6 +51,8 @@ beforeEach(() => {
   mp.site.findUnique.mockResolvedValue({ id: SITE_A, siteName: 'KCCA City Hall' });
   mp.site.findMany.mockResolvedValue([{ id: SITE_A, siteName: 'KCCA City Hall' }]);
   mp.$transaction.mockImplementation(async () => [movementRow(), {}]);
+  // No gun numbered yet, so registration issues GUN-001.
+  mp.gun.findFirst.mockResolvedValue(null);
 });
 
 // ── Registration ───────────────────────────────────────────────────────────────
@@ -61,11 +63,18 @@ describe('registerGun()', () => {
     mp.gun.create.mockResolvedValue({ ...armouryGun, registeredByUser: { id: TRAINER, name: 'Trainer' }, currentSite: null });
 
     const gun = await gunService.registerGun(
-      { serialNumber: 'AK-2026-001', gunType: 'AK-47', condition: 'GOOD', currentBullets: 30 } as any,
+      { serialNumber: 'AK-2026-001', gunType: 'AK-47', ownership: 'COMPANY', condition: 'GOOD', totalBullets: 30 } as any,
       TRAINER,
     );
 
-    expect(mp.gun.create.mock.calls[0][0].data.status).toBe(GUN_STATUSES.IN_ARMOURY);
+    const created = mp.gun.create.mock.calls[0][0].data;
+    expect(created.status).toBe(GUN_STATUSES.IN_ARMOURY);
+    // The rounds it was issued with are also what it currently holds.
+    expect(created.totalBullets).toBe(30);
+    expect(created.currentBullets).toBe(30);
+    // Fee comes from the ownership, not from the request.
+    expect(created.licenceFee).toBe(160_000);
+    expect(created.licencePeriod).toBe('YEARLY');
     expect(gun.serialNumber).toBe('AK-2026-001');
     expect((QueueService.logAudit as any).mock.calls[0][0].action).toBe('GUN_REGISTERED');
   });
@@ -315,13 +324,21 @@ describe('gun schemas', () => {
   });
 
   it('defaults a new gun to GOOD with no rounds', () => {
-    const r = RegisterGunSchema.parse({ serialNumber: 'X-1', gunType: 'AK-47' });
+    const r = RegisterGunSchema.parse({ serialNumber: 'X-1', gunType: 'AK-47', ownership: 'COMPANY' });
     expect(r.condition).toBe('GOOD');
-    expect(r.currentBullets).toBe(0);
+    expect(r.totalBullets).toBe(0);
   });
 
   it('rejects a negative bullet count', () => {
-    expect(RegisterGunSchema.safeParse({ serialNumber: 'X-1', gunType: 'AK-47', currentBullets: -1 }).success).toBe(false);
+    expect(RegisterGunSchema.safeParse({ serialNumber: 'X-1', gunType: 'AK-47', ownership: 'COMPANY', totalBullets: -1 }).success).toBe(false);
     expect(WithdrawGunSchema.safeParse({ gunId: 'g', fromSiteId: 's', bullets: -5 }).success).toBe(false);
+  });
+
+  it('rejects a gun type that is not on the list', () => {
+    expect(RegisterGunSchema.safeParse({ serialNumber: 'X-1', gunType: 'BAZOOKA', ownership: 'COMPANY' }).success).toBe(false);
+  });
+
+  it('requires an ownership', () => {
+    expect(RegisterGunSchema.safeParse({ serialNumber: 'X-1', gunType: 'AK-47' }).success).toBe(false);
   });
 });

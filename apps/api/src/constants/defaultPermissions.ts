@@ -46,6 +46,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.SETTINGS_VIEW, P.SETTINGS_EDIT, P.SYSTEM_ERRORS, P.AUDIT_LOG,
     P.SHIFT_REPORT_VIEW, P.SHIFT_REPORT_ACKNOWLEDGE,
     P.CONTRACTS_VIEW, P.CONTRACTS_CREATE, P.CONTRACTS_EDIT,
+    // Registers and edits guns — it already did through the route's role list.
+    P.GUNS_REGISTER,
   ],
 
   // Runs the system rather than the business: accounts, settings, diagnostics.

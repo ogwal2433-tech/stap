@@ -4,17 +4,18 @@ import {
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import {
-  GUN_TYPES, GUN_CONDITIONS, GUN_STATUSES, GUN_MOVEMENT_LABELS, ARMOURY_LABEL,
+  GUN_TYPES, GUN_OWNERSHIP, GUN_CONDITIONS, GUN_STATUSES, GUN_MOVEMENT_LABELS, ARMOURY_LABEL,
   type GunResponse, type GunCondition,
 } from '@stap/shared';
 import {
   useGuns, useGunInventory, useGun, useGunMovements,
-  useRegisterGun, useDeployGun, useWithdrawGun, useTransferGun,
+  useRegisterGun, useUpdateGun, useDeleteGun, useDeployGun, useWithdrawGun, useTransferGun,
 } from '../../hooks/useGuns';
 import { useAllSites } from '../../hooks/useClients';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
+import { useHasPermission } from '../../context/AuthContext';
 
 const NAVY = '#1B3A6B';
 
@@ -28,6 +29,30 @@ const SERIAL: React.CSSProperties = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** Ownership with its licence rate, as it appears in the list and the detail. */
+function ownershipCell(gun: { ownership: string; licenceFee: number | null }) {
+  const cfg = GUN_OWNERSHIP.find((o) => o.value === gun.ownership);
+  if (!cfg) return <span className="text-muted">—</span>;
+  return (
+    <div>
+      <div style={{ fontWeight: 600, fontSize: '0.8rem', color: cfg.colour }}>
+        {cfg.icon} {cfg.label}
+      </div>
+      <div className="text-muted" style={{ fontSize: '0.68rem' }}>
+        UGX {(gun.licenceFee ?? cfg.fee).toLocaleString()} {cfg.periodLabel}
+      </div>
+    </div>
+  );
+}
+
+/** Share of the issued rounds still held; 0 issued reads as full, not as empty. */
+const bulletPct = (g: { totalBullets: number; currentBullets: number }) =>
+  g.totalBullets <= 0 ? 100 : Math.min(100, Math.round((g.currentBullets / g.totalBullets) * 100));
+
+/** Red once a gun is below a third of what it was issued with. */
+const bulletColour = (g: { totalBullets: number; currentBullets: number }) =>
+  bulletPct(g) < 30 ? '#C0392B' : '#1E8449';
 
 function conditionBadge(condition: GunCondition) {
   const map: Record<GunCondition, string> = {
@@ -46,43 +71,65 @@ function formatDate(iso: string): string {
 
 // ── Register modal ─────────────────────────────────────────────────────────────
 
-function RegisterGunModal({ onClose }: { onClose: () => void }) {
+/** One form for both registering and editing — the fields are the same. */
+function GunFormModal({ gun, onClose }: { gun?: GunResponse | null; onClose: () => void }) {
   const { showToast } = useToast();
   const register = useRegisterGun();
+  const update   = useUpdateGun();
+  const editing  = !!gun;
 
-  const [serialNumber, setSerialNumber] = useState('');
-  const [gunType, setGunType]           = useState<string>(GUN_TYPES[0]);
-  const [manufacturer, setManufacturer] = useState('');
-  const [calibre, setCalibre]           = useState('');
-  const [condition, setCondition]       = useState<GunCondition>('GOOD');
-  const [bullets, setBullets]           = useState<number | ''>(0);
-  const [notes, setNotes]               = useState('');
+  const [serialNumber, setSerialNumber] = useState(gun?.serialNumber ?? '');
+  const [gunType, setGunType]           = useState<string>(gun?.gunType ?? GUN_TYPES[0].value);
+  const [ownership, setOwnership]       = useState<string>(gun?.ownership ?? 'COMPANY');
+  const [manufacturer, setManufacturer] = useState(gun?.manufacturer ?? '');
+  const [condition, setCondition]       = useState<GunCondition>(gun?.condition ?? 'GOOD');
+  const [bullets, setBullets]           = useState<number | ''>(gun?.totalBullets ?? 0);
+  const [notes, setNotes]               = useState(gun?.notes ?? '');
   const [error, setError]               = useState('');
+
+  const ownershipCfg = GUN_OWNERSHIP.find((o) => o.value === ownership);
+  const pending = register.isPending || update.isPending;
+
+  // A gun registered under an older list keeps a type the dropdown no longer
+  // offers. Showing it rather than silently switching to AK-47 keeps the edit
+  // honest — the person can leave it or pick a current one deliberately.
+  const legacyType = editing && !GUN_TYPES.some((t) => t.value === gunType) ? gunType : null;
 
   const submit = () => {
     if (!serialNumber.trim()) { setError('Serial number is required.'); return; }
     setError('');
-    register.mutate(
-      {
-        serialNumber:   serialNumber.trim(),
-        gunType,
-        manufacturer:   manufacturer.trim() || null,
-        calibre:        calibre.trim() || null,
-        condition,
-        currentBullets: Number(bullets) || 0,
-        notes:          notes.trim() || null,
-      },
-      {
-        onSuccess: () => { showToast(`Gun ${serialNumber.trim()} registered into the armoury`, 'success'); onClose(); },
+    const body = {
+      serialNumber: serialNumber.trim(),
+      gunType:      gunType as never,
+      ownership:    ownership as never,
+      manufacturer: manufacturer.trim() || null,
+      condition,
+      totalBullets: Number(bullets) || 0,
+      notes:        notes.trim() || null,
+    };
+    const done = (verb: string) => {
+      showToast(`Gun ${serialNumber.trim()} ${verb}`, 'success');
+      onClose();
+    };
+    if (editing) {
+      update.mutate({ id: gun!.id, body }, {
+        onSuccess: () => done('updated'),
+        onError:   (err) => setError(getApiErrorMessage(err, 'Could not update the gun.')),
+      });
+    } else {
+      register.mutate(body, {
+        onSuccess: () => done('registered into the armoury'),
         onError:   (err) => setError(getApiErrorMessage(err, 'Could not register the gun.')),
-      },
-    );
+      });
+    }
   };
 
   return (
     <Modal show onHide={onClose} centered>
       <Modal.Header closeButton>
-        <Modal.Title style={{ fontSize: '1.05rem' }}>🔫 Register New Gun</Modal.Title>
+        <Modal.Title style={{ fontSize: '1.05rem' }}>
+          {editing ? `🔫 Edit Gun — ${gun!.systemId ?? gun!.serialNumber}` : '🔫 Register New Gun'}
+        </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <Alert variant="danger" className="py-2 small">{error}</Alert>}
@@ -100,7 +147,8 @@ function RegisterGunModal({ onClose }: { onClose: () => void }) {
           <Col sm={5}>
             <Form.Label className="fw-bold small">Gun Type <span className="text-danger">*</span></Form.Label>
             <Form.Select value={gunType} onChange={(e) => setGunType(e.target.value)}>
-              {GUN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              {legacyType && <option value={legacyType}>{legacyType} (retired type)</option>}
+              {GUN_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Form.Select>
           </Col>
         </Row>
@@ -111,12 +159,40 @@ function RegisterGunModal({ onClose }: { onClose: () => void }) {
             <Form.Control value={manufacturer} maxLength={100} placeholder="e.g. Kalashnikov"
               onChange={(e) => setManufacturer(e.target.value)} />
           </Col>
-          <Col sm={6}>
-            <Form.Label className="fw-bold small">Calibre</Form.Label>
-            <Form.Control value={calibre} maxLength={40} placeholder="e.g. 7.62mm"
-              onChange={(e) => setCalibre(e.target.value)} />
-          </Col>
         </Row>
+
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-bold small">Ownership <span className="text-danger">*</span></Form.Label>
+          <div className="d-flex gap-2">
+            {GUN_OWNERSHIP.map((o) => {
+              const active = ownership === o.value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setOwnership(o.value)}
+                  style={{
+                    flex: 1, textAlign: 'left', padding: '10px 12px',
+                    border: `2px solid ${active ? o.colour : '#ced4da'}`,
+                    borderRadius: '0.5rem',
+                    background: active ? `${o.colour}14` : 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: '1.15rem' }}>{o.icon}</div>
+                  <div style={{ fontWeight: 700, color: o.colour, fontSize: '0.85rem' }}>{o.label}</div>
+                  <div className="text-muted" style={{ fontSize: '0.72rem' }}>{o.description}</div>
+                </button>
+              );
+            })}
+          </div>
+          {ownershipCfg && (
+            <Form.Text className="text-muted">
+              Licence fee of UGX {ownershipCfg.fee.toLocaleString()} {ownershipCfg.periodLabel} is
+              set from this — it is not entered here.
+            </Form.Text>
+          )}
+        </Form.Group>
 
         <Row className="g-2 mb-3">
           <Col sm={6}>
@@ -126,7 +202,7 @@ function RegisterGunModal({ onClose }: { onClose: () => void }) {
             </Form.Select>
           </Col>
           <Col sm={6}>
-            <Form.Label className="fw-bold small">Rounds held</Form.Label>
+            <Form.Label className="fw-bold small">Total bullets <span className="text-danger">*</span></Form.Label>
             <Form.Control
               type="number" min={0} value={bullets}
               onChange={(e) => setBullets(e.target.value === '' ? '' : Number(e.target.value))}
@@ -141,11 +217,11 @@ function RegisterGunModal({ onClose }: { onClose: () => void }) {
         </Form.Group>
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="outline-secondary" onClick={onClose} disabled={register.isPending}>Cancel</Button>
-        <Button style={{ background: NAVY, borderColor: NAVY }} onClick={submit} disabled={register.isPending}>
-          {register.isPending
-            ? <><Spinner as="span" size="sm" animation="border" className="me-1" /> Registering…</>
-            : 'Register Gun'}
+        <Button variant="outline-secondary" onClick={onClose} disabled={pending}>Cancel</Button>
+        <Button style={{ background: NAVY, borderColor: NAVY }} onClick={submit} disabled={pending}>
+          {pending
+            ? <><Spinner as="span" size="sm" animation="border" className="me-1" /> Saving…</>
+            : editing ? 'Save Changes' : 'Register Gun'}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -170,12 +246,34 @@ function GunHistoryModal({ gunId, onClose }: { gunId: string; onClose: () => voi
         ) : (
           <>
             <Row className="g-2 mb-3">
-              <Col sm={3}><div className="text-muted small">Type</div><div className="fw-bold">{gun.gunType}</div></Col>
-              <Col sm={3}><div className="text-muted small">Calibre</div><div>{gun.calibre ?? '—'}</div></Col>
+              <Col sm={3}><div className="text-muted small">Type</div><div className="fw-bold">{gun.gunTypeLabel}</div></Col>
+              <Col sm={3}><div className="text-muted small">Ownership</div><div>{ownershipCell(gun)}</div></Col>
               <Col sm={3}><div className="text-muted small">Condition</div><div>{conditionBadge(gun.condition)}</div></Col>
               <Col sm={3}>
                 <div className="text-muted small">Currently at</div>
                 <div className="fw-bold">{gun.currentSiteName ?? ARMOURY_LABEL}</div>
+              </Col>
+            </Row>
+
+            <Row className="g-2 mb-3 align-items-end">
+              <Col xs={4}>
+                <div className="text-muted small">Issued with</div>
+                <div className="fw-bold" style={{ fontSize: '1.1rem' }}>{gun.totalBullets}</div>
+              </Col>
+              <Col xs={4}>
+                <div className="text-muted small">Holding now</div>
+                <div className="fw-bold" style={{ fontSize: '1.1rem', color: bulletColour(gun) }}>
+                  {gun.currentBullets}
+                </div>
+              </Col>
+              <Col xs={4}>
+                <div className="text-muted small mb-1">Rounds remaining</div>
+                <div style={{ background: '#e9ecef', borderRadius: 10, height: 8, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${bulletPct(gun)}%`, height: '100%',
+                    background: bulletColour(gun), borderRadius: 10,
+                  }} />
+                </div>
               </Col>
             </Row>
 
@@ -423,6 +521,11 @@ function MovementForm({ kind, guns }: { kind: MovementKind; guns: GunResponse[] 
 export default function GunManagementPage() {
   const navigate = useNavigate();
   const [showRegister, setShowRegister] = useState(false);
+  const [editingGun,  setEditingGun]  = useState<GunResponse | null>(null);
+  const [deletingGun, setDeletingGun] = useState<GunResponse | null>(null);
+  const canWrite = useHasPermission('guns.register');
+  const { showToast } = useToast();
+  const removeGun = useDeleteGun();
   const [historyGunId, setHistoryGunId] = useState<string | null>(null);
 
   const { data: guns = [], isLoading }       = useGuns();
@@ -500,29 +603,45 @@ export default function GunManagementPage() {
                     <Table striped size="sm" className="small">
                       <thead className="table-light">
                         <tr>
-                          <th>Serial</th><th>Type</th><th>Calibre</th>
+                          <th>ID</th><th>Serial</th><th>Type</th><th>Ownership</th>
                           <th>Condition</th><th>Location</th>
-                          <th className="text-center">Rounds</th><th>Status</th>
+                          <th className="text-center">Rounds</th><th>Status</th><th />
                         </tr>
                       </thead>
                       <tbody>
                         {guns.length === 0 ? (
-                          <tr><td colSpan={7} className="text-center text-muted py-4">
+                          <tr><td colSpan={9} className="text-center text-muted py-4">
                             No guns registered yet.
                           </td></tr>
                         ) : guns.map((g) => (
                           <tr key={g.id} style={{ cursor: 'pointer' }} onClick={() => setHistoryGunId(g.id)}>
+                            <td className="text-muted" style={{ fontSize: '0.72rem' }}>{g.systemId ?? '—'}</td>
                             <td><code style={SERIAL}>{g.serialNumber}</code></td>
-                            <td>{g.gunType}</td>
-                            <td>{g.calibre ?? '—'}</td>
+                            <td>{g.gunTypeLabel}</td>
+                            <td>{ownershipCell(g)}</td>
                             <td>{conditionBadge(g.condition)}</td>
                             <td>{g.currentSiteName ?? ARMOURY_LABEL}</td>
-                            <td className="text-center">{g.currentBullets}</td>
+                            <td className="text-center">
+                              <div className="fw-semibold">{g.currentBullets}</div>
+                              {g.currentBullets !== g.totalBullets && (
+                                <div className="text-muted" style={{ fontSize: '0.68rem' }}>of {g.totalBullets}</div>
+                              )}
+                            </td>
                             <td>
                               <Badge bg={g.status === GUN_STATUSES.IN_ARMOURY ? 'success' : 'primary'}
                                 style={{ fontSize: '0.68rem' }}>
                                 {g.status.replace(/_/g, ' ')}
                               </Badge>
+                            </td>
+                            <td onClick={(e) => e.stopPropagation()}>
+                              {canWrite && g.status !== GUN_STATUSES.DEPLOYED && (
+                                <div className="d-flex gap-1">
+                                  <Button size="sm" variant="outline-secondary"
+                                    title="Edit" onClick={() => setEditingGun(g)}>✏️</Button>
+                                  <Button size="sm" variant="outline-danger"
+                                    title="Remove" onClick={() => setDeletingGun(g)}>🗑️</Button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -575,7 +694,51 @@ export default function GunManagementPage() {
         </Card.Body>
       </Card>
 
-      {showRegister  && <RegisterGunModal onClose={() => setShowRegister(false)} />}
+      {showRegister && <GunFormModal onClose={() => setShowRegister(false)} />}
+      {editingGun   && <GunFormModal gun={editingGun} onClose={() => setEditingGun(null)} />}
+
+      {deletingGun && (
+        <Modal show onHide={() => setDeletingGun(null)} centered>
+          <Modal.Header closeButton>
+            <Modal.Title style={{ fontSize: '1.05rem' }}>Remove gun</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <p className="mb-2">
+              Remove <strong>{deletingGun.systemId ?? deletingGun.serialNumber}</strong>
+              {' '}(serial <code>{deletingGun.serialNumber}</code>) from the armoury?
+            </p>
+            <Alert variant="light" className="border small mb-0">
+              A gun that has been deployed carries movement records — the armoury's account of
+              where it has been. That history is kept: the gun is retired rather than deleted,
+              so it leaves the inventory but stays answerable for. A gun that has never moved
+              is deleted outright.
+            </Alert>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={() => setDeletingGun(null)}
+              disabled={removeGun.isPending}>Cancel</Button>
+            <Button variant="danger" disabled={removeGun.isPending}
+              onClick={() => removeGun.mutate(deletingGun.id, {
+                onSuccess: (r) => {
+                  showToast(
+                    r.retired
+                      ? `${deletingGun.serialNumber} retired — its movement history was kept.`
+                      : `${deletingGun.serialNumber} deleted.`,
+                    'success',
+                  );
+                  setDeletingGun(null);
+                },
+                onError: (err) => {
+                  showToast(getApiErrorMessage(err, 'Could not remove the gun.'), 'danger');
+                  setDeletingGun(null);
+                },
+              })}
+            >
+              {removeGun.isPending ? 'Removing…' : 'Remove'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
       {historyGunId  && <GunHistoryModal gunId={historyGunId} onClose={() => setHistoryGunId(null)} />}
     </div>
   );

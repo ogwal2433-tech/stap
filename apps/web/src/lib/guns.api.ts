@@ -1,7 +1,7 @@
 import api from './api';
 import type {
   GunResponse, GunWithHistory, GunMovementResponse, GunInventoryRow,
-  RegisterGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
+  RegisterGunInput, UpdateGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
 } from '@stap/shared';
 
 export const gunsApi = {
@@ -20,6 +20,19 @@ export const gunsApi = {
   movements(params?: { gunId?: string; movementType?: string; limit?: number }): Promise<GunMovementResponse[]> {
     return api
       .get<{ success: boolean; data: GunMovementResponse[] }>('/guns/movements', { params })
+      .then((r) => r.data.data);
+  },
+
+  update(id: string, body: UpdateGunInput): Promise<GunResponse> {
+    return api
+      .patch<{ success: boolean; data: GunResponse }>(`/guns/${id}`, body)
+      .then((r) => r.data.data);
+  },
+
+  /** `retired` when the gun had a movement history and was kept instead. */
+  remove(id: string): Promise<{ deleted: boolean; retired: boolean }> {
+    return api
+      .delete<{ success: boolean; data: { deleted: boolean; retired: boolean } }>(`/guns/${id}`)
       .then((r) => r.data.data);
   },
 

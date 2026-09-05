@@ -51,12 +51,15 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { gunService } from '../services/gunService';
 import {
   ROLES,
   RegisterGunSchema,
+  UpdateGunSchema,
   DeployGunSchema,
   WithdrawGunSchema,
   TransferGunSchema,
@@ -147,11 +150,32 @@ router.post(
 
 router.post(
   '/',
-  requireRole(...GUN_WRITE_ROLES),
+  requirePermission(PERMISSIONS.GUNS_REGISTER),
   validate(RegisterGunSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const data = await gunService.registerGun(req.body, req.user!.userId);
     res.status(201).json({ success: true, data });
+  }),
+);
+
+// PATCH /guns/:id — edit registration details
+router.patch(
+  '/:id',
+  requirePermission(PERMISSIONS.GUNS_REGISTER),
+  validate(UpdateGunSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await gunService.updateGun(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+// DELETE /guns/:id — removes it, or retires it when it has a movement history
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.GUNS_REGISTER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await gunService.deleteGun(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
   }),
 );
 
