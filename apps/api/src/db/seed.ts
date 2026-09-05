@@ -23,47 +23,62 @@ const SALT_ROUNDS = 12;
 /**
  * Gives a system ID to rows that predate the scheme.
  *
- * Numbering restarts from the highest ID already issued, not from 1. Starting
- * at 1 meant the second run collided with the first on a unique constraint and
- * aborted the whole seed — so a database that had ever been seeded, then gained
- * one row without an ID, could not be seeded again.
+ * Numbering continues past the highest ID already issued rather than restarting
+ * at 1, and skips any number already taken. Restarting at 1 meant a second run
+ * collided on the unique constraint and aborted the whole seed, which in QA
+ * takes the API down with it: the entrypoint runs the seed before the server,
+ * under `set -e`, so a colliding ID becomes a container restart loop.
+ *
+ * Skipping taken numbers as well as counting past the maximum covers the case
+ * the maximum alone does not — a gap-filled or hand-edited sequence, where the
+ * next number up is free but a later one is not.
  */
 async function backfillSystemIds() {
   console.log('📋 Backfilling system IDs...');
 
-  /** Highest number already used for a prefix, so numbering continues past it. */
-  const highest = async (
-    rows: Array<{ systemId: string | null }>,
+  /**
+   * Assigns IDs to the rows that have none, from the rows already read — no
+   * extra queries, and every taken ID is known before the first write.
+   */
+  async function backfill<T extends { id: string; systemId: string | null }>(
+    rows:   T[],
     prefix: string,
-  ): Promise<number> =>
-    rows.reduce((max, r) => {
+    update: (id: string, systemId: string) => Promise<unknown>,
+    label:  string,
+  ): Promise<void> {
+    const taken = new Set(rows.map((r) => r.systemId).filter(Boolean) as string[]);
+    const missing = rows.filter((r) => !r.systemId);
+    if (!missing.length) return;
+
+    let n = rows.reduce((max, r) => {
       const m = r.systemId?.match(new RegExp(`^${prefix}(\\d+)$`));
       return m ? Math.max(max, parseInt(m[1], 10)) : max;
     }, 0);
 
-  const guardRows = await prisma.guard.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
-  let n = await highest(guardRows, 'SSLG');
-  const guards = guardRows.filter((g) => !g.systemId);
-  for (const g of guards) {
-    await prisma.guard.update({ where: { id: g.id }, data: { systemId: fmtId('SSLG', ++n) } });
+    for (const row of missing) {
+      let candidate = fmtId(prefix, ++n);
+      while (taken.has(candidate)) candidate = fmtId(prefix, ++n);
+      taken.add(candidate);
+      await update(row.id, candidate);
+    }
+    console.log(`✅ Backfilled ${missing.length} ${label}`);
   }
-  if (guards.length) console.log(`✅ Backfilled ${guards.length} guard IDs`);
 
-  const clientRows = await prisma.client.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
-  n = await highest(clientRows, 'SSLC');
-  const clients = clientRows.filter((c) => !c.systemId);
-  for (const c of clients) {
-    await prisma.client.update({ where: { id: c.id }, data: { systemId: fmtId('SSLC', ++n) } });
-  }
-  if (clients.length) console.log(`✅ Backfilled ${clients.length} client IDs`);
+  const order = { orderBy: { createdAt: 'asc' } } as const;
+  const select = { id: true, systemId: true } as const;
 
-  const userRows = await prisma.user.findMany({ select: { id: true, systemId: true }, orderBy: { createdAt: 'asc' } });
-  n = await highest(userRows, 'SSLS');
-  const users = userRows.filter((u) => !u.systemId);
-  for (const u of users) {
-    await prisma.user.update({ where: { id: u.id }, data: { systemId: fmtId('SSLS', ++n) } });
-  }
-  if (users.length) console.log(`✅ Backfilled ${users.length} user IDs`);
+  await backfill(
+    await prisma.guard.findMany({ select, ...order }), 'SSLG',
+    (id, systemId) => prisma.guard.update({ where: { id }, data: { systemId } }), 'guard IDs',
+  );
+  await backfill(
+    await prisma.client.findMany({ select, ...order }), 'SSLC',
+    (id, systemId) => prisma.client.update({ where: { id }, data: { systemId } }), 'client IDs',
+  );
+  await backfill(
+    await prisma.user.findMany({ select, ...order }), 'SSLS',
+    (id, systemId) => prisma.user.update({ where: { id }, data: { systemId } }), 'user IDs',
+  );
 }
 
 async function main() {

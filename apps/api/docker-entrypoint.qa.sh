@@ -18,9 +18,11 @@ cd /app/apps/api
 # healthchecks, so both are already accepting connections.
 
 echo "🗄️  Running database migrations..."
-npx prisma migrate resolve \
-  --rolled-back 20260602000001_fix_shift_type_enum \
-  --schema /app/apps/api/prisma/schema.prisma 2>/dev/null || true
+# The one-time unblock for 20260602000001 that used to sit here is gone, for
+# the reason it was removed from the production entrypoint: that migration
+# rewrites any shiftType it does not recognise to 'DAY' and converts the columns
+# back to an enum. Since 20260829000002 those columns hold configurable codes,
+# so clearing and re-running it would flatten every custom shift on the roster.
 npx prisma migrate deploy --schema /app/apps/api/prisma/schema.prisma
 echo "✅ Migrations complete"
 

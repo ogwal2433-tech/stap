@@ -38,7 +38,12 @@ services:
     # Not published to the host: reach it with `pnpm qa:shell:db`. Publishing
     # would put a second Postgres on the host's port range next to production.
     healthcheck:
-      test:         ["CMD-SHELL", "pg_isready -U ${QA_POSTGRES_USER:-s360_qa}"]
+      # -d as well as -U: without it pg_isready probes a database named after
+      # the user, so every probe logged `FATAL: database "s360_qa" does not
+      # exist` against a server whose database is called something else. It
+      # still exited 0 — a FATAL proves the server is up — so the check passed
+      # while filling the log with a failure that was not real.
+      test:         ["CMD-SHELL", "pg_isready -U ${QA_POSTGRES_USER:-s360_qa} -d ${QA_POSTGRES_DB:-s360_qa}"]
       interval:     10s
       timeout:      5s
       retries:      5
