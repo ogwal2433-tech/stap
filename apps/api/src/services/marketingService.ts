@@ -376,6 +376,19 @@ class MarketingService {
           // Standard terms; Finance adjusts on the client record afterwards.
           billingTerms:    30,
           leadStatus:      'CONVERTED',
+          // The prospect's contact becomes the client's primary contact row as
+          // well as its denormalised columns. A client converted from a prospect
+          // would otherwise be the one kind of client with an empty contacts
+          // list, since the backfill only ran over clients that already existed.
+          contacts: {
+            create: {
+              contactType: 'PRIMARY',
+              name:        prospect.contactName!,
+              phone:       prospect.contactPhone,
+              email:       prospect.contactEmail,
+              isPrimary:   true,
+            },
+          },
         },
       });
       await tx.prospectiveClient.update({

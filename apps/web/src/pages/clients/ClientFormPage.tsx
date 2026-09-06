@@ -5,10 +5,12 @@ import {
 } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateClientSchema, LEAD_SOURCES, LEAD_STATUSES } from '@stap/shared';
+import { ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES } from '@stap/shared';
 import { useClient, useCreateClient, useUpdateClient } from '../../hooks/useClients';
+import ContactsEditor from '../../components/clients/ContactsEditor';
+import { emptyContact, type ContactDraft } from '../../components/clients/ContactFields';
 import { useToast } from '../../context/ToastContext';
-import type { CreateClientInput } from '@stap/shared';
+import type { ClientFormInput, CreateClientInput } from '@stap/shared';
 
 const QUICK_TERMS = [7, 14, 30, 45, 60];
 
@@ -22,6 +24,8 @@ export default function ClientFormPage() {
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
 
+  const [contacts, setContacts] = useState<ContactDraft[]>([emptyContact(true)]);
+  const [contactsTouched, setContactsTouched] = useState(false);
   const [sameAddress, setSameAddress] = useState(false);
   const [vatRegistered, setVatRegistered] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -33,8 +37,8 @@ export default function ClientFormPage() {
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<CreateClientInput>({
-    resolver: zodResolver(CreateClientSchema),
+  } = useForm<ClientFormInput>({
+    resolver: zodResolver(ClientFormSchema),
     defaultValues: { contractStatus: 'ACTIVE', billingTerms: 30, leadStatus: 'CONVERTED', vatRegistered: false },
   });
 
@@ -60,6 +64,24 @@ export default function ClientFormPage() {
         referredBy:      existing.referredBy ?? undefined,
         leadStatus:      existing.leadStatus ?? 'CONVERTED',
       });
+
+      // Falls back to the denormalised pair for a client saved before contacts
+      // existed and somehow missed the backfill — an empty editor would look
+      // like the client has no contact when the record plainly names one.
+      const loaded = (existing.contacts ?? []).map((c) => ({
+        contactType: c.contactType,
+        name:        c.name,
+        phone:       c.phone ?? '',
+        email:       c.email ?? '',
+        jobTitle:    c.jobTitle ?? '',
+        isPrimary:   c.isPrimary,
+        notes:       c.notes ?? '',
+      }));
+      setContacts(
+        loaded.length > 0
+          ? loaded
+          : [{ ...emptyContact(true), name: existing.contactPerson, phone: existing.contactPhone }],
+      );
     }
   }, [existing, reset]);
 
@@ -69,15 +91,43 @@ export default function ClientFormPage() {
     }
   }, [sameAddress, physicalAddress, setValue]);
 
-  const onSubmit = async (data: CreateClientInput) => {
+  /** Contacts with a name typed in. A blank card the user never filled is not one. */
+  const filledContacts = contacts.filter((c) => c.name.trim());
+
+  const onSubmit = async (data: ClientFormInput) => {
+    setContactsTouched(true);
+    if (filledContacts.length === 0) {
+      setApiError('Add at least one contact person for this client.');
+      return;
+    }
     setApiError(null);
+
+    const primary = filledContacts.find((c) => c.isPrimary) ?? filledContacts[0];
+    const payload: CreateClientInput = {
+      ...data,
+      // The API keeps these two columns as the denormalised primary — invoices
+      // and MoMo disbursement read them — so they are derived here rather than
+      // asked for twice.
+      contactPerson: primary.name.trim(),
+      contactPhone:  primary.phone.trim(),
+      contacts:      filledContacts.map((c) => ({
+        ...c,
+        isPrimary: c === primary,
+      })),
+    };
+
     try {
       if (isEdit && id) {
-        await updateClient.mutateAsync({ id, data });
+        // Contacts are managed from the client detail page, where each one can
+        // be added, edited or removed individually. Sending the array here would
+        // have to mean "replace them all", which is how the previous edit path
+        // destroyed data it never loaded.
+        const { contacts: _omit, ...clientFields } = payload;
+        await updateClient.mutateAsync({ id, data: clientFields });
         showToast('Client updated', 'success');
         navigate(`/clients/${id}`);
       } else {
-        const created = await createClient.mutateAsync(data);
+        const created = await createClient.mutateAsync(payload);
         showToast('Client created', 'success');
         navigate(`/clients/${created.id}`);
       }
@@ -192,32 +242,9 @@ export default function ClientFormPage() {
             <Row className="g-3">
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Contact Person <span className="text-danger">*</span></Form.Label>
-                  <Form.Control
-                    {...register('contactPerson')}
-                    isInvalid={!!errors.contactPerson}
-                    placeholder="e.g. James Sserwanga"
-                  />
-                  <Form.Control.Feedback type="invalid">{errors.contactPerson?.message}</Form.Control.Feedback>
-                </Form.Group>
-              </Col>
-
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Contact Phone <span className="text-danger">*</span></Form.Label>
-                  <Form.Control
-                    type="tel"
-                    {...register('contactPhone')}
-                    isInvalid={!!errors.contactPhone}
-                    placeholder="+256…"
-                  />
-                  <Form.Control.Feedback type="invalid">{errors.contactPhone?.message}</Form.Control.Feedback>
-                </Form.Group>
-              </Col>
-
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Email <span className="text-muted small">(optional)</span></Form.Label>
+                  <Form.Label>
+                    Company Email <span className="text-muted small">(optional)</span>
+                  </Form.Label>
                   <Form.Control
                     type="email"
                     {...register('email')}
@@ -225,9 +252,33 @@ export default function ClientFormPage() {
                     placeholder="e.g. security@company.go.ug"
                   />
                   <Form.Control.Feedback type="invalid">{errors.email?.message}</Form.Control.Feedback>
+                  <Form.Text className="text-muted">
+                    The company's own address. Each contact person can have their own below.
+                  </Form.Text>
                 </Form.Group>
               </Col>
             </Row>
+
+            <hr className="my-4" />
+
+            {/*
+              This replaces the single Contact Person / Contact Phone pair. The
+              primary contact below is written back to those two fields, so
+              nothing that reads them changes — but a client with a manager, an
+              accounts officer and an operations lead can now hold all three.
+            */}
+            <ContactsEditor
+              contacts={contacts}
+              onChange={setContacts}
+              disabled={isSubmitting}
+              showErrors={contactsTouched}
+            />
+            {isEdit && (
+              <div className="text-muted" style={{ fontSize: '0.74rem', marginTop: 4 }}>
+                Contacts are saved from the client's page — use Contact Persons there to
+                add, edit or remove them.
+              </div>
+            )}
           </Card.Body>
         </Card>
 

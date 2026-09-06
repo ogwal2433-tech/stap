@@ -13,6 +13,7 @@ import IncidentFormModal from '../../components/clients/IncidentFormModal';
 import ContractFormModal from '../../components/clients/ContractFormModal';
 import AmendContractModal from '../../components/clients/AmendContractModal';
 import ContractHistory from '../../components/clients/ContractHistory';
+import ClientContacts from '../../components/clients/ClientContacts';
 import PermissionGuard from '../../components/PermissionGuard';
 import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
@@ -20,7 +21,7 @@ import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
-import { useHasPermission } from '../../context/AuthContext';
+import { useAuth, useHasPermission } from '../../context/AuthContext';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -62,6 +63,11 @@ const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGE
 
 export default function ClientDetailPage() {
   const canSeeContracts = useHasPermission('contracts.view');
+  const { user } = useAuth();
+  // The same list the Edit Client button uses, and the same one the contact
+  // endpoints enforce — contacts are part of the client, not a separate thing
+  // to hold a separate opinion about.
+  const canEditClient = CLIENT_WRITE_ROLES.includes(user?.role as UserRole);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -192,7 +198,12 @@ export default function ClientDetailPage() {
                   </span>
                 )}
               </div>
-              <div className="text-muted small">{client.contactPerson}</div>
+              <div className="text-muted small">
+                {client.contactPerson}
+                <span style={{ fontSize: '0.68rem', color: '#adb5bd', marginLeft: 6 }}>
+                  primary contact
+                </span>
+              </div>
               <div className="text-muted small">{client.contactPhone}</div>
               {client.email && <div className="text-muted small">{client.email}</div>}
             </Col>
@@ -272,6 +283,8 @@ export default function ClientDetailPage() {
               </Row>
             </Card.Body>
           </Card>
+
+          <ClientContacts clientId={id ?? ''} canEdit={canEditClient} />
 
           <Card className="border-0 shadow-sm">
             <Card.Header className="bg-white small fw-semibold text-muted">Lead Information</Card.Header>

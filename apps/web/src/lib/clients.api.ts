@@ -1,5 +1,7 @@
 import api from './api';
 import type {
+  ClientContactInput,
+  ClientContactResponse,
   ClientResponse,
   ClientSummary,
   SiteResponse,
@@ -43,6 +45,36 @@ export const clientsApi = {
     return api
       .patch<{ success: boolean; data: ClientResponse }>(`/clients/${id}/archive`)
       .then((r) => r.data.data);
+  },
+
+  // ── Contact persons ────────────────────────────────────────────────────────
+
+  contacts(clientId: string): Promise<ClientContactResponse[]> {
+    return api
+      .get<{ success: boolean; data: ClientContactResponse[] }>(`/clients/${clientId}/contacts`)
+      .then((r) => r.data.data);
+  },
+
+  addContact(clientId: string, data: ClientContactInput): Promise<ClientContactResponse> {
+    return api
+      .post<{ success: boolean; data: ClientContactResponse }>(`/clients/${clientId}/contacts`, data)
+      .then((r) => r.data.data);
+  },
+
+  updateContact(
+    clientId: string,
+    contactId: string,
+    data: Partial<ClientContactInput>,
+  ): Promise<ClientContactResponse> {
+    return api
+      .patch<{ success: boolean; data: ClientContactResponse }>(
+        `/clients/${clientId}/contacts/${contactId}`, data,
+      )
+      .then((r) => r.data.data);
+  },
+
+  deleteContact(clientId: string, contactId: string): Promise<void> {
+    return api.delete(`/clients/${clientId}/contacts/${contactId}`).then(() => undefined);
   },
 
   getSummary(): Promise<ClientSummary> {

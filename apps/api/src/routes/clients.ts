@@ -102,6 +102,7 @@ import {
   INTERNAL_ROLES,
   DEPLOYMENT_ROLES,
   ClientListQuerySchema,
+  ClientContactSchema,
   CreateClientSchema,
   UpdateClientSchema,
   CreateSiteSchema,
@@ -285,6 +286,58 @@ router.patch(
   asyncHandler(async (req, res) => {
     const client = await clientService.update(req.params.id, req.body, req.user!.userId);
     res.status(200).json({ success: true, data: client });
+  }),
+);
+
+// ── Contact persons ───────────────────────────────────────────────────────────
+//
+// Gated exactly as the client itself is: contacts are client fields that grew
+// into rows, so whoever may edit a client may edit its contacts. PERMISSIONS
+// .CLIENTS_EDIT exists but currently gates nothing, and is held by a narrower
+// set than CLIENT_WRITE_ROLES — using it here would let Marketing Head create a
+// client with contacts and then be unable to add one to it.
+
+// ── GET /:id/contacts — list a client's contacts ──────────────────────────────
+router.get(
+  '/:id/contacts',
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
+  asyncHandler(async (req, res) => {
+    const contacts = await clientService.listContacts(req.params.id);
+    res.status(200).json({ success: true, data: contacts });
+  }),
+);
+
+// ── POST /:id/contacts — add a contact ────────────────────────────────────────
+router.post(
+  '/:id/contacts',
+  requireRole(...CLIENT_WRITE_ROLES),
+  validate(ClientContactSchema),
+  asyncHandler(async (req, res) => {
+    const contact = await clientService.addContact(req.params.id, req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: contact });
+  }),
+);
+
+// ── PATCH /:id/contacts/:contactId — edit a contact ───────────────────────────
+router.patch(
+  '/:id/contacts/:contactId',
+  requireRole(...CLIENT_WRITE_ROLES),
+  validate(ClientContactSchema.partial()),
+  asyncHandler(async (req, res) => {
+    const contact = await clientService.updateContact(
+      req.params.id, req.params.contactId, req.body, req.user!.userId,
+    );
+    res.status(200).json({ success: true, data: contact });
+  }),
+);
+
+// ── DELETE /:id/contacts/:contactId — remove a contact ────────────────────────
+router.delete(
+  '/:id/contacts/:contactId',
+  requireRole(...CLIENT_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    await clientService.deleteContact(req.params.id, req.params.contactId, req.user!.userId);
+    res.status(200).json({ success: true, message: 'Contact removed' });
   }),
 );
 

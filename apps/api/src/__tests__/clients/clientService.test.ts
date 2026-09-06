@@ -14,6 +14,18 @@ vi.mock('../../db/prisma', () => ({
     },
     contract: { count: vi.fn() },
     clientComplaint: { count: vi.fn() },
+    clientContact: {
+      findFirst:  vi.fn(),
+      findMany:   vi.fn(),
+      count:      vi.fn(),
+      create:     vi.fn(),
+      update:     vi.fn(),
+      updateMany: vi.fn(),
+      delete:     vi.fn(),
+    },
+    // generateClientId() reads the highest existing SSLC number through raw SQL.
+    $queryRaw:    vi.fn(),
+    $transaction: vi.fn(),
   },
 }));
 
@@ -35,6 +47,17 @@ const mockPrisma = prisma as unknown as {
   };
   contract: { count: ReturnType<typeof vi.fn> };
   clientComplaint: { count: ReturnType<typeof vi.fn> };
+  clientContact: {
+    findFirst:  ReturnType<typeof vi.fn>;
+    findMany:   ReturnType<typeof vi.fn>;
+    count:      ReturnType<typeof vi.fn>;
+    create:     ReturnType<typeof vi.fn>;
+    update:     ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+    delete:     ReturnType<typeof vi.fn>;
+  };
+  $queryRaw:    ReturnType<typeof vi.fn>;
+  $transaction: ReturnType<typeof vi.fn>;
 };
 
 const baseClient = {
@@ -49,11 +72,23 @@ const baseClient = {
   contractStatus: 'ACTIVE' as const,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-01'),
+  contacts: [
+    {
+      id: 'cc1', clientId: 'c1', contactType: 'PRIMARY', name: 'James Sserwanga',
+      phone: '+256414123456', email: null, jobTitle: 'Head of Security',
+      isPrimary: true, notes: null,
+      createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'),
+    },
+  ],
   _count: { sites: 2, contracts: 1, complaints: 0 },
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockPrisma.$queryRaw.mockResolvedValue([{ max_num: 0 }]);
+  // The contact writes run inside a transaction; the callback is handed the same
+  // mock client so the assertions can see what it was asked to do.
+  mockPrisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(mockPrisma));
 });
 
 // ── list() ─────────────────────────────────────────────────────────────────────
@@ -142,6 +177,174 @@ describe('clientService.create()', () => {
     expect(QueueService.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'CLIENT_CREATED' }),
     );
+  });
+  it('stores a blank email as null rather than an empty string', async () => {
+    mockPrisma.client.create.mockResolvedValue({ ...baseClient, email: null });
+
+    await clientService.create({ ...input, email: '' }, 'user1');
+
+    expect(mockPrisma.client.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ email: null }) }),
+    );
+  });
+
+  it('creates a primary contact from contactPerson when no contacts are given', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+
+    await clientService.create(input, 'user1');
+
+    const { data } = mockPrisma.client.create.mock.calls[0][0];
+    expect(data.contacts.create).toEqual([
+      expect.objectContaining({
+        name:        'James Sserwanga',
+        phone:       '+256414123456',
+        contactType: 'PRIMARY',
+        isPrimary:   true,
+      }),
+    ]);
+  });
+
+  it('derives contactPerson and contactPhone from the primary contact', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+
+    await clientService.create(
+      {
+        clientName: 'Kampala Textile', physicalAddress: 'Industrial Area', billingTerms: 30,
+        contacts: [
+          { name: 'James Opio',   phone: '256701234567', contactType: 'PRIMARY',   isPrimary: true },
+          { name: 'Sarah Nakato', phone: '256709876543', contactType: 'SECONDARY', isPrimary: false },
+        ],
+      },
+      'user1',
+    );
+
+    const { data } = mockPrisma.client.create.mock.calls[0][0];
+    expect(data.contactPerson).toBe('James Opio');
+    expect(data.contactPhone).toBe('256701234567');
+    expect(data.contacts.create).toHaveLength(2);
+  });
+
+  it('makes the first contact primary when none is marked', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+
+    await clientService.create(
+      {
+        clientName: 'X', physicalAddress: 'Y', billingTerms: 30,
+        contacts: [{ name: 'First' }, { name: 'Second' }],
+      },
+      'user1',
+    );
+
+    const { create } = mockPrisma.client.create.mock.calls[0][0].data.contacts;
+    expect(create.map((c: { name: string; isPrimary: boolean }) => [c.name, c.isPrimary]))
+      .toEqual([['First', true], ['Second', false]]);
+  });
+
+  it('does not leave a second contact typed PRIMARY', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+
+    await clientService.create(
+      {
+        clientName: 'X', physicalAddress: 'Y', billingTerms: 30,
+        contacts: [
+          { name: 'A', contactType: 'PRIMARY', isPrimary: true },
+          { name: 'B', contactType: 'PRIMARY' },
+        ],
+      },
+      'user1',
+    );
+
+    const { create } = mockPrisma.client.create.mock.calls[0][0].data.contacts;
+    expect(create.map((c: { contactType: string }) => c.contactType)).toEqual(['PRIMARY', 'SECONDARY']);
+  });
+});
+
+// ── contacts ──────────────────────────────────────────────────────────────────
+
+describe('clientService contacts', () => {
+  const contact = {
+    id: 'cc2', clientId: 'c1', contactType: 'SECONDARY', name: 'Sarah Nakato',
+    phone: '256709876543', email: null, jobTitle: 'Finance Manager',
+    isPrimary: false, notes: null,
+    createdAt: new Date('2026-02-01'), updatedAt: new Date('2026-02-01'),
+  };
+
+  it('mirrors the promoted contact onto the client columns', async () => {
+    mockPrisma.clientContact.findFirst
+      .mockResolvedValueOnce({ ...contact, isPrimary: true }); // mirrorPrimary
+    mockPrisma.clientContact.findMany.mockResolvedValue([]);
+    mockPrisma.clientContact.update.mockResolvedValue({ ...contact, isPrimary: true });
+    mockPrisma.clientContact.findFirst.mockResolvedValue({ ...contact, isPrimary: true });
+
+    await clientService.updateContact('c1', 'cc2', { isPrimary: true }, 'user1');
+
+    expect(mockPrisma.client.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          contactPerson: 'Sarah Nakato',
+          contactPhone:  '256709876543',
+        }),
+      }),
+    );
+  });
+
+  it('retypes a demoted PRIMARY as SECONDARY', async () => {
+    mockPrisma.clientContact.findFirst.mockResolvedValue({ ...contact, isPrimary: true });
+    mockPrisma.clientContact.findMany.mockResolvedValue([
+      { id: 'cc1', contactType: 'PRIMARY', isPrimary: true },
+    ]);
+    mockPrisma.clientContact.update.mockResolvedValue({ ...contact, isPrimary: true });
+
+    await clientService.updateContact('c1', 'cc2', { isPrimary: true }, 'user1');
+
+    expect(mockPrisma.clientContact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cc1' },
+        data:  { isPrimary: false, contactType: 'SECONDARY' },
+      }),
+    );
+  });
+
+  it('leaves a demoted BILLING contact typed BILLING', async () => {
+    mockPrisma.clientContact.findFirst.mockResolvedValue({ ...contact, isPrimary: true });
+    mockPrisma.clientContact.findMany.mockResolvedValue([
+      { id: 'cc3', contactType: 'BILLING', isPrimary: true },
+    ]);
+    mockPrisma.clientContact.update.mockResolvedValue({ ...contact, isPrimary: true });
+
+    await clientService.updateContact('c1', 'cc2', { isPrimary: true }, 'user1');
+
+    expect(mockPrisma.clientContact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cc3' },
+        data:  { isPrimary: false, contactType: 'BILLING' },
+      }),
+    );
+  });
+
+  it('refuses to remove the only contact', async () => {
+    mockPrisma.clientContact.findFirst.mockResolvedValue(contact);
+    mockPrisma.clientContact.count.mockResolvedValue(1);
+
+    await expect(clientService.deleteContact('c1', 'cc2', 'user1'))
+      .rejects.toThrow(/only contact/i);
+    expect(mockPrisma.clientContact.delete).not.toHaveBeenCalled();
+  });
+
+  it('promotes the next contact when the primary is removed', async () => {
+    mockPrisma.clientContact.findFirst
+      .mockResolvedValueOnce({ ...contact, isPrimary: true })                 // the one being deleted
+      .mockResolvedValueOnce({ id: 'cc9', contactType: 'SECONDARY' })         // the next in line
+      .mockResolvedValueOnce({ ...contact, id: 'cc9', isPrimary: true });     // mirrorPrimary
+    mockPrisma.clientContact.count.mockResolvedValue(3);
+    mockPrisma.clientContact.delete.mockResolvedValue(contact);
+
+    await clientService.deleteContact('c1', 'cc2', 'user1');
+
+    expect(mockPrisma.clientContact.update).toHaveBeenCalledWith({
+      where: { id: 'cc9' },
+      data:  { isPrimary: true, contactType: 'PRIMARY' },
+    });
   });
 });
 

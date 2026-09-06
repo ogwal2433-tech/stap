@@ -524,6 +524,46 @@ model Client {
   serviceRequests ServiceRequest[]
   carryForwards   InvoiceCarryForward[]
   wonFromProspect ProspectiveClient?    @relation("ProspectConversion")
+  contacts        ClientContact[]
+}
+
+/// Everyone worth ringing at a client company.
+///
+/// A client is an organisation, and organisations do not have one contact —
+/// there is a manager who signs, an accounts person who pays, and an operations
+/// person who calls at 2am when a guard has not turned up. Holding only one of
+/// them meant the other numbers lived in someone's phone.
+///
+/// Client.contactPerson and Client.contactPhone are kept as the denormalised
+/// primary and mirrored from whichever row here is isPrimary. Invoices, the
+/// client portal and MoMo disbursement all read those two columns; repointing
+/// every one of them at a relation is a larger change than this, and a stale
+/// duplicate would be worse than a duplicate kept in step.
+model ClientContact {
+  id       String @id @default(cuid())
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  /// PRIMARY | SECONDARY | BILLING | OPERATIONS | OTHER
+  contactType String @default("PRIMARY")
+
+  name     String
+  phone    String?
+  email    String?
+  /// Their role at the client company, e.g. "Finance Manager".
+  jobTitle String?
+
+  /// At most one per client, enforced in the service rather than by a
+  /// constraint: a partial unique index cannot be expressed in Prisma schema.
+  isPrimary Boolean @default(false)
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, isPrimary])
 }
 
 model Site {

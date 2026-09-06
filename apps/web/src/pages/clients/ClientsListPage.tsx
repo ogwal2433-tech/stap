@@ -7,7 +7,7 @@ import {
 import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/useClients';
 import RoleGuard from '../../components/RoleGuard';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_STATUSES, type UserRole } from '@stap/shared';
+import { ROLES, LEAD_STATUSES, type ClientResponse, type UserRole } from '@stap/shared';
 
 const CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -17,6 +17,49 @@ const CONTRACT_BADGE: Record<string, string> = {
 
 const CLIENT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+
+/**
+ * The primary contact, with a count of the others.
+ *
+ * Falls back to the client's own contactPerson/contactPhone columns, which are
+ * kept in step with whichever contact is primary — a client saved before the
+ * contacts table existed still has those, and showing "no contact" next to a
+ * record that plainly names one would be wrong.
+ */
+function renderPrimaryContact(c: ClientResponse) {
+  const primary = c.contacts?.find((x) => x.isPrimary) ?? c.contacts?.[0];
+  const name    = primary?.name  ?? c.contactPerson;
+  const phone   = primary?.phone ?? c.contactPhone;
+  const others  = Math.max((c.contacts?.length ?? 0) - 1, 0);
+
+  if (!name) {
+    return (
+      <span style={{ color: '#adb5bd', fontStyle: 'italic', fontSize: '0.78rem' }}>
+        No contact added
+      </span>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontWeight: 500, fontSize: '0.82rem' }}>{name}</div>
+      {primary?.jobTitle && (
+        <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{primary.jobTitle}</div>
+      )}
+      {phone && <div style={{ fontSize: '0.7rem', color: '#1B3A6B' }}>📞 {phone}</div>}
+      {primary?.email && (
+        <div style={{ fontSize: '0.7rem', color: '#6c757d', wordBreak: 'break-all' }}>
+          ✉️ {primary.email}
+        </div>
+      )}
+      {others > 0 && (
+        <div style={{ fontSize: '0.65rem', color: '#adb5bd', marginTop: 2 }}>
+          +{others} more contact{others === 1 ? '' : 's'}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ClientsListPage() {
   const navigate = useNavigate();
@@ -164,7 +207,7 @@ export default function ClientsListPage() {
               <thead className="table-light">
                 <tr>
                   <th>Company</th>
-                  <th>Contact</th>
+                  <th>Primary Contact</th>
                   <th>Status</th>
                   <th>Sites</th>
                   <th>Complaints</th>
@@ -177,17 +220,14 @@ export default function ClientsListPage() {
                   <tr key={c.id}>
                     <td>
                       <div className="fw-semibold">{c.clientName}</div>
-                      <div className="text-muted small">{c.contactPerson}</div>
                       {c.systemId && (
                         <div style={{ fontSize: '0.72rem', color: '#0F7B6C', fontFamily: 'monospace', fontWeight: 600 }}>
                           {c.systemId}
                         </div>
                       )}
+                      {c.email && <div className="text-muted" style={{ fontSize: '0.72rem' }}>{c.email}</div>}
                     </td>
-                    <td>
-                      <div>{c.contactPhone}</div>
-                      {c.email && <div className="text-muted">{c.email}</div>}
-                    </td>
+                    <td>{renderPrimaryContact(c)}</td>
                     <td>
                       <Badge bg={CONTRACT_BADGE[c.contractStatus]}>{c.contractStatus}</Badge>
                     </td>

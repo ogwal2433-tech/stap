@@ -22,13 +22,73 @@ export const LEAD_STATUSES = {
 export type LeadSource = keyof typeof LEAD_SOURCES;
 export type LeadStatus = keyof typeof LEAD_STATUSES;
 
+// ── Contact persons ────────────────────────────────────────────────────────────
+
+export const CONTACT_TYPES = [
+  { value: 'PRIMARY',    label: 'Primary Contact',    icon: '⭐', colour: '#1B3A6B' },
+  { value: 'SECONDARY',  label: 'Secondary Contact',  icon: '👤', colour: '#0F7B6C' },
+  { value: 'BILLING',    label: 'Billing Contact',    icon: '💰', colour: '#1E8449' },
+  { value: 'OPERATIONS', label: 'Operations Contact', icon: '📋', colour: '#E8701A' },
+  { value: 'OTHER',      label: 'Other',              icon: '➕', colour: '#6c757d' },
+] as const;
+
+export const CONTACT_TYPE_VALUES = CONTACT_TYPES.map((t) => t.value) as
+  [ContactType, ...ContactType[]];
+
+export type ContactType = (typeof CONTACT_TYPES)[number]['value'];
+
+/** Falls back to Other so a retired type still renders rather than blanking. */
+export const contactTypeConfig = (value: string) =>
+  CONTACT_TYPES.find((t) => t.value === value) ?? CONTACT_TYPES[CONTACT_TYPES.length - 1];
+
+/**
+ * An empty string is what a blank <input> submits, and it has to be accepted
+ * before .email() sees it — z.string().email().optional() rejects '' because ''
+ * is not undefined. That is why an "optional" email field could not be left
+ * blank. The service normalises '' to null on the way in.
+ */
+const OptionalEmail = z.union([z.literal(''), z.string().email('Invalid email address')])
+  .optional()
+  .nullable();
+
+export const ClientContactSchema = z.object({
+  contactType: z.enum(CONTACT_TYPE_VALUES).default('PRIMARY'),
+  name:        z.string().min(1, 'Contact name is required').max(100),
+  phone:       z.string().max(20).optional().nullable(),
+  email:       OptionalEmail,
+  jobTitle:    z.string().max(100).optional().nullable(),
+  isPrimary:   z.boolean().default(false),
+  notes:       z.string().max(500).optional().nullable(),
+});
+
+export type ClientContactInput = z.input<typeof ClientContactSchema>;
+
+export interface ClientContactResponse {
+  id:          string;
+  clientId:    string;
+  contactType: ContactType;
+  name:        string;
+  phone:       string | null;
+  email:       string | null;
+  jobTitle:    string | null;
+  isPrimary:   boolean;
+  notes:       string | null;
+  createdAt:   string;
+  updatedAt:   string;
+}
+
 // ── Client schemas ─────────────────────────────────────────────────────────────
 
-export const CreateClientSchema = z.object({
+const _BaseClientSchema = z.object({
   clientName:     z.string().min(1).max(200),
-  contactPerson:  z.string().min(1).max(100),
-  contactPhone:   z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
-  email:          z.string().email().optional(),
+  /**
+   * The denormalised primary contact. Optional now that contacts[] can carry it
+   * — the refine below requires one route or the other, because the column is
+   * NOT NULL and invoices read it.
+   */
+  contactPerson:  z.string().min(1).max(100).optional(),
+  contactPhone:   z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional(),
+  email:          OptionalEmail,
   physicalAddress: z.string().min(1).max(500),
   billingAddress: z.string().max(500).optional(),
   billingTerms: z
@@ -45,15 +105,65 @@ export const CreateClientSchema = z.object({
   vatRate:       z.coerce.number().min(0).max(100).optional(),
 
   // CRM / lead tracking
-  leadSource: z.enum([
-    'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
-    'WORD_OF_MOUTH', 'EXHIBITION', 'OTHER',
+  /**
+   * An unselected <select> submits '', which .optional() does not treat as
+   * absent — so leaving Lead Source alone rejected the whole form with an enum
+   * error pointing at a field the user never touched. Accepting '' alongside
+   * the enum is the same shape as OptionalEmail above; the service stores it as
+   * null.
+   */
+  leadSource: z.union([
+    z.literal(''),
+    z.enum([
+      'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
+      'WORD_OF_MOUTH', 'EXHIBITION', 'OTHER',
+    ]),
   ]).optional(),
   referredBy: z.string().max(200).optional(),
   leadStatus: z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).default('CONVERTED'),
+
+  /** Every contact person at this client. The first is primary if none is marked. */
+  contacts: z.array(ClientContactSchema).optional(),
 });
 
-export const UpdateClientSchema = CreateClientSchema.partial();
+/** At most one contact may be flagged primary — two primaries has no meaning. */
+const singlePrimary = (contacts: ClientContactInput[] | undefined) =>
+  (contacts ?? []).filter((c) => c.isPrimary).length <= 1;
+
+export const CreateClientSchema = _BaseClientSchema
+  .refine(
+    (d) => !!d.contactPerson?.trim() || (d.contacts ?? []).some((c) => c.name?.trim()),
+    { message: 'At least one contact person is required.', path: ['contacts'] },
+  )
+  .refine((d) => singlePrimary(d.contacts), {
+    message: 'Only one contact can be the primary contact.',
+    path:    ['contacts'],
+  });
+
+/**
+ * Partial() cannot be called on the refined schema — .refine returns a
+ * ZodEffects, which has no .partial(). The base object is partialled and the
+ * primary-contact rule reapplied; the "must have a contact" rule is deliberately
+ * not reapplied, because an update that touches only the billing terms should
+ * not have to resend the contacts.
+ */
+export const UpdateClientSchema = _BaseClientSchema.partial()
+  .refine((d) => singlePrimary(d.contacts), {
+    message: 'Only one contact can be the primary contact.',
+    path:    ['contacts'],
+  });
+
+/**
+ * What the client form's own resolver validates.
+ *
+ * Contacts are held in their own state on the form and merged in on submit, so
+ * the resolver must not judge a `contacts` field it never sees: the "at least
+ * one contact" refine would fail every submission with an error attached to no
+ * visible input, and the form would sit there doing nothing. The form checks its
+ * own contact list, and the server still enforces the full CreateClientSchema.
+ */
+export const ClientFormSchema = _BaseClientSchema.omit({ contacts: true });
+export type ClientFormInput = z.input<typeof ClientFormSchema>;
 
 export const ClientListQuerySchema = z.object({
   page:           z.coerce.number().int().positive().default(1),
@@ -234,6 +344,8 @@ export interface ClientResponse {
   leadSource: LeadSource | null;
   referredBy: string | null;
   leadStatus: LeadStatus;
+
+  contacts: ClientContactResponse[];
 
   createdAt: string;
   updatedAt: string;
