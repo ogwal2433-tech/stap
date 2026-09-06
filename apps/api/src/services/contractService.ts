@@ -8,6 +8,8 @@ import type {
   ContractGuardRateResponse,
   PaginatedResponse,
   ShiftPattern,
+  AmendContractInput,
+  ContractAmendmentResponse,
 } from '@stap/shared';
 
 const CONTRACT_INCLUDE = {
@@ -125,6 +127,176 @@ class ContractService {
   }
 
   // ── List by client ─────────────────────────────────────────────────────────
+
+  // ── Amendments ─────────────────────────────────────────────────────────────
+
+  /**
+   * Records a change to a signed contract and applies it.
+   *
+   * Not the same as update(). A contract is an agreement, so a change carries a
+   * reason, an effective date and a record of what it was before — the guard
+   * rates are deleted and recreated when a contract changes, so without the
+   * snapshot the originally signed terms would be unrecoverable.
+   */
+  async amend(
+    contractId:  string,
+    data:        AmendContractInput,
+    amendedById: string,
+  ): Promise<ContractAmendmentResponse> {
+    const contract = await prisma.contract.findUnique({
+      where:   { id: contractId },
+      include: CONTRACT_INCLUDE,
+    });
+    if (!contract) throw new NotFoundError('Contract not found');
+
+    if (contract.status === 'EXPIRED') {
+      throw new AppError(
+        'This contract has expired. Raise a new contract rather than amending a closed one.',
+        400,
+      );
+    }
+
+    // The whole of what is changing, so a reader a year later sees the terms as
+    // they stood rather than only the fields that happened to move.
+    const previousValues = {
+      guardsRequired:    contract.guardsRequired,
+      totalMonthlyValue: contract.totalMonthlyValue,
+      contractEnd:       contract.contractEnd.toISOString(),
+      status:            contract.status,
+      billingNote:       contract.billingNote,
+      guardRates:        contract.guardRates.map((r) => ({
+        guardType: r.guardType, guardsCount: r.guardsCount, ratePerGuard: r.ratePerGuard,
+      })),
+    };
+
+    const newValues:  Record<string, unknown> = {};
+    const updateData: Record<string, unknown> = {};
+    const changes:    string[] = [];
+    const ugx = (n: number) => `UGX ${n.toLocaleString('en-UG')}`;
+
+    if (data.guardRates !== undefined) {
+      const derived = deriveTotals(data.guardRates);
+      newValues.guardsRequired    = derived.guardsRequired;
+      newValues.totalMonthlyValue = derived.totalMonthlyValue;
+      newValues.guardRates        = data.guardRates;
+      updateData.guardsRequired    = derived.guardsRequired;
+      updateData.totalMonthlyValue = derived.totalMonthlyValue;
+      updateData.guardRates = { deleteMany: {}, create: withMonthlyTotal(data.guardRates) };
+
+      if (derived.guardsRequired !== contract.guardsRequired) {
+        changes.push(`Guards: ${contract.guardsRequired} → ${derived.guardsRequired}`);
+      }
+      if (derived.totalMonthlyValue !== contract.totalMonthlyValue) {
+        changes.push(`Monthly value: ${ugx(contract.totalMonthlyValue)} → ${ugx(derived.totalMonthlyValue)}`);
+      }
+    }
+
+    if (data.contractEnd !== undefined && data.contractEnd) {
+      const end = new Date(data.contractEnd);
+      if (end <= contract.contractStart) {
+        throw new AppError('The new end date must be after the contract start date.', 400);
+      }
+      newValues.contractEnd  = end.toISOString();
+      updateData.contractEnd = end;
+      const fmt = (d: Date) => d.toLocaleDateString('en-GB');
+      if (end.getTime() !== contract.contractEnd.getTime()) {
+        changes.push(`End date: ${fmt(contract.contractEnd)} → ${fmt(end)}`);
+      }
+    }
+
+    if (data.billingNote !== undefined) {
+      newValues.billingNote  = data.billingNote;
+      updateData.billingNote = data.billingNote;
+      if ((data.billingNote ?? null) !== (contract.billingNote ?? null)) changes.push('Billing note updated');
+    }
+
+    if (data.amendmentType === 'TERMINATION') {
+      // Ends the contract on the day the amendment takes effect, not today: a
+      // termination agreed now may take effect at the end of the month.
+      const effective = new Date(data.effectiveDate);
+      newValues.status       = 'EXPIRED';
+      newValues.contractEnd  = effective.toISOString();
+      updateData.status      = 'EXPIRED';
+      updateData.contractEnd = effective;
+      changes.push(`Terminated, effective ${effective.toLocaleDateString('en-GB')}`);
+    }
+
+    const changeSummary = changes.join(', ') || 'No values changed';
+
+    // Numbered per contract from the highest already issued, so a contract's
+    // amendments read 01, 02, 03 rather than sharing a global sequence.
+    const last = await prisma.contractAmendment.findFirst({
+      where:   { contractId },
+      orderBy: { systemId: 'desc' },
+      select:  { systemId: true },
+    });
+    const n = last?.systemId ? Number(last.systemId.slice(4)) : 0;
+    const systemId = `AMD-${String((Number.isFinite(n) ? n : 0) + 1).padStart(4, '0')}`;
+
+    // One transaction: a contract must never be left changed with no amendment
+    // recording why, nor an amendment describing a change that did not happen.
+    const [amendment] = await prisma.$transaction([
+      prisma.contractAmendment.create({
+        data: {
+          systemId,
+          contractId,
+          amendedById,
+          reason:        data.reason.trim(),
+          effectiveDate: new Date(data.effectiveDate),
+          amendmentType: data.amendmentType,
+          previousValues: previousValues as never,
+          newValues:      newValues as never,
+          changeSummary,
+        },
+        include: { amendedByUser: { select: { id: true, name: true } } },
+      }),
+      prisma.contract.update({
+        where: { id: contractId },
+        data:  { ...updateData, amendmentCount: { increment: 1 } },
+      }),
+    ]);
+
+    await QueueService.logAudit({
+      userId:   amendedById,
+      action:   'CONTRACT_AMENDED',
+      entity:   'contract',
+      entityId: contractId,
+      oldValue: previousValues as never,
+      newValue: { systemId, amendmentType: data.amendmentType, changeSummary, reason: data.reason },
+    });
+
+    return this.sanitiseAmendment(amendment);
+  }
+
+  async getAmendments(contractId: string): Promise<ContractAmendmentResponse[]> {
+    const rows = await prisma.contractAmendment.findMany({
+      where:   { contractId },
+      include: { amendedByUser: { select: { id: true, name: true } } },
+      orderBy: { amendedAt: 'desc' },
+    });
+    return rows.map((r) => this.sanitiseAmendment(r));
+  }
+
+  private sanitiseAmendment(a: {
+    id: string; systemId: string | null; contractId: string;
+    amendedAt: Date; effectiveDate: Date; reason: string; amendmentType: string;
+    changeSummary: string | null; previousValues: unknown; newValues: unknown;
+    amendedByUser?: { id: string; name: string } | null;
+  }): ContractAmendmentResponse {
+    return {
+      id:             a.id,
+      systemId:       a.systemId,
+      contractId:     a.contractId,
+      amendedAt:      a.amendedAt.toISOString(),
+      amendedBy:      a.amendedByUser ?? null,
+      reason:         a.reason,
+      effectiveDate:  a.effectiveDate.toISOString(),
+      amendmentType:  a.amendmentType,
+      changeSummary:  a.changeSummary,
+      previousValues: (a.previousValues ?? {}) as Record<string, unknown>,
+      newValues:      (a.newValues ?? {}) as Record<string, unknown>,
+    };
+  }
 
   async listByClient(clientId: string): Promise<ContractResponse[]> {
     const contracts = await prisma.contract.findMany({
@@ -276,6 +448,7 @@ class ContractService {
       totalMonthlyValue: c.totalMonthlyValue ?? 0,
       status:            c.status,
       daysRemaining,
+      amendmentCount:    c.amendmentCount ?? 0,
       weaponsAllocation: c.weaponsAllocation ?? null,
       shiftPattern:      (c.shiftPattern as ShiftPattern | null) ?? null,
       guardRates: (c.guardRates ?? []).map((r: any): ContractGuardRateResponse => ({

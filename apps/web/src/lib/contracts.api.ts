@@ -4,9 +4,21 @@ import type {
   CreateContractInput,
   UpdateContractInput,
   PaginatedResponse,
+  AmendContractInput,
+  ContractAmendmentResponse,
 } from '@stap/shared';
 
 export const contractsApi = {
+  amend(id: string, body: AmendContractInput): Promise<ContractAmendmentResponse> {
+    return api.post<{ success: boolean; data: ContractAmendmentResponse }>(`/contracts/${id}/amend`, body)
+      .then(r => r.data.data);
+  },
+
+  amendments(id: string): Promise<ContractAmendmentResponse[]> {
+    return api.get<{ success: boolean; data: ContractAmendmentResponse[] }>(`/contracts/${id}/amendments`)
+      .then(r => r.data.data);
+  },
+
   listByClient(clientId: string): Promise<ContractResponse[]> {
     return api
       .get<{ success: boolean } & PaginatedResponse<ContractResponse>>('/contracts', {

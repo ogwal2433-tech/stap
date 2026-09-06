@@ -204,6 +204,7 @@ model User {
   fundDispatches           FundDispatch[]              @relation("FundDispatchedBy")
   shiftReportsAsController ShiftHandoverReport[]       @relation("ShiftController")
   jobsTriggered            JobRunLog[]                 @relation("JobTrigger")
+  contractAmendments       ContractAmendment[]         @relation("ContractAmender")
   shiftReportsAsIncoming   ShiftHandoverReport[]       @relation("IncomingController")
   acknowledgedShiftReports ShiftHandoverReport[]       @relation("ShiftReportAcknowledger")
 
@@ -823,9 +824,53 @@ model Contract {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Cached count of amendments, so a list can show it without joining.
+  amendmentCount Int @default(0)
+
   client     Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
   invoices   Invoice[]
   guardRates ContractGuardRate[]
+  amendments ContractAmendment[]
+}
+
+/// One recorded change to a signed contract.
+///
+/// A contract is a signed agreement, so a change is an amendment with a reason
+/// and a date, not an edit. Both sides of every change are stored: updating a
+/// contract deletes and recreates its guard rates, so without a snapshot the
+/// terms the client originally signed would simply be gone.
+model ContractAmendment {
+  id       String  @id @default(cuid())
+  /// AMD-0001, numbered per contract.
+  systemId String?
+
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  amendedAt     DateTime @default(now())
+  amendedById   String
+  amendedByUser User     @relation("ContractAmender", fields: [amendedById], references: [id], onDelete: Restrict)
+
+  /// Why it changed. Required — an amendment with no reason is indistinguishable
+  /// from a mistake when someone reads it back a year later.
+  reason        String   @db.Text
+  /// When the change takes effect, which is not always when it was recorded.
+  effectiveDate DateTime
+
+  /// The contract as it stood before, guard rates included.
+  previousValues Json
+  /// What it became.
+  newValues      Json
+  /// One line for a timeline: "Guards: 2 → 5, Monthly value: UGX 800,000 → 2,000,000".
+  changeSummary  String?
+
+  /// GUARD_COUNT_CHANGE | RATE_CHANGE | DATE_EXTENSION | SITE_CHANGE | TERMINATION | GENERAL
+  amendmentType String @default("GENERAL")
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractId, systemId])
+  @@index([contractId, amendedAt])
 }
 
 model ClientComplaint {

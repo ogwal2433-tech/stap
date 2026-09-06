@@ -73,6 +73,7 @@ import {
   ROLES,
   CreateContractSchema,
   UpdateContractSchema,
+  AmendContractSchema,
 } from '@stap/shared';
 
 const router: IRouter = Router();
@@ -129,6 +130,26 @@ router.get(
 );
 
 // ── PATCH /:id — update contract ──────────────────────────────────────────────
+// POST /contracts/:id/amend — record a change and apply it
+router.post(
+  '/:id/amend',
+  requirePermission(PERMISSIONS.CONTRACTS_EDIT),
+  validate(AmendContractSchema),
+  asyncHandler(async (req, res) => {
+    const data = await contractService.amend(req.params.id, req.body, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+// GET /contracts/:id/amendments — the history, newest first
+router.get(
+  '/:id/amendments',
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: await contractService.getAmendments(req.params.id) });
+  }),
+);
+
 router.patch(
   '/:id',
   requirePermission(PERMISSIONS.CONTRACTS_EDIT),

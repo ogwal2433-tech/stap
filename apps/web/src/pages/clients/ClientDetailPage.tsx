@@ -11,6 +11,9 @@ import RoleGuard from '../../components/RoleGuard';
 import SiteFormModal from '../../components/clients/SiteFormModal';
 import IncidentFormModal from '../../components/clients/IncidentFormModal';
 import ContractFormModal from '../../components/clients/ContractFormModal';
+import AmendContractModal from '../../components/clients/AmendContractModal';
+import ContractHistory from '../../components/clients/ContractHistory';
+import PermissionGuard from '../../components/PermissionGuard';
 import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
@@ -75,6 +78,8 @@ export default function ClientDetailPage() {
   const [incidentModal, setIncidentModal] = useState<{ siteId: string; siteName: string } | null>(null);
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [contractModal, setContractModal] = useState<{ contract?: ContractResponse } | null>(null);
+  const [amendContract, setAmendContract] = useState<ContractResponse | null>(null);
+  const [historyFor, setHistoryFor]       = useState<string | null>(null);
   const [incidentPage, setIncidentPage] = useState(1);
   const [showLogComplaintModal, setShowLogComplaintModal] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintResponse | null>(null);
@@ -595,15 +600,35 @@ export default function ClientDetailPage() {
                       </td>
                       <td>
                         <div className="d-flex gap-1">
-                          <RoleGuard allowedRoles={CONTRACT_WRITE_ROLES}>
-                            <Button
-                              size="sm"
-                              variant="outline-primary"
-                              onClick={() => setContractModal({ contract: c })}
-                            >
-                              Edit
-                            </Button>
-                          </RoleGuard>
+                          <PermissionGuard permission="contracts.edit">
+                            {/* Amend, not Edit: a signed contract changes with a
+                                reason and a record of what it was. Edit remains
+                                for a DRAFT that was never agreed with anyone. */}
+                            {c.status === 'DRAFT' ? (
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                onClick={() => setContractModal({ contract: c })}
+                              >
+                                Edit
+                              </Button>
+                            ) : c.status !== 'EXPIRED' && (
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                onClick={() => setAmendContract(c)}
+                              >
+                                Amend
+                              </Button>
+                            )}
+                          </PermissionGuard>
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={() => setHistoryFor(historyFor === c.id ? null : c.id)}
+                          >
+                            History{c.amendmentCount > 0 ? ` (${c.amendmentCount})` : ''}
+                          </Button>
                           <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
                             <Button
                               size="sm"
@@ -618,6 +643,16 @@ export default function ClientDetailPage() {
                     </tr>
                   );
                 })}
+                {/* The history opens under the contracts it belongs to rather
+                    than on a separate screen, so the current terms and what they
+                    used to be are read together. */}
+                {historyFor && (
+                  <tr>
+                    <td colSpan={9} style={{ background: '#F8F9FA' }}>
+                      <ContractHistory contractId={historyFor} />
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </Table>
           )}
@@ -764,6 +799,15 @@ export default function ClientDetailPage() {
           siteName={incidentModal.siteName}
           onClose={() => setIncidentModal(null)}
           onSuccess={() => setIncidentModal(null)}
+        />
+      )}
+
+      {amendContract && (
+        <AmendContractModal
+          show
+          contract={amendContract}
+          onClose={() => setAmendContract(null)}
+          onSuccess={() => { refetchContracts(); refetch(); }}
         />
       )}
 
