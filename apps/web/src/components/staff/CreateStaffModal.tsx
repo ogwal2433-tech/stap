@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Form, Modal, Row, Col, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, type StaffRole } from '@stap/shared';
+import { ROLE_CONFIG, STAFF_ROLE_VALUES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES } from '@stap/shared';
 import { useCreateStaff } from '../../hooks/useStaff';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -57,7 +57,7 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
         role:       form.role,
         phone:      form.phone.trim()      || null,
         department: form.department.trim() || null,
-        jobTitle:   form.jobTitle.trim()   || null,
+        jobTitle:   (form.jobTitle.trim() || null) as never,
         ...(form.password ? { password: form.password } : {}),
       },
       {
@@ -198,12 +198,23 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
                 <Form.Label className="fw-bold small">
                   Job Title <span className="text-muted fw-normal">(optional)</span>
                 </Form.Label>
-                <Form.Control
+                <Form.Select
                   size="sm"
                   value={form.jobTitle}
                   onChange={e => set('jobTitle', e.target.value)}
-                  placeholder="e.g. Senior Guard Supervisor"
-                />
+                >
+                  <option value="">— Select position —</option>
+                  {JOB_TITLE_CATEGORIES.map(cat => (
+                    <optgroup key={cat} label={cat}>
+                      {JOB_TITLES.filter(j => j.category === cat).map(j => (
+                        <option key={j.value} value={j.value}>{j.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Form.Select>
+                <Form.Text className="text-muted">
+                  A label only — the system role below is what grants access.
+                </Form.Text>
               </Form.Group>
             </Col>
           </Row>

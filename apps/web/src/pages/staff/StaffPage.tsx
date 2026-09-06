@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Badge, Button, Form, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES } from '@stap/shared';
+import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES , getJobTitleLabel } from '@stap/shared';
 import { useStaffList } from '../../hooks/useStaff';
 import { useAuth } from '../../context/AuthContext';
 import { formatRelativeDate } from '../../lib/dateUtils';
@@ -280,7 +280,7 @@ export default function StaffPage() {
                     <td style={{ padding: '10px 12px', fontSize: '0.78rem', color: '#4A5568' }}>
                       <div>{s.department ?? '—'}</div>
                       {s.jobTitle && (
-                        <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{s.jobTitle}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{getJobTitleLabel(s.jobTitle)}</div>
                       )}
                     </td>
 

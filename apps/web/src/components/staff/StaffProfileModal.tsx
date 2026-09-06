@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES, type StaffRole } from '@stap/shared';
+import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES, getJobTitleLabel, isLegacyJobTitle } from '@stap/shared';
 import {
   useStaffMember,
   useUpdateStaff,
@@ -104,7 +104,7 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
           name:             form.name.trim(),
           phone:            form.phone.trim()            || null,
           department:       form.department.trim()       || null,
-          jobTitle:         form.jobTitle.trim()         || null,
+          jobTitle:         (form.jobTitle.trim() || null) as never,
           emergencyContact: form.emergencyContact.trim() || null,
           emergencyPhone:   form.emergencyPhone.trim()   || null,
           // The server refuses a self role change; don't even send one.
@@ -352,8 +352,26 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                 </Col>
                 <Col md={6}>
                   <Form.Group className="mb-3">
-                    <Form.Label className="fw-bold small">Job Title</Form.Label>
-                    <Form.Control size="sm" value={form.jobTitle} onChange={e => set('jobTitle', e.target.value)} />
+                    <Form.Label className="fw-bold small">Position</Form.Label>
+                    <Form.Select size="sm" value={form.jobTitle} onChange={e => set('jobTitle', e.target.value)}>
+                      <option value="">— Select position —</option>
+                      {/* A title recorded before this list existed is offered as
+                          itself, so editing someone's phone number does not
+                          quietly clear the position they already hold. */}
+                      {isLegacyJobTitle(form.jobTitle) && (
+                        <option value={form.jobTitle}>{form.jobTitle} (not on the current list)</option>
+                      )}
+                      {JOB_TITLE_CATEGORIES.map(cat => (
+                        <optgroup key={cat} label={cat}>
+                          {JOB_TITLES.filter(j => j.category === cat).map(j => (
+                            <option key={j.value} value={j.value}>{j.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </Form.Select>
+                    <Form.Text className="text-muted">
+                      A label only — the system role is what grants access.
+                    </Form.Text>
                   </Form.Group>
                 </Col>
                 <Col md={6}>
@@ -383,7 +401,7 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                 <Col md={6}><Field label="Email"             value={staff.email} /></Col>
                 <Col md={6}><Field label="Phone"             value={staff.phone} /></Col>
                 <Col md={6}><Field label="Department"        value={staff.department} /></Col>
-                <Col md={6}><Field label="Job Title"         value={staff.jobTitle} /></Col>
+                <Col md={6}><Field label="Position"          value={getJobTitleLabel(staff.jobTitle)} /></Col>
                 <Col md={6}><Field label="Emergency Contact" value={staff.emergencyContact} /></Col>
                 <Col md={6}><Field label="Emergency Phone"   value={staff.emergencyPhone} /></Col>
               </Row>

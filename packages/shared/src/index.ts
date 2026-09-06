@@ -25,3 +25,4 @@ export * from './schemas/staff';
 export * from './types/api';
 export * from './types/roles';
 export * from './schemas/shiftReport';
+export * from './constants/jobTitles';
