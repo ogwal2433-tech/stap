@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientsApi } from '../lib/clients.api';
-import type { ClientListQuery, CreateClientInput, UpdateClientInput, CreateSiteInput, UpdateSiteInput, CreateIncidentInput } from '@stap/shared';
+import type {
+  ClientListQuery, CreateClientInput, UpdateClientInput, CreateSiteInput,
+  UpdateSiteInput, CreateIncidentInput, GrantClientPortalInput,
+} from '@stap/shared';
 
 export function useClientList(params?: Partial<ClientListQuery>) {
   return useQuery({
@@ -128,5 +131,44 @@ export function useSiteIncidents(siteId: string, page = 1) {
     queryKey: ['site-incidents', siteId, page],
     queryFn: () => clientsApi.getSiteIncidents(siteId, page),
     enabled: Boolean(siteId),
+  });
+}
+
+// ── Client portal access ──────────────────────────────────────────────────────
+// The portal is managed from the client profile, so every mutation refreshes
+// the account list the panel renders.
+
+export function useClientPortalAccounts(clientId: string) {
+  return useQuery({
+    queryKey: ['client-portal', clientId],
+    queryFn:  () => clientsApi.listPortalAccounts(clientId),
+    enabled:  Boolean(clientId),
+  });
+}
+
+export function useGrantClientPortal(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: GrantClientPortalInput) => clientsApi.grantPortalAccess(clientId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-portal', clientId] });
+    },
+  });
+}
+
+export function useRevokeClientPortal(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId?: string) => clientsApi.revokePortalAccess(clientId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-portal', clientId] });
+    },
+  });
+}
+
+export function useResetClientPortalPassword(clientId: string) {
+  return useMutation({
+    mutationFn: (vars: { userId: string; newPassword: string }) =>
+      clientsApi.resetPortalPassword(clientId, vars.userId, vars.newPassword),
   });
 }

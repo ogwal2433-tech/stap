@@ -151,6 +151,8 @@ class GuardService {
         },
         relatives: { orderBy: { createdAt: 'asc' } },
         associates: { orderBy: { createdAt: 'asc' } },
+        // The login, when there is one — drives the System Access panel.
+        user: { select: { id: true, email: true, status: true } },
         disciplinary: {
           where:   { type: 'SUSPENSION' },
           orderBy: { incidentDate: 'desc' },
@@ -909,6 +911,14 @@ class GuardService {
 
     if (guard._count) {
       response._count = guard._count;
+    }
+
+    // Only on the profile — the list does not fetch the relation, and an
+    // absent relation must not read as "access was revoked".
+    if (!listMode && guard.user !== undefined) {
+      response.systemAccess = guard.user
+        ? { userId: guard.user.id, email: guard.user.email, status: guard.user.status }
+        : null;
     }
 
     // "Where is this guard now" is the open deployment history record — the one

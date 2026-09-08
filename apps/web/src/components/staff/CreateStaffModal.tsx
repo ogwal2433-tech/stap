@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Button, Form, Modal, Row, Col, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES } from '@stap/shared';
+import {
+  ROLE_CONFIG, STAFF_ROLE_VALUES, type StaffRole,
+  JOB_TITLES, JOB_TITLE_CATEGORIES, generatePassword,
+} from '@stap/shared';
+import TemporaryPasswordField from '../common/TemporaryPasswordField';
 import { useCreateStaff } from '../../hooks/useStaff';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -11,18 +15,23 @@ interface CreateStaffModalProps {
   onSuccess: () => void;
 }
 
-const EMPTY_FORM = {
+/**
+ * A fresh form each time it opens, carrying a password already generated: the
+ * person doing the inviting usually needs to read the credentials out on the
+ * spot, and a blank box makes them invent one.
+ */
+const emptyForm = () => ({
   name:       '',
   email:      '',
   role:       '' as StaffRole | '',
   phone:      '',
   department: '',
   jobTitle:   '',
-  password:   '',
-};
+  password:   generatePassword(),
+});
 
 export default function CreateStaffModal({ show, onClose, onSuccess }: CreateStaffModalProps) {
-  const [form, setForm]   = useState(EMPTY_FORM);
+  const [form, setForm]   = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const create            = useCreateStaff();
   const { showToast }     = useToast();
@@ -33,7 +42,7 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
   const roleConfig = form.role ? ROLE_CONFIG[form.role] : null;
 
   const handleClose = () => {
-    setForm(EMPTY_FORM);
+    setForm(emptyForm());
     setError(null);
     onClose();
   };
@@ -68,7 +77,7 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
               : `${form.name.trim()}’s account is ready — their password has been emailed to them.`,
             'success',
           );
-          setForm(EMPTY_FORM);
+          setForm(emptyForm());
           onSuccess();
         },
         onError: (err) => setError(getApiErrorMessage(err, 'Failed to create the account.')),
@@ -81,11 +90,26 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
       <Form onSubmit={handleSubmit}>
         <Modal.Header closeButton>
           <Modal.Title style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1B3A6B' }}>
-            👥 Add Staff Member
+            👥 Invite Team Member
           </Modal.Title>
         </Modal.Header>
 
         <Modal.Body>
+          <div
+            style={{
+              background:   '#EBF5FB',
+              borderRadius: '0.375rem',
+              padding:      '10px 14px',
+              marginBottom: '16px',
+              fontSize:     '0.78rem',
+              color:        '#1B3A6B',
+              borderLeft:   '3px solid #1B3A6B',
+            }}
+          >
+            ℹ️ This creates an employee profile and a system login in one step. The new
+            team member will receive their login credentials by email.
+          </div>
+
           {error && (
             <div
               style={{
@@ -219,22 +243,17 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
             </Col>
           </Row>
 
-          <Form.Group className="mb-1">
-            <Form.Label className="fw-bold small">
-              Password <span className="text-muted fw-normal">(optional)</span>
-            </Form.Label>
-            <Form.Control
-              size="sm"
-              type="text"
-              value={form.password}
-              onChange={e => set('password', e.target.value)}
-              placeholder="Leave blank to auto-generate and email to the staff member"
-            />
-            <Form.Text className="text-muted">
-              If left blank, a secure password is generated and sent to{' '}
-              {form.email.trim() || 'their email address'}. They should change it on first login.
-            </Form.Text>
-          </Form.Group>
+          <TemporaryPasswordField
+            value={form.password}
+            onChange={next => set('password', next)}
+            hint={
+              <>
+                Share this with the team member — it is also emailed to{' '}
+                {form.email.trim() || 'their email address'}. They should change it on
+                first login.
+              </>
+            }
+          />
         </Modal.Body>
 
         <Modal.Footer>
@@ -242,7 +261,7 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
             Cancel
           </Button>
           <Button type="submit" variant="primary" size="sm" disabled={create.isPending}>
-            {create.isPending ? <Spinner size="sm" animation="border" /> : 'Create Account'}
+            {create.isPending ? <Spinner size="sm" animation="border" /> : 'Create Account & Send Credentials'}
           </Button>
         </Modal.Footer>
       </Form>

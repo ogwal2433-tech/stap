@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardsApi } from '../lib/guards.api';
 import { useToast } from '../context/ToastContext';
-import type { CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput, CreateGuardTransferInput, PromoteGuardInput } from '@stap/shared';
+import type {
+  CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput,
+  CreateGuardTransferInput, PromoteGuardInput, GrantGuardAccessInput,
+} from '@stap/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
   return useQuery({
@@ -172,5 +175,31 @@ export function useRunSalaryIncrements() {
     mutationFn: () => guardsApi.runSalaryIncrements(),
     onSuccess: () => showToast('Salary increment check completed successfully', 'success'),
     onError: () => showToast('Salary increment check failed', 'danger'),
+  });
+}
+
+/**
+ * System access for a guard. Both mutations refresh the profile query, because
+ * the System Access panel reads `systemAccess` straight off the guard.
+ */
+export function useGrantGuardAccess(guardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: GrantGuardAccessInput) => guardsApi.grantAccess(guardId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard', guardId] });
+      queryClient.invalidateQueries({ queryKey: ['guards'] });
+    },
+  });
+}
+
+export function useRevokeGuardAccess(guardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => guardsApi.revokeAccess(guardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard', guardId] });
+      queryClient.invalidateQueries({ queryKey: ['guards'] });
+    },
   });
 }

@@ -568,6 +568,17 @@ export interface GuardResponse {
     disciplinary:number;
     documents:   number;
   };
+
+  /**
+   * The login attached to this guard, or null when they have none — most
+   * guards never need one. Present on the profile only; the list does not
+   * carry it.
+   */
+  systemAccess?: {
+    userId: string;
+    email:  string;
+    status: string;
+  } | null;
 }
 
 export interface GuardTransferResponse {

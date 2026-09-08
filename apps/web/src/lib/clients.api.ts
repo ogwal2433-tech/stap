@@ -13,6 +13,8 @@ import type {
   CreateSiteInput,
   UpdateSiteInput,
   CreateIncidentInput,
+  GrantClientPortalInput,
+  LinkedAccount,
   SiteShiftResponse,
 } from '@stap/shared';
 
@@ -148,5 +150,35 @@ export const clientsApi = {
         { params: { page, limit: 20 } },
       )
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
+  },
+
+  // ── Portal access ─────────────────────────────────────────────────────────
+  // A company may hold several logins, so these work on a list, not a flag.
+
+  listPortalAccounts(clientId: string): Promise<LinkedAccount[]> {
+    return api
+      .get<{ success: boolean; data: LinkedAccount[] }>(`/clients/${clientId}/portal-access`)
+      .then((r) => r.data.data);
+  },
+
+  grantPortalAccess(clientId: string, data: GrantClientPortalInput): Promise<LinkedAccount> {
+    return api
+      .post<{ success: boolean; data: LinkedAccount }>(`/clients/${clientId}/grant-portal-access`, data)
+      .then((r) => r.data.data);
+  },
+
+  /** Without a userId every login for the company is switched off. */
+  revokePortalAccess(clientId: string, userId?: string): Promise<void> {
+    return api
+      .delete<{ success: boolean }>(`/clients/${clientId}/revoke-portal-access`, {
+        params: userId ? { userId } : undefined,
+      })
+      .then(() => undefined);
+  },
+
+  resetPortalPassword(clientId: string, userId: string, newPassword: string): Promise<void> {
+    return api
+      .post<{ success: boolean }>(`/clients/${clientId}/reset-portal-password`, { userId, newPassword })
+      .then(() => undefined);
   },
 };

@@ -24,6 +24,7 @@ import ApproveLetterModal from '../../components/letters/ApproveLetterModal';
 import LetterStatusBadge from '../../components/letters/LetterStatusBadge';
 import TransferModal from '../../components/guards/TransferModal';
 import PromoteGuardModal from '../../components/guards/PromoteGuardModal';
+import GuardSystemAccess from '../../components/guards/GuardSystemAccess';
 import ReturnItemModal from '../../components/inventory/ReturnItemModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
 import { useToast } from '../../context/ToastContext';
@@ -893,6 +894,10 @@ export default function GuardDetailPage() {
                   </Col>
                 </RoleGuard>
               </Row>
+
+              {/* Sits with employment rather than in its own card: whether someone
+                  can sign in is a fact about their engagement, not a separate system. */}
+              <GuardSystemAccess guard={guard} />
             </div>
           </div>
 

@@ -171,6 +171,7 @@ import fs from 'fs';
 import multer from 'multer';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
+import { accessService } from '../services/accessService';
 import { bulkImportService } from '../services/bulkImportService';
 import { renderToPdf } from '../lib/pdfBase';
 import { uploadService } from '../services/uploadService';
@@ -197,6 +198,7 @@ import {
   GuardListQuerySchema,
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
+  GrantGuardAccessSchema,
 } from '@stap/shared';
 
 // Memory-based upload for Excel imports (not saved to disk)
@@ -730,6 +732,36 @@ router.post(
   asyncHandler(async (_req, res) => {
     await guardService.runSalaryIncrements();
     res.json({ success: true, message: 'Salary increment check completed.' });
+  }),
+);
+
+// ── System access ─────────────────────────────────────────────────────────────
+// A guard's login is granted from their profile, not from a separate user
+// screen — the person is already on record, so only the credentials are new.
+
+// ── POST /:id/grant-access — give this guard a login ──────────────────────────
+router.post(
+  '/:id/grant-access',
+  requirePermission(PERMISSIONS.GUARDS_EDIT),
+  validate(GrantGuardAccessSchema),
+  asyncHandler(async (req, res) => {
+    const account = await accessService.grantGuardAccess(
+      req.params.id as string,
+      req.body.email,
+      req.body.password,
+      req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: account });
+  }),
+);
+
+// ── DELETE /:id/revoke-access — take the login away ──────────────────────────
+router.delete(
+  '/:id/revoke-access',
+  requirePermission(PERMISSIONS.GUARDS_EDIT),
+  asyncHandler(async (req, res) => {
+    const result = await accessService.revokeGuardAccess(req.params.id as string, req.user!.userId);
+    res.status(200).json({ success: true, data: result });
   }),
 );
 

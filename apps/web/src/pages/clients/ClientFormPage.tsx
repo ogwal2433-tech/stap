@@ -5,9 +5,10 @@ import {
 } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES } from '@stap/shared';
+import { ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES, generatePassword } from '@stap/shared';
 import { useClient, useCreateClient, useUpdateClient } from '../../hooks/useClients';
 import ContactsEditor from '../../components/clients/ContactsEditor';
+import TemporaryPasswordField from '../../components/common/TemporaryPasswordField';
 import { emptyContact, type ContactDraft } from '../../components/clients/ContactFields';
 import { useToast } from '../../context/ToastContext';
 import type { ClientFormInput, CreateClientInput } from '@stap/shared';
@@ -19,6 +20,16 @@ export default function ClientFormPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const isEdit = Boolean(id);
+
+  // Portal access set up in the same save. Offered on creation only — an
+  // existing client's portal is managed from its detail page, where the logins
+  // it already holds are listed.
+  const [enablePortal, setEnablePortal] = useState(false);
+  const [portal, setPortal] = useState({
+    contactName: '',
+    email:       '',
+    password:    generatePassword(),
+  });
 
   const { data: existing, isLoading } = useClient(id ?? '');
   const createClient = useCreateClient();
@@ -100,6 +111,20 @@ export default function ClientFormPage() {
       setApiError('Add at least one contact person for this client.');
       return;
     }
+    if (!isEdit && enablePortal) {
+      if (portal.contactName.trim().length < 2) {
+        setApiError('Name the person who will use the portal login, or switch portal access off.');
+        return;
+      }
+      if (!portal.email.trim()) {
+        setApiError('A portal login email is required, or switch portal access off.');
+        return;
+      }
+      if (portal.password.trim().length < 8) {
+        setApiError('The portal password must be at least 8 characters.');
+        return;
+      }
+    }
     setApiError(null);
 
     const primary = filledContacts.find((c) => c.isPrimary) ?? filledContacts[0];
@@ -114,6 +139,15 @@ export default function ClientFormPage() {
         ...c,
         isPrimary: c === primary,
       })),
+      ...(!isEdit && enablePortal
+        ? {
+            portal: {
+              contactName: portal.contactName.trim(),
+              email:       portal.email.trim(),
+              password:    portal.password,
+            },
+          }
+        : {}),
     };
 
     try {
@@ -128,7 +162,12 @@ export default function ClientFormPage() {
         navigate(`/clients/${id}`);
       } else {
         const created = await createClient.mutateAsync(payload);
-        showToast('Client created', 'success');
+        showToast(
+          enablePortal
+            ? `Client created — ${portal.email.trim()} can now sign into the portal.`
+            : 'Client created',
+          'success',
+        );
         navigate(`/clients/${created.id}`);
       }
     } catch (error) {
@@ -442,6 +481,103 @@ export default function ClientFormPage() {
             </Row>
           </Card.Body>
         </Card>
+
+        {!isEdit && (
+          <Card className="border-0 shadow-sm mb-3">
+            <Card.Body>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setEnablePortal(p => !p)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setEnablePortal(p => !p);
+                  }
+                }}
+                style={{
+                  display:      'flex',
+                  alignItems:   'center',
+                  gap:          '10px',
+                  cursor:       'pointer',
+                  marginBottom: enablePortal ? '14px' : '0',
+                }}
+              >
+                <div
+                  style={{
+                    width:        '40px',
+                    height:       '22px',
+                    borderRadius: '11px',
+                    background:   enablePortal ? '#1B3A6B' : '#ced4da',
+                    position:     'relative',
+                    transition:   'background 0.2s',
+                    flexShrink:   0,
+                  }}
+                >
+                  <div
+                    style={{
+                      position:     'absolute',
+                      top:          '3px',
+                      left:         enablePortal ? '21px' : '3px',
+                      width:        '16px',
+                      height:       '16px',
+                      borderRadius: '50%',
+                      background:   'white',
+                      transition:   'left 0.2s',
+                    }}
+                  />
+                </div>
+                <div>
+                  <div className="fw-bold small">🌐 Enable Client Portal Access</div>
+                  <div style={{ fontSize: '0.70rem', color: '#6c757d' }}>
+                    Set up the portal login at the same time as creating the client
+                  </div>
+                </div>
+              </div>
+
+              {enablePortal && (
+                <div
+                  style={{
+                    background:   '#F8F9FA',
+                    borderRadius: '0.5rem',
+                    padding:      '14px 16px',
+                    border:       '1px solid #e9ecef',
+                  }}
+                >
+                  <Row className="g-2">
+                    <Col md={6}>
+                      <Form.Label className="small fw-bold">Contact Name *</Form.Label>
+                      <Form.Control
+                        size="sm"
+                        type="text"
+                        value={portal.contactName}
+                        onChange={e => setPortal(p => ({ ...p, contactName: e.target.value }))}
+                        placeholder="Primary contact"
+                      />
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="small fw-bold">Login Email *</Form.Label>
+                      <Form.Control
+                        size="sm"
+                        type="email"
+                        value={portal.email}
+                        onChange={e => setPortal(p => ({ ...p, email: e.target.value }))}
+                        placeholder="contact@company.com"
+                      />
+                    </Col>
+                    <Col md={12}>
+                      <TemporaryPasswordField
+                        value={portal.password}
+                        onChange={next => setPortal(p => ({ ...p, password: next }))}
+                        hint="Emailed to the contact once the client is saved."
+                      />
+                    </Col>
+                  </Row>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        )}
 
         <div className="d-flex justify-content-end gap-2">
           <Button variant="secondary" onClick={() => navigate(isEdit ? `/clients/${id}` : '/clients')}>

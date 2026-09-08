@@ -19,6 +19,8 @@ import type {
   GuardTransferResponse,
   PromoteGuardInput,
   GuardPromotionResponse,
+  GrantGuardAccessInput,
+  LinkedAccount,
 } from '@stap/shared';
 
 export const guardsApi = {
@@ -191,6 +193,19 @@ export const guardsApi = {
   runSalaryIncrements(): Promise<void> {
     return api
       .post<{ success: boolean }>('/guards/salary-increment/run')
+      .then(() => undefined);
+  },
+
+  /** Gives this guard a login. They are already on record; only the credentials are new. */
+  grantAccess(id: string, data: GrantGuardAccessInput): Promise<LinkedAccount> {
+    return api
+      .post<{ success: boolean; data: LinkedAccount }>(`/guards/${id}/grant-access`, data)
+      .then((r) => r.data.data);
+  },
+
+  revokeAccess(id: string): Promise<void> {
+    return api
+      .delete<{ success: boolean }>(`/guards/${id}/revoke-access`)
       .then(() => undefined);
   },
 };

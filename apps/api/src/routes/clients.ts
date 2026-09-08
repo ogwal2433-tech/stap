@@ -89,6 +89,7 @@
  */
 import { Router, type IRouter } from 'express';
 import { clientService } from '../services/clientService';
+import { accessService } from '../services/accessService';
 import { siteService } from '../services/siteService';
 import { incidentService } from '../services/incidentService';
 import { authenticate } from '../middleware/authenticate';
@@ -109,6 +110,8 @@ import {
   CreateSiteInputSchema,
   UpdateSiteSchema,
   CreateIncidentSchema,
+  GrantClientPortalSchema,
+  ResetPortalPasswordSchema,
 } from '@stap/shared';
 import type { UserRole } from '@stap/shared';
 
@@ -372,6 +375,69 @@ router.post(
       req.user!.userId,
     );
     res.status(201).json({ success: true, data: site });
+  }),
+);
+
+// ── Client portal access ──────────────────────────────────────────────────────
+// The portal is switched on from the client that already exists. A company may
+// hold more than one login — finance and operations often want their own — so
+// granting adds a contact rather than replacing the last one.
+
+// ── GET /:id/portal-access — the logins this client holds ────────────────────
+router.get(
+  '/:id/portal-access',
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
+  asyncHandler(async (req, res) => {
+    const accounts = await accessService.listClientPortalAccounts(req.params.id as string);
+    res.status(200).json({ success: true, data: accounts });
+  }),
+);
+
+// ── POST /:id/grant-portal-access — add a portal login ───────────────────────
+router.post(
+  '/:id/grant-portal-access',
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
+  validate(GrantClientPortalSchema),
+  asyncHandler(async (req, res) => {
+    const account = await accessService.grantClientPortalAccess(
+      req.params.id as string,
+      req.body.email,
+      req.body.password,
+      req.body.contactName,
+      req.user!.userId,
+    );
+    res.status(201).json({ success: true, data: account });
+  }),
+);
+
+// ── DELETE /:id/revoke-portal-access — turn the portal off ───────────────────
+// Without ?userId the whole portal goes dark; with it, just that one contact.
+router.delete(
+  '/:id/revoke-portal-access',
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
+  asyncHandler(async (req, res) => {
+    const result = await accessService.revokeClientPortalAccess(
+      req.params.id as string,
+      req.user!.userId,
+      typeof req.query.userId === 'string' ? req.query.userId : undefined,
+    );
+    res.status(200).json({ success: true, data: result });
+  }),
+);
+
+// ── POST /:id/reset-portal-password — new temporary password ─────────────────
+router.post(
+  '/:id/reset-portal-password',
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
+  validate(ResetPortalPasswordSchema),
+  asyncHandler(async (req, res) => {
+    const result = await accessService.resetClientPortalPassword(
+      req.params.id as string,
+      req.body.userId,
+      req.body.newPassword,
+      req.user!.userId,
+    );
+    res.status(200).json({ success: true, data: result });
   }),
 );
 

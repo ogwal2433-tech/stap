@@ -124,6 +124,16 @@ const _BaseClientSchema = z.object({
 
   /** Every contact person at this client. The first is primary if none is marked. */
   contacts: z.array(ClientContactSchema).optional(),
+
+  /**
+   * Optional portal login, set up in the same save as the client itself.
+   * Omitted — the usual case — the company simply has no portal.
+   */
+  portal: z.object({
+    email:       z.string().email().transform((e) => e.trim().toLowerCase()),
+    password:    z.string().min(8, 'A temporary password needs at least 8 characters').max(128),
+    contactName: z.string().min(2, 'Name the person who will use this login').max(100),
+  }).optional(),
 });
 
 /** At most one contact may be flagged primary — two primaries has no meaning. */

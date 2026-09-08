@@ -14,6 +14,7 @@ import ContractFormModal from '../../components/clients/ContractFormModal';
 import AmendContractModal from '../../components/clients/AmendContractModal';
 import ContractHistory from '../../components/clients/ContractHistory';
 import ClientContacts from '../../components/clients/ClientContacts';
+import ClientPortalAccess from '../../components/clients/ClientPortalAccess';
 import PermissionGuard from '../../components/PermissionGuard';
 import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
@@ -285,6 +286,10 @@ export default function ClientDetailPage() {
           </Card>
 
           <ClientContacts clientId={id ?? ''} canEdit={canEditClient} />
+
+          {/* Beside the contacts, deliberately: a portal login belongs to one of
+              these people, and this is where you are already looking for them. */}
+          <ClientPortalAccess clientId={id ?? ''} clientName={client.clientName} />
 
           <Card className="border-0 shadow-sm">
             <Card.Header className="bg-white small fw-semibold text-muted">Lead Information</Card.Header>

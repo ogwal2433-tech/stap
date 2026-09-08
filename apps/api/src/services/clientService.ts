@@ -1,7 +1,8 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError } from '../errors/AppError';
-import { generateClientId } from '../lib/systemId';
+import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
 import type {
   ClientContactInput,
@@ -192,6 +193,18 @@ class ClientService {
   async create(data: CreateClientInput, createdBy: string): Promise<ClientResponse> {
     const systemId = await generateClientId();
 
+    // Checked before anything is written. A portal email already in use is the
+    // one failure a caller actually hits, and finding out after the client row
+    // exists would leave them with a half-made client and an error message.
+    const portal = data.portal;
+    if (portal) {
+      const taken = await prisma.user.findUnique({
+        where:  { email: portal.email },
+        select: { id: true },
+      });
+      if (taken) throw new AppError(`${portal.email} is already used by another account`, 409);
+    }
+
     // Either route may supply the contacts: the form sends contacts[], while an
     // older API caller (and prospect conversion) sends the flat pair. Whichever
     // arrives, both the relation and the denormalised columns get filled, so a
@@ -205,7 +218,13 @@ class ClientService {
     );
     const primary = contacts.find((c) => c.isPrimary)!;
 
-    const client = await prisma.client.create({
+    const portalHash = portal ? await bcrypt.hash(portal.password, 12) : null;
+    const portalSystemId = portal ? await generateStaffId() : null;
+
+    // One transaction: a client whose portal login failed to save would show
+    // "portal enabled" in the form the user just submitted and nothing behind it.
+    const client = await prisma.$transaction(async (tx) => {
+      const created = await tx.client.create({
       data: {
         systemId,
         clientName:     data.clientName,
@@ -231,6 +250,23 @@ class ClientService {
         contacts: { orderBy: CONTACT_ORDER },
         _count: { select: { sites: true, contracts: true, complaints: true } },
       },
+      });
+
+      if (portal) {
+        await tx.user.create({
+          data: {
+            systemId:     portalSystemId!,
+            name:         portal.contactName,
+            email:        portal.email,
+            passwordHash: portalHash!,
+            role:         'CLIENT',
+            status:       'ACTIVE',
+            clientId:     created.id,
+          },
+        });
+      }
+
+      return created;
     });
 
     await QueueService.logAudit({
@@ -238,8 +274,22 @@ class ClientService {
       action: 'CLIENT_CREATED',
       entity: 'client',
       entityId: client.id,
-      newValue: { clientName: client.clientName },
+      newValue: { clientName: client.clientName, portalEnabled: !!portal },
     });
+
+    if (portal) {
+      // Best effort — the account works whether or not the mail goes out.
+      try {
+        await QueueService.sendEmail({
+          to:       portal.email,
+          subject:  'Your client portal login',
+          template: 'welcome',
+          data:     { name: portal.contactName, email: portal.email, password: portal.password },
+        });
+      } catch (err) {
+        console.error('⚠️  Failed to queue portal credentials for', portal.email, err);
+      }
+    }
 
     return toClientResponse({
       ...client,
@@ -265,7 +315,13 @@ class ClientService {
     // Prisma with it still attached throws. It is handled through the contact
     // endpoints instead, so editing a client cannot silently drop contacts the
     // form never loaded.
-    const { contacts: _ignored, email, billingAddress, tin, referredBy, leadSource, ...fields } = data;
+    // `portal` is dropped alongside contacts: neither is a column on Client,
+    // and portal access is changed through its own endpoints, never as a
+    // side effect of editing the billing terms.
+    const {
+      contacts: _ignored, portal: _portalIgnored,
+      email, billingAddress, tin, referredBy, leadSource, ...fields
+    } = data;
 
     const updated = await prisma.client.update({
       where: { id },
