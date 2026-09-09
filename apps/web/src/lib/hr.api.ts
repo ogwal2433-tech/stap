@@ -22,6 +22,14 @@ import type {
 
 // ── Recruitment ────────────────────────────────────────────────────────────────
 
+/** A member of staff, as the facilitator dropdown and staff attendee list need them. */
+export interface Facilitator {
+  id:       string;
+  name:     string;
+  role:     string;
+  jobTitle: string | null;
+}
+
 export const hrApi = {
   listApplicants(params?: { stage?: string; page?: number; limit?: number }) {
     return api
@@ -93,13 +101,24 @@ export const hrApi = {
 
   // ── Training ────────────────────────────────────────────────────────────────
 
-  getTrainers(): Promise<{ id: string; name: string }[]> {
+  /**
+   * Everyone who may facilitate a session — every active member of staff, not
+   * only those holding the TRAINER role. Doubles as the attendee list for a
+   * staff session, since both want the same people.
+   */
+  getFacilitators(): Promise<Facilitator[]> {
     return api
-      .get<{ success: boolean; data: { id: string; name: string }[] }>('/hr/trainers')
+      .get<{ success: boolean; data: Facilitator[] }>('/hr/trainers')
       .then((r) => r.data.data);
   },
 
-  listSessions(params?: { status?: string; trainerId?: string; page?: number; limit?: number }) {
+  listSessions(params?: {
+    status?: string;
+    targetGroup?: string;
+    facilitatorUserId?: string;
+    page?: number;
+    limit?: number;
+  }) {
     return api
       .get<{ success: boolean } & PaginatedResponse<TrainingSessionResponse>>('/hr/training', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

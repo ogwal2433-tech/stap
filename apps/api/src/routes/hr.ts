@@ -316,18 +316,22 @@ router.post(
   }),
 );
 
-// ── Trainers lookup (dropdown data for scheduling form) ───────────────────────
-
+// ── Facilitator lookup (dropdown data for the scheduling form) ───────────────
+// Was restricted to users holding the TRAINER role. Supervisors, controllers
+// and administrators run sessions too, so this is every active member of
+// staff — guards and client portal logins excluded, since neither facilitates.
+// Kept on the /trainers path: it is the same lookup for the same dropdown, and
+// a second endpoint returning almost the same list would only drift.
 router.get(
   '/trainers',
   requireRole(...HR_ROLES, ROLES.TRAINER),
   asyncHandler(async (_req, res) => {
-    const trainers = await prisma.user.findMany({
-      where:   { role: ROLES.TRAINER, status: 'ACTIVE' },
-      select:  { id: true, name: true },
+    const facilitators = await prisma.user.findMany({
+      where:   { role: { notIn: [ROLES.GUARD, ROLES.CLIENT] }, status: 'ACTIVE' },
+      select:  { id: true, name: true, role: true, jobTitle: true },
       orderBy: { name: 'asc' },
     });
-    res.json({ success: true, data: trainers });
+    res.json({ success: true, data: facilitators });
   }),
 );
 
@@ -344,9 +348,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const page      = Number(req.query.page)  || 1;
     const limit     = Number(req.query.limit) || 20;
-    const status    = req.query.status    as string | undefined;
-    const trainerId = req.query.trainerId as string | undefined;
-    const result = await hrService.listSessions({ status, trainerId, page, limit });
+    const status      = req.query.status      as string | undefined;
+    const targetGroup = req.query.targetGroup as string | undefined;
+    // trainerId still accepted so an existing caller keeps working; the column
+    // it filters on is facilitatorUserId now.
+    const facilitatorUserId =
+      (req.query.facilitatorUserId ?? req.query.trainerId) as string | undefined;
+    const result = await hrService.listSessions({
+      status, facilitatorUserId, targetGroup, page, limit,
+    });
     res.json({ success: true, ...result });
   }),
 );

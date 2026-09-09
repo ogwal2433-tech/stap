@@ -1,6 +1,9 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
+import {
+  GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP, INTERNAL_FACILITATOR,
+} from '@stap/shared';
 import { notificationService } from './notificationService';
 import { guardService } from './guardService';
 import type {
@@ -81,17 +84,35 @@ function fmtSession(s: any): TrainingSessionResponse {
     id:            s.id,
     title:         s.title,
     description:   s.description ?? null,
-    trainer:       { id: s.trainer.id, name: s.trainer.name },
     location:      s.location ?? null,
     scheduledAt:   s.scheduledAt.toISOString(),
     durationHours: s.durationHours,
     passMark:      s.passMark,
     status:        s.status,
+
+    targetGroup:     s.targetGroup ?? GUARDS_TARGET_GROUP,
+    facilitatorType: s.facilitatorType ?? INTERNAL_FACILITATOR,
+    // The stored name first: it is written for both kinds, and an internal
+    // facilitator whose account was since deactivated still has one here.
+    facilitatorName: s.facilitatorName ?? s.facilitatorUser?.name ?? null,
+    facilitatorUser: s.facilitatorUser
+      ? { id: s.facilitatorUser.id, name: s.facilitatorUser.name }
+      : null,
+
     attendeeCount: attendees.length,
     passCount,
     failCount,
     attendees: attendees.map((a: any) => ({
-      guard:    { id: a.guard.id, fullName: `${a.guard.firstName} ${a.guard.lastName}` },
+      id:    a.id,
+      // Exactly one of these is set, enforced by a CHECK constraint. Read
+      // defensively anyway: this used to assume a guard and would throw on a
+      // staff attendee rather than render one.
+      guard: a.guard
+        ? { id: a.guard.id, fullName: `${a.guard.firstName} ${a.guard.lastName}` }
+        : null,
+      staff: a.user
+        ? { id: a.user.id, name: a.user.name, role: a.user.role, jobTitle: a.user.jobTitle ?? null }
+        : null,
       attended: a.attended,
       score:    a.score ?? null,
       passed:   a.passed ?? null,
@@ -151,10 +172,11 @@ const APPLICANT_INCLUDE = {
 };
 
 const SESSION_INCLUDE = {
-  trainer:  { select: { id: true, name: true } },
+  facilitatorUser: { select: { id: true, name: true } },
   attendees: {
     include: {
       guard: { select: { id: true, firstName: true, lastName: true } },
+      user:  { select: { id: true, name: true, role: true, jobTitle: true } },
     },
   },
 };
@@ -611,38 +633,88 @@ class HRService {
     data: CreateTrainingSessionInput,
     createdBy: string,
   ): Promise<TrainingSessionResponse> {
-    const trainer = await prisma.user.findUnique({ where: { id: data.trainerId } });
-    if (!trainer || trainer.role !== 'TRAINER') {
-      throw new AppError('Trainer not found or user is not a TRAINER', 400);
+    const forStaff = data.targetGroup === STAFF_TARGET_GROUP;
+
+    // The facilitator is no longer required to hold the TRAINER role — a
+    // supervisor or controller commonly runs a session — but an internal one
+    // must still be a real, active member of staff rather than a guard or a
+    // client portal login.
+    let facilitatorName = data.facilitatorName?.trim() || null;
+    if (data.facilitatorType === INTERNAL_FACILITATOR) {
+      const facilitator = await prisma.user.findUnique({
+        where:  { id: data.facilitatorUserId! },
+        select: { id: true, name: true, role: true, status: true },
+      });
+      if (!facilitator || facilitator.status !== 'ACTIVE') {
+        throw new AppError('The chosen facilitator is not an active user', 400);
+      }
+      if (facilitator.role === 'GUARD' || facilitator.role === 'CLIENT') {
+        throw new AppError('A facilitator must be a member of staff', 400);
+      }
+      // Copied, so the session still names who ran it if that account is later
+      // deactivated and the relation is nulled out.
+      facilitatorName = facilitator.name;
     }
 
-    const guards = await prisma.guard.findMany({
-      where: { id: { in: data.guardIds } },
-      select: { id: true, userId: true, firstName: true, lastName: true },
-    });
-    if (guards.length !== data.guardIds.length) {
-      throw new AppError('One or more guard IDs are invalid', 400);
+    // Validated as a set: findMany collapses duplicates, so comparing its
+    // length against the raw array would reject a list that merely repeated an
+    // id, and accept nothing wrong.
+    const guardIds = [...new Set(data.guardIds)];
+    const staffIds = [...new Set(data.staffIds)];
+
+    let guards: { id: string; userId: string | null }[] = [];
+    let staff:  { id: string }[] = [];
+
+    if (forStaff) {
+      staff = await prisma.user.findMany({
+        where:  { id: { in: staffIds }, role: { notIn: ['GUARD', 'CLIENT'] }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (staff.length !== staffIds.length) {
+        throw new AppError('One or more attendees are not active staff members', 400);
+      }
+    } else {
+      guards = await prisma.guard.findMany({
+        where:  { id: { in: guardIds } },
+        select: { id: true, userId: true },
+      });
+      if (guards.length !== guardIds.length) {
+        throw new AppError('One or more guard IDs are invalid', 400);
+      }
     }
 
     const session = await prisma.trainingSession.create({
       data: {
         title:         data.title,
         description:   data.description,
-        trainerId:     data.trainerId,
         location:      data.location,
         scheduledAt:   new Date(data.scheduledAt),
         durationHours: data.durationHours,
         passMark:      data.passMark,
+
+        targetGroup:       data.targetGroup,
+        facilitatorType:   data.facilitatorType,
+        facilitatorName,
+        facilitatorUserId: data.facilitatorType === INTERNAL_FACILITATOR
+          ? data.facilitatorUserId!
+          : null,
+
         attendees: {
-          create: data.guardIds.map((guardId) => ({ guardId })),
+          create: forStaff
+            ? staffIds.map((userId) => ({ userId }))
+            : guardIds.map((guardId) => ({ guardId })),
         },
       },
       include: SESSION_INCLUDE,
     });
 
-    // Notify guards that have user accounts
-    const guardUserIds = guards.filter((g) => g.userId).map((g) => g.userId!);
-    for (const userId of guardUserIds) {
+    // Tell the attendees. Guards are reachable only if they have a login;
+    // staff always are, since a staff record is a user account.
+    const notifyUserIds = forStaff
+      ? staffIds
+      : guards.filter((g) => g.userId).map((g) => g.userId!);
+
+    for (const userId of notifyUserIds) {
       await notificationService.send({
         userId,
         type:    'SYSTEM',
@@ -675,7 +747,12 @@ class HRService {
       for (const result of data.results) {
         const passed = result.score !== undefined ? result.score >= session.passMark : undefined;
         await tx.trainingAttendee.updateMany({
-          where: { trainingSessionId: sessionId, guardId: result.guardId },
+          // Keyed on whichever kind the result names — the schema requires
+          // exactly one — so a staff session's results land as well.
+          where: {
+            trainingSessionId: sessionId,
+            ...(result.guardId ? { guardId: result.guardId } : { userId: result.userId }),
+          },
           data:  { attended: result.attended, score: result.score, notes: result.notes, passed },
         });
       }
@@ -694,15 +771,17 @@ class HRService {
 
   async listSessions(query: {
     status?: string;
-    trainerId?: string;
+    facilitatorUserId?: string;
+    targetGroup?: string;
     page: number;
     limit: number;
   }): Promise<PaginatedResponse<TrainingSessionResponse>> {
-    const { status, trainerId, page, limit } = query;
+    const { status, facilitatorUserId, targetGroup, page, limit } = query;
     const skip  = (page - 1) * limit;
     const where: any = {};
-    if (status)    where.status    = status;
-    if (trainerId) where.trainerId = trainerId;
+    if (status)            where.status            = status;
+    if (facilitatorUserId) where.facilitatorUserId = facilitatorUserId;
+    if (targetGroup)       where.targetGroup       = targetGroup;
 
     const [data, total] = await Promise.all([
       prisma.trainingSession.findMany({

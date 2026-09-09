@@ -174,7 +174,8 @@ model User {
   reportedIncidents       Incident[]           @relation("IncidentReporter")
   notifications           Notification[]
   assignedApplicants      Applicant[]          @relation("ApplicantAssignee")
-  trainerSessions         TrainingSession[]    @relation("TrainerSessions")
+  facilitatedTrainings    TrainingSession[]    @relation("TrainingFacilitator")
+  trainingAttendances     TrainingAttendee[]   @relation("TrainingStaffAttendee")
   gunsRegistered          Gun[]                @relation("GunRegistrar")
   gunMovementsRecorded    GunMovement[]        @relation("GunMovementRecorder")
 
@@ -1609,8 +1610,24 @@ model TrainingSession {
   id                  String             @id @default(cuid())
   title               String
   description         String?
-  trainerId           String
-  trainer             User               @relation("TrainerSessions", fields: [trainerId], references: [id])
+
+  /// GUARDS | STAFF — who the session is for. Decides which kind of attendee
+  /// may be added, and the recruitment pipeline only links GUARDS sessions to
+  /// applicants.
+  targetGroup         String             @default("GUARDS")
+
+  /// INTERNAL | EXTERNAL. Internal names one of our own through
+  /// facilitatorUserId; external is a guest, known only by name.
+  facilitatorType     String             @default("INTERNAL")
+  /// Always set, for both kinds — an internal facilitator's name is copied here
+  /// so a session still says who ran it after that account is deactivated.
+  facilitatorName     String?
+  /// Replaces trainerId. Nullable because an external facilitator has no
+  /// account here, and no longer restricted to users with the TRAINER role:
+  /// supervisors and controllers run sessions too.
+  facilitatorUserId   String?
+  facilitatorUser     User?              @relation("TrainingFacilitator", fields: [facilitatorUserId], references: [id])
+
   location            String?
   scheduledAt         DateTime
   durationHours       Float              @default(1)
@@ -1623,19 +1640,32 @@ model TrainingSession {
   applicants          Applicant[]
 }
 
+/// One attendee of one session — either a guard or a member of staff, never
+/// both and never neither. Prisma cannot express that, so the migration adds a
+/// CHECK constraint; without it a row with both set, or neither, would render
+/// as a nameless attendee nobody can account for.
 model TrainingAttendee {
   id                String          @id @default(cuid())
   trainingSessionId String
   trainingSession   TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
-  guardId           String
-  guard             Guard           @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  guardId           String?
+  guard             Guard?          @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  /// A member of office staff, for a STAFF session.
+  userId            String?
+  user              User?           @relation("TrainingStaffAttendee", fields: [userId], references: [id], onDelete: Restrict)
+
   attended          Boolean         @default(false)
   score             Int?
   passed            Boolean?
   notes             String?
   createdAt         DateTime        @default(now())
 
+  // NULLs do not collide in Postgres, so each pair only constrains rows of its
+  // own kind — a guard cannot be added twice, nor a staff member.
   @@unique([trainingSessionId, guardId])
+  @@unique([trainingSessionId, userId])
 }
 
 model LeaveRequest {
