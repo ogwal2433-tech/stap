@@ -180,6 +180,12 @@ export const ClientListQuerySchema = z.object({
   limit:          z.coerce.number().int().min(1).max(500).default(20),
   search:         z.string().optional(),
   contractStatus: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  /**
+   * Narrows to clients by the state of their contracts, which is not the same
+   * as contractStatus above: that is a field on the client record, this is
+   * derived from the contracts themselves.
+   */
+  contractFilter: z.enum(['expiring', 'expired']).optional(),
   leadStatus:     z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).optional(),
   sortBy:         z.enum(['clientName', 'createdAt', 'billingTerms']).default('clientName'),
   sortOrder:      z.enum(['asc', 'desc']).default('asc'),
@@ -440,5 +446,7 @@ export interface ClientSummary {
   totalActive: number;
   totalInactive: number;
   expiringContracts: number;
+  /** Contracts already past their end date and not yet renewed or closed. */
+  expiredContracts: number;
   openComplaints: number;
 }

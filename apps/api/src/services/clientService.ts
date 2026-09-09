@@ -102,13 +102,34 @@ class ClientService {
   // ── List ───────────────────────────────────────────────────────────────────
 
   async list(query: ClientListQuery): Promise<PaginatedResponse<ClientResponse>> {
-    const { page, limit, search, contractStatus, leadStatus, sortBy, sortOrder } = query;
+    const { page, limit, search, contractStatus, contractFilter, leadStatus, sortBy, sortOrder } =
+      query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.ClientWhereInput = {};
 
     if (contractStatus) where.contractStatus = contractStatus;
     if (leadStatus)     where.leadStatus     = leadStatus;
+
+    // Narrowed by the contracts themselves rather than the client's own
+    // contractStatus column, and by date rather than the contract status a
+    // nightly cron maintains — otherwise anything that lapsed since the last
+    // run is missing from the very filter meant to find it.
+    if (contractFilter) {
+      const now = new Date();
+      if (contractFilter === 'expired') {
+        where.contracts = { some: { contractEnd: { lt: now }, status: { not: 'DRAFT' } } };
+      } else {
+        const thirtyDays = new Date(now);
+        thirtyDays.setDate(thirtyDays.getDate() + 30);
+        where.contracts = {
+          some: {
+            contractEnd: { gte: now, lte: thirtyDays },
+            status:      { in: ['ACTIVE', 'EXPIRING'] },
+          },
+        };
+      }
+    }
 
     if (search) {
       where.OR = [
@@ -611,7 +632,7 @@ class ClientService {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    const [totalActive, totalInactive, expiringContracts, openComplaints] =
+    const [totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints] =
       await Promise.all([
         prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
         prisma.client.count({ where: { contractStatus: 'INACTIVE' } }),
@@ -621,10 +642,17 @@ class ClientService {
             status: { in: ['ACTIVE', 'EXPIRING'] },
           },
         }),
+        // Counted from the date rather than the status, which a nightly cron
+        // maintains: anything that lapsed since the last run is still marked
+        // ACTIVE, and counting the status would miss exactly those.
+        // DRAFT is excluded — never signed is not the same as expired.
+        prisma.contract.count({
+          where: { contractEnd: { lt: new Date() }, status: { not: 'DRAFT' } },
+        }),
         prisma.clientComplaint.count({ where: { status: 'OPEN' } }),
       ]);
 
-    return { totalActive, totalInactive, expiringContracts, openComplaints };
+    return { totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints };
   }
 }
 

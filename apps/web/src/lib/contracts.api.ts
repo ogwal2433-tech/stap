@@ -48,4 +48,17 @@ export const contractsApi = {
       .get<{ success: boolean; data: ContractResponse[] }>('/contracts/expiring')
       .then((r) => r.data.data);
   },
+
+  /**
+   * Both expiry lists in one request. The dashboard shows them side by side,
+   * so asking twice risks two answers computed either side of midnight.
+   */
+  getExpiryAlerts(limit = 10): Promise<{ expiring: ContractResponse[]; expired: ContractResponse[] }> {
+    return api
+      .get<{ success: boolean; data: { expiring: ContractResponse[]; expired: ContractResponse[] } }>(
+        '/contracts/expiry-alerts',
+        { params: { limit } },
+      )
+      .then((r) => r.data.data);
+  },
 };

@@ -374,13 +374,60 @@ class ContractService {
     const contracts = await prisma.contract.findMany({
       where: {
         status: { in: ['ACTIVE', 'EXPIRING'] },
-        contractEnd: { lte: threshold },
+        // Both bounds. Without the lower one this asked for "ends before 30
+        // days from now", which every already-lapsed contract also satisfies —
+        // they only stayed out because the nightly cron had flipped them to
+        // EXPIRED. Anything that lapsed since the last run was listed as
+        // expiring, counting down from a date already past.
+        contractEnd: { gte: now, lte: threshold },
       },
       orderBy: { contractEnd: 'asc' },
       include: CONTRACT_INCLUDE,
     });
 
     return contracts.map((c) => this.formatContract(c));
+  }
+
+  // ── Get expired contracts ──────────────────────────────────────────────────
+
+  /**
+   * Contracts whose end date has passed and which nobody has renewed or closed.
+   *
+   * Matched on the date as well as the status, not the status alone: the status
+   * is maintained by a nightly cron, so between runs — or any time it has not
+   * run — a lapsed contract is still marked ACTIVE. Reading the field alone
+   * would quietly under-report exactly the thing this list exists to surface.
+   *
+   * DRAFT is excluded. A draft that was never signed has not expired; it was
+   * never in force, and showing it as needing renewal is noise.
+   */
+  async getExpiredContracts(limit?: number): Promise<ContractResponse[]> {
+    const now = new Date();
+
+    const contracts = await prisma.contract.findMany({
+      where: {
+        status:      { not: 'DRAFT' },
+        contractEnd: { lt: now },
+      },
+      // Most recently lapsed first: those are the ones still worth chasing.
+      orderBy: { contractEnd: 'desc' },
+      include: CONTRACT_INCLUDE,
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return contracts.map((c) => this.formatContract(c));
+  }
+
+  /** Both expiry lists in one round trip, for the clients dashboard. */
+  async getExpiryAlerts(
+    daysThreshold = 30,
+    limit = 10,
+  ): Promise<{ expiring: ContractResponse[]; expired: ContractResponse[] }> {
+    const [expiring, expired] = await Promise.all([
+      this.getExpiringContracts(daysThreshold),
+      this.getExpiredContracts(limit),
+    ]);
+    return { expiring: expiring.slice(0, limit), expired };
   }
 
   // ── Run status refresh (cron job) ──────────────────────────────────────────
@@ -437,7 +484,11 @@ class ContractService {
   private formatContract(c: any): ContractResponse {
     const now = new Date();
     const end = c.contractEnd instanceof Date ? c.contractEnd : new Date(c.contractEnd);
-    const daysRemaining = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    const rawDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    // Kept floored at 0 — callers already read it as "time left", and letting
+    // it go negative would put expired contracts inside every `<= 30` test.
+    const daysRemaining   = Math.max(0, rawDays);
+    const daysSinceExpiry = rawDays < 0 ? Math.abs(rawDays) : null;
 
     return {
       id:                c.id,
@@ -448,6 +499,7 @@ class ContractService {
       totalMonthlyValue: c.totalMonthlyValue ?? 0,
       status:            c.status,
       daysRemaining,
+      daysSinceExpiry,
       amendmentCount:    c.amendmentCount ?? 0,
       weaponsAllocation: c.weaponsAllocation ?? null,
       shiftPattern:      (c.shiftPattern as ShiftPattern | null) ?? null,

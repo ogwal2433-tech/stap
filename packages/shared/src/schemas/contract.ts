@@ -72,7 +72,15 @@ export interface ContractResponse {
   guardsRequired:    number; // derived: sum of guardRates[].guardsCount
   totalMonthlyValue: number; // derived: sum of guardRates[].monthlyTotal
   status:            'DRAFT' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED';
-  daysRemaining:     number; // computed: days until contractEnd
+  daysRemaining:     number; // computed: days until contractEnd, floored at 0
+  /**
+   * Days since contractEnd passed, or null while it is still in the future.
+   *
+   * A separate field because daysRemaining is floored at zero — an expired
+   * contract reports 0 there and cannot say whether it lapsed yesterday or a
+   * year ago, which is the whole question when deciding what to chase.
+   */
+  daysSinceExpiry:   number | null;
 
   // Security deployment details
   weaponsAllocation: number | null;

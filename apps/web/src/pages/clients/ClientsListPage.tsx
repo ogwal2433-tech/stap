@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, Card, Col, Form,
   InputGroup, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/useClients';
+import ContractExpiryPanels from '../../components/clients/ContractExpiryPanels';
 import RoleGuard from '../../components/RoleGuard';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_STATUSES, type ClientResponse, type UserRole } from '@stap/shared';
@@ -71,9 +72,25 @@ export default function ClientsListPage() {
   const [sortBy, setSortBy] = useState<'clientName' | 'createdAt' | 'billingTerms'>('clientName');
   const [page, setPage] = useState(1);
 
+  // Seeded from the URL so "View all expired" on the dashboard panel lands here
+  // already filtered, and so the filtered view can be linked to or bookmarked.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [contractFilter, setContractFilter] = useState<'expiring' | 'expired' | ''>(
+    (searchParams.get('contractFilter') as 'expiring' | 'expired' | null) ?? '',
+  );
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (contractFilter) next.set('contractFilter', contractFilter);
+    else next.delete('contractFilter');
+    // replace: the filter is a view of this page, not a place to go back to.
+    setSearchParams(next, { replace: true });
+  }, [contractFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data, isLoading, isError } = useClientList({
     search:         search || undefined,
     contractStatus: contractStatus || undefined,
+    contractFilter: contractFilter || undefined,
     leadStatus:     leadStatus || undefined,
     sortBy,
     sortOrder: 'asc',
@@ -115,24 +132,45 @@ export default function ClientsListPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <Row xs={2} lg={4} className="g-3 mb-4">
+        <Row xs={2} lg={5} className="g-3 mb-4">
           {[
             { label: 'Active Clients', value: summary.totalActive, color: '#1B3A6B' },
             { label: 'Inactive', value: summary.totalInactive, color: '#6c757d' },
-            { label: 'Expiring Contracts', value: summary.expiringContracts, color: '#E8701A' },
+            { label: 'Expiring Contracts', value: summary.expiringContracts, color: '#E8701A', filter: 'expiring' as const },
+            { label: 'Expired Contracts', value: summary.expiredContracts, color: '#922B21', filter: 'expired' as const },
             { label: 'Open Complaints', value: summary.openComplaints, color: '#dc3545' },
-          ].map(({ label, value, color }) => (
+          ].map(({ label, value, color, filter }) => {
+            const active = !!filter && contractFilter === filter;
+            return (
             <Col key={label}>
-              <Card className="border-0 shadow-sm h-100">
+              <Card
+                className="border-0 shadow-sm h-100"
+                // The contract counts double as filters: seeing "4 expired" and
+                // then having to find the filter yourself is the annoying half
+                // of the job.
+                role={filter ? 'button' : undefined}
+                onClick={filter ? () => { setContractFilter(active ? '' : filter); setPage(1); } : undefined}
+                style={{
+                  cursor:     filter ? 'pointer' : undefined,
+                  outline:    active ? `2px solid ${color}` : undefined,
+                  transition: 'outline 0.15s',
+                }}
+              >
                 <Card.Body className="text-center py-3">
                   <div className="fw-bold" style={{ fontSize: '2rem', color }}>{value}</div>
                   <div className="text-muted small">{label}</div>
+                  {active && (
+                    <div className="small" style={{ color, fontSize: '0.68rem' }}>filtering — click to clear</div>
+                  )}
                 </Card.Body>
               </Card>
             </Col>
-          ))}
+            );
+          })}
         </Row>
       )}
+
+      <ContractExpiryPanels />
 
       {/* Filters */}
       <Card className="border-0 shadow-sm mb-4">
