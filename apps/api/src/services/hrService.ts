@@ -3,6 +3,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import {
   GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP, INTERNAL_FACILITATOR,
+  GUARD_APPLICANT, STAFF_APPLICANT,
 } from '@stap/shared';
 import { notificationService } from './notificationService';
 import { guardService } from './guardService';
@@ -122,9 +123,23 @@ function fmtSession(s: any): TrainingSessionResponse {
 }
 
 function fmtLeave(l: any): LeaveRequestResponse {
+  // Read from whichever subject the row carries. A CHECK constraint guarantees
+  // exactly one, so this is a branch rather than a fallback chain.
+  const isStaff = !!l.userId;
+  const guard = l.guard
+    ? { id: l.guard.id, fullName: `${l.guard.firstName} ${l.guard.lastName}` }
+    : null;
+  const staff = l.user
+    ? { id: l.user.id, name: l.user.name, role: l.user.role, jobTitle: l.user.jobTitle ?? null }
+    : null;
+
   return {
     id:              l.id,
-    guard:           { id: l.guard.id, fullName: `${l.guard.firstName} ${l.guard.lastName}` },
+    applicantType:   isStaff ? STAFF_APPLICANT : GUARD_APPLICANT,
+    applicantId:     (isStaff ? l.userId : l.guardId) as string,
+    applicantName:   (isStaff ? staff?.name : guard?.fullName) ?? 'Unknown',
+    guard,
+    staff,
     type:            l.type,
     startDate:       l.startDate.toISOString(),
     endDate:         l.endDate.toISOString(),
@@ -183,6 +198,7 @@ const SESSION_INCLUDE = {
 
 const LEAVE_INCLUDE = {
   guard:    { select: { id: true, firstName: true, lastName: true, userId: true } },
+  user:     { select: { id: true, name: true, role: true, jobTitle: true } },
   approver: { select: { id: true, name: true } },
 };
 
@@ -804,34 +820,68 @@ class HRService {
   // ── Leave Management ──────────────────────────────────────────────────────────
 
   async requestLeave(data: CreateLeaveRequestInput, requestedBy: string): Promise<LeaveRequestResponse> {
-    const guard = await prisma.guard.findUnique({
-      where:  { id: data.guardId },
-      select: { id: true, firstName: true, lastName: true },
-    });
-    if (!guard) throw new NotFoundError('Guard not found');
+    // The schema already rejects both-or-neither; this narrows the type and
+    // catches a caller that bypassed validation.
+    if (!!data.guardId === !!data.userId) {
+      throw new AppError('Leave is for either a guard or a staff member, not both', 400);
+    }
+
+    // Whose leave this is, and what to call them in the approval notification.
+    let subjectName: string;
+    if (data.userId) {
+      const staff = await prisma.user.findUnique({
+        where:  { id: data.userId },
+        select: { id: true, name: true, role: true, status: true },
+      });
+      if (!staff) throw new NotFoundError('Staff member not found');
+      if (staff.role === 'GUARD' || staff.role === 'CLIENT') {
+        // A guard's leave belongs against their guard record, where their
+        // entitlement and deployment history live, not their login.
+        throw new AppError('Use the guard record for a guard’s leave', 400);
+      }
+      if (staff.status !== 'ACTIVE') {
+        throw new AppError('That staff account is not active', 400);
+      }
+      subjectName = staff.name;
+    } else {
+      const guard = await prisma.guard.findUnique({
+        where:  { id: data.guardId! },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      if (!guard) throw new NotFoundError('Guard not found');
+      subjectName = `${guard.firstName} ${guard.lastName}`;
+    }
 
     const startDate = new Date(data.startDate);
     const endDate   = new Date(data.endDate);
+    // Working days, not calendar days — Sundays do not count against leave.
     const daysRequested = countWorkingDays(startDate, endDate);
 
-    // Check for overlapping approved leave
+    // Pending counts as well as approved. Two requests over the same dates is a
+    // mistake being made twice, and catching it at entry is kinder than an
+    // approver discovering the clash later.
     const overlap = await prisma.leaveRequest.findFirst({
       where: {
-        guardId: data.guardId,
-        status:  'APPROVED',
+        ...(data.userId ? { userId: data.userId } : { guardId: data.guardId! }),
+        status: { in: ['PENDING', 'APPROVED'] },
         AND: [
           { startDate: { lte: endDate } },
           { endDate:   { gte: startDate } },
         ],
       },
+      select: { status: true },
     });
     if (overlap) {
-      throw new AppError('Guard already has approved leave in this period', 409);
+      throw new AppError(
+        `${subjectName} already has ${overlap.status === 'APPROVED' ? 'approved' : 'pending'} leave in this period`,
+        409,
+      );
     }
 
     const leave = await prisma.leaveRequest.create({
       data: {
-        guardId:      data.guardId,
+        guardId:      data.guardId ?? null,
+        userId:       data.userId  ?? null,
         type:         data.type,
         startDate,
         endDate,
@@ -845,7 +895,7 @@ class HRService {
       role:    'ASSISTANT_MANAGER',
       type:    'APPROVAL_REQUIRED',
       title:   'Leave Request',
-      message: `${guard.firstName} ${guard.lastName} requests ${data.type} leave from ${startDate.toLocaleDateString('en-UG')} to ${endDate.toLocaleDateString('en-UG')}.`,
+      message: `${subjectName} requests ${data.type} leave from ${startDate.toLocaleDateString('en-UG')} to ${endDate.toLocaleDateString('en-UG')}.`,
     });
 
     return fmtLeave(leave);
@@ -887,17 +937,23 @@ class HRService {
 
   async listLeaveRequests(query: {
     guardId?: string;
+    userId?: string;
+    applicantType?: string;
     status?: string;
     type?: string;
     page: number;
     limit: number;
   }): Promise<PaginatedResponse<LeaveRequestResponse>> {
-    const { guardId, status, type, page, limit } = query;
+    const { guardId, userId, applicantType, status, type, page, limit } = query;
     const skip  = (page - 1) * limit;
     const where: any = {};
     if (guardId) where.guardId = guardId;
+    if (userId)  where.userId  = userId;
     if (status)  where.status  = status;
     if (type)    where.type    = type;
+    // Narrowed by which subject the row carries, since the kind is not stored.
+    if (applicantType === STAFF_APPLICANT)      where.userId  = { not: null };
+    else if (applicantType === GUARD_APPLICANT) where.guardId = { not: null };
 
     const [data, total] = await Promise.all([
       prisma.leaveRequest.findMany({
@@ -917,16 +973,31 @@ class HRService {
     };
   }
 
-  async getLeaveBalance(guardId: string): Promise<LeaveBalance> {
-    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
-    if (!guard) throw new NotFoundError('Guard not found');
+  /**
+   * This year's leave for one person, guard or staff.
+   *
+   * The 21-day annual entitlement is the same figure the guard balance has
+   * always used. Whether office staff are entitled to the same is a policy
+   * question nobody has answered here; it is applied to both rather than
+   * quietly showing staff no balance at all.
+   */
+  async getLeaveBalance(subjectId: string, applicantType?: string): Promise<LeaveBalance> {
+    const forStaff = applicantType === STAFF_APPLICANT;
+
+    if (forStaff) {
+      const staff = await prisma.user.findUnique({ where: { id: subjectId }, select: { id: true } });
+      if (!staff) throw new NotFoundError('Staff member not found');
+    } else {
+      const guard = await prisma.guard.findUnique({ where: { id: subjectId }, select: { id: true } });
+      if (!guard) throw new NotFoundError('Guard not found');
+    }
 
     const yearStart = new Date(new Date().getFullYear(), 0, 1);
     const yearEnd   = new Date(new Date().getFullYear(), 11, 31);
 
     const approved = await prisma.leaveRequest.findMany({
       where: {
-        guardId,
+        ...(forStaff ? { userId: subjectId } : { guardId: subjectId }),
         status:    'APPROVED',
         startDate: { gte: yearStart, lte: yearEnd },
       },

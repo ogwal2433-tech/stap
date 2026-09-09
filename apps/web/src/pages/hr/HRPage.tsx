@@ -11,6 +11,8 @@ import {
   TRAINING_TARGET_GROUPS, FACILITATOR_TYPES, targetGroupLabel,
   GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP,
   INTERNAL_FACILITATOR, EXTERNAL_FACILITATOR, getJobTitleLabel,
+  LEAVE_TYPES, LEAVE_APPLICANT_TYPES, GUARD_APPLICANT, STAFF_APPLICANT,
+  leaveTypeLabel,
 } from '@stap/shared';
 import type {
   ApplicantResponse, TrainingSessionResponse, LeaveRequestResponse, LetterTemplateResponse,
@@ -637,13 +639,48 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
   const request = useRequestLeave();
   const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200, status: 'ACTIVE' });
   const guards = guardsData?.data ?? [];
-  const [form, setForm] = useState({ guardId: '', type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+  // The facilitator lookup is every active member of staff, which is exactly
+  // who can take office leave.
+  const { data: staffData, isLoading: staffLoading } = useFacilitators();
+  const staff = staffData ?? [];
+
+  const [form, setForm] = useState({
+    applicantType: GUARD_APPLICANT as string,
+    guardId: '', userId: '',
+    type: 'ANNUAL', startDate: '', endDate: '', reason: '',
+  });
+
+  const forStaff = form.applicantType === STAFF_APPLICANT;
+  const subjectChosen = forStaff ? !!form.userId : !!form.guardId;
+
+  /** Switching who the request is for drops the other subject. */
+  const chooseApplicantType = (value: string) =>
+    setForm(f => ({ ...f, applicantType: value, guardId: '', userId: '' }));
+
+  /**
+   * Working days, matching the server, which does not count Sundays against
+   * leave. A calendar-day figure here would disagree with the days that end up
+   * recorded, which is worse than showing nothing.
+   */
+  const workingDays = (() => {
+    if (!form.startDate || !form.endDate) return null;
+    const start = new Date(form.startDate);
+    const end   = new Date(form.endDate);
+    if (Number.isNaN(+start) || Number.isNaN(+end) || end < start) return null;
+    let count = 0;
+    for (const cur = new Date(start); cur <= end; cur.setDate(cur.getDate() + 1)) {
+      if (cur.getDay() !== 0) count++;
+    }
+    return count;
+  })();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     request.mutate(
       {
-        guardId:   form.guardId,
+        // Exactly one, which the API also enforces.
+        guardId:   forStaff ? null : form.guardId,
+        userId:    forStaff ? form.userId : null,
         type:      form.type as any,
         startDate: new Date(form.startDate).toISOString(),
         endDate:   new Date(form.endDate).toISOString(),
@@ -661,6 +698,67 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
       <Modal.Header closeButton><Modal.Title>Request Leave</Modal.Title></Modal.Header>
       <Modal.Body>
         <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Leave for *</Form.Label>
+            <div className="d-flex gap-2">
+              {LEAVE_APPLICANT_TYPES.map(t => {
+                const active = form.applicantType === t.value;
+                return (
+                  <div
+                    key={t.value}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
+                    onClick={() => chooseApplicantType(t.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        chooseApplicantType(t.value);
+                      }
+                    }}
+                    style={{
+                      flex:         1,
+                      padding:      '9px 12px',
+                      border:       `2px solid ${active ? '#1B3A6B' : '#e9ecef'}`,
+                      borderRadius: '0.5rem',
+                      cursor:       'pointer',
+                      background:   active ? '#EBF5FB' : 'white',
+                    }}
+                  >
+                    <div
+                      className="fw-bold"
+                      style={{ fontSize: '0.82rem', color: active ? '#1B3A6B' : '#4A5568' }}
+                    >
+                      {t.label}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#6c757d' }}>{t.description}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Form.Group>
+
+          {forStaff ? (
+            <Form.Group className="mb-2">
+              <Form.Label className="small fw-medium">Staff member *</Form.Label>
+              <Form.Select
+                size="sm"
+                value={form.userId}
+                onChange={e => setForm(f => ({ ...f, userId: e.target.value }))}
+                required
+                disabled={staffLoading}
+              >
+                <option value="">
+                  {staffLoading ? 'Loading staff…' : staff.length === 0 ? 'No active staff found' : 'Select staff member…'}
+                </option>
+                {staff.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} — {u.jobTitle ? getJobTitleLabel(u.jobTitle) : u.role.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          ) : (
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
             {guardsError ? (
@@ -683,11 +781,12 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
               </Form.Select>
             )}
           </Form.Group>
+          )}
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Leave Type *</Form.Label>
             <Form.Select size="sm" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              {['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY'].map(t => (
-                <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>
+              {LEAVE_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </Form.Select>
           </Form.Group>
@@ -701,13 +800,31 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
               <Form.Control size="sm" type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required />
             </Col>
           </Row>
+          {workingDays !== null && (
+            <div
+              style={{
+                background:   '#EBF5FB',
+                borderRadius: '0.375rem',
+                padding:      '7px 11px',
+                fontSize:     '0.76rem',
+                color:        '#1B3A6B',
+                fontWeight:   600,
+                marginBottom: '12px',
+              }}
+            >
+              {workingDays} working day{workingDays === 1 ? '' : 's'}
+              <span className="fw-normal text-muted ms-1" style={{ fontSize: '0.7rem' }}>
+                (Sundays not counted)
+              </span>
+            </div>
+          )}
           <Form.Group className="mb-3">
             <Form.Label className="small fw-medium">Reason *</Form.Label>
             <Form.Control as="textarea" rows={3} size="sm" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} required minLength={10} />
           </Form.Group>
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={request.isPending}>
+            <Button type="submit" size="sm" disabled={request.isPending || !subjectChosen}>
               {request.isPending ? <Spinner size="sm" /> : 'Submit Request'}
             </Button>
           </div>
@@ -1359,6 +1476,7 @@ export default function HRPage() {
   const [showLeaveModal, setShowLeaveModal]       = useState(false);
   const [editTemplate, setEditTemplate]           = useState<LetterTemplateResponse | null>(null);
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('');
+  const [leaveApplicantFilter, setLeaveApplicantFilter] = useState('');
   const [trainingStatusFilter, setTrainingStatusFilter] = useState('');
 
   const { data: applicantsData, isLoading: loadingApplicants } = useApplicants({ limit: 200 });
@@ -1368,7 +1486,8 @@ export default function HRPage() {
     limit: 50,
   });
   const { data: leaveData, isLoading: loadingLeave } = useLeaveRequests({
-    status: leaveStatusFilter || undefined,
+    status:        leaveStatusFilter || undefined,
+    applicantType: leaveApplicantFilter || undefined,
     limit: 50,
   });
   const { data: templates, isLoading: loadingTemplates } = useLetterTemplates();
@@ -1623,9 +1742,33 @@ export default function HRPage() {
                   </Button>
                 ))}
               </div>
-              <Button size="sm" onClick={() => setShowLeaveModal(true)}>
-                <i className="bi bi-plus-lg me-1" />Request Leave
-              </Button>
+              <div className="d-flex gap-1 align-items-center">
+                {[{ label: 'Everyone', value: '' }, { label: 'Guards', value: GUARD_APPLICANT }, { label: 'Staff', value: STAFF_APPLICANT }].map(f => {
+                  const active = leaveApplicantFilter === f.value;
+                  return (
+                    <button
+                      key={f.value || 'all'}
+                      type="button"
+                      onClick={() => setLeaveApplicantFilter(f.value)}
+                      style={{
+                        padding:      '3px 12px',
+                        borderRadius: '20px',
+                        border:       `1px solid ${active ? '#1B3A6B' : '#ced4da'}`,
+                        background:   active ? '#1B3A6B' : 'white',
+                        color:        active ? 'white' : '#4A5568',
+                        fontSize:     '0.74rem',
+                        fontWeight:   active ? 600 : 400,
+                        cursor:       'pointer',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+                <Button size="sm" className="ms-2" onClick={() => setShowLeaveModal(true)}>
+                  <i className="bi bi-plus-lg me-1" />Request Leave
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1637,7 +1780,7 @@ export default function HRPage() {
             <Table hover size="sm" responsive>
               <thead className="table-light">
                 <tr>
-                  <th>Guard</th>
+                  <th>Who</th>
                   <th>Type</th>
                   <th>Period</th>
                   <th className="text-center">Days</th>
@@ -1649,10 +1792,27 @@ export default function HRPage() {
               <tbody>
                 {leaves.map(l => (
                   <tr key={l.id}>
-                    <td className="fw-medium">{l.guard.fullName}</td>
+                    <td>
+                      <div className="fw-medium">{l.applicantName}</div>
+                      <div style={{ fontSize: '0.68rem', marginTop: '2px' }}>
+                        <Badge
+                          bg={l.applicantType === STAFF_APPLICANT ? 'success' : 'primary'}
+                          style={{ fontSize: '0.6rem' }}
+                        >
+                          {l.applicantType === STAFF_APPLICANT ? 'Staff' : 'Guard'}
+                        </Badge>
+                        {l.staff && (
+                          <span className="text-muted ms-2">
+                            {l.staff.jobTitle
+                              ? getJobTitleLabel(l.staff.jobTitle)
+                              : l.staff.role.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <Badge bg={LEAVE_TYPE_BADGES[l.type] ?? 'secondary'} text={l.type === 'SICK' ? 'dark' : undefined}>
-                        {l.type}
+                        {leaveTypeLabel(l.type)}
                       </Badge>
                     </td>
                     <td className="small text-nowrap">

@@ -138,7 +138,10 @@ export const hrApi = {
 
   // ── Leave ────────────────────────────────────────────────────────────────────
 
-  listLeaveRequests(params?: { guardId?: string; status?: string; type?: string; page?: number; limit?: number }) {
+  listLeaveRequests(params?: {
+    guardId?: string; userId?: string; applicantType?: string;
+    status?: string; type?: string; page?: number; limit?: number;
+  }) {
     return api
       .get<{ success: boolean } & PaginatedResponse<LeaveRequestResponse>>('/hr/leave', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

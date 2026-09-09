@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LEAVE_TYPE_VALUES } from '../constants/leave';
 import {
   TRAINING_TARGET_GROUP_VALUES, GUARDS_TARGET_GROUP,
   FACILITATOR_TYPE_VALUES, INTERNAL_FACILITATOR, EXTERNAL_FACILITATOR,
@@ -104,14 +105,21 @@ export type RecordTrainingResultsInput = z.infer<typeof RecordTrainingResultsSch
 
 export const CreateLeaveRequestSchema = z
   .object({
-    guardId:   z.string().min(1),
-    type:      z.enum(['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY']),
+    /** Exactly one of these — a guard, or a member of office staff. */
+    guardId:   z.string().min(1).optional().nullable(),
+    userId:    z.string().min(1).optional().nullable(),
+    type:      z.enum(LEAVE_TYPE_VALUES),
     startDate: z.string().datetime(),
     endDate:   z.string().datetime(),
     reason:    z.string().min(10),
   })
+  .refine((data) => !!data.guardId !== !!data.userId, {
+    message: 'Choose either a guard or a staff member, not both.',
+    path:    ['guardId'],
+  })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: 'End date must be after start date',
+    path:    ['endDate'],
   });
 export type CreateLeaveRequestInput = z.infer<typeof CreateLeaveRequestSchema>;
 
@@ -361,7 +369,16 @@ export interface TrainingSessionResponse {
 
 export interface LeaveRequestResponse {
   id:              string;
-  guard:           { id: string; fullName: string };
+  /**
+   * GUARD or STAFF, derived from whichever subject the record carries rather
+   * than stored beside it — so it cannot contradict the row.
+   */
+  applicantType:   string;
+  /** The subject's own id, whichever kind they are. */
+  applicantId:     string;
+  applicantName:   string;
+  guard:           { id: string; fullName: string } | null;
+  staff:           { id: string; name: string; role: string; jobTitle: string | null } | null;
   type:            string;
   startDate:       string;
   endDate:         string;

@@ -189,6 +189,7 @@ model User {
   marketingTargets        MarketingTarget[]       @relation("TargetAssignee")
   marketingTargetsCreated MarketingTarget[]       @relation("TargetCreator")
   approvedLeaves          LeaveRequest[]          @relation("LeaveApprover")
+  staffLeaveRequests      LeaveRequest[]          @relation("StaffLeaveRequest")
   recordedInventory       InventoryTransaction[]  @relation("InventoryRecorder")
   authorisedTransfers     GuardTransfer[]         @relation("TransferAuthoriser")
   supervisedZones         Zone[]                  @relation("ZoneSupervisor")
@@ -1668,10 +1669,24 @@ model TrainingAttendee {
   @@unique([trainingSessionId, userId])
 }
 
+/// Leave for a guard or for a member of office staff — exactly one of the two,
+/// never both and never neither. Prisma cannot express that, so the migration
+/// adds a CHECK constraint; without it a request belonging to nobody would sit
+/// in the approval queue with no name against it.
+///
+/// There is deliberately no stored "applicantType": it would only restate which
+/// of the two columns is set, and a stored restatement is something that can
+/// disagree with the data it describes. It is derived when the row is read.
 model LeaveRequest {
   id              String    @id @default(cuid())
-  guardId         String
-  guard           Guard     @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  guardId         String?
+  guard           Guard?    @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  /// The office staff member this leave belongs to.
+  userId          String?
+  user            User?     @relation("StaffLeaveRequest", fields: [userId], references: [id], onDelete: Restrict)
+
   type            String
   startDate       DateTime
   endDate         DateTime

@@ -394,6 +394,8 @@ router.get(
     const status  = req.query.status  as string | undefined;
     const type    = req.query.type    as string | undefined;
     let guardId   = req.query.guardId as string | undefined;
+    let userId    = req.query.userId  as string | undefined;
+    let applicantType = req.query.applicantType as string | undefined;
 
     // Guards can only see their own leave requests
     if (req.user!.role === ROLES.GUARD) {
@@ -403,7 +405,16 @@ router.get(
       guardId = guard?.id;
     }
 
-    const result = await hrService.listLeaveRequests({ guardId, status, type, page, limit });
+    // A guard sees only their own, so the filter is pinned to their record and
+    // any staff filter they asked for is discarded rather than widening it.
+    if (req.user!.role === ROLES.GUARD) {
+      userId        = undefined;
+      applicantType = 'GUARD';
+    }
+
+    const result = await hrService.listLeaveRequests({
+      guardId, userId, applicantType, status, type, page, limit,
+    });
     res.json({ success: true, ...result });
   }),
 );
@@ -418,6 +429,8 @@ router.post(
   }),
 );
 
+// :guardId is the path it has always been; it now also accepts a user id when
+// ?applicantType=STAFF is passed, rather than a second near-identical route.
 router.get(
   '/leave/:guardId/balance',
   requireRole(...HR_ROLES, ROLES.GUARD),
@@ -431,7 +444,10 @@ router.get(
         throw new ForbiddenError('Guards can only view their own leave balance');
       }
     }
-    const data = await hrService.getLeaveBalance(req.params.guardId);
+    const data = await hrService.getLeaveBalance(
+      req.params.guardId as string,
+      req.query.applicantType as string | undefined,
+    );
     res.json({ success: true, data });
   }),
 );
