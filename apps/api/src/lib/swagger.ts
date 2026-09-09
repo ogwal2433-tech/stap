@@ -1,5 +1,5 @@
 import swaggerJsdoc from 'swagger-jsdoc';
-import { APP_NAME } from '@stap/shared';
+import { APP_NAME } from '../config/branding';
 
 const options: swaggerJsdoc.Options = {
   definition: {

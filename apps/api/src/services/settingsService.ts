@@ -6,7 +6,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
-import { APP_NAME } from '@stap/shared';
+import { APP_NAME } from '../config/branding';
 import type {
   SystemSettingResponse,
   UserResponse,

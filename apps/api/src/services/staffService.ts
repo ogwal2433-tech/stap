@@ -6,7 +6,8 @@ import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { APP_NAME, ROLE_CONFIG, ROLES } from '@stap/shared';
+import { ROLE_CONFIG, ROLES } from '@stap/shared';
+import { APP_NAME } from '../config/branding';
 import type {
   CreateStaffInput,
   UpdateStaffInput,

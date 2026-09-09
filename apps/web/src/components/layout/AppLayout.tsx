@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Button, Navbar } from 'react-bootstrap';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
-import { APP_NAME } from '@stap/shared';
+import { APP_NAME } from '../../lib/branding';
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { clientsApi } from '../../lib/clients.api';
 import { useQuery } from '@tanstack/react-query';
 import type { SupervisorCheckinInput } from '@stap/shared';
-import { COMPANY_NAME } from '@stap/shared';
+import { COMPANY_NAME } from '../../lib/branding';
 
 interface QueuedCheckin {
   data: SupervisorCheckinInput;

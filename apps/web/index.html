@@ -4,9 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>STAP Security</title>
-    <meta name="application-name" content="STAP Security" />
-    <meta name="description" content="STAP Security — Guard Management Platform" />
+    <!--
+      %APP_NAME% and %APP_TAGLINE% are substituted at build time by the
+      brand-index-html plugin in vite.config.ts, so one source tree can build
+      differently-branded frontends. Unset, they resolve to the defaults in
+      @stap/shared.
+    -->
+    <title>%APP_NAME%</title>
+    <meta name="application-name" content="%APP_NAME%" />
+    <meta name="description" content="%APP_NAME% — %APP_TAGLINE%" />
+    <meta property="og:title" content="%APP_NAME%" />
   </head>
   <body>
     <div id="root"></div>

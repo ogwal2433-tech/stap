@@ -3,7 +3,7 @@ import prisma from '../db/prisma';
 import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { APP_NAME } from '@stap/shared';
+import { APP_NAME } from '../config/branding';
 import { loginUrl } from '../jobs/templates/emailTemplates';
 import type { LinkedAccount } from '@stap/shared';
 

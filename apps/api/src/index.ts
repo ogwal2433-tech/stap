@@ -40,7 +40,7 @@ import { swaggerSpec } from './lib/swagger';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticate } from './middleware/authenticate';
 import { errorLogger } from './services/errorLogger';
-import { APP_NAME } from '@stap/shared';
+import { APP_NAME } from './config/branding';
 
 const app: Express = express();
 // Trust the first proxy (Nginx) — required when running behind a reverse proxy
@@ -66,7 +66,10 @@ app.use('/uploads', authenticate, express.static(path.join(__dirname, '../public
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 app.get('/api/v1/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // `app` names which deployment answered. Two differently-branded stacks run
+  // on one host, and a health check that cannot tell them apart is how you
+  // confirm the wrong one is up.
+  res.json({ status: 'ok', app: APP_NAME, timestamp: new Date().toISOString() });
 });
 
 app.use('/api/v1', apiRouter);

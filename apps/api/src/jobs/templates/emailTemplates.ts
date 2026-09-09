@@ -1,4 +1,4 @@
-import { COMPANY_NAME, APP_NAME } from '@stap/shared';
+import { COMPANY_NAME, APP_NAME } from '../../config/branding';
 
 /**
  * Email bodies for the queued mail templates.

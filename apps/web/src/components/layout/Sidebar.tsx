@@ -9,9 +9,8 @@ import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import RoleGuard from '../RoleGuard';
 import PermissionGuard from '../PermissionGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
+import { APP_NAME, APP_TAGLINE } from '../../lib/branding';
 import {
-  APP_NAME,
-  APP_TAGLINE,
   ROLES,
   INTERNAL_ROLES,
   FINANCE_ROLES,

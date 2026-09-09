@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { COMPANY_NAME } from '@stap/shared';
+import { COMPANY_NAME } from '../config/branding';
 import { smtpConfig } from '../services/integrationSettings';
 
 /**

@@ -22,6 +22,21 @@ COPY apps/web ./apps/web
 # Build shared first
 RUN pnpm --filter @stap/shared build
 
+# ── Branding ──────────────────────────────────────────────────────────
+# The frontend is static files behind nginx, so there is no server to ask at
+# page load what deployment this is. The brand is therefore baked in here, and
+# each branded stack builds its own image.
+#
+# Left unset these are empty, resolveBranding() falls back to the defaults in
+# @stap/shared, and the image is the original STAP Security build — so the
+# existing deployment is unaffected by this argument existing.
+ARG VITE_APP_NAME=""
+ARG VITE_APP_TAGLINE=""
+ARG VITE_COMPANY_NAME=""
+ENV VITE_APP_NAME=$VITE_APP_NAME \
+    VITE_APP_TAGLINE=$VITE_APP_TAGLINE \
+    VITE_COMPANY_NAME=$VITE_COMPANY_NAME
+
 # Build web
 RUN pnpm --filter web build
 

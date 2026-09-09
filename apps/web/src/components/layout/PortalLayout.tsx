@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Button, Navbar } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
-import { COMPANY_NAME } from '@stap/shared';
+import { COMPANY_NAME } from '../../lib/branding';
 
 export default function PortalLayout() {
   const { user, logout } = useAuth();
