@@ -53,14 +53,27 @@ export const contactTypeConfig = (value: string) =>
   CONTACT_TYPES.find((t) => t.value === value) ?? CONTACT_TYPES[CONTACT_TYPES.length - 1];
 
 /**
+ * An email address, or nothing at all.
+ *
  * An empty string is what a blank <input> submits, and it has to be accepted
  * before .email() sees it — z.string().email().optional() rejects '' because ''
  * is not undefined. That is why an "optional" email field could not be left
- * blank. The service normalises '' to null on the way in.
+ * blank. The service normalises the blank to null on the way in.
+ *
+ * Trimmed first, so a field holding only spaces counts as blank. It looks empty
+ * to whoever is filling the form, and rejecting it as "Invalid email address"
+ * is the same complaint as the original bug wearing a different hat. Trimming
+ * here also matches blankToNull() in clientService, which has always trimmed.
  */
-const OptionalEmail = z.union([z.literal(''), z.string().email('Invalid email address')])
+const OptionalEmail = z
+  .string()
+  .trim()
   .optional()
-  .nullable();
+  .nullable()
+  .refine(
+    (v) => !v || z.string().email().safeParse(v).success,
+    'Invalid email address',
+  );
 
 export const ClientContactSchema = z.object({
   contactType: z.enum(CONTACT_TYPE_VALUES).default('PRIMARY'),
