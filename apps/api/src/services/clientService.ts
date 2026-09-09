@@ -7,6 +7,7 @@ import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
 import { MARKETER_LEAD_SOURCE, LEAD_SOURCES } from '@stap/shared';
 import type {
+  BillingSummary,
   ClientContactInput,
   ClientContactResponse,
   CreateClientInput,
@@ -673,6 +674,111 @@ class ClientService {
       ]);
 
     return { totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints };
+  }
+
+  /**
+   * What this client is being billed, and what they still owe.
+   *
+   * "Currently billed" is the sum of the monthly value of contracts in force —
+   * ACTIVE or EXPIRING, since a contract in its last month is still being
+   * invoiced. DRAFT and EXPIRED are not: one has not started, the other has
+   * stopped, and counting either would overstate revenue.
+   *
+   * Money received is read the way invoiceService.recomputeBalance() reads it,
+   * because anything else would disagree with the figure on the invoice itself:
+   * manual Payment rows plus mobile-money InvoicePayment rows that actually
+   * succeeded. A failed or still-pending mobile-money attempt is not a payment.
+   */
+  async getBillingSummary(clientId: string): Promise<BillingSummary> {
+    const client = await prisma.client.findUnique({
+      where:  { id: clientId },
+      select: { id: true },
+    });
+    if (!client) throw new NotFoundError(`Client ${clientId} not found`);
+
+    const now = new Date();
+
+    const [contracts, openInvoices, manualPayment, momoPayment] = await Promise.all([
+      prisma.contract.findMany({
+        where:  { clientId, status: { in: ['ACTIVE', 'EXPIRING'] } },
+        select: {
+          id: true, guardsRequired: true, totalMonthlyValue: true,
+          status: true, contractEnd: true,
+        },
+        orderBy: { contractEnd: 'asc' },
+      }),
+      // Anything not settled. PAID invoices carry a zero balance and would only
+      // add rows to sum through.
+      prisma.invoice.findMany({
+        where:  { clientId, status: { not: 'PAID' } },
+        select: {
+          id: true, invoiceNumber: true, totalAmount: true, paidAmount: true,
+          outstandingBalance: true, status: true, dueDate: true,
+        },
+      }),
+      prisma.payment.findFirst({
+        where:   { invoice: { clientId } },
+        orderBy: { createdAt: 'desc' },
+        select:  { amountPaid: true, createdAt: true },
+      }),
+      prisma.invoicePayment.findFirst({
+        where:   { invoice: { clientId }, status: 'SUCCESS' },
+        orderBy: { initiatedAt: 'desc' },
+        select:  { amountPaid: true, initiatedAt: true, resolvedAt: true },
+      }),
+    ]);
+
+    const totalMonthlyBilling = contracts.reduce((sum, c) => sum + c.totalMonthlyValue, 0);
+    const totalGuardsDeployed = contracts.reduce((sum, c) => sum + c.guardsRequired, 0);
+
+    // outstandingBalance is maintained and floored at zero, but it is derived —
+    // falling back to the arithmetic keeps this correct for a row written
+    // before that column existed, or one a failed recompute left behind.
+    const balanceOf = (inv: { outstandingBalance: number; totalAmount: number; paidAmount: number }) =>
+      inv.outstandingBalance || Math.max(0, inv.totalAmount - inv.paidAmount);
+
+    const totalOutstanding = openInvoices.reduce((sum, inv) => sum + balanceOf(inv), 0);
+
+    // Overdue by the date as well as the status: status is only refreshed when
+    // an invoice is touched, so one that fell due this morning may still read
+    // PENDING.
+    const overdue = openInvoices.filter(
+      (inv) => inv.status === 'OVERDUE' || inv.dueDate < now,
+    );
+    const totalOverdue = overdue.reduce((sum, inv) => sum + balanceOf(inv), 0);
+
+    // Whichever of the two kinds of payment landed most recently.
+    const momoAt = momoPayment ? (momoPayment.resolvedAt ?? momoPayment.initiatedAt) : null;
+    const lastPayment =
+      manualPayment && momoAt
+        ? manualPayment.createdAt >= momoAt
+          ? { amount: manualPayment.amountPaid, paidAt: manualPayment.createdAt }
+          : { amount: momoPayment!.amountPaid, paidAt: momoAt }
+        : manualPayment
+          ? { amount: manualPayment.amountPaid, paidAt: manualPayment.createdAt }
+          : momoAt
+            ? { amount: momoPayment!.amountPaid, paidAt: momoAt }
+            : null;
+
+    return {
+      totalMonthlyBilling,
+      activeContractCount: contracts.length,
+      totalGuardsDeployed,
+      activeContracts: contracts.map((c) => ({
+        id:             c.id,
+        guardsRequired: c.guardsRequired,
+        monthlyValue:   c.totalMonthlyValue,
+        status:         c.status,
+        contractEnd:    c.contractEnd.toISOString(),
+      })),
+      totalOutstanding,
+      outstandingInvoiceCount: openInvoices.length,
+      totalOverdue,
+      overdueCount: overdue.length,
+      lastPayment: lastPayment
+        ? { amount: lastPayment.amount, paidAt: lastPayment.paidAt.toISOString() }
+        : null,
+    };
   }
 
   /**

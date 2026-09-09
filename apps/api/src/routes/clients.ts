@@ -145,6 +145,18 @@ const SITE_WRITE_ROLES: UserRole[] = [
   ROLES.OPERATIONS_SUPERVISOR,
 ];
 
+// ── GET /:id/billing-summary — what this client is billed and owes ───────────
+// CONTRACTS_VIEW, not CLIENTS_VIEW: Control Room needs the client record to run
+// a shift and has no business seeing what that client pays.
+router.get(
+  '/:id/billing-summary',
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
+  asyncHandler(async (req, res) => {
+    const summary = await clientService.getBillingSummary(req.params.id as string);
+    res.status(200).json({ success: true, data: summary });
+  }),
+);
+
 // ── GET /marketer-stats — how clients were won ───────────────────────────────
 // Before /:id, or "marketer-stats" is read as a client id.
 router.get(

@@ -13,6 +13,7 @@ import type {
   CreateSiteInput,
   UpdateSiteInput,
   CreateIncidentInput,
+  BillingSummary,
   GrantClientPortalInput,
   LinkedAccount,
   SiteShiftResponse,
@@ -150,6 +151,13 @@ export const clientsApi = {
         { params: { page, limit: 20 } },
       )
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
+  },
+
+  /** What this client is billed and what they owe. Needs contracts.view. */
+  getBillingSummary(clientId: string): Promise<BillingSummary> {
+    return api
+      .get<{ success: boolean; data: BillingSummary }>(`/clients/${clientId}/billing-summary`)
+      .then((r) => r.data.data);
   },
 
   // ── Portal access ─────────────────────────────────────────────────────────

@@ -28,3 +28,14 @@ body {
   /* The field must still appear; only the movement is dropped. */
   [style*="fadeInField"] { animation: none !important; }
 }
+
+/* Loading placeholders. Held above 0.4 so the bars stay visible against the
+   navy card rather than blinking out entirely. */
+@keyframes billingPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="billingPulse"] { animation: none !important; }
+}

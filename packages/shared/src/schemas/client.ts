@@ -488,6 +488,36 @@ export interface IncidentResponse {
   createdAt: string;
 }
 
+/**
+ * What a client is being billed and what they still owe.
+ *
+ * Amounts are whole shillings, as everywhere else in this system — UGX has no
+ * subunit in practice, and integers keep sums exact.
+ */
+export interface BillingSummary {
+  /** Sum of the monthly value of contracts in force. */
+  totalMonthlyBilling: number;
+  activeContractCount: number;
+  totalGuardsDeployed: number;
+  activeContracts: {
+    id:             string;
+    guardsRequired: number;
+    monthlyValue:   number;
+    status:         string;
+    contractEnd:    string;
+  }[];
+
+  /** Unsettled across every invoice that is not PAID. */
+  totalOutstanding:        number;
+  outstandingInvoiceCount: number;
+  /** The part of the above that is past its due date. */
+  totalOverdue:            number;
+  overdueCount:            number;
+
+  /** Most recent money actually received, manual or mobile money. */
+  lastPayment: { amount: number; paidAt: string } | null;
+}
+
 export interface ClientSummary {
   totalActive: number;
   totalInactive: number;

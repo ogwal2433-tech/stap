@@ -15,6 +15,7 @@ import AmendContractModal from '../../components/clients/AmendContractModal';
 import ContractHistory from '../../components/clients/ContractHistory';
 import ClientContacts from '../../components/clients/ClientContacts';
 import ClientPortalAccess from '../../components/clients/ClientPortalAccess';
+import BillingSummaryCard from '../../components/clients/BillingSummaryCard';
 import PermissionGuard from '../../components/PermissionGuard';
 import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
@@ -185,6 +186,10 @@ export default function ClientDetailPage() {
           </Button>
         </ButtonGroup>
       </div>
+
+      {/* Above the record itself: what this client is worth is the question most
+          often being asked when someone opens their page. */}
+      <BillingSummaryCard clientId={id ?? ''} canView={canSeeContracts} />
 
       {/* Profile header */}
       <Card className="border-0 shadow-sm mb-4">

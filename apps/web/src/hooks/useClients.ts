@@ -172,3 +172,19 @@ export function useResetClientPortalPassword(clientId: string) {
       clientsApi.resetPortalPassword(clientId, vars.userId, vars.newPassword),
   });
 }
+
+/**
+ * Billing totals for one client.
+ *
+ * `enabled` gates the request on the permission, not just the rendering: a
+ * hidden card that still fetched would put the figures in the network tab of
+ * someone who is not allowed to see them, and log a 403 for every page view.
+ */
+export function useClientBillingSummary(clientId: string, enabled = true) {
+  return useQuery({
+    queryKey:  ['client-billing', clientId],
+    queryFn:   () => clientsApi.getBillingSummary(clientId),
+    enabled:   enabled && Boolean(clientId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
