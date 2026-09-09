@@ -5,6 +5,7 @@ import { loginUrl } from '../jobs/templates/emailTemplates';
 import { NotFoundError } from '../errors/AppError';
 import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
+import { MARKETER_LEAD_SOURCE, LEAD_SOURCES } from '@stap/shared';
 import type {
   ClientContactInput,
   ClientContactResponse,
@@ -85,8 +86,9 @@ function toClientResponse(client: Record<string, unknown>): ClientResponse {
     vatRegistered: (client.vatRegistered as boolean) ?? false,
     vatRate:       (client.vatRate as number | null) ?? null,
 
-    leadSource:  (client.leadSource as ClientResponse['leadSource']) ?? null,
-    referredBy:  (client.referredBy as string | null) ?? null,
+    leadSource:   (client.leadSource as ClientResponse['leadSource']) ?? null,
+    referredBy:   (client.referredBy as string | null) ?? null,
+    marketerName: (client.marketerName as string | null) ?? null,
     leadStatus:  (client.leadStatus as ClientResponse['leadStatus']) ?? 'CONVERTED',
 
     contacts: ((client.contacts as Record<string, unknown>[] | undefined) ?? [])
@@ -265,6 +267,11 @@ class ClientService {
         vatRate:        data.vatRate ?? null,
         leadSource:     blankToNull(data.leadSource),
         referredBy:     blankToNull(data.referredBy),
+        // Stored only when the source explains it. A name left behind after the
+        // source changed would be read as fact by the marketer report.
+        marketerName:   data.leadSource === MARKETER_LEAD_SOURCE
+          ? blankToNull(data.marketerName)
+          : null,
         leadStatus:     data.leadStatus ?? 'CONVERTED',
         contacts:       { create: contacts },
       },
@@ -349,7 +356,7 @@ class ClientService {
     // side effect of editing the billing terms.
     const {
       contacts: _ignored, portal: _portalIgnored,
-      email, billingAddress, tin, referredBy, leadSource, ...fields
+      email, billingAddress, tin, referredBy, leadSource, marketerName, ...fields
     } = data;
 
     const updated = await prisma.client.update({
@@ -363,6 +370,19 @@ class ClientService {
         ...(tin            !== undefined ? { tin:            blankToNull(tin) } : {}),
         ...(referredBy     !== undefined ? { referredBy:     blankToNull(referredBy) } : {}),
         ...(leadSource     !== undefined ? { leadSource:     blankToNull(leadSource) } : {}),
+        // Tied to leadSource rather than sent on its own. Whenever the source
+        // is part of this update and is no longer MARKETER, the name goes with
+        // it — otherwise switching a client to "Referral" would leave them
+        // still counted against a marketer's numbers.
+        ...(leadSource !== undefined
+          ? {
+              marketerName: leadSource === MARKETER_LEAD_SOURCE
+                ? blankToNull(marketerName)
+                : null,
+            }
+          : marketerName !== undefined
+            ? { marketerName: blankToNull(marketerName) }
+            : {}),
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
@@ -653,6 +673,54 @@ class ClientService {
       ]);
 
     return { totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints };
+  }
+
+  /**
+   * How clients were won: by marketer, and by source overall.
+   *
+   * The marketer breakdown filters on leadSource as well as a non-null name,
+   * because the column is only meaningful alongside that source — a row left
+   * over from before the source was changed would otherwise be credited to
+   * someone who no longer brought that client in. create() and update() clear
+   * it, so this is belt and braces against rows written another way.
+   *
+   * Names are grouped as typed. Two spellings of the same marketer are two
+   * rows here, which is honest — silently merging them would invent a number
+   * nobody entered.
+   */
+  async getMarketerStats(): Promise<{
+    byMarketer: { marketerName: string; clientCount: number }[];
+    bySource:   { source: string; sourceLabel: string; clientCount: number }[];
+  }> {
+    const [byMarketer, bySource] = await Promise.all([
+      prisma.client.groupBy({
+        by:      ['marketerName'],
+        where:   { leadSource: MARKETER_LEAD_SOURCE, marketerName: { not: null } },
+        _count:  { _all: true },
+        orderBy: { _count: { marketerName: 'desc' } },
+      }),
+      prisma.client.groupBy({
+        by:      ['leadSource'],
+        where:   { leadSource: { not: null } },
+        _count:  { _all: true },
+        orderBy: { _count: { leadSource: 'desc' } },
+      }),
+    ]);
+
+    return {
+      byMarketer: byMarketer.map((m) => ({
+        marketerName: m.marketerName as string,
+        clientCount:  m._count._all,
+      })),
+      bySource: bySource.map((row) => {
+        const source = row.leadSource as string;
+        return {
+          source,
+          sourceLabel: LEAD_SOURCES[source as keyof typeof LEAD_SOURCES] ?? source,
+          clientCount: row._count._all,
+        };
+      }),
+    };
   }
 }
 

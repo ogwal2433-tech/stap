@@ -16,3 +16,15 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Used by fields that appear in response to another answer — the movement
+   shows the form reacting, rather than a field seeming to have been missed. */
+@keyframes fadeInField {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The field must still appear; only the movement is dropped. */
+  [style*="fadeInField"] { animation: none !important; }
+}

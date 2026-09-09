@@ -145,6 +145,16 @@ const SITE_WRITE_ROLES: UserRole[] = [
   ROLES.OPERATIONS_SUPERVISOR,
 ];
 
+// ── GET /marketer-stats — how clients were won ───────────────────────────────
+// Before /:id, or "marketer-stats" is read as a client id.
+router.get(
+  '/marketer-stats',
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
+  asyncHandler(async (_req, res) => {
+    res.status(200).json({ success: true, data: await clientService.getMarketerStats() });
+  }),
+);
+
 // ── GET /summary — quick stats for dashboard ───────────────────────────────────
 // Must be registered BEFORE /:id to avoid "summary" being captured as id param
 router.get(

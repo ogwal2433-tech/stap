@@ -20,7 +20,7 @@ import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_SOURCES, LEAD_STATUSES, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
 import { useAuth, useHasPermission } from '../../context/AuthContext';
 
@@ -311,9 +311,19 @@ export default function ClientDetailPage() {
                 <Col md={4}>
                   <div className="text-muted small">Lead Source</div>
                   <div className="fw-medium">
-                    {(client as any).leadSource
-                      ? LEAD_SOURCES[(client as any).leadSource as keyof typeof LEAD_SOURCES] ?? (client as any).leadSource
+                    {client.leadSource
+                      ? LEAD_SOURCES[client.leadSource as keyof typeof LEAD_SOURCES] ?? client.leadSource
                       : '—'}
+                    {/* The marketer reads as part of the source, not a field of
+                        its own: "Marketer" alone leaves the obvious question. */}
+                    {client.leadSource === MARKETER_LEAD_SOURCE && client.marketerName && (
+                      <span
+                        className="text-muted"
+                        style={{ fontWeight: 400, fontSize: '0.78rem', marginLeft: '6px' }}
+                      >
+                        via {client.marketerName}
+                      </span>
+                    )}
                   </div>
                 </Col>
                 <Col md={4}>

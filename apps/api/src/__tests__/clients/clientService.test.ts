@@ -373,6 +373,85 @@ describe('clientService.update()', () => {
 
 // ── archive() ─────────────────────────────────────────────────────────────────
 
+// ── marketerName is tied to leadSource ────────────────────────────────────────
+
+describe('marketerName follows leadSource', () => {
+  const input = {
+    clientName:      'KCCA',
+    contactPerson:   'James Sserwanga',
+    contactPhone:    '+256414123456',
+    physicalAddress: 'City Hall, Kampala',
+    billingTerms:    30,
+    contractStatus:  'ACTIVE' as const,
+  };
+
+  const dataFromCreate = () => mockPrisma.client.create.mock.calls[0][0].data;
+  const dataFromUpdate = () => mockPrisma.client.update.mock.calls[0][0].data;
+
+  it('stores the name when the source is MARKETER', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+    await clientService.create(
+      { ...input, leadSource: 'MARKETER', marketerName: 'John Okello' } as never,
+      'user1',
+    );
+    expect(dataFromCreate().marketerName).toBe('John Okello');
+  });
+
+  it('drops a name sent with any other source', async () => {
+    // Nothing explains the value once the source is not MARKETER, and the
+    // marketer report reads this column as fact.
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+    await clientService.create(
+      { ...input, leadSource: 'REFERRAL', marketerName: 'John Okello' } as never,
+      'user1',
+    );
+    expect(dataFromCreate().marketerName).toBeNull();
+  });
+
+  it('stores a blank name as null, not an empty string', async () => {
+    mockPrisma.client.create.mockResolvedValue(baseClient);
+    await clientService.create(
+      { ...input, leadSource: 'WEBSITE', marketerName: '' } as never,
+      'user1',
+    );
+    expect(dataFromCreate().marketerName).toBeNull();
+  });
+
+  it('clears the name when an update moves the source away from MARKETER', async () => {
+    // The case that matters: a client already credited to a marketer is
+    // re-sourced, and must stop counting towards their numbers.
+    mockPrisma.client.findUnique.mockResolvedValue(baseClient);
+    mockPrisma.client.update.mockResolvedValue(baseClient);
+
+    await clientService.update('c1', { leadSource: 'REFERRAL' } as never, 'user1');
+
+    expect(dataFromUpdate().marketerName).toBeNull();
+  });
+
+  it('keeps the name when an update leaves the source as MARKETER', async () => {
+    mockPrisma.client.findUnique.mockResolvedValue(baseClient);
+    mockPrisma.client.update.mockResolvedValue(baseClient);
+
+    await clientService.update(
+      'c1',
+      { leadSource: 'MARKETER', marketerName: 'Grace Nakato' } as never,
+      'user1',
+    );
+
+    expect(dataFromUpdate().marketerName).toBe('Grace Nakato');
+  });
+
+  it('leaves the name alone on an update that does not mention the source', async () => {
+    // A PATCH of the billing terms must not blank a field it never sent.
+    mockPrisma.client.findUnique.mockResolvedValue(baseClient);
+    mockPrisma.client.update.mockResolvedValue(baseClient);
+
+    await clientService.update('c1', { billingTerms: 60 } as never, 'user1');
+
+    expect(dataFromUpdate()).not.toHaveProperty('marketerName');
+  });
+});
+
 describe('clientService.archive()', () => {
   it('sets contractStatus to INACTIVE', async () => {
     mockPrisma.client.findUnique.mockResolvedValue(baseClient);

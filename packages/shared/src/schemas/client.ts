@@ -3,6 +3,8 @@ import { z } from 'zod';
 // ── Lead / CRM constants ───────────────────────────────────────────────────────
 
 export const LEAD_SOURCES = {
+  /** One of our own marketers brought them in — see MARKETER_LEAD_SOURCE. */
+  MARKETER:      'Marketer',
   SOCIAL_MEDIA:  'Social Media',
   REFERRAL:      'Referral',
   COLD_CALL:     'Cold Call',
@@ -11,6 +13,15 @@ export const LEAD_SOURCES = {
   EXHIBITION:    'Exhibition / Event',
   OTHER:         'Other',
 } as const;
+
+/**
+ * The one lead source that needs a name alongside it.
+ *
+ * Named rather than written as a bare string in each of the four places that
+ * check it — the form, the resolver, the service and the reporting query — so
+ * they cannot drift apart.
+ */
+export const MARKETER_LEAD_SOURCE = 'MARKETER';
 
 export const LEAD_STATUSES = {
   NEW:       'New',
@@ -115,11 +126,17 @@ const _BaseClientSchema = z.object({
   leadSource: z.union([
     z.literal(''),
     z.enum([
-      'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
+      'MARKETER', 'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
       'WORD_OF_MOUTH', 'EXHIBITION', 'OTHER',
     ]),
   ]).optional(),
   referredBy: z.string().max(200).optional(),
+  /**
+   * Who brought them in, when the source is MARKETER. Required in that case and
+   * ignored otherwise — the rule lives in requireMarketerName() below, because
+   * it spans two fields and cannot be expressed on this one.
+   */
+  marketerName: z.string().max(100).optional(),
   leadStatus: z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).default('CONVERTED'),
 
   /** Every contact person at this client. The first is primary if none is marked. */
@@ -140,6 +157,27 @@ const _BaseClientSchema = z.object({
 const singlePrimary = (contacts: ClientContactInput[] | undefined) =>
   (contacts ?? []).filter((c) => c.isPrimary).length <= 1;
 
+/**
+ * A marketer-sourced client has to say which marketer.
+ *
+ * Spans two fields, so it cannot live on either one, and it is applied to the
+ * create, update and form schemas alike — the form is what people actually hit,
+ * and the other two are what stops a direct API call writing a MARKETER row
+ * that names nobody.
+ *
+ * Only fires when leadSource is explicitly MARKETER in the payload: a partial
+ * update that touches neither field must not be rejected for a rule about
+ * fields it never sent.
+ */
+const requireMarketerName = <T extends { leadSource?: string; marketerName?: string | null }>(
+  d: T,
+): boolean => d.leadSource !== MARKETER_LEAD_SOURCE || !!d.marketerName?.trim();
+
+const MARKETER_NAME_REQUIRED = {
+  message: 'Enter the name of the marketer who brought this client in.',
+  path:    ['marketerName'],
+};
+
 export const CreateClientSchema = _BaseClientSchema
   .refine(
     (d) => !!d.contactPerson?.trim() || (d.contacts ?? []).some((c) => c.name?.trim()),
@@ -148,7 +186,8 @@ export const CreateClientSchema = _BaseClientSchema
   .refine((d) => singlePrimary(d.contacts), {
     message: 'Only one contact can be the primary contact.',
     path:    ['contacts'],
-  });
+  })
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 
 /**
  * Partial() cannot be called on the refined schema — .refine returns a
@@ -161,7 +200,8 @@ export const UpdateClientSchema = _BaseClientSchema.partial()
   .refine((d) => singlePrimary(d.contacts), {
     message: 'Only one contact can be the primary contact.',
     path:    ['contacts'],
-  });
+  })
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 
 /**
  * What the client form's own resolver validates.
@@ -172,7 +212,11 @@ export const UpdateClientSchema = _BaseClientSchema.partial()
  * visible input, and the form would sit there doing nothing. The form checks its
  * own contact list, and the server still enforces the full CreateClientSchema.
  */
-export const ClientFormSchema = _BaseClientSchema.omit({ contacts: true });
+export const ClientFormSchema = _BaseClientSchema
+  .omit({ contacts: true })
+  // Same rule the API enforces, so the message appears under the field as the
+  // form is filled in rather than coming back as a 400 after submit.
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 export type ClientFormInput = z.input<typeof ClientFormSchema>;
 
 export const ClientListQuerySchema = z.object({
@@ -358,6 +402,8 @@ export interface ClientResponse {
 
   // CRM / lead tracking
   leadSource: LeadSource | null;
+  /** Set only when leadSource is MARKETER. */
+  marketerName: string | null;
   referredBy: string | null;
   leadStatus: LeadStatus;
 

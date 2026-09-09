@@ -8,7 +8,9 @@ import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/u
 import ContractExpiryPanels from '../../components/clients/ContractExpiryPanels';
 import RoleGuard from '../../components/RoleGuard';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_STATUSES, type ClientResponse, type UserRole } from '@stap/shared';
+import {
+  ROLES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, type ClientResponse, type UserRole,
+} from '@stap/shared';
 
 const CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -264,6 +266,13 @@ export default function ClientsListPage() {
                         </div>
                       )}
                       {c.email && <div className="text-muted" style={{ fontSize: '0.72rem' }}>{c.email}</div>}
+                      {/* Who won this client, visible without opening it —
+                          the question the marketer report is built to answer. */}
+                      {c.leadSource === MARKETER_LEAD_SOURCE && c.marketerName && (
+                        <div style={{ fontSize: '0.68rem', color: '#0F7B6C', marginTop: '2px' }}>
+                          via {c.marketerName}
+                        </div>
+                      )}
                     </td>
                     <td>{renderPrimaryContact(c)}</td>
                     <td>

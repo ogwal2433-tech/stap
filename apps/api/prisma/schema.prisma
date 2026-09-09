@@ -509,8 +509,15 @@ model Client {
   vatRate       Float? // VAT percentage, e.g. 18.0
 
   // CRM / lead tracking
-  leadSource String? // SOCIAL_MEDIA | REFERRAL | COLD_CALL | WEBSITE | WORD_OF_MOUTH | EXHIBITION | OTHER
+  leadSource String? // MARKETER | SOCIAL_MEDIA | REFERRAL | COLD_CALL | WEBSITE | WORD_OF_MOUTH | EXHIBITION | OTHER
   referredBy String? // Name of referring person or company
+  /// The marketer who brought this client in. Set only when leadSource is
+  /// MARKETER, and cleared by the service when the source changes away from it,
+  /// so the column never holds a name that the source no longer explains.
+  /// Separate from referredBy: that names an outside party who pointed the
+  /// client at us, this names one of our own, and marketer performance is
+  /// counted from it.
+  marketerName String?
   leadStatus String  @default("CONVERTED") // NEW | CONTACTED | CONVERTED | LOST
 
   createdAt DateTime @default(now())
