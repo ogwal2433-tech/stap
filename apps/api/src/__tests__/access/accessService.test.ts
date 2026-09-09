@@ -35,6 +35,7 @@ vi.mock('bcryptjs', () => ({
 }));
 
 import prisma from '../../db/prisma';
+import { QueueService } from '../../jobs/QueueService';
 import { accessService } from '../../services/accessService';
 import { AppError, NotFoundError } from '../../errors/AppError';
 
@@ -262,5 +263,83 @@ describe('accessService.resetClientPortalPassword()', () => {
     expect(db.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u2' } }),
     );
+  });
+});
+
+describe('credential emails', () => {
+  beforeEach(() => {
+    process.env.FRONTEND_URL = 'https://stap.example.com';
+  });
+
+  it('sends a client the portal template, naming their company', async () => {
+    db.client.findUnique.mockResolvedValue({ id: 'c1', clientName: 'Acme Holdings' });
+    db.user.findUnique.mockResolvedValue(null);
+    db.user.create.mockResolvedValue({
+      id: 'u2', name: 'John Mugisha', email: 'john@acme.com', status: 'ACTIVE',
+    });
+
+    await accessService.grantClientPortalAccess(
+      'c1', 'john@acme.com', 'sup3rsecret', 'John Mugisha', 'admin',
+    );
+
+    expect(QueueService.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to:       'john@acme.com',
+        template: 'client-portal-welcome',
+        subject:  expect.stringContaining('Acme Holdings'),
+        data: expect.objectContaining({
+          clientName:  'Acme Holdings',
+          contactName: 'John Mugisha',
+          password:    'sup3rsecret',
+          loginUrl:    'https://stap.example.com/login',
+        }),
+      }),
+    );
+  });
+
+  it('sends a guard the staff template, not the client one', async () => {
+    db.guard.findUnique.mockResolvedValue(GUARD);
+    db.user.findUnique.mockResolvedValue(null);
+    db.user.create.mockResolvedValue(ACCOUNT);
+    db.guard.update.mockResolvedValue({});
+
+    await accessService.grantGuardAccess('g1', 'alaru@example.com', 'sup3rsecret', 'admin');
+
+    expect(QueueService.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ template: 'welcome' }),
+    );
+  });
+
+  it('uses the password-reset template when resetting', async () => {
+    db.user.findFirst.mockResolvedValue({ id: 'u2', name: 'John', email: 'john@acme.com' });
+    db.user.update.mockResolvedValue({});
+
+    await accessService.resetClientPortalPassword('c1', 'u2', 'brandnewpass', 'admin');
+
+    expect(QueueService.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: 'password-reset',
+        data:     expect.objectContaining({ password: 'brandnewpass' }),
+      }),
+    );
+  });
+
+  it('still creates the account when the mail queue is unreachable', async () => {
+    // The account exists by the time the email is queued. Letting a queue
+    // outage surface as a failure would have the caller retry into
+    // "email already in use" against the account they just made.
+    vi.mocked(QueueService.sendEmail).mockRejectedValueOnce(new Error('redis down'));
+
+    db.client.findUnique.mockResolvedValue({ id: 'c1', clientName: 'Acme' });
+    db.user.findUnique.mockResolvedValue(null);
+    db.user.create.mockResolvedValue({
+      id: 'u2', name: 'John', email: 'john@acme.com', status: 'ACTIVE',
+    });
+
+    const result = await accessService.grantClientPortalAccess(
+      'c1', 'john@acme.com', 'sup3rsecret', 'John', 'admin',
+    );
+
+    expect(result.userId).toBe('u2');
   });
 });

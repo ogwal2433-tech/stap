@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
+import { loginUrl } from '../jobs/templates/emailTemplates';
 import { NotFoundError } from '../errors/AppError';
 import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
@@ -282,9 +283,16 @@ class ClientService {
       try {
         await QueueService.sendEmail({
           to:       portal.email,
-          subject:  'Your client portal login',
-          template: 'welcome',
-          data:     { name: portal.contactName, email: portal.email, password: portal.password },
+          subject:  `Welcome to the ${data.clientName} client portal`,
+          template: 'client-portal-welcome',
+          data: {
+            name:        portal.contactName,
+            contactName: portal.contactName,
+            clientName:  data.clientName,
+            email:       portal.email,
+            password:    portal.password,
+            loginUrl:    loginUrl(),
+          },
         });
       } catch (err) {
         console.error('⚠️  Failed to queue portal credentials for', portal.email, err);

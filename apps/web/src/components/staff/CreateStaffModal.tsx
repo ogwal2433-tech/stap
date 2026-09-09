@@ -72,10 +72,9 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
       {
         onSuccess: () => {
           showToast(
-            form.password
-              ? `${form.name.trim()}’s account is ready.`
-              : `${form.name.trim()}’s account is ready — their password has been emailed to them.`,
+            `${form.name.trim()}’s account is ready. Login details sent to ${form.email.trim()}.`,
             'success',
+            6000,
           );
           setForm(emptyForm());
           onSuccess();

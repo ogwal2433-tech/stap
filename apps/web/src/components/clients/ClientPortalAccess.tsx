@@ -30,6 +30,8 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
   const [revoking,  setRevoking]  = useState<LinkedAccount | null>(null);
   const [resetting, setResetting] = useState<LinkedAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Set on success so the modal confirms the email before it closes. */
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [form, setForm] = useState({ contactName: '', email: '', password: generatePassword() });
   const [newPassword, setNewPassword] = useState(generatePassword());
 
@@ -44,6 +46,7 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
   const openGrant = () => {
     setForm({ contactName: '', email: '', password: generatePassword() });
     setError(null);
+    setSentTo(null);
     setShowGrant(true);
   };
 
@@ -57,8 +60,15 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
       { contactName: form.contactName.trim(), email: form.email.trim(), password: form.password },
       {
         onSuccess: () => {
-          showToast(`${form.contactName.trim()} can now sign into the portal.`, 'success');
-          setShowGrant(false);
+          const address = form.email.trim();
+          showToast(`Portal access enabled. Login details sent to ${address}.`, 'success', 6000);
+          // Held open briefly so the person setting this up sees which address
+          // the credentials went to — they usually have to pass it on.
+          setSentTo(address);
+          setTimeout(() => {
+            setSentTo(null);
+            setShowGrant(false);
+          }, 2500);
         },
         onError: (err) => setError(getApiErrorMessage(err, 'Could not enable portal access.')),
       },
@@ -85,7 +95,7 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
       { userId: resetting.userId, newPassword },
       {
         onSuccess: () => {
-          showToast(`A new password has been sent to ${resetting.email}.`, 'success');
+          showToast(`Password reset. The new details were emailed to ${resetting.email}.`, 'success', 6000);
           setResetting(null);
         },
         onError: (err) => {
@@ -205,6 +215,19 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          {sentTo ? (
+            <div style={{ textAlign: 'center', padding: '30px 20px' }}>
+              <div style={{ fontSize: '3rem', lineHeight: 1 }}>✅</div>
+              <div style={{ fontWeight: 700, fontSize: '1rem', marginTop: '12px', color: '#1E8449' }}>
+                Portal Access Enabled
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#6c757d', marginTop: '8px' }}>
+                Login details sent to<br />
+                <strong>{sentTo}</strong>
+              </div>
+            </div>
+          ) : (
+          <>
           <div
             style={{
               background:   '#EBF5FB',
@@ -262,10 +285,12 @@ export default function ClientPortalAccess({ clientId, clientName }: ClientPorta
           <TemporaryPasswordField
             value={form.password}
             onChange={next => setForm(p => ({ ...p, password: next }))}
-            hint="Sent to the contact by email, and safe to share directly."
+            hint="Emailed to the contact, and safe to read out directly."
           />
+          </>
+          )}
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer hidden={!!sentTo}>
           <Button variant="outline-secondary" size="sm" onClick={() => setShowGrant(false)}>
             Cancel
           </Button>

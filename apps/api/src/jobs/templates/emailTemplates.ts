@@ -17,6 +17,7 @@ function esc(v: unknown): string {
 }
 
 const NAVY = '#1B3A6B';
+const GOLD = '#F2AA20';
 
 function layout(title: string, body: string): string {
   return `<!doctype html>
@@ -27,6 +28,7 @@ function layout(title: string, body: string): string {
         <tr><td style="background:${NAVY};padding:18px 24px;">
           <div style="color:#ffffff;font-size:18px;font-weight:bold;">${esc(COMPANY_NAME)}</div>
         </td></tr>
+        <tr><td style="background:${GOLD};height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
         <tr><td style="padding:24px;">
           <h2 style="margin:0 0 14px;font-size:18px;color:${NAVY};">${esc(title)}</h2>
           ${body}
@@ -53,6 +55,26 @@ const button = (href: string, text: string) =>
 const rows = (d: Record<string, unknown>) =>
   table(Object.entries(d).map(([k, v]) => label(k, v)).join(''));
 
+/** A cautionary aside — used for "change this password" and similar. */
+const notice = (text: string) =>
+  `<div style="background:#FEF9E7;border-left:3px solid ${GOLD};border-radius:4px;` +
+  `padding:10px 14px;margin:14px 0 0;font-size:12px;color:#856404;">${esc(text)}</div>`;
+
+/** Plain list. Mail clients render <ul> inconsistently, so rows of text it is. */
+const bullets = (items: string[]) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0;">` +
+  items.map((i) => `<tr><td style="padding:3px 0;font-size:13px;color:#4A5568;">• ${esc(i)}</td></tr>`).join('') +
+  `</table>`;
+
+/**
+ * The link a recipient uses to sign in. Falls back to no button rather than a
+ * dead `/login` when FRONTEND_URL is unset, which is what an empty base gives.
+ */
+export function loginUrl(): string {
+  const base = (process.env.FRONTEND_URL ?? '').replace(/\/+$/, '');
+  return base ? `${base}/login` : '';
+}
+
 export function renderEmail(template: string, subject: string, d: Record<string, unknown>): string {
   switch (template) {
     case 'welcome':
@@ -65,11 +87,31 @@ export function renderEmail(template: string, subject: string, d: Record<string,
         d.loginUrl ? button(String(d.loginUrl), 'Sign in') : '',
       ].join(''));
 
+    case 'client-portal-welcome':
+      // Addressed to a customer rather than a colleague, so it says what the
+      // portal is for instead of assuming they already know.
+      return layout('Your client portal is ready', [
+        p(`Dear ${esc(d.contactName ?? d.name)},`),
+        p(`An account has been set up for <strong>${esc(d.clientName)}</strong> on the ` +
+          `${esc(COMPANY_NAME)} client portal. Sign in with the details below.`),
+        table(label('Email', d.email) + label('Temporary password', d.password)),
+        d.loginUrl ? button(String(d.loginUrl), 'Open the portal') : '',
+        p('<strong style="font-size:13px;">Through the portal you can:</strong>') +
+          bullets([
+            'View and download your invoices',
+            'Submit service requests',
+            'Raise and track complaints',
+            'See your sites and their deployments',
+          ]),
+        notice('Please change this password after you sign in, and keep it to yourself.'),
+      ].join(''));
+
     case 'password-reset':
       return layout('Your password has been reset', [
         p(`Hello ${esc(d.name)},`),
         p('An administrator has reset your password. Use the password below to sign in, then change it immediately.'),
         table(label('Email', d.email) + label('New password', d.password)),
+        d.loginUrl ? button(String(d.loginUrl), 'Sign in') : '',
       ].join(''));
 
     case 'notification':

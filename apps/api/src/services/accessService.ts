@@ -4,6 +4,7 @@ import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { APP_NAME } from '@stap/shared';
+import { loginUrl } from '../jobs/templates/emailTemplates';
 import type { LinkedAccount } from '@stap/shared';
 
 /**
@@ -50,16 +51,37 @@ async function audit(data: Parameters<typeof QueueService.logAudit>[0]): Promise
   }
 }
 
-async function sendCredentials(to: string, name: string, password: string): Promise<void> {
+/**
+ * Hands someone their new credentials.
+ *
+ * Queued rather than sent inline: the account already exists by this point, and
+ * a mail server that is slow or down must not turn a successful grant into an
+ * error the caller retries into "email already in use". The queue owns the
+ * retries and records a failure of its own.
+ */
+async function sendCredentials(opts: {
+  to:       string;
+  name:     string;
+  password: string;
+  subject:  string;
+  template: 'welcome' | 'client-portal-welcome' | 'password-reset';
+  extra?:   Record<string, unknown>;
+}): Promise<void> {
   try {
     await QueueService.sendEmail({
-      to,
-      subject:  `Your ${APP_NAME} login`,
-      template: 'welcome',
-      data:     { name, email: to, password },
+      to:       opts.to,
+      subject:  opts.subject,
+      template: opts.template,
+      data: {
+        name:     opts.name,
+        email:    opts.to,
+        password: opts.password,
+        loginUrl: loginUrl(),
+        ...opts.extra,
+      },
     });
   } catch (err) {
-    console.error('⚠️  Failed to queue credentials email for', to, err);
+    console.error('⚠️  Failed to queue credentials email for', opts.to, err);
   }
 }
 
@@ -134,7 +156,11 @@ export const accessService = {
       entityId: guardId,
       newValue: { userId: user.id, email },
     });
-    await sendCredentials(email, name, password);
+    await sendCredentials({
+      to: email, name, password,
+      subject:  `Your ${APP_NAME} login`,
+      template: 'welcome',
+    });
 
     return linked(user);
   },
@@ -233,7 +259,12 @@ export const accessService = {
       entityId: clientId,
       newValue: { userId: user.id, email, contactName },
     });
-    await sendCredentials(email, contactName, password);
+    await sendCredentials({
+      to: email, name: contactName, password,
+      subject:  `Welcome to the ${client.clientName} client portal`,
+      template: 'client-portal-welcome',
+      extra:    { contactName, clientName: client.clientName },
+    });
 
     return linked(user);
   },
@@ -306,7 +337,11 @@ export const accessService = {
       entityId: clientId,
       newValue: { userId: user.id, email: user.email },
     });
-    await sendCredentials(user.email, user.name, newPassword);
+    await sendCredentials({
+      to: user.email, name: user.name, password: newPassword,
+      subject:  'Your portal password has been reset',
+      template: 'password-reset',
+    });
 
     return { email: user.email };
   },

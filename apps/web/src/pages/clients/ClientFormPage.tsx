@@ -164,9 +164,10 @@ export default function ClientFormPage() {
         const created = await createClient.mutateAsync(payload);
         showToast(
           enablePortal
-            ? `Client created — ${portal.email.trim()} can now sign into the portal.`
+            ? `Client created. Portal login details sent to ${portal.email.trim()}.`
             : 'Client created',
           'success',
+          enablePortal ? 6000 : undefined,
         );
         navigate(`/clients/${created.id}`);
       }
