@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import type { UserRole } from '@stap/shared';
+import { ACCESS_TOKEN_EXPIRES_IN, REFRESH_TOKEN_EXPIRES_IN } from '../config/session';
 
 const ACCESS_SECRET  = process.env.JWT_SECRET!;
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET!;
@@ -27,7 +28,9 @@ export interface RefreshTokenPayload {
 }
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, 'type'>): string {
-  return jwt.sign({ ...payload, type: 'access' }, ACCESS_SECRET, { expiresIn: '15m' });
+  return jwt.sign({ ...payload, type: 'access' }, ACCESS_SECRET, {
+    expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+  });
 }
 
 export function signRefreshToken(userId: string): string {
@@ -36,7 +39,7 @@ export function signRefreshToken(userId: string): string {
     type: 'refresh',
     jti: crypto.randomUUID(),
   };
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES_IN });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {

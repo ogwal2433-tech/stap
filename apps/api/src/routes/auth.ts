@@ -12,6 +12,12 @@ import { UnauthorisedError } from '../errors/AppError';
 
 const router: IRouter = Router();
 
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  REFRESH_TOKEN_TTL_SECONDS,
+  INACTIVITY_TIMEOUT_MINUTES,
+} from '../config/session';
+
 const REFRESH_COOKIE = 'refreshToken';
 const REFRESH_COOKIE_PATH = '/';
 
@@ -50,7 +56,9 @@ function refreshCookieOptions() {
     secure:   useSecureCookie(),
     sameSite: 'lax' as const,
     path:     REFRESH_COOKIE_PATH,
-    maxAge:   7 * 24 * 60 * 60 * 1000,
+    // Same window as the token inside it, so the browser stops presenting a
+    // cookie at the moment the server stops honouring it.
+    maxAge:   REFRESH_TOKEN_TTL_SECONDS * 1000,
   };
 }
 
@@ -133,7 +141,10 @@ router.post(
       success: true,
       data: {
         accessToken: result.accessToken,
-        user: result.user,
+        // The frontend schedules its silent refresh from this rather than
+        // hardcoding 15 minutes, so changing the expiry needs no redeploy.
+        expiresIn:   ACCESS_TOKEN_TTL_SECONDS,
+        user:        result.user,
       },
     });
   }),
@@ -159,7 +170,7 @@ router.post(
 
     res.status(200).json({
       success: true,
-      data: { accessToken },
+      data: { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
     });
   }),
 );
@@ -207,6 +218,21 @@ router.get(
 );
 
 /** Exposed for tests only — see auth/loginErrors.test.ts. */
+// ── GET /session-config — timings the browser needs before it has a session ───
+// Unauthenticated on purpose: the login screen reads it to arm the inactivity
+// timer for the session it is about to create, and it discloses nothing beyond
+// how long this deployment lets a session sit idle.
+router.get('/session-config', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      inactivityTimeoutMinutes: INACTIVITY_TIMEOUT_MINUTES,
+      accessTokenExpiresIn:     ACCESS_TOKEN_TTL_SECONDS,
+      refreshTokenExpiresIn:    REFRESH_TOKEN_TTL_SECONDS,
+    },
+  });
+});
+
 export const __testRefreshCookieOptions = refreshCookieOptions;
 
 export default router;

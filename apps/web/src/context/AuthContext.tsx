@@ -2,13 +2,24 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { setAccessToken } from '../lib/api';
+import api, { setAccessToken, setSessionLostHandler } from '../lib/api';
+import {
+  sessionManager,
+  millisecondsSinceLastActivity,
+  clearActivityRecord,
+} from '../lib/sessionManager';
+import { useToast } from './ToastContext';
 import type { AuthState, User } from '../types/auth';
+
+/** Falls back to the built-in defaults if /auth/session-config cannot be read. */
+const FALLBACK_ACCESS_TOKEN_SECONDS = 15 * 60;
+const FALLBACK_INACTIVITY_MINUTES   = 30;
 
 interface AuthContextValue extends AuthState {
   /** Permission keys the signed-in user's role holds, from the database. */
@@ -22,6 +33,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  /**
+   * Read once from the server so the timeout can be changed in .env without
+   * rebuilding this bundle. Kept in a ref because the timers read it from
+   * inside callbacks that must not be rebuilt when it arrives.
+   */
+  const sessionConfig = useRef({
+    accessTokenSeconds: FALLBACK_ACCESS_TOKEN_SECONDS,
+    inactivityMinutes:  FALLBACK_INACTIVITY_MINUTES,
+  });
 
   // Fetched rather than inferred from the role: what a role may do lives in the
   // database and an administrator can change it, so the role name is no longer
@@ -46,13 +68,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
 
+  /** Clears local session state. Does not call the API — used when it is already gone. */
+  const clearSession = useCallback(() => {
+    sessionManager.destroy();
+    clearActivityRecord();
+    setAccessToken(null);
+    setPermissions([]);
+    setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+  }, []);
+
+  /**
+   * Renews the access token and re-arms the next renewal.
+   *
+   * Returning a boolean rather than throwing is what the session manager needs:
+   * it has to tell "renewed" from "this session is over" without unwrapping an
+   * axios error.
+   */
+  const renewAccessToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const { data } = await api.post<{
+        success: boolean;
+        data: { accessToken: string; expiresIn?: number };
+      }>('/auth/refresh');
+
+      const token = data.data.accessToken;
+      setAccessToken(token);
+      setState((prev) => (prev.isAuthenticated ? { ...prev, accessToken: token } : prev));
+
+      const seconds = data.data.expiresIn ?? sessionConfig.current.accessTokenSeconds;
+      sessionManager.scheduleRefresh(seconds * 1000);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  /**
+   * Ends the session properly: the server drops the stored refresh token and
+   * clears its cookie, then local state goes.
+   *
+   * The API call matters even when the sign-out was decided in the browser. The
+   * refresh cookie outlives the access token, so clearing only local state
+   * would leave a session that any reload could walk straight back into — the
+   * inactivity timeout would look enforced and be decorative. If the access
+   * token has already expired by then, the 401 interceptor refreshes and
+   * retries this call on its own.
+   */
+  const signOut = useCallback(
+    async (reason?: 'inactivity') => {
+      try {
+        await api.post('/auth/logout');
+      } catch {
+        // Already invalid server-side; local teardown below is what matters.
+      } finally {
+        clearSession();
+        if (reason === 'inactivity') {
+          showToast('You were signed out after a period of inactivity.', 'info');
+        }
+        navigate('/login');
+      }
+    },
+    [clearSession, showToast, navigate],
+  );
+
+  /**
+   * Arms the background renewal and the inactivity clock for a session that is
+   * now live. Safe to call again — init() tears down any previous timers first.
+   */
+  const startSession = useCallback(
+    (accessTokenSeconds: number) => {
+      sessionManager.init({
+        tokenExpiresInMs: accessTokenSeconds * 1000,
+        inactivityMs:     sessionConfig.current.inactivityMinutes * 60 * 1000,
+        onRefresh:        renewAccessToken,
+        onLogout: () => {
+          // Reached only from the session manager, so the session ended on a
+          // timer rather than by choice — signOut says why, or landing on the
+          // login screen looks like the app dropped them for no reason.
+          void signOut('inactivity');
+        },
+        onWarning: () => {
+          showToast(
+            'You will be signed out in 2 minutes unless you do something. Move the mouse or press a key to stay signed in.',
+            'warning',
+            10_000,
+          );
+        },
+      });
+    },
+    [renewAccessToken, signOut, showToast],
+  );
+
   // ── Silent refresh on mount to restore session ───────────────────────────────
   useEffect(() => {
     const restoreSession = async () => {
+      // Fetched first and never fatal: without it the built-in defaults apply.
+      try {
+        const { data } = await api.get<{
+          data: { inactivityTimeoutMinutes: number; accessTokenExpiresIn: number };
+        }>('/auth/session-config');
+        sessionConfig.current = {
+          accessTokenSeconds: data.data.accessTokenExpiresIn || FALLBACK_ACCESS_TOKEN_SECONDS,
+          inactivityMinutes:  data.data.inactivityTimeoutMinutes || FALLBACK_INACTIVITY_MINUTES,
+        };
+      } catch {
+        // Defaults already in place.
+      }
+
+      // The refresh cookie outlives the inactivity window, so a browser left
+      // closed overnight would otherwise reopen into a live session. Checked
+      // before the cookie is spent, so a stale one is not rotated on the way out.
+      const idleFor = millisecondsSinceLastActivity();
+      const idleLimitMs = sessionConfig.current.inactivityMinutes * 60 * 1000;
+      if (idleFor !== null && idleFor > idleLimitMs) {
+        clearActivityRecord();
+        setPermissions([]);
+        setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+        return;
+      }
+
       try {
         const { data: refreshData } = await api.post<{
           success: boolean;
-          data: { accessToken: string };
+          data: { accessToken: string; expiresIn?: number };
         }>('/auth/refresh');
 
         const token = refreshData.data.accessToken;
@@ -67,20 +205,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
         });
         await loadPermissions();
+
+        startSession(refreshData.data.expiresIn ?? sessionConfig.current.accessTokenSeconds);
       } catch {
+        // No usable refresh cookie — a first visit or an expired session.
         setPermissions([]);
-        setPermissions([]);
-      setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+        setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
       }
     };
 
     restoreSession();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * A 401 that survived the interceptor's refresh attempt means the refresh
+   * token is gone too. Routed through here so the timers stop and React state
+   * clears, instead of the hard window.location redirect it used to do.
+   */
+  useEffect(() => {
+    setSessionLostHandler(() => {
+      clearSession();
+      navigate('/login');
+    });
+    return () => setSessionLostHandler(null);
+  }, [clearSession, navigate]);
+
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await api.post<{
       success: boolean;
-      data: { accessToken: string; user: User };
+      data: { accessToken: string; expiresIn?: number; user: User };
     }>('/auth/login', { email, password });
 
     const { accessToken, user } = data.data;
@@ -88,26 +241,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setState({ user, accessToken, isAuthenticated: true, isLoading: false });
     await loadPermissions();
-  }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await api.post('/auth/logout');
-    } finally {
-      setAccessToken(null);
-      setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
-      navigate('/login');
-    }
-  }, [navigate]);
+    startSession(data.data.expiresIn ?? sessionConfig.current.accessTokenSeconds);
+  }, [loadPermissions, startSession]);
+
+  const logout = useCallback(() => signOut(), [signOut]);
 
   const refreshToken = useCallback(async () => {
-    const { data } = await api.post<{ success: boolean; data: { accessToken: string } }>(
-      '/auth/refresh',
-    );
-    const token = data.data.accessToken;
-    setAccessToken(token);
-    setState((prev) => ({ ...prev, accessToken: token }));
-  }, []);
+    await renewAccessToken();
+  }, [renewAccessToken]);
 
   return (
     <AuthContext.Provider value={{ ...state, permissions, login, logout, refreshToken }}>

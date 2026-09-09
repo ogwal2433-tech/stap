@@ -28,6 +28,43 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Response interceptor — silent refresh on 401 ─────────────────────────────
+
+/**
+ * One refresh at a time.
+ *
+ * A dashboard opens with several requests in flight, so an expired token
+ * produces several simultaneous 401s. Refreshing per response meant each one
+ * started its own refresh, and because the server rotates the refresh token,
+ * the first to land invalidated the cookie the others were still using — the
+ * losers got "token has been revoked" and the user was bounced to the login
+ * screen mid-session. Now the first 401 refreshes and the rest wait for it.
+ */
+let refreshInFlight: Promise<string> | null = null;
+
+/** Set by AuthContext so a dead session tears down its timers and React state. */
+let onSessionLost: (() => void) | null = null;
+
+export function setSessionLostHandler(handler: (() => void) | null): void {
+  onSessionLost = handler;
+}
+
+function refreshAccessToken(): Promise<string> {
+  // A bare axios call, not `api` — going back through this instance would send
+  // the dead Bearer token and recurse through this same interceptor.
+  refreshInFlight ??= axios
+    .post<{ data: { accessToken: string } }>('/api/v1/auth/refresh', {}, { withCredentials: true })
+    .then((res) => {
+      const token = res.data.data.accessToken;
+      setAccessToken(token);
+      return token;
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -37,18 +74,11 @@ api.interceptors.response.use(
     // Skip refresh loop for auth endpoints themselves
     const isAuthEndpoint = url.includes('/auth/refresh') || url.includes('/auth/login');
 
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    if (error.response?.status === 401 && !originalRequest?._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       try {
-        // Call refresh directly (withCredentials sends the httpOnly cookie)
-        const refreshRes = await axios.post(
-          '/api/v1/auth/refresh',
-          {},
-          { withCredentials: true },
-        );
-        const newToken: string = refreshRes.data.data.accessToken;
-        setAccessToken(newToken);
+        const newToken = await refreshAccessToken();
 
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -56,7 +86,13 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         setAccessToken(null);
-        window.location.href = '/login';
+        // Preferred over assigning window.location: it lets AuthContext clear
+        // its timers and state, and keeps the SPA from doing a full reload.
+        if (onSessionLost) {
+          onSessionLost();
+        } else {
+          window.location.href = '/login';
+        }
         return Promise.reject(error);
       }
     }

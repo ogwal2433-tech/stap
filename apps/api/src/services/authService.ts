@@ -6,12 +6,15 @@ import { QueueService } from '../jobs/QueueService';
 import { errorLogger } from './errorLogger';
 import { isValidBcryptHash } from '../lib/passwordHash';
 import { AccountLockedError, UnauthorisedError, AppError } from '../errors/AppError';
+import { REFRESH_TOKEN_TTL_SECONDS } from '../config/session';
 import type { LoginResponse } from '@stap/shared';
 import type { UserRole } from '@stap/shared';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILED_ATTEMPT_TTL = 30 * 60; // 30 minutes in seconds
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+// Kept equal to the refresh token's own expiry by construction: a Redis TTL
+// shorter than the JWT signs people out with "token has been revoked".
+const REFRESH_TOKEN_TTL = REFRESH_TOKEN_TTL_SECONDS;
 
 function failedKey(userId: string) {
   return `auth:failed:${userId}`;
