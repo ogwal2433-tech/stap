@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../db/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { requirePermission, clearPermissionCache } from '../middleware/permissions';
@@ -198,7 +199,7 @@ router.put(
     const role = req.params.role;
     assertEditable(role);
 
-    const { permissionKeys } = req.body as { permissionKeys?: string[] };
+    const { permissionKeys, reason } = req.body as { permissionKeys?: string[]; reason?: string };
     if (!Array.isArray(permissionKeys)) {
       throw new AppError('permissionKeys must be an array of permission keys.', 400);
     }
@@ -231,7 +232,16 @@ router.put(
       action:   'PERMISSIONS_BULK_UPDATED',
       entity:   'rolePermission',
       entityId: role,
-      newValue: { role, count: found.length, permissionKeys },
+      // Why the set was replaced — a preset, a reset, a module-wide change — so
+      // the audit trail reads as decisions rather than bare arrays of keys.
+      newValue: {
+        role,
+        count: found.length,
+        permissionKeys,
+        ...(typeof reason === 'string' && reason.trim()
+          ? { reason: reason.trim().slice(0, 200) }
+          : {}),
+      },
     });
 
     res.json({ success: true, data: { role, count: found.length } });
@@ -245,6 +255,148 @@ router.get(
     const role = req.params.role;
     assertManagedRole(role);
     res.json({ success: true, data: { role, permissionKeys: DEFAULT_ROLE_PERMISSIONS[role] ?? [] } });
+  }),
+);
+
+// ── Presets ───────────────────────────────────────────────────────────────────
+// Named permission sets. There is deliberately no "apply" endpoint: applying a
+// preset is PUT /roles/:role above with the preset's keys, so it inherits the
+// same checks — DIRECTOR immutable, unknown keys refused, one transaction —
+// rather than a second write path that would have to repeat them.
+
+const PRESET_SELECT = {
+  id: true, name: true, description: true, permissionKeys: true,
+  createdAt: true, updatedAt: true,
+  createdBy: { select: { id: true, name: true } },
+} as const;
+
+type PresetRow = {
+  id: string; name: string; description: string | null; permissionKeys: string[];
+  createdAt: Date; updatedAt: Date; createdBy: { id: string; name: string } | null;
+};
+
+const fmtPreset = (p: PresetRow) => ({
+  ...p,
+  createdAt: p.createdAt.toISOString(),
+  updatedAt: p.updatedAt.toISOString(),
+});
+
+/**
+ * Best effort. The preset has already been written by the time this runs, and
+ * a queue outage surfacing as a 500 would have the caller retry into "already
+ * exists" against the preset they just made.
+ */
+const auditPreset = (data: Parameters<typeof QueueService.logAudit>[0]) =>
+  QueueService.logAudit(data).catch((err) =>
+    console.error('⚠️  Failed to queue audit entry for', data.action, err),
+  );
+
+router.get(
+  '/presets',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const presets = await prisma.rolePreset.findMany({
+      select:  PRESET_SELECT,
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: presets.map(fmtPreset) });
+  }),
+);
+
+router.post(
+  '/presets',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, description, permissionKeys } = req.body as {
+      name?: unknown; description?: unknown; permissionKeys?: unknown;
+    };
+
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!trimmed) throw new AppError('A preset needs a name.', 400);
+    if (trimmed.length > 80) throw new AppError('Keep the preset name to 80 characters.', 400);
+
+    if (description != null && typeof description !== 'string') {
+      throw new AppError('description must be text.', 400);
+    }
+    const desc = typeof description === 'string' && description.trim() ? description.trim() : null;
+    if (desc && desc.length > 300) throw new AppError('Keep the description to 300 characters.', 400);
+
+    if (!Array.isArray(permissionKeys) || permissionKeys.some((k) => typeof k !== 'string')) {
+      throw new AppError('permissionKeys must be an array of permission keys.', 400);
+    }
+    // An empty set is allowed: "no access" is a legitimate thing to save.
+    const keys = [...new Set(permissionKeys as string[])].sort();
+
+    // Refused whole rather than saved minus the typo, matching PUT above: a
+    // preset that silently held fewer keys than asked would apply the wrong set.
+    const found = await prisma.permission.findMany({
+      where:  { key: { in: keys } },
+      select: { key: true },
+    });
+    const known = new Set(found.map((f) => f.key));
+    const unknown = keys.filter((k) => !known.has(k));
+    if (unknown.length) {
+      throw new AppError(`Unknown permission key(s): ${unknown.join(', ')}`, 400);
+    }
+
+    // Case-insensitive: "Front desk" and "front desk" read as one preset in a
+    // list, so they should not be able to exist as two.
+    const clash = await prisma.rolePreset.findFirst({
+      where:  { name: { equals: trimmed, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (clash) throw new AppError(`A preset called "${trimmed}" already exists.`, 409);
+
+    let preset: PresetRow;
+    try {
+      preset = await prisma.rolePreset.create({
+        data: {
+          name:           trimmed,
+          description:    desc,
+          permissionKeys: keys,
+          createdById:    req.user!.userId,
+        },
+        select: PRESET_SELECT,
+      });
+    } catch (err) {
+      // Two saves racing past the check above land on the unique index.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new AppError(`A preset called "${trimmed}" already exists.`, 409);
+      }
+      throw err;
+    }
+
+    await auditPreset({
+      userId:   req.user!.userId,
+      action:   'ROLE_PRESET_CREATED',
+      entity:   'rolePreset',
+      entityId: preset.id,
+      newValue: { name: preset.name, count: keys.length, permissionKeys: keys },
+    });
+
+    res.status(201).json({ success: true, data: fmtPreset(preset) });
+  }),
+);
+
+/** Deleting a preset changes no role — each keeps whatever it holds now. */
+router.delete(
+  '/presets/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const existing = await prisma.rolePreset.findUnique({
+      where:  { id: req.params.id },
+      select: { id: true, name: true, permissionKeys: true },
+    });
+    if (!existing) throw new NotFoundError('That preset no longer exists.');
+
+    await prisma.rolePreset.delete({ where: { id: existing.id } });
+
+    await auditPreset({
+      userId:   req.user!.userId,
+      action:   'ROLE_PRESET_DELETED',
+      entity:   'rolePreset',
+      entityId: existing.id,
+      oldValue: { name: existing.name, permissionKeys: existing.permissionKeys },
+    });
+
+    res.json({ success: true, data: { id: existing.id, deleted: true } });
   }),
 );
 

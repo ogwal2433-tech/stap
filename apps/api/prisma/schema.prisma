@@ -181,6 +181,7 @@ model User {
 
   prospectsAssigned       ProspectiveClient[]     @relation("ProspectAssignee")
   permissionsGranted      RolePermission[]        @relation("PermissionGranter")
+  createdRolePresets      RolePreset[]            @relation("RolePresetCreator")
   prospectsCreated        ProspectiveClient[]     @relation("ProspectCreator")
   prospectStatusChanges   ProspectStatusHistory[] @relation("ProspectStatusChanger")
   bidsSubmitted           Bid[]                   @relation("BidSubmitter")
@@ -1700,6 +1701,14 @@ model LeaveRequest {
   rejectionReason String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  // Declared here, not only in the migration that created them. An index that
+  // exists solely in raw SQL reads to Prisma as drift, and the next generated
+  // migration silently drops it — which is what happened to these two.
+  // Both lists read by subject and status; the overlap check queries one
+  // subject's date range at a time.
+  @@index([guardId, status])
+  @@index([userId, status])
 }
 
 model LetterTemplate {
@@ -1921,6 +1930,28 @@ model Permission {
 /// Keyed on the Role enum rather than a Role table: roles are a closed set the
 /// code already branches on, and making them rows would let someone create a
 /// role no route has ever heard of.
+/// A named set of permission keys, saved so one configuration can be applied
+/// to a role in a single step — "Read-only finance", "Front desk".
+///
+/// Roles themselves cannot be created at runtime: Role is a Postgres enum, and
+/// adding a value is a migration. A preset is the part of "custom roles" that
+/// can be dynamic. Applying one replaces a role's grants through the same
+/// guarded write as every other bulk change, so DIRECTOR stays immutable.
+///
+/// Keys are stored as written rather than as foreign keys, so a preset outlives
+/// changes to the catalogue; a key that has since gone is reported and skipped
+/// when the preset is applied instead of making the preset unusable.
+model RolePreset {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String?
+  permissionKeys String[]
+  createdById    String?
+  createdBy      User?    @relation("RolePresetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model RolePermission {
   id            String     @id @default(cuid())
   role          Role

@@ -8,6 +8,17 @@ export interface Permission {
   module:      string;
 }
 
+/** A named permission set that can be applied to a role in one step. */
+export interface RolePreset {
+  id:             string;
+  name:           string;
+  description:    string | null;
+  permissionKeys: string[];
+  createdBy:      { id: string; name: string } | null;
+  createdAt:      string;
+  updatedAt:      string;
+}
+
 export interface RoleSummary {
   role:     string;
   count:    number;
@@ -47,7 +58,34 @@ export const permissionsApi = {
       .then(() => undefined);
   },
 
-  replace(role: string, permissionKeys: string[]): Promise<void> {
-    return api.put(`/permissions/roles/${role}`, { permissionKeys }).then(() => undefined);
+  /**
+   * Replaces a role's whole set in one transaction. `reason` is recorded in the
+   * audit log — "Applied preset: Front desk", "Revoke all: guards" — so the
+   * trail reads as decisions rather than bare arrays of keys.
+   */
+  replace(role: string, permissionKeys: string[], reason?: string): Promise<void> {
+    return api
+      .put(`/permissions/roles/${role}`, { permissionKeys, ...(reason ? { reason } : {}) })
+      .then(() => undefined);
+  },
+
+  // ── Presets ─────────────────────────────────────────────────────────────────
+
+  presets(): Promise<RolePreset[]> {
+    return api.get<{ data: RolePreset[] }>('/permissions/presets').then((r) => r.data.data);
+  },
+
+  createPreset(input: {
+    name: string;
+    description?: string;
+    permissionKeys: string[];
+  }): Promise<RolePreset> {
+    return api
+      .post<{ data: RolePreset }>('/permissions/presets', input)
+      .then((r) => r.data.data);
+  },
+
+  deletePreset(id: string): Promise<void> {
+    return api.delete(`/permissions/presets/${encodeURIComponent(id)}`).then(() => undefined);
   },
 };
