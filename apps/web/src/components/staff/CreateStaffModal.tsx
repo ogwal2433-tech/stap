@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Button, Form, Modal, Row, Col, Spinner } from 'react-bootstrap';
 import {
-  ROLE_CONFIG, STAFF_ROLE_VALUES, type StaffRole,
+  ROLE_CONFIG, type StaffRole,
   JOB_TITLES, JOB_TITLE_CATEGORIES, generatePassword,
 } from '@stap/shared';
 import TemporaryPasswordField from '../common/TemporaryPasswordField';
+import { useRoles } from '../../hooks/useRoles';
 import { useCreateStaff } from '../../hooks/useStaff';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -39,7 +40,10 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm(f => ({ ...f, [key]: value }));
 
-  const roleConfig = form.role ? ROLE_CONFIG[form.role] : null;
+  // Roles are rows now — created and disabled at runtime — so the list comes from
+  // the API rather than a constant that would never show a new one.
+  const { data: assignableRoles = [], isLoading: rolesLoading } = useRoles(true);
+  const roleConfig = form.role ? (assignableRoles.find(r => r.name === form.role) ?? null) : null;
 
   const handleClose = () => {
     setForm(emptyForm());
@@ -166,14 +170,14 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
               value={form.role}
               onChange={e => set('role', e.target.value as StaffRole | '')}
             >
-              <option value="">— Select role —</option>
-              {STAFF_ROLE_VALUES.map(value => (
-                <option key={value} value={value}>
-                  {ROLE_CONFIG[value]?.icon} {ROLE_CONFIG[value]?.label ?? value}
+              <option value="">{rolesLoading ? 'Loading roles…' : '— Select role —'}</option>
+              {assignableRoles.map(r => (
+                <option key={r.name} value={r.name}>
+                  {ROLE_CONFIG[r.name]?.icon ?? '•'} {r.label}
                 </option>
               ))}
             </Form.Select>
-            {roleConfig && (
+            {roleConfig?.description && (
               <div
                 style={{
                   background:   '#EBF5FB',

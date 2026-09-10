@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
+import { assertAssignableRole } from './roleService';
 import { writeAuditLog } from '../lib/auditLog';
 import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
@@ -169,6 +170,10 @@ class SettingsService {
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new AppError('A user with this email already exists', 409);
 
+    // Roles are rows now; an unknown or disabled one is refused here rather
+    // than reaching the foreign key as an unexplained 500.
+    await assertAssignableRole(data.role);
+
     if (data.role === 'CLIENT') {
       if (!data.clientId) {
         throw new AppError('A client company must be selected when creating a Client user.', 400);
@@ -226,6 +231,12 @@ class SettingsService {
   ): Promise<UserResponse> {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('User not found');
+
+    // Only a change of role is checked: keeping a role that has since been
+    // disabled must not block an unrelated edit to the same person.
+    if (data.role !== undefined && data.role !== existing.role) {
+      await assertAssignableRole(data.role);
+    }
 
     // Resolve the effective role/clientId this update settles on, whether or
     // not the caller resent every field — e.g. a status-only update on an

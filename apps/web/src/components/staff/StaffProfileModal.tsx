@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES, getJobTitleLabel, isLegacyJobTitle } from '@stap/shared';
+import { ROLE_CONFIG, ROLES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES, getJobTitleLabel, isLegacyJobTitle } from '@stap/shared';
 import {
   useStaffMember,
   useUpdateStaff,
@@ -8,6 +8,7 @@ import {
   useReactivateStaff,
   useResetStaffPassword,
 } from '../../hooks/useStaff';
+import { useRoles } from '../../hooks/useRoles';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -44,6 +45,8 @@ function Field({ label, value }: { label: string; value: string | null }) {
 
 export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: StaffProfileModalProps) {
   const { data: staff, isLoading, error } = useStaffMember(show ? staffId : null);
+  // From the Role table, so custom roles are offered and disabled ones are not.
+  const { data: assignableRoles = [] } = useRoles(true);
   const { user }      = useAuth();
   const { showToast } = useToast();
 
@@ -323,9 +326,16 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                       onChange={e => set('role', e.target.value as StaffRole)}
                       disabled={isSelf}
                     >
-                      {STAFF_ROLE_VALUES.map(value => (
-                        <option key={value} value={value}>
-                          {ROLE_CONFIG[value]?.icon} {ROLE_CONFIG[value]?.label ?? value}
+                      {/* The role they hold now, even once it has been disabled —
+                          otherwise the select would silently show another one. */}
+                      {staff && !assignableRoles.some(r => r.name === staff.role) && (
+                        <option value={staff.role}>
+                          {ROLE_CONFIG[staff.role]?.label ?? staff.role} (not assignable)
+                        </option>
+                      )}
+                      {assignableRoles.map(r => (
+                        <option key={r.name} value={r.name}>
+                          {ROLE_CONFIG[r.name]?.icon ?? '•'} {r.label}
                         </option>
                       ))}
                     </Form.Select>
@@ -333,7 +343,8 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                       <Form.Text className="text-muted">You cannot change your own role.</Form.Text>
                     ) : form.role && form.role !== staff.role ? (
                       <Form.Text style={{ color: '#E8701A' }}>
-                        {ROLE_CONFIG[form.role]?.description} They will be signed out and must log in again.
+                        {assignableRoles.find(r => r.name === form.role)?.description ?? ROLE_CONFIG[form.role]?.description}{' '}
+                        They will be signed out and must log in again.
                       </Form.Text>
                     ) : null}
                   </Form.Group>

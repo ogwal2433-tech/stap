@@ -14,6 +14,7 @@ import {
 } from '../../hooks/useSettings';
 import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
+import { useRoles } from '../../hooks/useRoles';
 import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse } from '@stap/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { getApiErrorMessage } from '../../lib/api';
@@ -65,6 +66,35 @@ const STATUS_BADGES: Record<string, string> = {
 };
 
 // ── Setting Field ──────────────────────────────────────────────────────────────
+
+/**
+ * The role choices for a user account: the system roles this form has always
+ * offered, plus any enabled custom role. Read from the Role table, because a
+ * role created in the UI would never appear in a constant.
+ */
+function RoleOptions() {
+  const { data: roles = [] } = useRoles();
+  const offered = roles.filter(
+    r => r.isActive && (!r.isSystem || ROLE_OPTIONS.includes(r.name as UserRole)),
+  );
+  // Until the list arrives, keep the built-in choices so the select is never empty.
+  if (!offered.length) {
+    return (
+      <>
+        {ROLE_OPTIONS.map(r => (
+          <option key={r} value={r}>{r === ROLES.CLIENT ? 'Client (Portal Access)' : r.replace(/_/g, ' ')}</option>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {offered.map(r => (
+        <option key={r.name} value={r.name}>{r.name === ROLES.CLIENT ? 'Client (Portal Access)' : r.label}</option>
+      ))}
+    </>
+  );
+}
 
 function SettingField({
   setting,
@@ -231,7 +261,7 @@ function UserModal({
             <Col>
               <Form.Label className="small fw-medium">Role *</Form.Label>
               <Form.Select size="sm" value={form.role} onChange={e => handleRoleChange(e.target.value as UserRole)}>
-                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r === ROLES.CLIENT ? 'Client (Portal Access)' : r.replace(/_/g, ' ')}</option>)}
+                <RoleOptions />
               </Form.Select>
             </Col>
             {!isNew && (

@@ -10,31 +10,6 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-enum Role {
-  DIRECTOR
-  ASSISTANT_MANAGER
-  ADMINISTRATOR
-  OPERATIONS_SUPERVISOR
-  FIELD_SUPERVISOR
-  TRAINER
-  ACCOUNTS_OFFICER
-  CONTROL_ROOM
-  /// Split into MARKETING_HEAD and SALES. Retained so existing rows and any
-  /// token issued before the split still resolve — dropping an enum value in
-  /// Postgres means recreating the type and rewriting every column that uses
-  /// it. Nothing assigns it any more; the migration moved every holder to
-  /// MARKETING_HEAD.
-  MARKETING
-  /// Full marketing access: every lead, targets, bids, all reports.
-  MARKETING_HEAD
-  /// Sales staff. Only the leads assigned to them; no targets, no bids.
-  SALES
-  /// HR officer: guard HR records, leave, discipline, letters and HR reports.
-  /// Deliberately no finance, payroll, complaints, marketing or client billing.
-  HR
-  GUARD
-  CLIENT
-}
 
 enum UserStatus {
   ACTIVE
@@ -125,7 +100,12 @@ model User {
   email        String     @unique
   phone        String?
   passwordHash String
-  role         Role
+  /// The role's name. A foreign key to Role.name rather than Role.id, so every
+  /// query, sign-in token and requireRole guard that compares role names keeps
+  /// working unchanged. Names are immutable once created, so there is no rename
+  /// for a key on id to protect against.
+  role         String
+  roleRecord   Role       @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -1930,6 +1910,31 @@ model Permission {
 /// Keyed on the Role enum rather than a Role table: roles are a closed set the
 /// code already branches on, and making them rows would let someone create a
 /// role no route has ever heard of.
+/// A role a user can hold. Replaces the Postgres enum of the same name, so a
+/// role can be created, relabelled, disabled or deleted from the UI without a
+/// migration.
+///
+/// `name` is the identifier code and sign-in tokens use — DIRECTOR, HR — and is
+/// what User.role and RolePermission.role reference. It is fixed once created.
+/// System roles are the ones code names directly (requireRole, ROLES): they
+/// cannot be deleted, only disabled, and DIRECTOR cannot even be disabled.
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  label       String
+  description String?
+  colour      String?
+  isSystem    Boolean  @default(false)
+  /// A disabled role holds no permissions and its users cannot sign in. Its
+  /// grants are kept, so enabling it again restores exactly what it had.
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
 /// A named set of permission keys, saved so one configuration can be applied
 /// to a role in a single step — "Read-only finance", "Front desk".
 ///
@@ -1954,7 +1959,9 @@ model RolePreset {
 
 model RolePermission {
   id            String     @id @default(cuid())
-  role          Role
+  role          String
+  /// Deleting a role takes its grants with it; they mean nothing without it.
+  roleRecord    Role       @relation(fields: [role], references: [name], onDelete: Cascade, onUpdate: Cascade)
   permissionId  String
   permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   grantedAt     DateTime   @default(now())

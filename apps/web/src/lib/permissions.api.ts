@@ -20,9 +20,15 @@ export interface RolePreset {
 }
 
 export interface RoleSummary {
-  role:     string;
-  count:    number;
-  editable: boolean;
+  role:        string;
+  label:       string;
+  description: string | null;
+  colour:      string | null;
+  isSystem:    boolean;
+  isActive:    boolean;
+  userCount:   number;
+  count:       number;
+  editable:    boolean;
 }
 
 export const permissionsApi = {

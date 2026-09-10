@@ -8,6 +8,8 @@ import { AppError, NotFoundError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
 import { PERMISSIONS } from '../constants/permissions';
 import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
+import { PORTAL_ROLES } from '../constants/systemRoles';
+import { ROLE_HIERARCHY } from '@stap/shared';
 
 const router = Router();
 
@@ -24,11 +26,19 @@ router.use(authenticate);
 router.get(
   '/me',
   asyncHandler(async (req: Request, res: Response) => {
-    const rows = await prisma.rolePermission.findMany({
-      where:   { role: req.user!.role as never },
-      include: { permission: { select: { key: true, name: true, module: true } } },
-      orderBy: { permission: { key: 'asc' } },
+    // A disabled role holds nothing, whatever grants its rows still carry —
+    // the same rule requirePermission applies, so the UI and the API agree.
+    const roleRow = await prisma.role.findUnique({
+      where:  { name: req.user!.role },
+      select: { label: true, isActive: true },
     });
+    const rows = roleRow?.isActive
+      ? await prisma.rolePermission.findMany({
+          where:   { role: req.user!.role as never },
+          include: { permission: { select: { key: true, name: true, module: true } } },
+          orderBy: { permission: { key: 'asc' } },
+        })
+      : [];
 
     const byModule: Record<string, string[]> = {};
     for (const r of rows) {
@@ -39,6 +49,9 @@ router.get(
       success: true,
       data: {
         role:        req.user!.role,
+        // The label, so the UI can name a custom role it has no constant for.
+        roleLabel:   roleRow?.label ?? req.user!.role,
+        roleActive:  roleRow?.isActive ?? false,
         permissions: rows.map((r) => r.permission.key),
         byModule,
       },
@@ -50,11 +63,17 @@ router.get(
 // by someone who only happens to hold a high role.
 router.use(requirePermission(PERMISSIONS.ROLES_MANAGE));
 
-/** The roles the matrix covers. GUARD and CLIENT are not permission-gated. */
-const MANAGED_ROLES = Object.keys(DEFAULT_ROLE_PERMISSIONS);
-
-function assertManagedRole(role: string): void {
-  if (!MANAGED_ROLES.includes(role)) {
+/**
+ * Every role in the Role table except the portal roles, which are not
+ * permission-gated. Read from the database rather than the default sets, so a
+ * role created in the UI can be given permissions without a code change.
+ */
+async function assertManagedRole(role: string): Promise<void> {
+  const isPortal = (PORTAL_ROLES as readonly string[]).includes(role);
+  const found = isPortal
+    ? null
+    : await prisma.role.findUnique({ where: { name: role }, select: { id: true } });
+  if (!found) {
     throw new AppError(`"${role}" is not a role whose permissions can be managed.`, 400);
   }
 }
@@ -66,8 +85,8 @@ function assertManagedRole(role: string): void {
  * allows an administrator to revoke the last grant that can undo the change —
  * locking permission management out of the system with no route back in.
  */
-function assertEditable(role: string): void {
-  assertManagedRole(role);
+async function assertEditable(role: string): Promise<void> {
+  await assertManagedRole(role);
   if (role === 'DIRECTOR') {
     throw new AppError(
       'Director permissions cannot be changed. The role is the fallback that keeps permission management reachable.',
@@ -88,22 +107,40 @@ router.get(
   }),
 );
 
-/** Every managed role with its grant count — drives the left-hand role list. */
+/**
+ * Every role the matrix covers, from the Role table, so a role created in the
+ * UI appears here at once. System roles first in the hierarchy people already
+ * know; custom roles after, A–Z.
+ */
 router.get(
   '/roles',
   asyncHandler(async (_req: Request, res: Response) => {
-    const counts = await prisma.rolePermission.groupBy({
-      by:     ['role'],
-      _count: { id: true },
-    });
+    const [roles, counts] = await Promise.all([
+      prisma.role.findMany({
+        where:   { name: { notIn: [...PORTAL_ROLES] } },
+        include: { _count: { select: { users: true } } },
+      }),
+      prisma.rolePermission.groupBy({ by: ['role'], _count: { id: true } }),
+    ]);
     const byRole = new Map(counts.map((c) => [String(c.role), c._count.id]));
+    const rank = (r: { name: string; isSystem: boolean }) => {
+      const i = ROLE_HIERARCHY.indexOf(r.name as never);
+      return r.isSystem && i !== -1 ? i : ROLE_HIERARCHY.length;
+    };
+    roles.sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label));
 
     res.json({
       success: true,
-      data: MANAGED_ROLES.map((role) => ({
-        role,
-        count:    byRole.get(role) ?? 0,
-        editable: role !== 'DIRECTOR',
+      data: roles.map((r) => ({
+        role:        r.name,
+        label:       r.label,
+        description: r.description,
+        colour:      r.colour,
+        isSystem:    r.isSystem,
+        isActive:    r.isActive,
+        userCount:   r._count.users,
+        count:       byRole.get(r.name) ?? 0,
+        editable:    r.name !== 'DIRECTOR',
       })),
     });
   }),
@@ -113,7 +150,7 @@ router.get(
   '/roles/:role',
   asyncHandler(async (req: Request, res: Response) => {
     const role = req.params.role;
-    assertManagedRole(role);
+    await assertManagedRole(role);
 
     const rows = await prisma.rolePermission.findMany({
       where:   { role: role as never },
@@ -138,7 +175,7 @@ router.post(
   '/roles/:role/grant',
   asyncHandler(async (req: Request, res: Response) => {
     const role = req.params.role;
-    assertEditable(role);
+    await assertEditable(role);
 
     const { permissionKey } = req.body as { permissionKey?: string };
     if (!permissionKey) throw new AppError('permissionKey is required.', 400);
@@ -169,7 +206,7 @@ router.delete(
   '/roles/:role/revoke/:key',
   asyncHandler(async (req: Request, res: Response) => {
     const role = req.params.role;
-    assertEditable(role);
+    await assertEditable(role);
 
     const permissionKey = decodeURIComponent(req.params.key);
     const permission = await prisma.permission.findUnique({ where: { key: permissionKey } });
@@ -197,7 +234,7 @@ router.put(
   '/roles/:role',
   asyncHandler(async (req: Request, res: Response) => {
     const role = req.params.role;
-    assertEditable(role);
+    await assertEditable(role);
 
     const { permissionKeys, reason } = req.body as { permissionKeys?: string[]; reason?: string };
     if (!Array.isArray(permissionKeys)) {
@@ -253,7 +290,7 @@ router.get(
   '/roles/:role/defaults',
   asyncHandler(async (req: Request, res: Response) => {
     const role = req.params.role;
-    assertManagedRole(role);
+    await assertManagedRole(role);
     res.json({ success: true, data: { role, permissionKeys: DEFAULT_ROLE_PERMISSIONS[role] ?? [] } });
   }),
 );

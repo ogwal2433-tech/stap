@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Badge, Button, Form, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, STAFF_ROLE_VALUES, ROLES , getJobTitleLabel } from '@stap/shared';
+import { ROLE_CONFIG, ROLES , getJobTitleLabel } from '@stap/shared';
 import { useStaffList } from '../../hooks/useStaff';
+import { useRoles } from '../../hooks/useRoles';
 import { useAuth } from '../../context/AuthContext';
 import { formatRelativeDate } from '../../lib/dateUtils';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
@@ -53,6 +54,9 @@ export default function StaffPage() {
 
   const canAddStaff  = CAN_ADD_STAFF.includes(user?.role ?? '');
   const countByRole  = staffData?.countByRole ?? {};
+  // From the Role table, so a custom role gets a chip as soon as someone holds it.
+  const { data: allRoles = [] } = useRoles();
+  const chipRoles = allRoles.filter(r => r.name !== ROLES.GUARD && r.name !== ROLES.CLIENT);
   const totalActive  = Object.values(countByRole).reduce((a, b) => a + b, 0);
   const hasFilters   = !!search || !!roleFilter || statusFilter !== 'active';
 
@@ -110,7 +114,7 @@ export default function StaffPage() {
           <span style={{ marginLeft: '6px', opacity: 0.8 }}>({totalActive})</span>
         </div>
 
-        {STAFF_ROLE_VALUES.map(role => {
+        {chipRoles.map(({ name: role, label }) => {
           const count = countByRole[role] ?? 0;
           // A role nobody holds is noise on a bar people scan for head-counts.
           if (count === 0) return null;
@@ -128,7 +132,7 @@ export default function StaffPage() {
                 border:     `2px solid ${active ? '#1B3A6B' : '#e9ecef'}`,
               }}
             >
-              {ROLE_CONFIG[role]?.icon} {ROLE_CONFIG[role]?.label ?? role}
+              {ROLE_CONFIG[role]?.icon ?? '•'} {label}
               <span style={{ marginLeft: '6px', opacity: 0.7 }}>({count})</span>
             </div>
           );

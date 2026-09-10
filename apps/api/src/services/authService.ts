@@ -71,7 +71,10 @@ export class AuthService {
   ): Promise<LoginResult | LoginFailure> {
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, name: true, email: true, passwordHash: true, role: true, status: true, clientId: true },
+      select: {
+        id: true, name: true, email: true, passwordHash: true, role: true, status: true, clientId: true,
+        roleRecord: { select: { isActive: true, label: true } },
+      },
     });
 
     if (!user) {
@@ -172,6 +175,23 @@ export class AuthService {
       );
     }
 
+    // A disabled role signs nobody in. Checked after the password for the same
+    // reason as status above: only the account's owner learns why.
+    if (!user.roleRecord.isActive) {
+      await QueueService.logAudit({
+        userId: user.id,
+        action: 'LOGIN_DENIED_ROLE_DISABLED',
+        entity: 'auth',
+        entityId: user.id,
+        ipAddress,
+        userAgent,
+      });
+      throw new AppError(
+        `The ${user.roleRecord.label} role has been disabled. Please contact your administrator.`,
+        403,
+      );
+    }
+
     // Successful login — reset failed attempts
     await redisConnection.del(failedKey(user.id));
 
@@ -233,10 +253,15 @@ export class AuthService {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true, status: true, clientId: true },
+      select: {
+        id: true, name: true, email: true, role: true, status: true, clientId: true,
+        roleRecord: { select: { isActive: true } },
+      },
     });
 
-    if (!user || user.status !== 'ACTIVE') {
+    // A disabled role stops refreshing too, so an open session ends when its
+    // access token does — within the token's lifetime, not at the next sign-in.
+    if (!user || user.status !== 'ACTIVE' || !user.roleRecord.isActive) {
       throw new UnauthorisedError();
     }
 

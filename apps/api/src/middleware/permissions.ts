@@ -20,12 +20,15 @@ async function getRolePermissions(role: string): Promise<Set<string>> {
   const hit = cache.get(role);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.keys;
 
-  const rows = await prisma.rolePermission.findMany({
-    where:  { role: role as never },
-    select: { permission: { select: { key: true } } },
+  // Read through the Role, so a disabled role — or one deleted since the token
+  // was issued — holds nothing, whatever grant rows remain. A disabled role's
+  // grants are kept, so enabling it again restores exactly what it had.
+  const row = await prisma.role.findUnique({
+    where:  { name: role },
+    select: { isActive: true, permissions: { select: { permission: { select: { key: true } } } } },
   });
 
-  const keys = new Set(rows.map((r) => r.permission.key));
+  const keys = new Set(row?.isActive ? row.permissions.map((p) => p.permission.key) : []);
   cache.set(role, { keys, at: Date.now() });
   return keys;
 }

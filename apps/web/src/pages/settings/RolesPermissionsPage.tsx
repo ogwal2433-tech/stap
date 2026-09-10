@@ -1,7 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Button, Form, Modal, Spinner } from 'react-bootstrap';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { permissionsApi, type Permission, type RolePreset } from '../../lib/permissions.api';
+import { permissionsApi, type Permission, type RolePreset, type RoleSummary } from '../../lib/permissions.api';
+import { rolesApi } from '../../lib/roles.api';
+import { ROLE_NAME_PATTERN, normaliseRoleName } from '@stap/shared';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -178,6 +180,202 @@ function SavePresetModal({
   );
 }
 
+// ── Create / edit a role ──────────────────────────────────────────────────────
+
+const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
+
+function RoleFormModal({
+  mode, show, initial, viewerRole, onHide, onSaved,
+}: {
+  mode:        'create' | 'edit';
+  show:        boolean;
+  initial?:    RoleSummary;
+  viewerRole?: string;
+  onHide:      () => void;
+  onSaved:     (name: string, label: string) => void;
+}) {
+  const [label, setLabel]             = useState('');
+  const [name, setName]               = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
+  const [description, setDescription] = useState('');
+  const [colour, setColour]           = useState('#1B3A6B');
+  const [active, setActive]           = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [saving, setSaving]           = useState(false);
+
+  // Start from the role being edited — or blank — each time the modal opens.
+  // Keyed on `show` alone: re-running on `initial` would wipe what someone is
+  // typing whenever the role list refetches in the background.
+  useEffect(() => {
+    if (!show) return;
+    setLabel(initial?.label ?? '');
+    setName(initial?.role ?? '');
+    setNameTouched(false);
+    setDescription(initial?.description ?? '');
+    setColour(initial?.colour ?? '#1B3A6B');
+    setActive(initial?.isActive ?? true);
+    setError(null);
+  }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Until someone edits it, the system name follows the label.
+  const systemName = mode === 'edit'
+    ? (initial?.role ?? '')
+    : normaliseRoleName(nameTouched ? name : label);
+  const nameValid    = mode === 'edit' || ROLE_NAME_PATTERN.test(systemName);
+  const activeLocked = mode === 'edit' && (initial?.role === 'DIRECTOR' || initial?.role === viewerRole);
+  const disabling    = mode === 'edit' && !!initial?.isActive && !active;
+
+  const close = () => { if (!saving) onHide(); };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (label.trim().length < 2) return setError('Give the role a name of at least 2 characters.');
+    if (!nameValid) {
+      return setError('The system name must start with a letter and use only letters, numbers and underscores.');
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      if (mode === 'create') {
+        const role = await rolesApi.create({
+          label: label.trim(), name: systemName, description: description.trim() || null, colour,
+        });
+        onSaved(role.name, role.label);
+      } else if (initial) {
+        const role = await rolesApi.update(initial.role, {
+          label:       label.trim(),
+          description: description.trim() || null,
+          colour,
+          ...(active !== initial.isActive ? { isActive: active } : {}),
+        });
+        onSaved(role.name, role.label);
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not save the role.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal show={show} onHide={close} centered>
+      <Form onSubmit={submit}>
+        <Modal.Header closeButton={!saving} closeVariant="white" style={{ background: NAVY, color: 'white' }}>
+          <Modal.Title style={{ fontSize: '1rem' }}>
+            {mode === 'create' ? 'Create a role' : `Edit ${initial?.label ?? 'role'}`}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {error && (
+            <div
+              style={{
+                background: '#FDECEA', border: '1px solid #F5C6CB', borderRadius: '0.375rem',
+                padding: '8px 12px', marginBottom: 12, fontSize: '0.82rem', color: RED,
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-bold small">Name *</Form.Label>
+            <Form.Control
+              size="sm" value={label} maxLength={60} autoFocus placeholder="e.g. Zone Manager"
+              onChange={(e) => setLabel(e.target.value)}
+            />
+            <Form.Text className="text-muted">What people see — in the staff directory and on badges.</Form.Text>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-bold small">System name</Form.Label>
+            <Form.Control
+              size="sm" value={systemName} disabled={mode === 'edit'} isInvalid={!nameValid}
+              style={{ fontFamily: 'monospace' }}
+              onChange={(e) => { setNameTouched(true); setName(e.target.value); }}
+            />
+            <Form.Text className="text-muted">
+              {mode === 'edit'
+                ? 'Fixed once a role is created — code and sign-in tokens refer to it.'
+                : 'Follows the name until you change it. Fixed once the role is created.'}
+            </Form.Text>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-bold small">
+              Description <span className="text-muted fw-normal">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              as="textarea" rows={2} size="sm" value={description} maxLength={300}
+              placeholder="What this role is for" onChange={(e) => setDescription(e.target.value)}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-bold small">Badge colour</Form.Label>
+            <div className="d-flex gap-2 align-items-center">
+              <input
+                type="color" value={colour} aria-label="Badge colour"
+                onChange={(e) => setColour(e.target.value)}
+                style={{ width: 40, height: 32, border: '1px solid #ced4da', borderRadius: '0.375rem', padding: 2, cursor: 'pointer' }}
+              />
+              <span style={{ background: colour, color: 'white', padding: '3px 12px', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700 }}>
+                {label.trim() || 'Preview'}
+              </span>
+            </div>
+          </Form.Group>
+
+          {mode === 'edit' && (
+            <Form.Group className="mb-1">
+              <Form.Check
+                type="switch" id="role-active" label="Enabled"
+                checked={active} disabled={activeLocked}
+                onChange={(e) => setActive(e.target.checked)}
+              />
+              <Form.Text className="text-muted">
+                {initial?.role === 'DIRECTOR'
+                  ? 'Director cannot be disabled — it keeps permission management reachable.'
+                  : initial?.role === viewerRole
+                    ? 'You cannot disable the role you are signed in with.'
+                    : 'A disabled role holds no permissions and its users cannot sign in. Its grants are kept.'}
+              </Form.Text>
+              {disabling && initial && initial.userCount > 0 && (
+                <div
+                  style={{
+                    background: '#FDEDEC', borderLeft: `3px solid ${RED}`, borderRadius: 4,
+                    padding: '8px 12px', marginTop: 8, fontSize: '0.8rem', color: '#922B21',
+                  }}
+                >
+                  {people(initial.userCount)} with this role will be signed out within 15 minutes and
+                  unable to sign back in.
+                </div>
+              )}
+            </Form.Group>
+          )}
+
+          {mode === 'create' && (
+            <div
+              style={{
+                background: '#FEF9E7', borderLeft: '3px solid #F2AA20', borderRadius: 4,
+                padding: '8px 12px', fontSize: '0.78rem', color: '#856404',
+              }}
+            >
+              New roles start with no permissions — grant what it needs in the matrix, or apply a
+              preset. Some older areas still check for specific built-in roles and will refuse a
+              custom one even with the right permission.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" size="sm" disabled={saving} onClick={close}>Cancel</Button>
+          <Button type="submit" size="sm" disabled={saving || !label.trim() || !nameValid}>
+            {saving ? <Spinner size="sm" animation="border" /> : mode === 'create' ? 'Create role' : 'Save'}
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const headerLink = (colour: string, disabled: boolean): React.CSSProperties => ({
@@ -199,6 +397,8 @@ export default function RolesPermissionsPage() {
   const [bulkBusy, setBulkBusy]     = useState(false);
   const [confirm, setConfirm]       = useState<PendingConfirm | null>(null);
   const [showSave, setShowSave]     = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit]     = useState(false);
 
   const { data: roles = [], isLoading: rolesLoading } = useQuery({
     queryKey: ['permission-roles'],
@@ -220,6 +420,9 @@ export default function RolesPermissionsPage() {
     queryKey: ['permission-presets'],
     queryFn:  permissionsApi.presets,
   });
+
+  const selectedRole  = roles.find((r) => r.role === selected);
+  const selectedLabel = selectedRole?.label ?? pretty(selected);
 
   const held = useMemo(
     () => new Set((roleDetail?.permissions ?? []).map((p) => p.key)),
@@ -243,7 +446,7 @@ export default function RolesPermissionsPage() {
   const visibleRoles = useMemo(() => {
     const q = roleSearch.trim().toLowerCase();
     return q
-      ? roles.filter((r) => r.role.toLowerCase().includes(q) || pretty(r.role).toLowerCase().includes(q))
+      ? roles.filter((r) => r.role.toLowerCase().includes(q) || r.label.toLowerCase().includes(q))
       : roles;
   }, [roles, roleSearch]);
 
@@ -259,7 +462,7 @@ export default function RolesPermissionsPage() {
         padding: '8px 12px', margin: '10px 0', fontSize: '0.8rem', color: '#922B21',
       }}
     >
-      <strong>{pretty(selected)} is your own role.</strong> Without <code>{ROLES_MANAGE_KEY}</code>{' '}
+      <strong>{selectedLabel} is your own role.</strong> Without <code>{ROLES_MANAGE_KEY}</code>{' '}
       you will lose this page the moment the change lands, and only a Director will be able to
       restore it.
     </div>
@@ -316,7 +519,7 @@ export default function RolesPermissionsPage() {
     const before = [...held];
     const { added, removed } = diffSets(before, next);
     if (!added.length && !removed.length) {
-      showToast(`${pretty(selected)} already has exactly that set.`, 'info');
+      showToast(`${selectedLabel} already has exactly that set.`, 'info');
       return;
     }
 
@@ -327,7 +530,7 @@ export default function RolesPermissionsPage() {
       try {
         await permissionsApi.replace(selected, next, reason);
         refresh();
-        showToast(`${pretty(selected)}: +${added.length} / −${removed.length}`, 'success');
+        showToast(`${selectedLabel}: +${added.length} / −${removed.length}`, 'success');
       } catch (err) {
         showToast(getApiErrorMessage(err), 'danger');
       } finally {
@@ -346,11 +549,11 @@ export default function RolesPermissionsPage() {
     ].filter(Boolean).join(' and ');
 
     setConfirm({
-      title: opts.title ?? `Change ${pretty(selected)}?`,
+      title: opts.title ?? `Change ${selectedLabel}?`,
       body: (
         <>
           <p className="mb-2">
-            {pretty(selected)} will {phrase} permission{added.length + removed.length === 1 ? '' : 's'}.
+            {selectedLabel} will {phrase} permission{added.length + removed.length === 1 ? '' : 's'}.
           </p>
           {removed.length > 0 && (
             <details className="mb-2">
@@ -383,7 +586,7 @@ export default function RolesPermissionsPage() {
       const keys = await permissionsApi.defaultsFor(selected);
       await applySet(keys, 'Reset to defaults', {
         always: true,
-        title:  `Reset ${pretty(selected)} to its defaults?`,
+        title:  `Reset ${selectedLabel} to its defaults?`,
       });
     } catch (err) {
       showToast(getApiErrorMessage(err), 'danger');
@@ -396,7 +599,7 @@ export default function RolesPermissionsPage() {
     const { keys, skipped } = applicablePresetKeys(preset.permissionKeys, catalogueKeys);
     void applySet(keys, `Applied preset: ${preset.name}`, {
       always: true,
-      title:  `Apply “${preset.name}” to ${pretty(selected)}?`,
+      title:  `Apply “${preset.name}” to ${selectedLabel}?`,
       note: skipped.length > 0 ? (
         <div
           style={{
@@ -433,6 +636,34 @@ export default function RolesPermissionsPage() {
     });
   }
 
+  function deleteRole(role: RoleSummary) {
+    setConfirm({
+      title: `Delete the ${role.label} role?`,
+      body: (
+        <>
+          <p className="mb-2">
+            The role and its {plural(role.count, 'permission')} are removed. Nobody holds it, so no
+            one loses access.
+          </p>
+          <p className="mb-0 small text-muted">This cannot be undone. Presets are unaffected.</p>
+        </>
+      ),
+      confirmLabel: 'Delete role',
+      danger:       true,
+      onConfirm: async () => {
+        try {
+          await rolesApi.remove(role.role);
+          void queryClient.invalidateQueries({ queryKey: ['permission-roles'] });
+          void queryClient.invalidateQueries({ queryKey: ['roles'] });
+          setSelected('ASSISTANT_MANAGER');
+          showToast(`${role.label} deleted`, 'success');
+        } catch (err) {
+          showToast(getApiErrorMessage(err), 'danger');
+        }
+      },
+    });
+  }
+
   if (rolesLoading || catLoading) {
     return <div className="text-center py-5"><Spinner animation="border" /></div>;
   }
@@ -451,6 +682,14 @@ export default function RolesPermissionsPage() {
         <div style={{ flex: '0 0 270px', width: '100%', maxWidth: 330 }}>
           <div style={{ border: '1px solid #e9ecef', borderRadius: '0.5rem', overflow: 'hidden' }}>
             <div style={{ padding: 10, borderBottom: '1px solid #e9ecef', background: '#F8F9FA' }}>
+              <Button
+                size="sm"
+                className="w-100 mb-2"
+                style={{ background: NAVY, borderColor: NAVY }}
+                onClick={() => setShowCreate(true)}
+              >
+                + New role
+              </Button>
               <Form.Control
                 size="sm"
                 placeholder="Search roles…"
@@ -479,13 +718,28 @@ export default function RolesPermissionsPage() {
                       display: 'flex', alignItems: 'center', gap: 10,
                     }}
                   >
-                    <span style={{ fontSize: '1.2rem' }}>{ROLE_ICON[r.role] ?? '•'}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: active ? 700 : 500, fontSize: '0.85rem' }}>
-                        {pretty(r.role)}
+                    <span style={{ fontSize: '1.2rem', width: 22, textAlign: 'center' }}>
+                      {ROLE_ICON[r.role] ?? (
+                        <span
+                          aria-hidden
+                          style={{
+                            display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
+                            background: r.colour ?? '#adb5bd',
+                          }}
+                        />
+                      )}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0, opacity: r.isActive ? 1 : 0.55 }}>
+                      <div
+                        className="d-flex align-items-center gap-1"
+                        style={{ fontWeight: active ? 700 : 500, fontSize: '0.85rem' }}
+                      >
+                        <span className="text-truncate">{r.label}</span>
+                        {!r.isSystem && <Badge bg="success" style={{ fontSize: '0.55rem' }}>Custom</Badge>}
+                        {!r.isActive && <Badge bg="secondary" style={{ fontSize: '0.55rem' }}>Disabled</Badge>}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
-                        {plural(r.count, 'permission')}
+                        {plural(r.count, 'permission')} · {plural(r.userCount, 'user')}
                         {!r.editable && ' · locked'}
                       </div>
                     </div>
@@ -537,7 +791,7 @@ export default function RolesPermissionsPage() {
                         variant="outline-primary"
                         style={{ fontSize: '0.68rem', padding: '1px 8px' }}
                         disabled={!editable || bulkBusy}
-                        title={editable ? `Apply to ${pretty(selected)}` : `${pretty(selected)} cannot be changed`}
+                        title={editable ? `Apply to ${selectedLabel}` : `${selectedLabel} cannot be changed`}
                         onClick={() => applyPreset(p)}
                       >
                         Apply
@@ -566,13 +820,31 @@ export default function RolesPermissionsPage() {
             <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
               <div>
                 <div style={{ fontWeight: 700, fontSize: '1rem', color: NAVY }}>
-                  {ROLE_ICON[selected] ?? '•'} {pretty(selected)}
+                  {ROLE_ICON[selected] ?? '•'} {selectedLabel}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
                   {held.size} of {catalogue.length} permissions granted
                 </div>
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex gap-2 flex-wrap">
+                <Button variant="outline-primary" size="sm" disabled={!selectedRole} onClick={() => setShowEdit(true)}>
+                  ✎ Edit role
+                </Button>
+                {selectedRole && !selectedRole.isSystem && (
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    disabled={selectedRole.userCount > 0}
+                    title={
+                      selectedRole.userCount > 0
+                        ? `${plural(selectedRole.userCount, 'user')} still hold this role — move them first`
+                        : 'Delete this role'
+                    }
+                    onClick={() => deleteRole(selectedRole)}
+                  >
+                    🗑 Delete role
+                  </Button>
+                )}
                 <Button
                   variant="outline-secondary"
                   size="sm"
@@ -601,6 +873,19 @@ export default function RolesPermissionsPage() {
             </div>
           </div>
 
+          {selectedRole && !selectedRole.isActive && (
+            <div
+              style={{
+                background: '#F2F4F7', border: '1px solid #ced4da', borderRadius: '0.5rem',
+                padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem',
+              }}
+            >
+              ⏸ <strong>{selectedLabel}</strong> is disabled. Its {plural(selectedRole.userCount, 'user')}{' '}
+              cannot sign in and it holds no permissions until it is enabled again. The grants below
+              are kept, so enabling it restores exactly this.
+            </div>
+          )}
+
           {!editable && !detailLoading && (
             <div
               style={{
@@ -608,7 +893,7 @@ export default function RolesPermissionsPage() {
                 padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem',
               }}
             >
-              🔒 <strong>{pretty(selected)}</strong> holds every permission and cannot be changed.
+              🔒 <strong>{selectedLabel}</strong> holds every permission and cannot be changed.
               It is what keeps permission management reachable if another role is misconfigured.
             </div>
           )}
@@ -726,13 +1011,41 @@ export default function RolesPermissionsPage() {
 
       <SavePresetModal
         show={showSave}
-        roleLabel={pretty(selected)}
+        roleLabel={selectedLabel}
         keys={[...held].sort()}
         onHide={() => setShowSave(false)}
         onSaved={(preset) => {
           setShowSave(false);
           void queryClient.invalidateQueries({ queryKey: ['permission-presets'] });
           showToast(`Preset “${preset.name}” saved`, 'success');
+        }}
+      />
+
+      <RoleFormModal
+        mode="create"
+        show={showCreate}
+        onHide={() => setShowCreate(false)}
+        onSaved={(name, label) => {
+          setShowCreate(false);
+          void queryClient.invalidateQueries({ queryKey: ['permission-roles'] });
+          void queryClient.invalidateQueries({ queryKey: ['roles'] });
+          setSelected(name);
+          showToast(`${label} created — it has no permissions yet`, 'success');
+        }}
+      />
+
+      <RoleFormModal
+        mode="edit"
+        show={showEdit}
+        initial={selectedRole}
+        viewerRole={user?.role}
+        onHide={() => setShowEdit(false)}
+        onSaved={(_name, label) => {
+          setShowEdit(false);
+          void queryClient.invalidateQueries({ queryKey: ['permission-roles'] });
+          void queryClient.invalidateQueries({ queryKey: ['role-permissions', selected] });
+          void queryClient.invalidateQueries({ queryKey: ['roles'] });
+          showToast(`${label} saved`, 'success');
         }}
       />
     </div>

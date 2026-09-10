@@ -102,7 +102,7 @@ class IncidentService {
     if (data.severity === 'HIGH' || data.severity === 'CRITICAL') {
       const notifyRoles = ['DIRECTOR', 'OPERATIONS_SUPERVISOR'];
       const recipients = await prisma.user.findMany({
-        where: { role: { in: notifyRoles as import('@prisma/client').Role[] }, status: 'ACTIVE' },
+        where: { role: { in: notifyRoles }, status: 'ACTIVE' },
         select: { id: true, name: true, email: true },
       });
 

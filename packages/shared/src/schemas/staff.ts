@@ -118,10 +118,17 @@ export const STAFF_ROLE_VALUES = [
   ROLES.HR,
 ] as const;
 
-const StaffRoleEnum = z.enum(STAFF_ROLE_VALUES);
+/**
+ * Any role name. Roles are rows now, created at runtime, so a schema cannot
+ * list them; staffService checks the name against the Role table instead —
+ * that it exists, is enabled, and is not GUARD or CLIENT.
+ */
+const StaffRoleEnum = z.string().trim().min(1).max(40);
 
-/** A role a staff account may hold — UserRole less GUARD and CLIENT. */
-export type StaffRole = (typeof STAFF_ROLE_VALUES)[number];
+/** The system roles a staff account may hold — the built-in set, before any custom role. */
+export type SystemStaffRole = (typeof STAFF_ROLE_VALUES)[number];
+/** A role a staff account holds: any role name, system or custom. */
+export type StaffRole = string;
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
