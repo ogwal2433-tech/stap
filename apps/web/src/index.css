@@ -16,3 +16,26 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Used by fields that appear in response to another answer — the movement
+   shows the form reacting, rather than a field seeming to have been missed. */
+@keyframes fadeInField {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The field must still appear; only the movement is dropped. */
+  [style*="fadeInField"] { animation: none !important; }
+}
+
+/* Loading placeholders. Held above 0.4 so the bars stay visible against the
+   navy card rather than blinking out entirely. */
+@keyframes billingPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="billingPulse"] { animation: none !important; }
+}

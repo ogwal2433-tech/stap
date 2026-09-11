@@ -27,6 +27,7 @@ import { gunsRouter } from './guns';
 import { marketingRouter } from './marketing';
 import { staffRouter } from './staff';
 import permissionsRouter from './permissions';
+import rolesRouter from './roles';
 import sitesRouter from './sites';
 
 const router: IRouter = Router();
@@ -41,6 +42,7 @@ router.use('/contracts', contractsRouter);
 router.use('/users', usersRouter);
 router.use('/staff', staffRouter);
 router.use('/permissions', permissionsRouter);
+router.use('/roles', rolesRouter);
 router.use('/sites', sitesRouter);
 router.use('/finance', financeRouter);
 router.use('/requisitions', requisitionsRouter);

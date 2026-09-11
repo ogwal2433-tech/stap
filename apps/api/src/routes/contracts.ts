@@ -108,6 +108,37 @@ router.get(
   }),
 );
 
+// ── GET /expired — contracts already past their end date ─────────────────────
+// Before /:id, same as /expiring, or "expired" is read as a contract id.
+router.get(
+  '/expired',
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
+  asyncHandler(async (req, res) => {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+    const contracts = await contractService.getExpiredContracts(
+      Number.isFinite(limit) && limit! > 0 ? limit : undefined,
+    );
+    res.status(200).json({ success: true, data: contracts });
+  }),
+);
+
+// ── GET /expiry-alerts — both lists in one call ──────────────────────────────
+// The dashboard shows expiring and expired side by side, so it asks once
+// rather than firing two requests that can disagree about where "now" is.
+router.get(
+  '/expiry-alerts',
+  requirePermission(PERMISSIONS.CONTRACTS_VIEW),
+  asyncHandler(async (req, res) => {
+    const days  = req.query.days  ? parseInt(String(req.query.days), 10)  : 30;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 10;
+    const data = await contractService.getExpiryAlerts(
+      Number.isFinite(days)  && days  > 0 ? days  : 30,
+      Number.isFinite(limit) && limit > 0 ? limit : 10,
+    );
+    res.status(200).json({ success: true, data });
+  }),
+);
+
 // ── POST / — create contract ───────────────────────────────────────────────────
 router.post(
   '/',

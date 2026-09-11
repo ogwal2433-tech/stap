@@ -5,7 +5,9 @@ import { loginUrl } from '../jobs/templates/emailTemplates';
 import { NotFoundError } from '../errors/AppError';
 import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
+import { MARKETER_LEAD_SOURCE, LEAD_SOURCES } from '@stap/shared';
 import type {
+  BillingSummary,
   ClientContactInput,
   ClientContactResponse,
   CreateClientInput,
@@ -85,8 +87,9 @@ function toClientResponse(client: Record<string, unknown>): ClientResponse {
     vatRegistered: (client.vatRegistered as boolean) ?? false,
     vatRate:       (client.vatRate as number | null) ?? null,
 
-    leadSource:  (client.leadSource as ClientResponse['leadSource']) ?? null,
-    referredBy:  (client.referredBy as string | null) ?? null,
+    leadSource:   (client.leadSource as ClientResponse['leadSource']) ?? null,
+    referredBy:   (client.referredBy as string | null) ?? null,
+    marketerName: (client.marketerName as string | null) ?? null,
     leadStatus:  (client.leadStatus as ClientResponse['leadStatus']) ?? 'CONVERTED',
 
     contacts: ((client.contacts as Record<string, unknown>[] | undefined) ?? [])
@@ -102,13 +105,34 @@ class ClientService {
   // ── List ───────────────────────────────────────────────────────────────────
 
   async list(query: ClientListQuery): Promise<PaginatedResponse<ClientResponse>> {
-    const { page, limit, search, contractStatus, leadStatus, sortBy, sortOrder } = query;
+    const { page, limit, search, contractStatus, contractFilter, leadStatus, sortBy, sortOrder } =
+      query;
     const skip = (page - 1) * limit;
 
     const where: import('@prisma/client').Prisma.ClientWhereInput = {};
 
     if (contractStatus) where.contractStatus = contractStatus;
     if (leadStatus)     where.leadStatus     = leadStatus;
+
+    // Narrowed by the contracts themselves rather than the client's own
+    // contractStatus column, and by date rather than the contract status a
+    // nightly cron maintains — otherwise anything that lapsed since the last
+    // run is missing from the very filter meant to find it.
+    if (contractFilter) {
+      const now = new Date();
+      if (contractFilter === 'expired') {
+        where.contracts = { some: { contractEnd: { lt: now }, status: { not: 'DRAFT' } } };
+      } else {
+        const thirtyDays = new Date(now);
+        thirtyDays.setDate(thirtyDays.getDate() + 30);
+        where.contracts = {
+          some: {
+            contractEnd: { gte: now, lte: thirtyDays },
+            status:      { in: ['ACTIVE', 'EXPIRING'] },
+          },
+        };
+      }
+    }
 
     if (search) {
       where.OR = [
@@ -244,6 +268,11 @@ class ClientService {
         vatRate:        data.vatRate ?? null,
         leadSource:     blankToNull(data.leadSource),
         referredBy:     blankToNull(data.referredBy),
+        // Stored only when the source explains it. A name left behind after the
+        // source changed would be read as fact by the marketer report.
+        marketerName:   data.leadSource === MARKETER_LEAD_SOURCE
+          ? blankToNull(data.marketerName)
+          : null,
         leadStatus:     data.leadStatus ?? 'CONVERTED',
         contacts:       { create: contacts },
       },
@@ -328,7 +357,7 @@ class ClientService {
     // side effect of editing the billing terms.
     const {
       contacts: _ignored, portal: _portalIgnored,
-      email, billingAddress, tin, referredBy, leadSource, ...fields
+      email, billingAddress, tin, referredBy, leadSource, marketerName, ...fields
     } = data;
 
     const updated = await prisma.client.update({
@@ -342,6 +371,19 @@ class ClientService {
         ...(tin            !== undefined ? { tin:            blankToNull(tin) } : {}),
         ...(referredBy     !== undefined ? { referredBy:     blankToNull(referredBy) } : {}),
         ...(leadSource     !== undefined ? { leadSource:     blankToNull(leadSource) } : {}),
+        // Tied to leadSource rather than sent on its own. Whenever the source
+        // is part of this update and is no longer MARKETER, the name goes with
+        // it — otherwise switching a client to "Referral" would leave them
+        // still counted against a marketer's numbers.
+        ...(leadSource !== undefined
+          ? {
+              marketerName: leadSource === MARKETER_LEAD_SOURCE
+                ? blankToNull(marketerName)
+                : null,
+            }
+          : marketerName !== undefined
+            ? { marketerName: blankToNull(marketerName) }
+            : {}),
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
@@ -611,7 +653,7 @@ class ClientService {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    const [totalActive, totalInactive, expiringContracts, openComplaints] =
+    const [totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints] =
       await Promise.all([
         prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
         prisma.client.count({ where: { contractStatus: 'INACTIVE' } }),
@@ -621,10 +663,170 @@ class ClientService {
             status: { in: ['ACTIVE', 'EXPIRING'] },
           },
         }),
+        // Counted from the date rather than the status, which a nightly cron
+        // maintains: anything that lapsed since the last run is still marked
+        // ACTIVE, and counting the status would miss exactly those.
+        // DRAFT is excluded — never signed is not the same as expired.
+        prisma.contract.count({
+          where: { contractEnd: { lt: new Date() }, status: { not: 'DRAFT' } },
+        }),
         prisma.clientComplaint.count({ where: { status: 'OPEN' } }),
       ]);
 
-    return { totalActive, totalInactive, expiringContracts, openComplaints };
+    return { totalActive, totalInactive, expiringContracts, expiredContracts, openComplaints };
+  }
+
+  /**
+   * What this client is being billed, and what they still owe.
+   *
+   * "Currently billed" is the sum of the monthly value of contracts in force —
+   * ACTIVE or EXPIRING, since a contract in its last month is still being
+   * invoiced. DRAFT and EXPIRED are not: one has not started, the other has
+   * stopped, and counting either would overstate revenue.
+   *
+   * Money received is read the way invoiceService.recomputeBalance() reads it,
+   * because anything else would disagree with the figure on the invoice itself:
+   * manual Payment rows plus mobile-money InvoicePayment rows that actually
+   * succeeded. A failed or still-pending mobile-money attempt is not a payment.
+   */
+  async getBillingSummary(clientId: string): Promise<BillingSummary> {
+    const client = await prisma.client.findUnique({
+      where:  { id: clientId },
+      select: { id: true },
+    });
+    if (!client) throw new NotFoundError(`Client ${clientId} not found`);
+
+    const now = new Date();
+
+    const [contracts, openInvoices, manualPayment, momoPayment] = await Promise.all([
+      prisma.contract.findMany({
+        where:  { clientId, status: { in: ['ACTIVE', 'EXPIRING'] } },
+        select: {
+          id: true, guardsRequired: true, totalMonthlyValue: true,
+          status: true, contractEnd: true,
+        },
+        orderBy: { contractEnd: 'asc' },
+      }),
+      // Anything not settled. PAID invoices carry a zero balance and would only
+      // add rows to sum through.
+      prisma.invoice.findMany({
+        where:  { clientId, status: { not: 'PAID' } },
+        select: {
+          id: true, invoiceNumber: true, totalAmount: true, paidAmount: true,
+          outstandingBalance: true, status: true, dueDate: true,
+        },
+      }),
+      prisma.payment.findFirst({
+        where:   { invoice: { clientId } },
+        orderBy: { createdAt: 'desc' },
+        select:  { amountPaid: true, createdAt: true },
+      }),
+      prisma.invoicePayment.findFirst({
+        where:   { invoice: { clientId }, status: 'SUCCESS' },
+        orderBy: { initiatedAt: 'desc' },
+        select:  { amountPaid: true, initiatedAt: true, resolvedAt: true },
+      }),
+    ]);
+
+    const totalMonthlyBilling = contracts.reduce((sum, c) => sum + c.totalMonthlyValue, 0);
+    const totalGuardsDeployed = contracts.reduce((sum, c) => sum + c.guardsRequired, 0);
+
+    // outstandingBalance is maintained and floored at zero, but it is derived —
+    // falling back to the arithmetic keeps this correct for a row written
+    // before that column existed, or one a failed recompute left behind.
+    const balanceOf = (inv: { outstandingBalance: number; totalAmount: number; paidAmount: number }) =>
+      inv.outstandingBalance || Math.max(0, inv.totalAmount - inv.paidAmount);
+
+    const totalOutstanding = openInvoices.reduce((sum, inv) => sum + balanceOf(inv), 0);
+
+    // Overdue by the date as well as the status: status is only refreshed when
+    // an invoice is touched, so one that fell due this morning may still read
+    // PENDING.
+    const overdue = openInvoices.filter(
+      (inv) => inv.status === 'OVERDUE' || inv.dueDate < now,
+    );
+    const totalOverdue = overdue.reduce((sum, inv) => sum + balanceOf(inv), 0);
+
+    // Whichever of the two kinds of payment landed most recently.
+    const momoAt = momoPayment ? (momoPayment.resolvedAt ?? momoPayment.initiatedAt) : null;
+    const lastPayment =
+      manualPayment && momoAt
+        ? manualPayment.createdAt >= momoAt
+          ? { amount: manualPayment.amountPaid, paidAt: manualPayment.createdAt }
+          : { amount: momoPayment!.amountPaid, paidAt: momoAt }
+        : manualPayment
+          ? { amount: manualPayment.amountPaid, paidAt: manualPayment.createdAt }
+          : momoAt
+            ? { amount: momoPayment!.amountPaid, paidAt: momoAt }
+            : null;
+
+    return {
+      totalMonthlyBilling,
+      activeContractCount: contracts.length,
+      totalGuardsDeployed,
+      activeContracts: contracts.map((c) => ({
+        id:             c.id,
+        guardsRequired: c.guardsRequired,
+        monthlyValue:   c.totalMonthlyValue,
+        status:         c.status,
+        contractEnd:    c.contractEnd.toISOString(),
+      })),
+      totalOutstanding,
+      outstandingInvoiceCount: openInvoices.length,
+      totalOverdue,
+      overdueCount: overdue.length,
+      lastPayment: lastPayment
+        ? { amount: lastPayment.amount, paidAt: lastPayment.paidAt.toISOString() }
+        : null,
+    };
+  }
+
+  /**
+   * How clients were won: by marketer, and by source overall.
+   *
+   * The marketer breakdown filters on leadSource as well as a non-null name,
+   * because the column is only meaningful alongside that source — a row left
+   * over from before the source was changed would otherwise be credited to
+   * someone who no longer brought that client in. create() and update() clear
+   * it, so this is belt and braces against rows written another way.
+   *
+   * Names are grouped as typed. Two spellings of the same marketer are two
+   * rows here, which is honest — silently merging them would invent a number
+   * nobody entered.
+   */
+  async getMarketerStats(): Promise<{
+    byMarketer: { marketerName: string; clientCount: number }[];
+    bySource:   { source: string; sourceLabel: string; clientCount: number }[];
+  }> {
+    const [byMarketer, bySource] = await Promise.all([
+      prisma.client.groupBy({
+        by:      ['marketerName'],
+        where:   { leadSource: MARKETER_LEAD_SOURCE, marketerName: { not: null } },
+        _count:  { _all: true },
+        orderBy: { _count: { marketerName: 'desc' } },
+      }),
+      prisma.client.groupBy({
+        by:      ['leadSource'],
+        where:   { leadSource: { not: null } },
+        _count:  { _all: true },
+        orderBy: { _count: { leadSource: 'desc' } },
+      }),
+    ]);
+
+    return {
+      byMarketer: byMarketer.map((m) => ({
+        marketerName: m.marketerName as string,
+        clientCount:  m._count._all,
+      })),
+      bySource: bySource.map((row) => {
+        const source = row.leadSource as string;
+        return {
+          source,
+          sourceLabel: LEAD_SOURCES[source as keyof typeof LEAD_SOURCES] ?? source,
+          clientCount: row._count._all,
+        };
+      }),
+    };
   }
 }
 

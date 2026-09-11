@@ -1,4 +1,5 @@
-import { PrismaClient, Role, UserStatus } from '@prisma/client';
+import { PrismaClient, UserStatus } from '@prisma/client';
+import { SYSTEM_ROLES } from '../constants/systemRoles';
 import { HR_LETTER_TEMPLATES } from './hrLetterTemplates';
 import { PERMISSIONS, permissionModule, permissionName } from '../constants/permissions';
 import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
@@ -88,22 +89,40 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(PASSWORD, SALT_ROUNDS);
 
+  // ── Roles ───────────────────────────────────────────────────────────────────
+  //
+  // Users and grants reference a role by name through a foreign key, so every
+  // role must exist before either is written. An existing row is left alone: a
+  // label or colour changed in the UI must survive a re-seed.
+
+  for (const r of SYSTEM_ROLES) {
+    await prisma.role.upsert({
+      where:  { name: r.name },
+      update: {},
+      create: {
+        name: r.name, label: r.label, description: r.description,
+        colour: r.colour, isSystem: true, isActive: r.isActive,
+      },
+    });
+  }
+  console.log(`✅ ${SYSTEM_ROLES.length} system roles`);
+
   // ── Users (one per role) ────────────────────────────────────────────────────
 
-  const userSeeds: Array<{ name: string; email: string; role: Role; status: UserStatus }> = [
-    { name: 'Joshua Ssewakiryanga',  email: 'director@stapsecurity.co.ug',     role: Role.DIRECTOR,             status: UserStatus.ACTIVE },
-    { name: 'Grace Namutebi',        email: 'asstmanager@stapsecurity.co.ug',  role: Role.ASSISTANT_MANAGER,    status: UserStatus.ACTIVE },
-    { name: 'Ronald Byaruhanga',     email: 'admin@stapsecurity.co.ug',        role: Role.ADMINISTRATOR,        status: UserStatus.ACTIVE },
-    { name: 'Patricia Namukasa',     email: 'opsupervisor@stapsecurity.co.ug', role: Role.OPERATIONS_SUPERVISOR, status: UserStatus.ACTIVE },
-    { name: 'Emmanuel Okello',       email: 'fieldsupervisor@stapsecurity.co.ug', role: Role.FIELD_SUPERVISOR,  status: UserStatus.ACTIVE },
-    { name: 'Immaculate Nalubega',   email: 'trainer@stapsecurity.co.ug',      role: Role.TRAINER,              status: UserStatus.ACTIVE },
-    { name: 'Charles Mwesigwa',      email: 'accounts@stapsecurity.co.ug',     role: Role.ACCOUNTS_OFFICER,     status: UserStatus.ACTIVE },
-    { name: 'Betty Nakiwala',        email: 'controlroom@stapsecurity.co.ug',  role: Role.CONTROL_ROOM,         status: UserStatus.ACTIVE },
-    { name: 'Sylvia Akello',         email: 'marketing@stapsecurity.co.ug',    role: Role.MARKETING_HEAD,       status: UserStatus.ACTIVE },
-    { name: 'Brian Kigongo',         email: 'sales@stapsecurity.co.ug',        role: Role.SALES,                status: UserStatus.ACTIVE },
-    { name: 'Rebecca Atim',          email: 'hr@stapsecurity.co.ug',           role: Role.HR,                   status: UserStatus.ACTIVE },
-    { name: 'David Wasswa',          email: 'guard.wasswa@stapsecurity.co.ug', role: Role.GUARD,                status: UserStatus.ACTIVE },
-    { name: 'Michael Kakooza',       email: 'client.kakooza@stapsecurity.co.ug', role: Role.CLIENT,             status: UserStatus.ACTIVE },
+  const userSeeds: Array<{ name: string; email: string; role: string; status: UserStatus }> = [
+    { name: 'Joshua Ssewakiryanga',  email: 'director@stapsecurity.co.ug',     role: 'DIRECTOR',             status: UserStatus.ACTIVE },
+    { name: 'Grace Namutebi',        email: 'asstmanager@stapsecurity.co.ug',  role: 'ASSISTANT_MANAGER',    status: UserStatus.ACTIVE },
+    { name: 'Ronald Byaruhanga',     email: 'admin@stapsecurity.co.ug',        role: 'ADMINISTRATOR',        status: UserStatus.ACTIVE },
+    { name: 'Patricia Namukasa',     email: 'opsupervisor@stapsecurity.co.ug', role: 'OPERATIONS_SUPERVISOR', status: UserStatus.ACTIVE },
+    { name: 'Emmanuel Okello',       email: 'fieldsupervisor@stapsecurity.co.ug', role: 'FIELD_SUPERVISOR',  status: UserStatus.ACTIVE },
+    { name: 'Immaculate Nalubega',   email: 'trainer@stapsecurity.co.ug',      role: 'TRAINER',              status: UserStatus.ACTIVE },
+    { name: 'Charles Mwesigwa',      email: 'accounts@stapsecurity.co.ug',     role: 'ACCOUNTS_OFFICER',     status: UserStatus.ACTIVE },
+    { name: 'Betty Nakiwala',        email: 'controlroom@stapsecurity.co.ug',  role: 'CONTROL_ROOM',         status: UserStatus.ACTIVE },
+    { name: 'Sylvia Akello',         email: 'marketing@stapsecurity.co.ug',    role: 'MARKETING_HEAD',       status: UserStatus.ACTIVE },
+    { name: 'Brian Kigongo',         email: 'sales@stapsecurity.co.ug',        role: 'SALES',                status: UserStatus.ACTIVE },
+    { name: 'Rebecca Atim',          email: 'hr@stapsecurity.co.ug',           role: 'HR',                   status: UserStatus.ACTIVE },
+    { name: 'David Wasswa',          email: 'guard.wasswa@stapsecurity.co.ug', role: 'GUARD',                status: UserStatus.ACTIVE },
+    { name: 'Michael Kakooza',       email: 'client.kakooza@stapsecurity.co.ug', role: 'CLIENT',             status: UserStatus.ACTIVE },
   ];
 
   const users: Record<string, Awaited<ReturnType<typeof prisma.user.upsert>>> = {};
@@ -194,9 +213,9 @@ async function main() {
         continue;
       }
       await prisma.rolePermission.upsert({
-        where:  { role_permissionId: { role: role as Role, permissionId } },
+        where:  { role_permissionId: { role: role, permissionId } },
         update: {},
-        create: { role: role as Role, permissionId },
+        create: { role: role, permissionId },
       });
       granted++;
     }

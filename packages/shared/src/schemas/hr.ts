@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { LEAVE_TYPE_VALUES } from '../constants/leave';
+import {
+  TRAINING_TARGET_GROUP_VALUES, GUARDS_TARGET_GROUP,
+  FACILITATOR_TYPE_VALUES, INTERNAL_FACILITATOR, EXTERNAL_FACILITATOR,
+} from '../constants/training';
 
 // ── Recruitment ────────────────────────────────────────────────────────────────
 
@@ -39,24 +44,58 @@ export type UpdateApplicantStageInput = z.infer<typeof UpdateApplicantStageSchem
 export const CreateTrainingSessionSchema = z.object({
   title:         z.string().min(3),
   description:   z.string().optional(),
-  trainerId:     z.string().min(1),
   location:      z.string().optional(),
   scheduledAt:   z.string().datetime(),
   durationHours: z.coerce.number().positive().default(1),
   passMark:      z.coerce.number().int().min(0).max(100).default(70),
-  guardIds:      z.array(z.string().min(1)).min(1),
-});
+
+  /** GUARDS or STAFF. Decides which of the two attendee lists may be used. */
+  targetGroup:   z.enum(TRAINING_TARGET_GROUP_VALUES).default(GUARDS_TARGET_GROUP),
+
+  facilitatorType:   z.enum(FACILITATOR_TYPE_VALUES).default(INTERNAL_FACILITATOR),
+  /** Required for an external facilitator; copied from the user for an internal one. */
+  facilitatorName:   z.string().max(120).optional(),
+  facilitatorUserId: z.string().min(1).optional().nullable(),
+
+  guardIds: z.array(z.string().min(1)).default([]),
+  /** Office staff, for a STAFF session. */
+  staffIds: z.array(z.string().min(1)).default([]),
+})
+  .refine(
+    (d) => (d.targetGroup === GUARDS_TARGET_GROUP ? d.guardIds.length > 0 : d.staffIds.length > 0),
+    { message: 'Select at least one attendee for this session.', path: ['guardIds'] },
+  )
+  .refine(
+    // Attendees of the wrong kind are rejected rather than quietly dropped: a
+    // session that silently trained nobody it was told to is worse than an error.
+    (d) => (d.targetGroup === GUARDS_TARGET_GROUP ? d.staffIds.length === 0 : d.guardIds.length === 0),
+    { message: 'Attendees do not match who this session is for.', path: ['staffIds'] },
+  )
+  .refine(
+    (d) => d.facilitatorType !== INTERNAL_FACILITATOR || !!d.facilitatorUserId,
+    { message: 'Choose the staff member facilitating this session.', path: ['facilitatorUserId'] },
+  )
+  .refine(
+    (d) => d.facilitatorType !== EXTERNAL_FACILITATOR || !!d.facilitatorName?.trim(),
+    { message: 'Enter the name of the external facilitator.', path: ['facilitatorName'] },
+  );
 export type CreateTrainingSessionInput = z.infer<typeof CreateTrainingSessionSchema>;
 
 export const RecordTrainingResultsSchema = z.object({
   results: z
     .array(
-      z.object({
-        guardId:  z.string().min(1),
-        attended: z.boolean(),
-        score:    z.number().int().min(0).max(100).optional(),
-        notes:    z.string().optional(),
-      }),
+      z
+        .object({
+          /** One of the two, matching what kind of session this is. */
+          guardId:  z.string().min(1).optional(),
+          userId:   z.string().min(1).optional(),
+          attended: z.boolean(),
+          score:    z.number().int().min(0).max(100).optional(),
+          notes:    z.string().optional(),
+        })
+        .refine((r) => !!r.guardId !== !!r.userId, {
+          message: 'Each result names exactly one attendee.',
+        }),
     )
     .min(1),
 });
@@ -66,14 +105,21 @@ export type RecordTrainingResultsInput = z.infer<typeof RecordTrainingResultsSch
 
 export const CreateLeaveRequestSchema = z
   .object({
-    guardId:   z.string().min(1),
-    type:      z.enum(['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY']),
+    /** Exactly one of these — a guard, or a member of office staff. */
+    guardId:   z.string().min(1).optional().nullable(),
+    userId:    z.string().min(1).optional().nullable(),
+    type:      z.enum(LEAVE_TYPE_VALUES),
     startDate: z.string().datetime(),
     endDate:   z.string().datetime(),
     reason:    z.string().min(10),
   })
+  .refine((data) => !!data.guardId !== !!data.userId, {
+    message: 'Choose either a guard or a staff member, not both.',
+    path:    ['guardId'],
+  })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: 'End date must be after start date',
+    path:    ['endDate'],
   });
 export type CreateLeaveRequestInput = z.infer<typeof CreateLeaveRequestSchema>;
 
@@ -290,17 +336,30 @@ export interface TrainingSessionResponse {
   id:            string;
   title:         string;
   description:   string | null;
-  trainer:       { id: string; name: string };
   location:      string | null;
   scheduledAt:   string;
   durationHours: number;
   passMark:      number;
   status:        string;
+
+  targetGroup:     string;
+  facilitatorType: string;
+  /** Who ran it. Held as text as well as an id, so it survives a deactivated account. */
+  facilitatorName: string | null;
+  facilitatorUser: { id: string; name: string } | null;
+
   attendeeCount: number;
   passCount:     number;
   failCount:     number;
+  /**
+   * One entry per attendee, whichever kind. `guard` and `staff` are mutually
+   * exclusive — a database constraint enforces that — so a renderer can switch
+   * on whichever is present rather than trusting targetGroup.
+   */
   attendees: {
-    guard:    { id: string; fullName: string };
+    id:       string;
+    guard:    { id: string; fullName: string } | null;
+    staff:    { id: string; name: string; role: string; jobTitle: string | null } | null;
     attended: boolean;
     score:    number | null;
     passed:   boolean | null;
@@ -310,7 +369,16 @@ export interface TrainingSessionResponse {
 
 export interface LeaveRequestResponse {
   id:              string;
-  guard:           { id: string; fullName: string };
+  /**
+   * GUARD or STAFF, derived from whichever subject the record carries rather
+   * than stored beside it — so it cannot contradict the row.
+   */
+  applicantType:   string;
+  /** The subject's own id, whichever kind they are. */
+  applicantId:     string;
+  applicantName:   string;
+  guard:           { id: string; fullName: string } | null;
+  staff:           { id: string; name: string; role: string; jobTitle: string | null } | null;
   type:            string;
   startDate:       string;
   endDate:         string;

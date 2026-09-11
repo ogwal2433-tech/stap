@@ -1,6 +1,10 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
+import {
+  GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP, INTERNAL_FACILITATOR,
+  GUARD_APPLICANT, STAFF_APPLICANT,
+} from '@stap/shared';
 import { notificationService } from './notificationService';
 import { guardService } from './guardService';
 import type {
@@ -81,17 +85,35 @@ function fmtSession(s: any): TrainingSessionResponse {
     id:            s.id,
     title:         s.title,
     description:   s.description ?? null,
-    trainer:       { id: s.trainer.id, name: s.trainer.name },
     location:      s.location ?? null,
     scheduledAt:   s.scheduledAt.toISOString(),
     durationHours: s.durationHours,
     passMark:      s.passMark,
     status:        s.status,
+
+    targetGroup:     s.targetGroup ?? GUARDS_TARGET_GROUP,
+    facilitatorType: s.facilitatorType ?? INTERNAL_FACILITATOR,
+    // The stored name first: it is written for both kinds, and an internal
+    // facilitator whose account was since deactivated still has one here.
+    facilitatorName: s.facilitatorName ?? s.facilitatorUser?.name ?? null,
+    facilitatorUser: s.facilitatorUser
+      ? { id: s.facilitatorUser.id, name: s.facilitatorUser.name }
+      : null,
+
     attendeeCount: attendees.length,
     passCount,
     failCount,
     attendees: attendees.map((a: any) => ({
-      guard:    { id: a.guard.id, fullName: `${a.guard.firstName} ${a.guard.lastName}` },
+      id:    a.id,
+      // Exactly one of these is set, enforced by a CHECK constraint. Read
+      // defensively anyway: this used to assume a guard and would throw on a
+      // staff attendee rather than render one.
+      guard: a.guard
+        ? { id: a.guard.id, fullName: `${a.guard.firstName} ${a.guard.lastName}` }
+        : null,
+      staff: a.user
+        ? { id: a.user.id, name: a.user.name, role: a.user.role, jobTitle: a.user.jobTitle ?? null }
+        : null,
       attended: a.attended,
       score:    a.score ?? null,
       passed:   a.passed ?? null,
@@ -101,9 +123,23 @@ function fmtSession(s: any): TrainingSessionResponse {
 }
 
 function fmtLeave(l: any): LeaveRequestResponse {
+  // Read from whichever subject the row carries. A CHECK constraint guarantees
+  // exactly one, so this is a branch rather than a fallback chain.
+  const isStaff = !!l.userId;
+  const guard = l.guard
+    ? { id: l.guard.id, fullName: `${l.guard.firstName} ${l.guard.lastName}` }
+    : null;
+  const staff = l.user
+    ? { id: l.user.id, name: l.user.name, role: l.user.role, jobTitle: l.user.jobTitle ?? null }
+    : null;
+
   return {
     id:              l.id,
-    guard:           { id: l.guard.id, fullName: `${l.guard.firstName} ${l.guard.lastName}` },
+    applicantType:   isStaff ? STAFF_APPLICANT : GUARD_APPLICANT,
+    applicantId:     (isStaff ? l.userId : l.guardId) as string,
+    applicantName:   (isStaff ? staff?.name : guard?.fullName) ?? 'Unknown',
+    guard,
+    staff,
     type:            l.type,
     startDate:       l.startDate.toISOString(),
     endDate:         l.endDate.toISOString(),
@@ -151,16 +187,18 @@ const APPLICANT_INCLUDE = {
 };
 
 const SESSION_INCLUDE = {
-  trainer:  { select: { id: true, name: true } },
+  facilitatorUser: { select: { id: true, name: true } },
   attendees: {
     include: {
       guard: { select: { id: true, firstName: true, lastName: true } },
+      user:  { select: { id: true, name: true, role: true, jobTitle: true } },
     },
   },
 };
 
 const LEAVE_INCLUDE = {
   guard:    { select: { id: true, firstName: true, lastName: true, userId: true } },
+  user:     { select: { id: true, name: true, role: true, jobTitle: true } },
   approver: { select: { id: true, name: true } },
 };
 
@@ -611,38 +649,88 @@ class HRService {
     data: CreateTrainingSessionInput,
     createdBy: string,
   ): Promise<TrainingSessionResponse> {
-    const trainer = await prisma.user.findUnique({ where: { id: data.trainerId } });
-    if (!trainer || trainer.role !== 'TRAINER') {
-      throw new AppError('Trainer not found or user is not a TRAINER', 400);
+    const forStaff = data.targetGroup === STAFF_TARGET_GROUP;
+
+    // The facilitator is no longer required to hold the TRAINER role — a
+    // supervisor or controller commonly runs a session — but an internal one
+    // must still be a real, active member of staff rather than a guard or a
+    // client portal login.
+    let facilitatorName = data.facilitatorName?.trim() || null;
+    if (data.facilitatorType === INTERNAL_FACILITATOR) {
+      const facilitator = await prisma.user.findUnique({
+        where:  { id: data.facilitatorUserId! },
+        select: { id: true, name: true, role: true, status: true },
+      });
+      if (!facilitator || facilitator.status !== 'ACTIVE') {
+        throw new AppError('The chosen facilitator is not an active user', 400);
+      }
+      if (facilitator.role === 'GUARD' || facilitator.role === 'CLIENT') {
+        throw new AppError('A facilitator must be a member of staff', 400);
+      }
+      // Copied, so the session still names who ran it if that account is later
+      // deactivated and the relation is nulled out.
+      facilitatorName = facilitator.name;
     }
 
-    const guards = await prisma.guard.findMany({
-      where: { id: { in: data.guardIds } },
-      select: { id: true, userId: true, firstName: true, lastName: true },
-    });
-    if (guards.length !== data.guardIds.length) {
-      throw new AppError('One or more guard IDs are invalid', 400);
+    // Validated as a set: findMany collapses duplicates, so comparing its
+    // length against the raw array would reject a list that merely repeated an
+    // id, and accept nothing wrong.
+    const guardIds = [...new Set(data.guardIds)];
+    const staffIds = [...new Set(data.staffIds)];
+
+    let guards: { id: string; userId: string | null }[] = [];
+    let staff:  { id: string }[] = [];
+
+    if (forStaff) {
+      staff = await prisma.user.findMany({
+        where:  { id: { in: staffIds }, role: { notIn: ['GUARD', 'CLIENT'] }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (staff.length !== staffIds.length) {
+        throw new AppError('One or more attendees are not active staff members', 400);
+      }
+    } else {
+      guards = await prisma.guard.findMany({
+        where:  { id: { in: guardIds } },
+        select: { id: true, userId: true },
+      });
+      if (guards.length !== guardIds.length) {
+        throw new AppError('One or more guard IDs are invalid', 400);
+      }
     }
 
     const session = await prisma.trainingSession.create({
       data: {
         title:         data.title,
         description:   data.description,
-        trainerId:     data.trainerId,
         location:      data.location,
         scheduledAt:   new Date(data.scheduledAt),
         durationHours: data.durationHours,
         passMark:      data.passMark,
+
+        targetGroup:       data.targetGroup,
+        facilitatorType:   data.facilitatorType,
+        facilitatorName,
+        facilitatorUserId: data.facilitatorType === INTERNAL_FACILITATOR
+          ? data.facilitatorUserId!
+          : null,
+
         attendees: {
-          create: data.guardIds.map((guardId) => ({ guardId })),
+          create: forStaff
+            ? staffIds.map((userId) => ({ userId }))
+            : guardIds.map((guardId) => ({ guardId })),
         },
       },
       include: SESSION_INCLUDE,
     });
 
-    // Notify guards that have user accounts
-    const guardUserIds = guards.filter((g) => g.userId).map((g) => g.userId!);
-    for (const userId of guardUserIds) {
+    // Tell the attendees. Guards are reachable only if they have a login;
+    // staff always are, since a staff record is a user account.
+    const notifyUserIds = forStaff
+      ? staffIds
+      : guards.filter((g) => g.userId).map((g) => g.userId!);
+
+    for (const userId of notifyUserIds) {
       await notificationService.send({
         userId,
         type:    'SYSTEM',
@@ -675,7 +763,12 @@ class HRService {
       for (const result of data.results) {
         const passed = result.score !== undefined ? result.score >= session.passMark : undefined;
         await tx.trainingAttendee.updateMany({
-          where: { trainingSessionId: sessionId, guardId: result.guardId },
+          // Keyed on whichever kind the result names — the schema requires
+          // exactly one — so a staff session's results land as well.
+          where: {
+            trainingSessionId: sessionId,
+            ...(result.guardId ? { guardId: result.guardId } : { userId: result.userId }),
+          },
           data:  { attended: result.attended, score: result.score, notes: result.notes, passed },
         });
       }
@@ -694,15 +787,17 @@ class HRService {
 
   async listSessions(query: {
     status?: string;
-    trainerId?: string;
+    facilitatorUserId?: string;
+    targetGroup?: string;
     page: number;
     limit: number;
   }): Promise<PaginatedResponse<TrainingSessionResponse>> {
-    const { status, trainerId, page, limit } = query;
+    const { status, facilitatorUserId, targetGroup, page, limit } = query;
     const skip  = (page - 1) * limit;
     const where: any = {};
-    if (status)    where.status    = status;
-    if (trainerId) where.trainerId = trainerId;
+    if (status)            where.status            = status;
+    if (facilitatorUserId) where.facilitatorUserId = facilitatorUserId;
+    if (targetGroup)       where.targetGroup       = targetGroup;
 
     const [data, total] = await Promise.all([
       prisma.trainingSession.findMany({
@@ -725,34 +820,68 @@ class HRService {
   // ── Leave Management ──────────────────────────────────────────────────────────
 
   async requestLeave(data: CreateLeaveRequestInput, requestedBy: string): Promise<LeaveRequestResponse> {
-    const guard = await prisma.guard.findUnique({
-      where:  { id: data.guardId },
-      select: { id: true, firstName: true, lastName: true },
-    });
-    if (!guard) throw new NotFoundError('Guard not found');
+    // The schema already rejects both-or-neither; this narrows the type and
+    // catches a caller that bypassed validation.
+    if (!!data.guardId === !!data.userId) {
+      throw new AppError('Leave is for either a guard or a staff member, not both', 400);
+    }
+
+    // Whose leave this is, and what to call them in the approval notification.
+    let subjectName: string;
+    if (data.userId) {
+      const staff = await prisma.user.findUnique({
+        where:  { id: data.userId },
+        select: { id: true, name: true, role: true, status: true },
+      });
+      if (!staff) throw new NotFoundError('Staff member not found');
+      if (staff.role === 'GUARD' || staff.role === 'CLIENT') {
+        // A guard's leave belongs against their guard record, where their
+        // entitlement and deployment history live, not their login.
+        throw new AppError('Use the guard record for a guard’s leave', 400);
+      }
+      if (staff.status !== 'ACTIVE') {
+        throw new AppError('That staff account is not active', 400);
+      }
+      subjectName = staff.name;
+    } else {
+      const guard = await prisma.guard.findUnique({
+        where:  { id: data.guardId! },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      if (!guard) throw new NotFoundError('Guard not found');
+      subjectName = `${guard.firstName} ${guard.lastName}`;
+    }
 
     const startDate = new Date(data.startDate);
     const endDate   = new Date(data.endDate);
+    // Working days, not calendar days — Sundays do not count against leave.
     const daysRequested = countWorkingDays(startDate, endDate);
 
-    // Check for overlapping approved leave
+    // Pending counts as well as approved. Two requests over the same dates is a
+    // mistake being made twice, and catching it at entry is kinder than an
+    // approver discovering the clash later.
     const overlap = await prisma.leaveRequest.findFirst({
       where: {
-        guardId: data.guardId,
-        status:  'APPROVED',
+        ...(data.userId ? { userId: data.userId } : { guardId: data.guardId! }),
+        status: { in: ['PENDING', 'APPROVED'] },
         AND: [
           { startDate: { lte: endDate } },
           { endDate:   { gte: startDate } },
         ],
       },
+      select: { status: true },
     });
     if (overlap) {
-      throw new AppError('Guard already has approved leave in this period', 409);
+      throw new AppError(
+        `${subjectName} already has ${overlap.status === 'APPROVED' ? 'approved' : 'pending'} leave in this period`,
+        409,
+      );
     }
 
     const leave = await prisma.leaveRequest.create({
       data: {
-        guardId:      data.guardId,
+        guardId:      data.guardId ?? null,
+        userId:       data.userId  ?? null,
         type:         data.type,
         startDate,
         endDate,
@@ -766,7 +895,7 @@ class HRService {
       role:    'ASSISTANT_MANAGER',
       type:    'APPROVAL_REQUIRED',
       title:   'Leave Request',
-      message: `${guard.firstName} ${guard.lastName} requests ${data.type} leave from ${startDate.toLocaleDateString('en-UG')} to ${endDate.toLocaleDateString('en-UG')}.`,
+      message: `${subjectName} requests ${data.type} leave from ${startDate.toLocaleDateString('en-UG')} to ${endDate.toLocaleDateString('en-UG')}.`,
     });
 
     return fmtLeave(leave);
@@ -808,17 +937,23 @@ class HRService {
 
   async listLeaveRequests(query: {
     guardId?: string;
+    userId?: string;
+    applicantType?: string;
     status?: string;
     type?: string;
     page: number;
     limit: number;
   }): Promise<PaginatedResponse<LeaveRequestResponse>> {
-    const { guardId, status, type, page, limit } = query;
+    const { guardId, userId, applicantType, status, type, page, limit } = query;
     const skip  = (page - 1) * limit;
     const where: any = {};
     if (guardId) where.guardId = guardId;
+    if (userId)  where.userId  = userId;
     if (status)  where.status  = status;
     if (type)    where.type    = type;
+    // Narrowed by which subject the row carries, since the kind is not stored.
+    if (applicantType === STAFF_APPLICANT)      where.userId  = { not: null };
+    else if (applicantType === GUARD_APPLICANT) where.guardId = { not: null };
 
     const [data, total] = await Promise.all([
       prisma.leaveRequest.findMany({
@@ -838,16 +973,31 @@ class HRService {
     };
   }
 
-  async getLeaveBalance(guardId: string): Promise<LeaveBalance> {
-    const guard = await prisma.guard.findUnique({ where: { id: guardId } });
-    if (!guard) throw new NotFoundError('Guard not found');
+  /**
+   * This year's leave for one person, guard or staff.
+   *
+   * The 21-day annual entitlement is the same figure the guard balance has
+   * always used. Whether office staff are entitled to the same is a policy
+   * question nobody has answered here; it is applied to both rather than
+   * quietly showing staff no balance at all.
+   */
+  async getLeaveBalance(subjectId: string, applicantType?: string): Promise<LeaveBalance> {
+    const forStaff = applicantType === STAFF_APPLICANT;
+
+    if (forStaff) {
+      const staff = await prisma.user.findUnique({ where: { id: subjectId }, select: { id: true } });
+      if (!staff) throw new NotFoundError('Staff member not found');
+    } else {
+      const guard = await prisma.guard.findUnique({ where: { id: subjectId }, select: { id: true } });
+      if (!guard) throw new NotFoundError('Guard not found');
+    }
 
     const yearStart = new Date(new Date().getFullYear(), 0, 1);
     const yearEnd   = new Date(new Date().getFullYear(), 11, 31);
 
     const approved = await prisma.leaveRequest.findMany({
       where: {
-        guardId,
+        ...(forStaff ? { userId: subjectId } : { guardId: subjectId }),
         status:    'APPROVED',
         startDate: { gte: yearStart, lte: yearEnd },
       },

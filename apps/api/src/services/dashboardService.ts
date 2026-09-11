@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { guardService } from './guardService';
 import { OUTSTANDING_STATUSES } from './invoiceService';
-import { ROLES, DEPLOYABLE_STATUSES } from '@stap/shared';
+import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel } from '@stap/shared';
 import { marketingService } from './marketingService';
 import type { DashboardData } from '@stap/shared';
 
@@ -331,7 +331,8 @@ class DashboardService {
 
     const [
       activeGuards,
-      onLeaveToday,
+      guardsOnLeaveToday,
+      staffOnLeaveToday,
       pendingLeave,
       recentDisciplinary,
       lettersThisMonth,
@@ -343,7 +344,18 @@ class DashboardService {
       // Approved leave that covers today, so the figure answers "who is off
       // right now" rather than "how much leave was booked".
       prisma.leaveRequest.count({
-        where: { status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today } },
+        where: {
+          status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today },
+          guardId: { not: null },
+        },
+      }),
+      // Office staff leave, counted separately: "12 people off" reads very
+      // differently depending on whether they were guards on a site.
+      prisma.leaveRequest.count({
+        where: {
+          status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today },
+          userId: { not: null },
+        },
       }),
       prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
       // Terminations and reinstatements are outcomes, not open matters, so they
@@ -363,7 +375,10 @@ class DashboardService {
       }),
       prisma.leaveRequest.findMany({
         where:   { status: 'PENDING' },
-        include: { guard: { select: { firstName: true, lastName: true, systemId: true } } },
+        include: {
+          guard: { select: { firstName: true, lastName: true, systemId: true } },
+          user:  { select: { name: true, jobTitle: true, role: true } },
+        },
         orderBy: { startDate: 'asc' },
         take:    10,
       }),
@@ -379,7 +394,11 @@ class DashboardService {
       role:  'HR',
       stats: {
         activeGuards,
-        onLeaveToday,
+        // Kept as the combined figure the existing card reads, with the split
+        // alongside it so a caller can show either.
+        onLeaveToday: guardsOnLeaveToday + staffOnLeaveToday,
+        guardsOnLeaveToday,
+        staffOnLeaveToday,
         pendingLeave,
         recentDisciplinary,
         lettersThisMonth,
@@ -389,12 +408,26 @@ class DashboardService {
         guardsNoId:       idStats.noId,
       },
       feeds: {
-        pendingLeave: pendingLeaveFeed.map((l) => ({
-          id:        l.id,
-          primary:   `${l.guard.firstName} ${l.guard.lastName}`,
-          secondary: `${l.guard.systemId ?? '—'} · ${fmtDate(l.startDate)} to ${fmtDate(l.endDate)} · ${l.daysRequested} day${l.daysRequested === 1 ? '' : 's'}`,
-          badge:     l.type,
-        })),
+        pendingLeave: pendingLeaveFeed.map((l) => {
+          // Either a guard or a staff member; a CHECK constraint guarantees one.
+          const who = l.guard
+            ? {
+                name: `${l.guard.firstName} ${l.guard.lastName}`,
+                ref:  l.guard.systemId ?? '—',
+              }
+            : {
+                name: l.user?.name ?? 'Unknown',
+                ref:  l.user?.jobTitle
+                  ? getJobTitleLabel(l.user.jobTitle)
+                  : (l.user?.role.replace(/_/g, ' ') ?? 'Staff'),
+              };
+          return {
+            id:        l.id,
+            primary:   who.name,
+            secondary: `${who.ref} · ${fmtDate(l.startDate)} to ${fmtDate(l.endDate)} · ${l.daysRequested} day${l.daysRequested === 1 ? '' : 's'}`,
+            badge:     l.type,
+          };
+        }),
         guardsByRank: byRank
           .sort((a, b) => b._count.id - a._count.id)
           .map((r) => ({

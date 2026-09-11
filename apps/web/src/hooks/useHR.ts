@@ -120,10 +120,11 @@ export function useConvertToGuard() {
 
 // ── Training ───────────────────────────────────────────────────────────────────
 
-export function useTrainers() {
+/** Staff who can facilitate a session, and who can attend a staff session. */
+export function useFacilitators() {
   return useQuery({
-    queryKey: ['hr-trainers'],
-    queryFn:  () => hrApi.getTrainers(),
+    queryKey: ['hr-facilitators'],
+    queryFn:  () => hrApi.getFacilitators(),
     staleTime: 5 * 60 * 1000,
   });
 }

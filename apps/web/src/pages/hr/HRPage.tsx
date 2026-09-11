@@ -8,6 +8,11 @@ import { useToast } from '../../context/ToastContext';
 import RoleGuard from '../../components/RoleGuard';
 import {
   ROLES, HR_ROLES, INTERNAL_ROLES, APPLICANT_STAGES, LETTER_TYPES, type UserRole,
+  TRAINING_TARGET_GROUPS, FACILITATOR_TYPES, targetGroupLabel,
+  GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP,
+  INTERNAL_FACILITATOR, EXTERNAL_FACILITATOR, getJobTitleLabel,
+  LEAVE_TYPES, LEAVE_APPLICANT_TYPES, GUARD_APPLICANT, STAFF_APPLICANT,
+  leaveTypeLabel,
 } from '@stap/shared';
 import type {
   ApplicantResponse, TrainingSessionResponse, LeaveRequestResponse, LetterTemplateResponse,
@@ -17,7 +22,7 @@ import {
   useCreateApplicant, useUpdateApplicantStage, useConvertToGuard,
   useVerifyDocuments, useUpdateVettingRequirements,
   useUploadApplicationLetter, useUploadVettingForm,
-  useTrainers, useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
+  useFacilitators, useTrainingSessions, useCreateTrainingSession, useRecordTrainingResults,
   useLeaveRequests, useRequestLeave, useApproveLeave,
   useLetterTemplates, useSaveLetterTemplate, usePreviewTemplate,
 } from '../../hooks/useHR';
@@ -278,30 +283,66 @@ function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => v
   const { showToast } = useToast();
   const create = useCreateTrainingSession();
   const { data: guardsData } = useGuardList({ page: 1, limit: 200, status: 'ACTIVE' });
-  const { data: trainersData, isLoading: loadingTrainers } = useTrainers();
-  const guards   = guardsData?.data  ?? [];
-  const trainers = trainersData      ?? [];
+  const { data: facilitatorsData, isLoading: loadingStaff } = useFacilitators();
+  const guards = guardsData?.data ?? [];
+  // The same list serves both the facilitator dropdown and, for a staff
+  // session, the attendee picker — they are the same people.
+  const staff  = facilitatorsData  ?? [];
 
   const [form, setForm] = useState({
-    title: '', trainerId: '', location: '', scheduledAt: '',
-    durationHours: '1', passMark: '70', guardIds: [] as string[], description: '',
+    title: '', location: '', scheduledAt: '',
+    durationHours: '1', passMark: '70', description: '',
+    targetGroup:       GUARDS_TARGET_GROUP as string,
+    facilitatorType:   INTERNAL_FACILITATOR as string,
+    facilitatorUserId: '',
+    facilitatorName:   '',
+    guardIds: [] as string[],
+    staffIds: [] as string[],
   });
 
-  const handleGuardToggle = (id: string) => {
+  const forStaff = form.targetGroup === STAFF_TARGET_GROUP;
+  const attendeeCount = forStaff ? form.staffIds.length : form.guardIds.length;
+
+  const toggle = (key: 'guardIds' | 'staffIds', id: string) => {
     setForm(f => ({
       ...f,
-      guardIds: f.guardIds.includes(id) ? f.guardIds.filter(g => g !== id) : [...f.guardIds, id],
+      [key]: f[key].includes(id) ? f[key].filter(x => x !== id) : [...f[key], id],
     }));
   };
+
+  /** Switching who the session is for drops attendees of the other kind. */
+  const chooseTargetGroup = (value: string) =>
+    setForm(f => ({ ...f, targetGroup: value, guardIds: [], staffIds: [] }));
+
+  const chooseFacilitatorType = (value: string) =>
+    setForm(f => ({ ...f, facilitatorType: value, facilitatorUserId: '', facilitatorName: '' }));
+
+  const staffLabel = (u: { name: string; role: string; jobTitle: string | null }) =>
+    `${u.name} — ${u.jobTitle ? getJobTitleLabel(u.jobTitle) : u.role.replace(/_/g, ' ')}`;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     create.mutate(
       {
-        ...form,
+        title:         form.title,
+        description:   form.description,
+        location:      form.location,
         scheduledAt:   new Date(form.scheduledAt).toISOString(),
         durationHours: Number(form.durationHours),
         passMark:      Number(form.passMark),
+        targetGroup:   form.targetGroup as never,
+        facilitatorType: form.facilitatorType as never,
+        // Only the relevant half is sent. Sending both would be rejected by the
+        // API, which refuses attendees that do not match the target group
+        // rather than quietly dropping them.
+        facilitatorUserId: form.facilitatorType === INTERNAL_FACILITATOR
+          ? form.facilitatorUserId
+          : null,
+        facilitatorName: form.facilitatorType === EXTERNAL_FACILITATOR
+          ? form.facilitatorName.trim()
+          : undefined,
+        guardIds: forStaff ? [] : form.guardIds,
+        staffIds: forStaff ? form.staffIds : [],
       },
       {
         onSuccess: () => { showToast('Training session scheduled', 'success'); onHide(); },
@@ -315,6 +356,47 @@ function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => v
       <Modal.Header closeButton><Modal.Title>Schedule Training Session</Modal.Title></Modal.Header>
       <Modal.Body>
         <Form onSubmit={handleSubmit}>
+          {/* Asked first: it decides which attendee list the rest of the form shows. */}
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Training for *</Form.Label>
+            <div className="d-flex gap-2">
+              {TRAINING_TARGET_GROUPS.map(g => {
+                const active = form.targetGroup === g.value;
+                return (
+                  <div
+                    key={g.value}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
+                    onClick={() => chooseTargetGroup(g.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        chooseTargetGroup(g.value);
+                      }
+                    }}
+                    style={{
+                      flex:         1,
+                      padding:      '10px 12px',
+                      border:       `2px solid ${active ? '#1B3A6B' : '#e9ecef'}`,
+                      borderRadius: '0.5rem',
+                      cursor:       'pointer',
+                      background:   active ? '#EBF5FB' : 'white',
+                    }}
+                  >
+                    <div
+                      className="fw-bold"
+                      style={{ fontSize: '0.84rem', color: active ? '#1B3A6B' : '#4A5568' }}
+                    >
+                      {g.label}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>{g.description}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Form.Group>
+
           <Row className="mb-2">
             <Col md={8}>
               <Form.Label className="small fw-medium">Title *</Form.Label>
@@ -337,17 +419,51 @@ function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => v
           </Row>
           <Row className="mb-2">
             <Col md={6}>
-              <Form.Label className="small fw-medium">Trainer *</Form.Label>
-              <Form.Select
-                size="sm"
-                value={form.trainerId}
-                onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
-                required
-                disabled={loadingTrainers}
-              >
-                <option value="">{loadingTrainers ? 'Loading trainers…' : 'Select trainer…'}</option>
-                {trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </Form.Select>
+              <Form.Label className="small fw-medium">Facilitator / Modulator *</Form.Label>
+              <div className="d-flex gap-1 mb-2">
+                {FACILITATOR_TYPES.map(t => {
+                  const active = form.facilitatorType === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => chooseFacilitatorType(t.value)}
+                      style={{
+                        padding:      '3px 10px',
+                        borderRadius: '20px',
+                        border:       `1px solid ${active ? '#1B3A6B' : '#ced4da'}`,
+                        background:   active ? '#1B3A6B' : 'white',
+                        color:        active ? 'white' : '#4A5568',
+                        fontSize:     '0.72rem',
+                        fontWeight:   active ? 600 : 400,
+                        cursor:       'pointer',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {form.facilitatorType === INTERNAL_FACILITATOR ? (
+                <Form.Select
+                  size="sm"
+                  value={form.facilitatorUserId}
+                  onChange={e => setForm(f => ({ ...f, facilitatorUserId: e.target.value }))}
+                  required
+                  disabled={loadingStaff}
+                >
+                  <option value="">{loadingStaff ? 'Loading staff…' : 'Select facilitator…'}</option>
+                  {staff.map(u => <option key={u.id} value={u.id}>{staffLabel(u)}</option>)}
+                </Form.Select>
+              ) : (
+                <Form.Control
+                  size="sm"
+                  value={form.facilitatorName}
+                  onChange={e => setForm(f => ({ ...f, facilitatorName: e.target.value }))}
+                  placeholder="Name of the guest facilitator"
+                  required
+                />
+              )}
             </Col>
             <Col md={6}>
               <Form.Label className="small fw-medium">Pass Mark (%)</Form.Label>
@@ -359,24 +475,46 @@ function TrainingSessionModal({ show, onHide }: { show: boolean; onHide: () => v
             <Form.Control as="textarea" rows={2} size="sm" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </Form.Group>
           <Form.Group className="mb-3">
-            <Form.Label className="small fw-medium">Select Guards * ({form.guardIds.length} selected)</Form.Label>
+            <Form.Label className="small fw-medium">
+              {forStaff ? 'Select staff' : 'Select guards'} * ({attendeeCount} selected)
+            </Form.Label>
             <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: 8 }}>
-              {guards.map(g => (
-                <Form.Check
-                  key={g.id}
-                  type="checkbox"
-                  id={`guard-${g.id}`}
-                  label={`${g.firstName} ${g.lastName}`}
-                  checked={form.guardIds.includes(g.id)}
-                  onChange={() => handleGuardToggle(g.id)}
-                  className="small"
-                />
-              ))}
+              {forStaff ? (
+                staff.length === 0 ? (
+                  <div className="text-muted small text-center py-2">
+                    {loadingStaff ? 'Loading staff…' : 'No active staff members found'}
+                  </div>
+                ) : (
+                  staff.map(u => (
+                    <Form.Check
+                      key={u.id}
+                      type="checkbox"
+                      id={`staff-${u.id}`}
+                      label={staffLabel(u)}
+                      checked={form.staffIds.includes(u.id)}
+                      onChange={() => toggle('staffIds', u.id)}
+                      className="small"
+                    />
+                  ))
+                )
+              ) : (
+                guards.map(g => (
+                  <Form.Check
+                    key={g.id}
+                    type="checkbox"
+                    id={`guard-${g.id}`}
+                    label={`${g.firstName} ${g.lastName}`}
+                    checked={form.guardIds.includes(g.id)}
+                    onChange={() => toggle('guardIds', g.id)}
+                    className="small"
+                  />
+                ))
+              )}
             </div>
           </Form.Group>
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={create.isPending || form.guardIds.length === 0}>
+            <Button type="submit" size="sm" disabled={create.isPending || attendeeCount === 0}>
               {create.isPending ? <Spinner size="sm" /> : 'Schedule Training'}
             </Button>
           </div>
@@ -400,8 +538,10 @@ function RecordResultsModal({
   React.useEffect(() => {
     if (session) {
       const init: typeof results = {};
+      // Keyed on the attendee row, not the guard: a staff attendee has no
+      // guard, and this used to key on one and throw.
       session.attendees.forEach(a => {
-        init[a.guard.id] = { attended: false, score: '', notes: '' };
+        init[a.id] = { attended: false, score: '', notes: '' };
       });
       setResults(init);
     }
@@ -412,10 +552,11 @@ function RecordResultsModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const payload = session.attendees.map(a => ({
-      guardId:  a.guard.id,
-      attended: results[a.guard.id]?.attended ?? false,
-      score:    results[a.guard.id]?.score ? Number(results[a.guard.id].score) : undefined,
-      notes:    results[a.guard.id]?.notes || undefined,
+      // Exactly one of these, matching the kind of attendee.
+      ...(a.guard ? { guardId: a.guard.id } : { userId: a.staff!.id }),
+      attended: results[a.id]?.attended ?? false,
+      score:    results[a.id]?.score ? Number(results[a.id].score) : undefined,
+      notes:    results[a.id]?.notes || undefined,
     }));
     record.mutate(
       { id: session.id, data: { results: payload } },
@@ -434,7 +575,7 @@ function RecordResultsModal({
           <Table size="sm" hover>
             <thead className="table-light">
               <tr>
-                <th>Guard</th>
+                <th>{session.targetGroup === STAFF_TARGET_GROUP ? 'Staff member' : 'Guard'}</th>
                 <th className="text-center">Attended</th>
                 <th>Score (%)</th>
                 <th>Notes</th>
@@ -442,12 +583,21 @@ function RecordResultsModal({
             </thead>
             <tbody>
               {session.attendees.map(a => (
-                <tr key={a.guard.id}>
-                  <td className="fw-medium small">{a.guard.fullName}</td>
+                <tr key={a.id}>
+                  <td className="fw-medium small">
+                    {a.guard?.fullName ?? a.staff?.name ?? '—'}
+                    {a.staff && (
+                      <div className="text-muted" style={{ fontSize: '0.68rem' }}>
+                        {a.staff.jobTitle
+                          ? getJobTitleLabel(a.staff.jobTitle)
+                          : a.staff.role.replace(/_/g, ' ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="text-center">
                     <Form.Check
-                      checked={results[a.guard.id]?.attended ?? false}
-                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], attended: e.target.checked } }))}
+                      checked={results[a.id]?.attended ?? false}
+                      onChange={e => setResults(r => ({ ...r, [a.id]: { ...r[a.id], attended: e.target.checked } }))}
                     />
                   </td>
                   <td>
@@ -456,16 +606,16 @@ function RecordResultsModal({
                       type="number"
                       min="0"
                       max="100"
-                      value={results[a.guard.id]?.score ?? ''}
-                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], score: e.target.value } }))}
+                      value={results[a.id]?.score ?? ''}
+                      onChange={e => setResults(r => ({ ...r, [a.id]: { ...r[a.id], score: e.target.value } }))}
                       style={{ width: 80 }}
                     />
                   </td>
                   <td>
                     <Form.Control
                       size="sm"
-                      value={results[a.guard.id]?.notes ?? ''}
-                      onChange={e => setResults(r => ({ ...r, [a.guard.id]: { ...r[a.guard.id], notes: e.target.value } }))}
+                      value={results[a.id]?.notes ?? ''}
+                      onChange={e => setResults(r => ({ ...r, [a.id]: { ...r[a.id], notes: e.target.value } }))}
                     />
                   </td>
                 </tr>
@@ -489,13 +639,48 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
   const request = useRequestLeave();
   const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200, status: 'ACTIVE' });
   const guards = guardsData?.data ?? [];
-  const [form, setForm] = useState({ guardId: '', type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+  // The facilitator lookup is every active member of staff, which is exactly
+  // who can take office leave.
+  const { data: staffData, isLoading: staffLoading } = useFacilitators();
+  const staff = staffData ?? [];
+
+  const [form, setForm] = useState({
+    applicantType: GUARD_APPLICANT as string,
+    guardId: '', userId: '',
+    type: 'ANNUAL', startDate: '', endDate: '', reason: '',
+  });
+
+  const forStaff = form.applicantType === STAFF_APPLICANT;
+  const subjectChosen = forStaff ? !!form.userId : !!form.guardId;
+
+  /** Switching who the request is for drops the other subject. */
+  const chooseApplicantType = (value: string) =>
+    setForm(f => ({ ...f, applicantType: value, guardId: '', userId: '' }));
+
+  /**
+   * Working days, matching the server, which does not count Sundays against
+   * leave. A calendar-day figure here would disagree with the days that end up
+   * recorded, which is worse than showing nothing.
+   */
+  const workingDays = (() => {
+    if (!form.startDate || !form.endDate) return null;
+    const start = new Date(form.startDate);
+    const end   = new Date(form.endDate);
+    if (Number.isNaN(+start) || Number.isNaN(+end) || end < start) return null;
+    let count = 0;
+    for (const cur = new Date(start); cur <= end; cur.setDate(cur.getDate() + 1)) {
+      if (cur.getDay() !== 0) count++;
+    }
+    return count;
+  })();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     request.mutate(
       {
-        guardId:   form.guardId,
+        // Exactly one, which the API also enforces.
+        guardId:   forStaff ? null : form.guardId,
+        userId:    forStaff ? form.userId : null,
         type:      form.type as any,
         startDate: new Date(form.startDate).toISOString(),
         endDate:   new Date(form.endDate).toISOString(),
@@ -513,6 +698,67 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
       <Modal.Header closeButton><Modal.Title>Request Leave</Modal.Title></Modal.Header>
       <Modal.Body>
         <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-medium">Leave for *</Form.Label>
+            <div className="d-flex gap-2">
+              {LEAVE_APPLICANT_TYPES.map(t => {
+                const active = form.applicantType === t.value;
+                return (
+                  <div
+                    key={t.value}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
+                    onClick={() => chooseApplicantType(t.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        chooseApplicantType(t.value);
+                      }
+                    }}
+                    style={{
+                      flex:         1,
+                      padding:      '9px 12px',
+                      border:       `2px solid ${active ? '#1B3A6B' : '#e9ecef'}`,
+                      borderRadius: '0.5rem',
+                      cursor:       'pointer',
+                      background:   active ? '#EBF5FB' : 'white',
+                    }}
+                  >
+                    <div
+                      className="fw-bold"
+                      style={{ fontSize: '0.82rem', color: active ? '#1B3A6B' : '#4A5568' }}
+                    >
+                      {t.label}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#6c757d' }}>{t.description}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Form.Group>
+
+          {forStaff ? (
+            <Form.Group className="mb-2">
+              <Form.Label className="small fw-medium">Staff member *</Form.Label>
+              <Form.Select
+                size="sm"
+                value={form.userId}
+                onChange={e => setForm(f => ({ ...f, userId: e.target.value }))}
+                required
+                disabled={staffLoading}
+              >
+                <option value="">
+                  {staffLoading ? 'Loading staff…' : staff.length === 0 ? 'No active staff found' : 'Select staff member…'}
+                </option>
+                {staff.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} — {u.jobTitle ? getJobTitleLabel(u.jobTitle) : u.role.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          ) : (
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Guard *</Form.Label>
             {guardsError ? (
@@ -535,11 +781,12 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
               </Form.Select>
             )}
           </Form.Group>
+          )}
           <Form.Group className="mb-2">
             <Form.Label className="small fw-medium">Leave Type *</Form.Label>
             <Form.Select size="sm" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              {['ANNUAL', 'SICK', 'EMERGENCY', 'MATERNITY', 'PATERNITY'].map(t => (
-                <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>
+              {LEAVE_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </Form.Select>
           </Form.Group>
@@ -553,13 +800,31 @@ function LeaveRequestModal({ show, onHide }: { show: boolean; onHide: () => void
               <Form.Control size="sm" type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required />
             </Col>
           </Row>
+          {workingDays !== null && (
+            <div
+              style={{
+                background:   '#EBF5FB',
+                borderRadius: '0.375rem',
+                padding:      '7px 11px',
+                fontSize:     '0.76rem',
+                color:        '#1B3A6B',
+                fontWeight:   600,
+                marginBottom: '12px',
+              }}
+            >
+              {workingDays} working day{workingDays === 1 ? '' : 's'}
+              <span className="fw-normal text-muted ms-1" style={{ fontSize: '0.7rem' }}>
+                (Sundays not counted)
+              </span>
+            </div>
+          )}
           <Form.Group className="mb-3">
             <Form.Label className="small fw-medium">Reason *</Form.Label>
             <Form.Control as="textarea" rows={3} size="sm" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} required minLength={10} />
           </Form.Group>
           <div className="d-flex justify-content-end gap-2">
             <Button variant="secondary" size="sm" onClick={onHide}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={request.isPending}>
+            <Button type="submit" size="sm" disabled={request.isPending || !subjectChosen}>
               {request.isPending ? <Spinner size="sm" /> : 'Submit Request'}
             </Button>
           </div>
@@ -1211,6 +1476,7 @@ export default function HRPage() {
   const [showLeaveModal, setShowLeaveModal]       = useState(false);
   const [editTemplate, setEditTemplate]           = useState<LetterTemplateResponse | null>(null);
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('');
+  const [leaveApplicantFilter, setLeaveApplicantFilter] = useState('');
   const [trainingStatusFilter, setTrainingStatusFilter] = useState('');
 
   const { data: applicantsData, isLoading: loadingApplicants } = useApplicants({ limit: 200 });
@@ -1220,7 +1486,8 @@ export default function HRPage() {
     limit: 50,
   });
   const { data: leaveData, isLoading: loadingLeave } = useLeaveRequests({
-    status: leaveStatusFilter || undefined,
+    status:        leaveStatusFilter || undefined,
+    applicantType: leaveApplicantFilter || undefined,
     limit: 50,
   });
   const { data: templates, isLoading: loadingTemplates } = useLetterTemplates();
@@ -1404,9 +1671,25 @@ export default function HRPage() {
                   const allPassed = s.passCount === s.attendeeCount && s.attendeeCount > 0;
                   return (
                     <tr key={s.id}>
-                      <td className="fw-medium">{s.title}</td>
+                      <td className="fw-medium">
+                        {s.title}
+                        <Badge
+                          bg={s.targetGroup === STAFF_TARGET_GROUP ? 'success' : 'primary'}
+                          className="ms-2"
+                          style={{ fontSize: '0.62rem' }}
+                        >
+                          {targetGroupLabel(s.targetGroup)}
+                        </Badge>
+                      </td>
                       <td>{new Date(s.scheduledAt).toLocaleDateString('en-UG')}</td>
-                      <td>{s.trainer.name}</td>
+                      <td>
+                        {s.facilitatorName ?? s.facilitatorUser?.name ?? '—'}
+                        {s.facilitatorType === EXTERNAL_FACILITATOR && (
+                          <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.6rem' }}>
+                            External
+                          </Badge>
+                        )}
+                      </td>
                       <td>{s.location ?? '—'}</td>
                       <td className="text-center">{s.attendeeCount}</td>
                       <td className="text-center">
@@ -1459,9 +1742,33 @@ export default function HRPage() {
                   </Button>
                 ))}
               </div>
-              <Button size="sm" onClick={() => setShowLeaveModal(true)}>
-                <i className="bi bi-plus-lg me-1" />Request Leave
-              </Button>
+              <div className="d-flex gap-1 align-items-center">
+                {[{ label: 'Everyone', value: '' }, { label: 'Guards', value: GUARD_APPLICANT }, { label: 'Staff', value: STAFF_APPLICANT }].map(f => {
+                  const active = leaveApplicantFilter === f.value;
+                  return (
+                    <button
+                      key={f.value || 'all'}
+                      type="button"
+                      onClick={() => setLeaveApplicantFilter(f.value)}
+                      style={{
+                        padding:      '3px 12px',
+                        borderRadius: '20px',
+                        border:       `1px solid ${active ? '#1B3A6B' : '#ced4da'}`,
+                        background:   active ? '#1B3A6B' : 'white',
+                        color:        active ? 'white' : '#4A5568',
+                        fontSize:     '0.74rem',
+                        fontWeight:   active ? 600 : 400,
+                        cursor:       'pointer',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+                <Button size="sm" className="ms-2" onClick={() => setShowLeaveModal(true)}>
+                  <i className="bi bi-plus-lg me-1" />Request Leave
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1473,7 +1780,7 @@ export default function HRPage() {
             <Table hover size="sm" responsive>
               <thead className="table-light">
                 <tr>
-                  <th>Guard</th>
+                  <th>Who</th>
                   <th>Type</th>
                   <th>Period</th>
                   <th className="text-center">Days</th>
@@ -1485,10 +1792,27 @@ export default function HRPage() {
               <tbody>
                 {leaves.map(l => (
                   <tr key={l.id}>
-                    <td className="fw-medium">{l.guard.fullName}</td>
+                    <td>
+                      <div className="fw-medium">{l.applicantName}</div>
+                      <div style={{ fontSize: '0.68rem', marginTop: '2px' }}>
+                        <Badge
+                          bg={l.applicantType === STAFF_APPLICANT ? 'success' : 'primary'}
+                          style={{ fontSize: '0.6rem' }}
+                        >
+                          {l.applicantType === STAFF_APPLICANT ? 'Staff' : 'Guard'}
+                        </Badge>
+                        {l.staff && (
+                          <span className="text-muted ms-2">
+                            {l.staff.jobTitle
+                              ? getJobTitleLabel(l.staff.jobTitle)
+                              : l.staff.role.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <Badge bg={LEAVE_TYPE_BADGES[l.type] ?? 'secondary'} text={l.type === 'SICK' ? 'dark' : undefined}>
-                        {l.type}
+                        {leaveTypeLabel(l.type)}
                       </Badge>
                     </td>
                     <td className="small text-nowrap">

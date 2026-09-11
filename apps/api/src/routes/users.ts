@@ -38,7 +38,7 @@ router.get(
       where: {
         status: statusParam as 'ACTIVE' | 'INACTIVE',
         ...(roleFilter && roleFilter.length > 0
-          ? { role: { in: roleFilter as import('@prisma/client').Role[] } }
+          ? { role: { in: roleFilter } }
           : {}),
       },
       select: {

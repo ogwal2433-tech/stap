@@ -5,7 +5,9 @@ import {
 } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES, generatePassword } from '@stap/shared';
+import {
+  ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, generatePassword,
+} from '@stap/shared';
 import { useClient, useCreateClient, useUpdateClient } from '../../hooks/useClients';
 import ContactsEditor from '../../components/clients/ContactsEditor';
 import TemporaryPasswordField from '../../components/common/TemporaryPasswordField';
@@ -54,6 +56,15 @@ export default function ClientFormPage() {
   });
 
   const physicalAddress = watch('physicalAddress');
+  const leadSource      = watch('leadSource');
+  const isMarketerLead  = leadSource === MARKETER_LEAD_SOURCE;
+
+  // Clearing on change rather than on submit: leaving the value in place would
+  // let a hidden field carry a name the visible form no longer explains, and on
+  // an edit that name would be silently resubmitted.
+  useEffect(() => {
+    if (!isMarketerLead) setValue('marketerName', undefined);
+  }, [isMarketerLead, setValue]);
 
   useEffect(() => {
     if (existing) {
@@ -73,6 +84,7 @@ export default function ClientFormPage() {
         vatRate:         existing.vatRate ?? undefined,
         leadSource:      existing.leadSource ?? undefined,
         referredBy:      existing.referredBy ?? undefined,
+        marketerName:    existing.marketerName ?? undefined,
         leadStatus:      existing.leadStatus ?? 'CONVERTED',
       });
 
@@ -466,6 +478,27 @@ export default function ClientFormPage() {
                   <Form.Control.Feedback type="invalid">{errors.leadSource?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
+
+              {/* Only asked for when the answer above makes it meaningful. */}
+              {isMarketerLead && (
+                <Col md={6}>
+                  <Form.Group style={{ animation: 'fadeInField 0.2s ease-in' }}>
+                    <Form.Label>Marketer Name <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      {...register('marketerName')}
+                      isInvalid={!!errors.marketerName}
+                      placeholder="e.g. John Okello"
+                      autoFocus
+                    />
+                    <Form.Text className="text-muted">
+                      Which of our marketers brought this client in
+                    </Form.Text>
+                    <Form.Control.Feedback type="invalid">
+                      {errors.marketerName?.message}
+                    </Form.Control.Feedback>
+                  </Form.Group>
+                </Col>
+              )}
 
               <Col md={6}>
                 <Form.Group>

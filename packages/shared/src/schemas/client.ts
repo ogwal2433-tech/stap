@@ -3,6 +3,8 @@ import { z } from 'zod';
 // ── Lead / CRM constants ───────────────────────────────────────────────────────
 
 export const LEAD_SOURCES = {
+  /** One of our own marketers brought them in — see MARKETER_LEAD_SOURCE. */
+  MARKETER:      'Marketer',
   SOCIAL_MEDIA:  'Social Media',
   REFERRAL:      'Referral',
   COLD_CALL:     'Cold Call',
@@ -11,6 +13,15 @@ export const LEAD_SOURCES = {
   EXHIBITION:    'Exhibition / Event',
   OTHER:         'Other',
 } as const;
+
+/**
+ * The one lead source that needs a name alongside it.
+ *
+ * Named rather than written as a bare string in each of the four places that
+ * check it — the form, the resolver, the service and the reporting query — so
+ * they cannot drift apart.
+ */
+export const MARKETER_LEAD_SOURCE = 'MARKETER';
 
 export const LEAD_STATUSES = {
   NEW:       'New',
@@ -42,14 +53,27 @@ export const contactTypeConfig = (value: string) =>
   CONTACT_TYPES.find((t) => t.value === value) ?? CONTACT_TYPES[CONTACT_TYPES.length - 1];
 
 /**
+ * An email address, or nothing at all.
+ *
  * An empty string is what a blank <input> submits, and it has to be accepted
  * before .email() sees it — z.string().email().optional() rejects '' because ''
  * is not undefined. That is why an "optional" email field could not be left
- * blank. The service normalises '' to null on the way in.
+ * blank. The service normalises the blank to null on the way in.
+ *
+ * Trimmed first, so a field holding only spaces counts as blank. It looks empty
+ * to whoever is filling the form, and rejecting it as "Invalid email address"
+ * is the same complaint as the original bug wearing a different hat. Trimming
+ * here also matches blankToNull() in clientService, which has always trimmed.
  */
-const OptionalEmail = z.union([z.literal(''), z.string().email('Invalid email address')])
+const OptionalEmail = z
+  .string()
+  .trim()
   .optional()
-  .nullable();
+  .nullable()
+  .refine(
+    (v) => !v || z.string().email().safeParse(v).success,
+    'Invalid email address',
+  );
 
 export const ClientContactSchema = z.object({
   contactType: z.enum(CONTACT_TYPE_VALUES).default('PRIMARY'),
@@ -115,11 +139,17 @@ const _BaseClientSchema = z.object({
   leadSource: z.union([
     z.literal(''),
     z.enum([
-      'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
+      'MARKETER', 'SOCIAL_MEDIA', 'REFERRAL', 'COLD_CALL', 'WEBSITE',
       'WORD_OF_MOUTH', 'EXHIBITION', 'OTHER',
     ]),
   ]).optional(),
   referredBy: z.string().max(200).optional(),
+  /**
+   * Who brought them in, when the source is MARKETER. Required in that case and
+   * ignored otherwise — the rule lives in requireMarketerName() below, because
+   * it spans two fields and cannot be expressed on this one.
+   */
+  marketerName: z.string().max(100).optional(),
   leadStatus: z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).default('CONVERTED'),
 
   /** Every contact person at this client. The first is primary if none is marked. */
@@ -140,6 +170,27 @@ const _BaseClientSchema = z.object({
 const singlePrimary = (contacts: ClientContactInput[] | undefined) =>
   (contacts ?? []).filter((c) => c.isPrimary).length <= 1;
 
+/**
+ * A marketer-sourced client has to say which marketer.
+ *
+ * Spans two fields, so it cannot live on either one, and it is applied to the
+ * create, update and form schemas alike — the form is what people actually hit,
+ * and the other two are what stops a direct API call writing a MARKETER row
+ * that names nobody.
+ *
+ * Only fires when leadSource is explicitly MARKETER in the payload: a partial
+ * update that touches neither field must not be rejected for a rule about
+ * fields it never sent.
+ */
+const requireMarketerName = <T extends { leadSource?: string; marketerName?: string | null }>(
+  d: T,
+): boolean => d.leadSource !== MARKETER_LEAD_SOURCE || !!d.marketerName?.trim();
+
+const MARKETER_NAME_REQUIRED = {
+  message: 'Enter the name of the marketer who brought this client in.',
+  path:    ['marketerName'],
+};
+
 export const CreateClientSchema = _BaseClientSchema
   .refine(
     (d) => !!d.contactPerson?.trim() || (d.contacts ?? []).some((c) => c.name?.trim()),
@@ -148,7 +199,8 @@ export const CreateClientSchema = _BaseClientSchema
   .refine((d) => singlePrimary(d.contacts), {
     message: 'Only one contact can be the primary contact.',
     path:    ['contacts'],
-  });
+  })
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 
 /**
  * Partial() cannot be called on the refined schema — .refine returns a
@@ -161,7 +213,8 @@ export const UpdateClientSchema = _BaseClientSchema.partial()
   .refine((d) => singlePrimary(d.contacts), {
     message: 'Only one contact can be the primary contact.',
     path:    ['contacts'],
-  });
+  })
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 
 /**
  * What the client form's own resolver validates.
@@ -172,7 +225,11 @@ export const UpdateClientSchema = _BaseClientSchema.partial()
  * visible input, and the form would sit there doing nothing. The form checks its
  * own contact list, and the server still enforces the full CreateClientSchema.
  */
-export const ClientFormSchema = _BaseClientSchema.omit({ contacts: true });
+export const ClientFormSchema = _BaseClientSchema
+  .omit({ contacts: true })
+  // Same rule the API enforces, so the message appears under the field as the
+  // form is filled in rather than coming back as a 400 after submit.
+  .refine(requireMarketerName, MARKETER_NAME_REQUIRED);
 export type ClientFormInput = z.input<typeof ClientFormSchema>;
 
 export const ClientListQuerySchema = z.object({
@@ -180,6 +237,12 @@ export const ClientListQuerySchema = z.object({
   limit:          z.coerce.number().int().min(1).max(500).default(20),
   search:         z.string().optional(),
   contractStatus: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  /**
+   * Narrows to clients by the state of their contracts, which is not the same
+   * as contractStatus above: that is a field on the client record, this is
+   * derived from the contracts themselves.
+   */
+  contractFilter: z.enum(['expiring', 'expired']).optional(),
   leadStatus:     z.enum(['NEW', 'CONTACTED', 'CONVERTED', 'LOST']).optional(),
   sortBy:         z.enum(['clientName', 'createdAt', 'billingTerms']).default('clientName'),
   sortOrder:      z.enum(['asc', 'desc']).default('asc'),
@@ -352,6 +415,8 @@ export interface ClientResponse {
 
   // CRM / lead tracking
   leadSource: LeadSource | null;
+  /** Set only when leadSource is MARKETER. */
+  marketerName: string | null;
   referredBy: string | null;
   leadStatus: LeadStatus;
 
@@ -436,9 +501,41 @@ export interface IncidentResponse {
   createdAt: string;
 }
 
+/**
+ * What a client is being billed and what they still owe.
+ *
+ * Amounts are whole shillings, as everywhere else in this system — UGX has no
+ * subunit in practice, and integers keep sums exact.
+ */
+export interface BillingSummary {
+  /** Sum of the monthly value of contracts in force. */
+  totalMonthlyBilling: number;
+  activeContractCount: number;
+  totalGuardsDeployed: number;
+  activeContracts: {
+    id:             string;
+    guardsRequired: number;
+    monthlyValue:   number;
+    status:         string;
+    contractEnd:    string;
+  }[];
+
+  /** Unsettled across every invoice that is not PAID. */
+  totalOutstanding:        number;
+  outstandingInvoiceCount: number;
+  /** The part of the above that is past its due date. */
+  totalOverdue:            number;
+  overdueCount:            number;
+
+  /** Most recent money actually received, manual or mobile money. */
+  lastPayment: { amount: number; paidAt: string } | null;
+}
+
 export interface ClientSummary {
   totalActive: number;
   totalInactive: number;
   expiringContracts: number;
+  /** Contracts already past their end date and not yet renewed or closed. */
+  expiredContracts: number;
   openComplaints: number;
 }

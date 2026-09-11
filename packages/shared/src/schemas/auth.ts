@@ -13,7 +13,12 @@ export const StrongPasswordSchema = z
   .regex(/[0-9]/,        'Must contain a number')
   .regex(/[^A-Za-z0-9]/, 'Must contain a special character');
 
-const USER_ROLE_VALUES = Object.values(ROLES) as [UserRole, ...UserRole[]];
+/**
+ * Any role name. Roles are rows now, created at runtime, so a schema cannot list
+ * them; settingsService checks the name against the Role table instead — that
+ * it exists and is enabled.
+ */
+const RoleName = z.string().trim().min(1).max(40);
 
 // A CLIENT-role user must be linked to a client company; every other role
 // must NOT carry a clientId — enforced here so this rule can't be bypassed
@@ -37,7 +42,7 @@ export const CreateUserSchema = requireClientIdForClientRole(
     name:     z.string().min(2),
     email:    z.string().email(),
     password: StrongPasswordSchema,
-    role:     z.enum(USER_ROLE_VALUES),
+    role:     RoleName,
     clientId: z.string().min(1).optional().nullable(),
   }),
 );
@@ -45,7 +50,7 @@ export const CreateUserSchema = requireClientIdForClientRole(
 export const UpdateUserSchema = requireClientIdForClientRole(
   z.object({
     name:     z.string().min(2).optional(),
-    role:     z.enum(USER_ROLE_VALUES).optional(),
+    role:     RoleName.optional(),
     status:   z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
     clientId: z.string().min(1).optional().nullable(),
   }),

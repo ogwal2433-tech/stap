@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
+import { assertAssignableRole } from './roleService';
 import { generateStaffId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
@@ -185,6 +186,10 @@ class StaffService {
       throw new AppError(`A user with email "${data.email}" already exists.`, 409);
     }
 
+    // Roles are rows now — custom ones included — so the name is checked
+    // against the table: it must exist, be enabled, and be a staff role.
+    await assertAssignableRole(data.role, { staffOnly: true });
+
     const password     = data.password ?? this.generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
     const systemId     = await generateStaffId();
@@ -252,6 +257,12 @@ class StaffService {
     // this module has to make impossible, however senior the caller is.
     if (updatedById === id && data.role && data.role !== user.role) {
       throw new AppError('You cannot change your own role.', 400);
+    }
+
+    // Only a change of role is checked: keeping a role that has since been
+    // disabled must not block an unrelated edit to the same person.
+    if (data.role !== undefined && data.role !== user.role) {
+      await assertAssignableRole(data.role, { staffOnly: true });
     }
 
     // Every field is optional and nullable — spread only what was actually

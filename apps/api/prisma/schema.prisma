@@ -10,31 +10,6 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-enum Role {
-  DIRECTOR
-  ASSISTANT_MANAGER
-  ADMINISTRATOR
-  OPERATIONS_SUPERVISOR
-  FIELD_SUPERVISOR
-  TRAINER
-  ACCOUNTS_OFFICER
-  CONTROL_ROOM
-  /// Split into MARKETING_HEAD and SALES. Retained so existing rows and any
-  /// token issued before the split still resolve — dropping an enum value in
-  /// Postgres means recreating the type and rewriting every column that uses
-  /// it. Nothing assigns it any more; the migration moved every holder to
-  /// MARKETING_HEAD.
-  MARKETING
-  /// Full marketing access: every lead, targets, bids, all reports.
-  MARKETING_HEAD
-  /// Sales staff. Only the leads assigned to them; no targets, no bids.
-  SALES
-  /// HR officer: guard HR records, leave, discipline, letters and HR reports.
-  /// Deliberately no finance, payroll, complaints, marketing or client billing.
-  HR
-  GUARD
-  CLIENT
-}
 
 enum UserStatus {
   ACTIVE
@@ -125,7 +100,12 @@ model User {
   email        String     @unique
   phone        String?
   passwordHash String
-  role         Role
+  /// The role's name. A foreign key to Role.name rather than Role.id, so every
+  /// query, sign-in token and requireRole guard that compares role names keeps
+  /// working unchanged. Names are immutable once created, so there is no rename
+  /// for a key on id to protect against.
+  role         String
+  roleRecord   Role       @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -174,12 +154,14 @@ model User {
   reportedIncidents       Incident[]           @relation("IncidentReporter")
   notifications           Notification[]
   assignedApplicants      Applicant[]          @relation("ApplicantAssignee")
-  trainerSessions         TrainingSession[]    @relation("TrainerSessions")
+  facilitatedTrainings    TrainingSession[]    @relation("TrainingFacilitator")
+  trainingAttendances     TrainingAttendee[]   @relation("TrainingStaffAttendee")
   gunsRegistered          Gun[]                @relation("GunRegistrar")
   gunMovementsRecorded    GunMovement[]        @relation("GunMovementRecorder")
 
   prospectsAssigned       ProspectiveClient[]     @relation("ProspectAssignee")
   permissionsGranted      RolePermission[]        @relation("PermissionGranter")
+  createdRolePresets      RolePreset[]            @relation("RolePresetCreator")
   prospectsCreated        ProspectiveClient[]     @relation("ProspectCreator")
   prospectStatusChanges   ProspectStatusHistory[] @relation("ProspectStatusChanger")
   bidsSubmitted           Bid[]                   @relation("BidSubmitter")
@@ -188,6 +170,7 @@ model User {
   marketingTargets        MarketingTarget[]       @relation("TargetAssignee")
   marketingTargetsCreated MarketingTarget[]       @relation("TargetCreator")
   approvedLeaves          LeaveRequest[]          @relation("LeaveApprover")
+  staffLeaveRequests      LeaveRequest[]          @relation("StaffLeaveRequest")
   recordedInventory       InventoryTransaction[]  @relation("InventoryRecorder")
   authorisedTransfers     GuardTransfer[]         @relation("TransferAuthoriser")
   supervisedZones         Zone[]                  @relation("ZoneSupervisor")
@@ -509,8 +492,15 @@ model Client {
   vatRate       Float? // VAT percentage, e.g. 18.0
 
   // CRM / lead tracking
-  leadSource String? // SOCIAL_MEDIA | REFERRAL | COLD_CALL | WEBSITE | WORD_OF_MOUTH | EXHIBITION | OTHER
+  leadSource String? // MARKETER | SOCIAL_MEDIA | REFERRAL | COLD_CALL | WEBSITE | WORD_OF_MOUTH | EXHIBITION | OTHER
   referredBy String? // Name of referring person or company
+  /// The marketer who brought this client in. Set only when leadSource is
+  /// MARKETER, and cleared by the service when the source changes away from it,
+  /// so the column never holds a name that the source no longer explains.
+  /// Separate from referredBy: that names an outside party who pointed the
+  /// client at us, this names one of our own, and marketer performance is
+  /// counted from it.
+  marketerName String?
   leadStatus String  @default("CONVERTED") // NEW | CONTACTED | CONVERTED | LOST
 
   createdAt DateTime @default(now())
@@ -1602,8 +1592,24 @@ model TrainingSession {
   id                  String             @id @default(cuid())
   title               String
   description         String?
-  trainerId           String
-  trainer             User               @relation("TrainerSessions", fields: [trainerId], references: [id])
+
+  /// GUARDS | STAFF — who the session is for. Decides which kind of attendee
+  /// may be added, and the recruitment pipeline only links GUARDS sessions to
+  /// applicants.
+  targetGroup         String             @default("GUARDS")
+
+  /// INTERNAL | EXTERNAL. Internal names one of our own through
+  /// facilitatorUserId; external is a guest, known only by name.
+  facilitatorType     String             @default("INTERNAL")
+  /// Always set, for both kinds — an internal facilitator's name is copied here
+  /// so a session still says who ran it after that account is deactivated.
+  facilitatorName     String?
+  /// Replaces trainerId. Nullable because an external facilitator has no
+  /// account here, and no longer restricted to users with the TRAINER role:
+  /// supervisors and controllers run sessions too.
+  facilitatorUserId   String?
+  facilitatorUser     User?              @relation("TrainingFacilitator", fields: [facilitatorUserId], references: [id])
+
   location            String?
   scheduledAt         DateTime
   durationHours       Float              @default(1)
@@ -1616,25 +1622,52 @@ model TrainingSession {
   applicants          Applicant[]
 }
 
+/// One attendee of one session — either a guard or a member of staff, never
+/// both and never neither. Prisma cannot express that, so the migration adds a
+/// CHECK constraint; without it a row with both set, or neither, would render
+/// as a nameless attendee nobody can account for.
 model TrainingAttendee {
   id                String          @id @default(cuid())
   trainingSessionId String
   trainingSession   TrainingSession @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
-  guardId           String
-  guard             Guard           @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  guardId           String?
+  guard             Guard?          @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  /// A member of office staff, for a STAFF session.
+  userId            String?
+  user              User?           @relation("TrainingStaffAttendee", fields: [userId], references: [id], onDelete: Restrict)
+
   attended          Boolean         @default(false)
   score             Int?
   passed            Boolean?
   notes             String?
   createdAt         DateTime        @default(now())
 
+  // NULLs do not collide in Postgres, so each pair only constrains rows of its
+  // own kind — a guard cannot be added twice, nor a staff member.
   @@unique([trainingSessionId, guardId])
+  @@unique([trainingSessionId, userId])
 }
 
+/// Leave for a guard or for a member of office staff — exactly one of the two,
+/// never both and never neither. Prisma cannot express that, so the migration
+/// adds a CHECK constraint; without it a request belonging to nobody would sit
+/// in the approval queue with no name against it.
+///
+/// There is deliberately no stored "applicantType": it would only restate which
+/// of the two columns is set, and a stored restatement is something that can
+/// disagree with the data it describes. It is derived when the row is read.
 model LeaveRequest {
   id              String    @id @default(cuid())
-  guardId         String
-  guard           Guard     @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  guardId         String?
+  guard           Guard?    @relation(fields: [guardId], references: [id], onDelete: Restrict)
+
+  /// The office staff member this leave belongs to.
+  userId          String?
+  user            User?     @relation("StaffLeaveRequest", fields: [userId], references: [id], onDelete: Restrict)
+
   type            String
   startDate       DateTime
   endDate         DateTime
@@ -1648,6 +1681,14 @@ model LeaveRequest {
   rejectionReason String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  // Declared here, not only in the migration that created them. An index that
+  // exists solely in raw SQL reads to Prisma as drift, and the next generated
+  // migration silently drops it — which is what happened to these two.
+  // Both lists read by subject and status; the overlap check queries one
+  // subject's date range at a time.
+  @@index([guardId, status])
+  @@index([userId, status])
 }
 
 model LetterTemplate {
@@ -1869,9 +1910,58 @@ model Permission {
 /// Keyed on the Role enum rather than a Role table: roles are a closed set the
 /// code already branches on, and making them rows would let someone create a
 /// role no route has ever heard of.
+/// A role a user can hold. Replaces the Postgres enum of the same name, so a
+/// role can be created, relabelled, disabled or deleted from the UI without a
+/// migration.
+///
+/// `name` is the identifier code and sign-in tokens use — DIRECTOR, HR — and is
+/// what User.role and RolePermission.role reference. It is fixed once created.
+/// System roles are the ones code names directly (requireRole, ROLES): they
+/// cannot be deleted, only disabled, and DIRECTOR cannot even be disabled.
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  label       String
+  description String?
+  colour      String?
+  isSystem    Boolean  @default(false)
+  /// A disabled role holds no permissions and its users cannot sign in. Its
+  /// grants are kept, so enabling it again restores exactly what it had.
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
+/// A named set of permission keys, saved so one configuration can be applied
+/// to a role in a single step — "Read-only finance", "Front desk".
+///
+/// Roles themselves cannot be created at runtime: Role is a Postgres enum, and
+/// adding a value is a migration. A preset is the part of "custom roles" that
+/// can be dynamic. Applying one replaces a role's grants through the same
+/// guarded write as every other bulk change, so DIRECTOR stays immutable.
+///
+/// Keys are stored as written rather than as foreign keys, so a preset outlives
+/// changes to the catalogue; a key that has since gone is reported and skipped
+/// when the preset is applied instead of making the preset unusable.
+model RolePreset {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String?
+  permissionKeys String[]
+  createdById    String?
+  createdBy      User?    @relation("RolePresetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model RolePermission {
   id            String     @id @default(cuid())
-  role          Role
+  role          String
+  /// Deleting a role takes its grants with it; they mean nothing without it.
+  roleRecord    Role       @relation(fields: [role], references: [name], onDelete: Cascade, onUpdate: Cascade)
   permissionId  String
   permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   grantedAt     DateTime   @default(now())

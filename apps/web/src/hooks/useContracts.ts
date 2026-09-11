@@ -34,6 +34,7 @@ export function useUpdateContract(clientId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts', clientId] });
       queryClient.invalidateQueries({ queryKey: ['contracts-expiring'] });
+      queryClient.invalidateQueries({ queryKey: ['contract-expiry-alerts'] });
     },
   });
 }
@@ -45,7 +46,17 @@ export function useDeleteContract(clientId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts', clientId] });
       queryClient.invalidateQueries({ queryKey: ['contracts-expiring'] });
+      queryClient.invalidateQueries({ queryKey: ['contract-expiry-alerts'] });
     },
+  });
+}
+
+/** Expiring and expired contracts for the clients dashboard, in one request. */
+export function useContractExpiryAlerts(limit = 10) {
+  return useQuery({
+    queryKey:  ['contract-expiry-alerts', limit],
+    queryFn:   () => contractsApi.getExpiryAlerts(limit),
+    staleTime: 10 * 60 * 1000,
   });
 }
 
