@@ -2009,6 +2009,11 @@ model ShiftHandoverReport {
   gunsDeployed      Json
   /// [{ site, guardName, issue, actionTakenBy }]
   disciplineIssues  Json
+  /// Section 8 — [{ id, description, responsiblePerson, priority, addedAt }].
+  /// Nullable because every report written before these sections existed has none.
+  pendingMatters    Json?
+  /// Section 9 — [{ id, zone, motorcycleId, riderName, unreachablePeriods[], longParkedPeriods[] }]
+  motorcycleReport  Json?
 
   // ── Section 7: summary ──────────────────────────────────────────────────────
   totalIncidents    Int     @default(0)

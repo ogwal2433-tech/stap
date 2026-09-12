@@ -1,8 +1,11 @@
 import { renderToPdf } from './pdfBase';
+import { computeDuration, PRIORITY_LEVELS } from '@stap/shared';
+import type { MotorcycleReport, PendingMatter } from '@stap/shared';
 
 type Row = Record<string, string>;
 
 const NAVY = '#1B3A6B';
+const TEAL = '#0F7B6C';
 
 const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"]/g, (c) =>
@@ -65,6 +68,8 @@ export interface ShiftReportPdfData {
   clientComms:       Row[];
   gunsDeployed:      Row[];
   disciplineIssues:  Row[];
+  pendingMatters:    PendingMatter[];
+  motorcycleReport:  MotorcycleReport[];
   totalIncidents:    number;
   totalClientCalls:  number;
   totalAbsentees:    number;
@@ -76,6 +81,50 @@ export interface ShiftReportPdfData {
   incomingTime:           string | null;
   acknowledgedBy:         string | null;
   acknowledgedAt:         string | null;
+}
+
+/**
+ * Section 9 prints one block per motorcycle: the zone line, then only the
+ * period tables that have rows. A motorcycle with a quiet shift says so — an
+ * empty table beneath a plate number reads as missing data rather than a
+ * clean shift.
+ */
+function motorcycleBlock(mc: MotorcycleReport): string {
+  const head = [mc.zone, mc.motorcycleId, mc.riderName ? `(${mc.riderName})` : '']
+    .filter(Boolean).map(esc).join(' — ');
+
+  const periods = (
+    label: string, colour: string, bg: string,
+    rows: { from: string; to: string; tail: string }[],
+  ) => rows.length === 0 ? '' : `
+    <div style="font-size:8pt;font-weight:700;color:${colour};margin:4px 0 2px;">${label}</div>
+    ${rows.map((p) => `
+      <div style="font-size:8.5pt;background:${bg};border-radius:3px;padding:3px 6px;
+                  margin-bottom:2px;color:${colour};">
+        ${esc(p.from) || '—'} – ${esc(p.to) || '—'}
+        ${p.from && p.to ? `(${esc(computeDuration(p.from, p.to))})` : ''}
+        ${p.tail ? ` · ${esc(p.tail)}` : ''}
+      </div>`).join('')}`;
+
+  const unreachable = periods('Unreachable periods', '#C0392B', '#FDF2F2',
+    (mc.unreachablePeriods ?? []).map((u) => ({ from: u.from, to: u.to, tail: u.reason })));
+  const parked = periods('Long parked periods', '#856404', '#FEF9E7',
+    (mc.longParkedPeriods ?? []).map((p) => ({ from: p.from, to: p.to, tail: p.location })));
+
+  return `
+    <div style="border:1px solid #A9DFBF;border-radius:4px;margin-bottom:6px;
+                break-inside:avoid;page-break-inside:avoid;">
+      <div style="background:#E8F8F5;padding:4px 8px;font-size:8.5pt;font-weight:700;color:${TEAL};">
+        ${head || 'Motorcycle'}
+      </div>
+      <div style="padding:4px 8px;">
+        ${unreachable || parked
+          ? `${unreachable}${parked}`
+          : `<div style="font-size:8pt;color:#666;font-style:italic;">
+               No unreachable or long parking periods recorded.
+             </div>`}
+      </div>
+    </div>`;
 }
 
 /** Renders the handover onto the STAP letterhead, laid out as the paper form. */
@@ -167,6 +216,24 @@ export async function renderShiftReportPdf(r: ShiftReportPdfData): Promise<Buffe
       <tr>${totals}</tr>
     </table>
     ${freeText('Major Issue of the Shift', r.majorIssue)}
+
+    ${section(8, 'PENDING MATTERS FOR NEXT SHIFT')}
+    ${table([
+      { key: 'priority',          label: 'Priority', width: '60px' },
+      { key: 'description',       label: 'Matter' },
+      { key: 'responsiblePerson', label: 'Responsible', width: '150px' },
+    ], (r.pendingMatters ?? []).map((m) => ({
+      priority: PRIORITY_LEVELS.find((p) => p.value === m.priority)?.label ?? '',
+      description:       m.description,
+      responsiblePerson: m.responsiblePerson,
+    })))}
+
+    ${section(9, 'SUPERVISOR MOTORCYCLE REPORT')}
+    ${(r.motorcycleReport ?? []).length === 0
+      ? `<div style="font-size:8.5pt;color:#666;font-style:italic;padding:3px 0 8px;">
+           Nothing recorded for this section.
+         </div>`
+      : (r.motorcycleReport ?? []).map(motorcycleBlock).join('')}
 
     <div style="border:1.5px solid ${NAVY};padding:8px 10px;margin-top:6px;
                 break-inside:avoid;page-break-inside:avoid;">

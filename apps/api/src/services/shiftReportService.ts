@@ -56,6 +56,9 @@ function fmt(r: WithNames) {
     clientComms:       (r.clientComms      ?? []) as never,
     gunsDeployed:      (r.gunsDeployed     ?? []) as never,
     disciplineIssues:  (r.disciplineIssues ?? []) as never,
+    // Null on every report written before sections 8 and 9 existed.
+    pendingMatters:    (r.pendingMatters   ?? []) as never,
+    motorcycleReport:  (r.motorcycleReport ?? []) as never,
 
     totalIncidents:    r.totalIncidents,
     totalClientCalls:  r.totalClientCalls,
@@ -90,6 +93,8 @@ function sectionData(d: ShiftReportInput) {
     clientComms:       (d.clientComms      ?? []) as unknown as Json,
     gunsDeployed:      (d.gunsDeployed     ?? []) as unknown as Json,
     disciplineIssues:  (d.disciplineIssues ?? []) as unknown as Json,
+    pendingMatters:    (d.pendingMatters   ?? []) as unknown as Json,
+    motorcycleReport:  (d.motorcycleReport ?? []) as unknown as Json,
 
     totalIncidents:    d.totalIncidents    ?? 0,
     totalClientCalls:  d.totalClientCalls  ?? 0,
