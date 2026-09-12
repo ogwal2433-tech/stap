@@ -3,12 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Badge, Button, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { DEPLOYMENT_ROW_LABELS, GUN_EXTRA_ROWS } from '@stap/shared';
-import type { ShiftReportInput } from '@stap/shared';
+import type { MotorcycleReport, PendingMatter, ShiftReportInput } from '@stap/shared';
 import { shiftReportsApi } from '../../lib/shiftReports.api';
 import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
-import { SectionHeader, DynamicTable, FixedTable, NAVY } from './shiftReportParts';
+import {
+  SectionHeader, DynamicTable, FixedTable, PendingMattersSection, MotorcycleSection, NAVY,
+} from './shiftReportParts';
 
 type Row = Record<string, string>;
 
@@ -24,6 +26,7 @@ interface FormState {
   deploymentRows: Row[]; deploymentRemarks: string;
   incidents: Row[]; supervisionRows: Row[]; clientComms: Row[];
   gunsDeployed: Row[]; disciplineIssues: Row[];
+  pendingMatters: PendingMatter[]; motorcycleReport: MotorcycleReport[];
   totalIncidents: number; totalClientCalls: number;
   totalAbsentees: number; totalReplacements: number;
   majorIssue: string;
@@ -44,6 +47,9 @@ function blankForm(): FormState {
     clientComms:      [{ ...emptyClientComm }],
     gunsDeployed:     [],
     disciplineIssues: [{ ...emptyDiscipline }],
+    // Sections 8 and 9 start empty: unlike the printed tables above, a row here
+    // means the controller had something to hand over.
+    pendingMatters: [], motorcycleReport: [],
     totalIncidents: 0, totalClientCalls: 0, totalAbsentees: 0, totalReplacements: 0,
     majorIssue: '',
     outgoingControllerName: '', outgoingTime: '',
@@ -98,6 +104,8 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         clientComms:       existing.clientComms as Row[],
         gunsDeployed:      existing.gunsDeployed as Row[],
         disciplineIssues:  existing.disciplineIssues as Row[],
+        pendingMatters:    existing.pendingMatters   ?? [],
+        motorcycleReport:  existing.motorcycleReport ?? [],
         totalIncidents:    existing.totalIncidents,
         totalClientCalls:  existing.totalClientCalls,
         totalAbsentees:    existing.totalAbsentees,
@@ -358,6 +366,16 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         <Form.Control as="textarea" rows={3} value={form.majorIssue} disabled={locked}
           onChange={e => set('majorIssue', e.target.value)} />
       </Form.Group>
+
+      <PendingMattersSection
+        items={form.pendingMatters} readOnly={locked}
+        onChange={items => set('pendingMatters', items)}
+      />
+
+      <MotorcycleSection
+        items={form.motorcycleReport} readOnly={locked}
+        onChange={items => set('motorcycleReport', items)}
+      />
 
       <div style={{
         background: '#F2F4F7', borderRadius: '0.5rem', padding: '16px 20px',

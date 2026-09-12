@@ -71,6 +71,79 @@ const DisciplineRow = z.object({
   actionTakenBy: z.string().default(''),
 });
 
+/**
+ * Sections 8 and 9 differ from the tables above: their rows carry an id.
+ * The form edits a row in place and the periods nest inside a motorcycle, so
+ * an index is not enough to say which row changed.
+ */
+
+export const PRIORITY_LEVELS = [
+  { value: 'HIGH',   label: 'High',   colour: '#C0392B', bg: '#FDEDEC' },
+  { value: 'MEDIUM', label: 'Medium', colour: '#856404', bg: '#FEF9E7' },
+  { value: 'LOW',    label: 'Low',    colour: '#1E8449', bg: '#E8F8F5' },
+] as const;
+
+export const PRIORITY_VALUES = ['HIGH', 'MEDIUM', 'LOW'] as const;
+
+const PendingMatterSchema = z.object({
+  id:                z.string(),
+  description:       z.string().default(''),
+  responsiblePerson: z.string().default(''),
+  priority:          z.enum(PRIORITY_VALUES).default('MEDIUM'),
+  /** ISO timestamp of when the controller added the row. */
+  addedAt:           z.string().default(''),
+});
+
+const UnreachablePeriodSchema = z.object({
+  id:     z.string(),
+  from:   z.string().default(''),
+  to:     z.string().default(''),
+  reason: z.string().default(''),
+});
+
+const LongParkedPeriodSchema = z.object({
+  id:       z.string(),
+  from:     z.string().default(''),
+  to:       z.string().default(''),
+  location: z.string().default(''),
+  /** Display only — computeDuration() is the source of truth when both times are set. */
+  duration: z.string().default(''),
+});
+
+const MotorcycleReportSchema = z.object({
+  id:                 z.string(),
+  zone:               z.string().default(''),
+  motorcycleId:       z.string().default(''),
+  riderName:          z.string().default(''),
+  unreachablePeriods: z.array(UnreachablePeriodSchema).default([]),
+  longParkedPeriods:  z.array(LongParkedPeriodSchema).default([]),
+});
+
+export type PendingMatter     = z.infer<typeof PendingMatterSchema>;
+export type UnreachablePeriod = z.infer<typeof UnreachablePeriodSchema>;
+export type LongParkedPeriod  = z.infer<typeof LongParkedPeriodSchema>;
+export type MotorcycleReport  = z.infer<typeof MotorcycleReportSchema>;
+
+/**
+ * "14:30" to "15:15" reads as "45m".
+ *
+ * An end before the start ran past midnight rather than backwards — the night
+ * shift is 18:00–06:00, so a motorcycle unreachable from 23:40 to 00:20 was
+ * gone for 40 minutes. Lives here rather than in the form because the PDF
+ * prints the same durations and the two must not drift apart.
+ */
+export function computeDuration(from: string, to: string): string {
+  if (!from || !to) return '';
+  const [fh, fm] = from.split(':').map(Number);
+  const [th, tm] = to.split(':').map(Number);
+  if ([fh, fm, th, tm].some((n) => !Number.isFinite(n))) return '';
+  let mins = (th * 60 + tm) - (fh * 60 + fm);
+  if (mins < 0) mins += 24 * 60;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 export const ShiftReportBodySchema = z.object({
   date:     z.string().min(1, 'Date is required'),
   shift:    z.enum(SHIFT_VALUES),
@@ -84,6 +157,8 @@ export const ShiftReportBodySchema = z.object({
   clientComms:       z.array(ClientCommRow).default([]),
   gunsDeployed:      z.array(GunRow).default([]),
   disciplineIssues:  z.array(DisciplineRow).default([]),
+  pendingMatters:    z.array(PendingMatterSchema).default([]),
+  motorcycleReport:  z.array(MotorcycleReportSchema).default([]),
 
   totalIncidents:    z.coerce.number().int().min(0).default(0),
   totalClientCalls:  z.coerce.number().int().min(0).default(0),
@@ -128,6 +203,8 @@ export interface ShiftReportResponse extends ShiftReportRowSummary {
   clientComms:       { time: string; clientSite: string; issueRaised: string; staffResponsible: string }[];
   gunsDeployed:      { zone: string; numGuns: string; numBullets: string; status: string }[];
   disciplineIssues:  { site: string; guardName: string; issue: string; actionTakenBy: string }[];
+  pendingMatters:    PendingMatter[];
+  motorcycleReport:  MotorcycleReport[];
   totalClientCalls:  number;
   totalReplacements: number;
   majorIssue:             string | null;
