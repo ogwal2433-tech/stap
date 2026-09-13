@@ -17,6 +17,9 @@ import type {
   GrantClientPortalInput,
   LinkedAccount,
   SiteShiftResponse,
+  ClientImportPreview,
+  ClientImportResult,
+  ClientImportRow,
 } from '@stap/shared';
 
 export const clientsApi = {
@@ -78,6 +81,39 @@ export const clientsApi = {
 
   deleteContact(clientId: string, contactId: string): Promise<void> {
     return api.delete(`/clients/${clientId}/contacts/${contactId}`).then(() => undefined);
+  },
+
+  // ── Excel bulk import ─────────────────────────────────────────────────────
+  // Parsing happens on the server, so one set of rules decides what a cell
+  // means — the guards import does the same.
+
+  downloadImportTemplate(): Promise<void> {
+    return api
+      .get('/clients/import/template', { responseType: 'blob' })
+      .then((r) => {
+        const url = URL.createObjectURL(new Blob([r.data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'STAP_Client_Import_Template.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  },
+
+  importPreview(file: File): Promise<ClientImportPreview> {
+    const form = new FormData();
+    form.append('file', file);
+    return api
+      .post<{ success: boolean; data: ClientImportPreview }>('/clients/import/preview', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  importConfirm(rows: ClientImportRow[]): Promise<ClientImportResult> {
+    return api
+      .post<{ success: boolean; data: ClientImportResult }>('/clients/import/confirm', { rows })
+      .then((r) => r.data.data);
   },
 
   getSummary(): Promise<ClientSummary> {

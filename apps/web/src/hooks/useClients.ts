@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientsApi } from '../lib/clients.api';
 import type {
   ClientListQuery, CreateClientInput, UpdateClientInput, CreateSiteInput,
-  UpdateSiteInput, CreateIncidentInput, GrantClientPortalInput,
+  UpdateSiteInput, CreateIncidentInput, GrantClientPortalInput, ClientImportRow,
 } from '@stap/shared';
 
 export function useClientList(params?: Partial<ClientListQuery>) {
@@ -33,6 +33,28 @@ export function useCreateClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateClientInput) => clientsApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client-summary'] });
+    },
+  });
+}
+
+// ── Excel bulk import ────────────────────────────────────────────────────────
+
+export function useClientImportTemplate() {
+  return useMutation({ mutationFn: () => clientsApi.downloadImportTemplate() });
+}
+
+/** Parses and validates on the server. Nothing is saved until confirm. */
+export function useClientImportPreview() {
+  return useMutation({ mutationFn: (file: File) => clientsApi.importPreview(file) });
+}
+
+export function useClientImportConfirm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rows: ClientImportRow[]) => clientsApi.importConfirm(rows),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['client-summary'] });

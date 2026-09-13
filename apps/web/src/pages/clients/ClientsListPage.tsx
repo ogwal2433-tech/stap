@@ -6,6 +6,7 @@ import {
 } from 'react-bootstrap';
 import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/useClients';
 import ContractExpiryPanels from '../../components/clients/ContractExpiryPanels';
+import ClientImportModal from '../../components/clients/ClientImportModal';
 import RoleGuard from '../../components/RoleGuard';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -102,6 +103,7 @@ export default function ClientsListPage() {
 
   const { data: summary } = useClientSummary();
   const archiveClient = useArchiveClient();
+  const [showImport, setShowImport] = useState(false);
 
   const handleArchive = async (id: string, name: string) => {
     if (!confirm(`Archive ${name}? This will set their status to INACTIVE.`)) return;
@@ -123,14 +125,27 @@ export default function ClientsListPage() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Client Management</h4>
         <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
-          <Button
-            style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
-            onClick={() => navigate('/clients/new')}
-          >
-            <i className="bi bi-plus-lg me-1" />Add Client
-          </Button>
+          <div className="d-flex gap-2">
+            <Button variant="outline-primary" onClick={() => setShowImport(true)}>
+              <i className="bi bi-file-earmark-spreadsheet me-1" />Import from Excel
+            </Button>
+            <Button
+              style={{ backgroundColor: '#1B3A6B', borderColor: '#1B3A6B' }}
+              onClick={() => navigate('/clients/new')}
+            >
+              <i className="bi bi-plus-lg me-1" />Add Client
+            </Button>
+          </div>
         </RoleGuard>
       </div>
+
+      {/* The import invalidates the client queries itself, so the list and the
+          summary cards refresh without anything being refetched here. */}
+      <ClientImportModal
+        show={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={() => showToast('Import finished — see the summary in the dialog.', 'success')}
+      />
 
       {/* Summary Cards */}
       {summary && (

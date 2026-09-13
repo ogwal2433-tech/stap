@@ -89,7 +89,10 @@
  */
 import { Router, type IRouter } from 'express';
 import { clientService } from '../services/clientService';
+import { clientImportService } from '../services/clientImportService';
 import { accessService } from '../services/accessService';
+import { excelImportUpload } from '../config/multer';
+import { AppError } from '../errors/AppError';
 import { siteService } from '../services/siteService';
 import { incidentService } from '../services/incidentService';
 import { authenticate } from '../middleware/authenticate';
@@ -112,6 +115,7 @@ import {
   CreateIncidentSchema,
   GrantClientPortalSchema,
   ResetPortalPasswordSchema,
+  ClientImportConfirmSchema,
 } from '@stap/shared';
 import type { UserRole } from '@stap/shared';
 
@@ -175,6 +179,46 @@ router.get(
   asyncHandler(async (_req, res) => {
     const summary = await clientService.getSummary();
     res.status(200).json({ success: true, data: summary });
+  }),
+);
+
+// ── Excel bulk import ─────────────────────────────────────────────────────────
+// Before /:id, or "import" is read as a client id. Gated on CLIENTS_CREATE
+// rather than CLIENTS_EDIT: this creates clients, and a role trusted to correct
+// an existing record is not necessarily trusted to add fifty new ones.
+
+// ── GET /import/template — download the Excel template ───────────────────────
+router.get(
+  '/import/template',
+  requirePermission(PERMISSIONS.CLIENTS_CREATE),
+  asyncHandler(async (_req, res) => {
+    const buffer = await clientImportService.generateTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=STAP_Client_Import_Template.xlsx');
+    res.send(buffer);
+  }),
+);
+
+// ── POST /import/preview — parse and validate, writing nothing ───────────────
+router.post(
+  '/import/preview',
+  requirePermission(PERMISSIONS.CLIENTS_CREATE),
+  excelImportUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const data = await clientImportService.preview(req.file.buffer);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /import/confirm — save the rows the user selected ───────────────────
+router.post(
+  '/import/confirm',
+  requirePermission(PERMISSIONS.CLIENTS_CREATE),
+  validate(ClientImportConfirmSchema),
+  asyncHandler(async (req, res) => {
+    const data = await clientImportService.confirm(req.body.rows, req.user!.userId);
+    res.status(200).json({ success: true, data });
   }),
 );
 
