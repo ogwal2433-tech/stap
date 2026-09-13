@@ -387,6 +387,88 @@ export const CreateIncidentSchema = z.object({
 
 // ── Inferred input types ───────────────────────────────────────────────────────
 
+// ── Excel bulk import ────────────────────────────────────────────────────────
+//
+// The spreadsheet the company already keeps has seven columns, and three things
+// a client record needs are not among them: a contact person, billing terms, and
+// a contract end date. These are the values an imported record gets instead, so
+// the form, the API and the template all state the same assumptions.
+
+/** Payment terms an imported client is created with — no column supplies it. */
+export const CLIENT_IMPORT_BILLING_TERMS = 30;
+/** An imported contract runs this many months from its start date. */
+export const CLIENT_IMPORT_CONTRACT_MONTHS = 12;
+/** Stands in for the required contact person until someone fills it in. */
+export const CLIENT_IMPORT_CONTACT_PLACEHOLDER = 'To be confirmed';
+/** Stands in for the required physical address when the Location cell is blank. */
+export const CLIENT_IMPORT_ADDRESS_PLACEHOLDER = 'Not specified';
+
+export const CLIENT_IMPORT_HEADERS = [
+  'Client Name *',
+  'Guns Deployed',
+  'Location',
+  'Contract Status',
+  'No. of Guards Deployed',
+  'Start Date (DD/MM/YYYY)',
+  'Amount — Monthly (UGX)',
+] as const;
+
+export const ClientImportRowSchema = z.object({
+  /** The row's own number in the sheet, so a message points at what the user sees. */
+  rowNumber:      z.number().int().min(1),
+  clientName:     z.string().max(200).nullable(),
+  gunsDeployed:   z.number().int().min(0).max(10_000).nullable(),
+  location:       z.string().max(500).nullable(),
+  contractStatus: z.string().max(100).nullable(),
+  guardsDeployed: z.number().int().min(0).max(10_000).nullable(),
+  /** ISO date string, not a Date: this travels back through JSON on confirm. */
+  startDate:      z.string().datetime().nullable(),
+  amount:         z.number().int().min(0).nullable(),
+  isValid:        z.boolean(),
+  /** Why the row cannot be imported. */
+  errors:         z.array(z.string()),
+  /** Importable, but something was assumed or will be left out — say so. */
+  warnings:       z.array(z.string()),
+  /** Whether a contract will be created alongside the client. */
+  willCreateContract: z.boolean(),
+});
+
+export type ClientImportRow = z.infer<typeof ClientImportRowSchema>;
+
+export interface ClientImportPreview {
+  totalRows:    number;
+  validCount:   number;
+  invalidCount: number;
+  rows:         ClientImportRow[];
+}
+
+/**
+ * Confirm re-validates every field rather than trusting the flags the browser
+ * sends back: `isValid` arrives from the client and a request can claim anything.
+ */
+export const ClientImportConfirmSchema = z.object({
+  rows: z.array(ClientImportRowSchema).min(1, 'No rows to import').max(500, 'Import at most 500 rows at a time'),
+});
+
+export type ClientImportConfirmInput = z.infer<typeof ClientImportConfirmSchema>;
+
+export interface ClientImportResultRow {
+  rowNumber:       number;
+  name:            string;
+  status:          'IMPORTED' | 'SKIPPED' | 'FAILED';
+  note:            string;
+  clientId?:       string;
+  contractCreated: boolean;
+}
+
+export interface ClientImportResult {
+  imported:         number;
+  skipped:          number;
+  failed:           number;
+  contractsCreated: number;
+  rows:             ClientImportResultRow[];
+}
+
 export type CreateClientInput = z.input<typeof CreateClientSchema>;
 export type UpdateClientInput = z.input<typeof UpdateClientSchema>;
 export type ClientListQuery = z.infer<typeof ClientListQuerySchema>;
