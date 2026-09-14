@@ -57,7 +57,6 @@ const SystemErrorsPage             = lazyWithReload(() => import('@/pages/admin/
 const AuditLogPage                 = lazyWithReload(() => import('@/pages/admin/AuditLogPage'), 'AuditLogPage');
 const StaffPage                    = lazyWithReload(() => import('@/pages/staff/StaffPage'), 'StaffPage');
 
-const GUARD_WRITE: UserRole[]    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
 const INV_ROLES: UserRole[]      = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
@@ -125,11 +124,15 @@ function App() {
 
               {/* Guards */}
               <Route path="/guards"              element={<L><GuardsListPage /></L>} />
-              <Route path="/guards/new"          element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
+              {/* Guard write pages gate on the same permission as the buttons that
+                  open them. They used a role list of DIRECTOR and ASSISTANT_MANAGER,
+                  so a role granted guards.create saw "+ Add Guard" and was then
+                  refused the page it opened. */}
+              <Route path="/guards/new"          element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><GuardFormPage /></PermissionGuard></L>} />
               <Route path="/guards/dashboard"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><GuardDashboardPage /></RoleGuard></L>} />
-              <Route path="/guards/import"       element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><BulkImportPage /></RoleGuard></L>} />
+              <Route path="/guards/import"       element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><BulkImportPage /></PermissionGuard></L>} />
               <Route path="/guards/:id"          element={<L><GuardDetailPage /></L>} />
-              <Route path="/guards/:id/edit"     element={<L><RoleGuard allowedRoles={GUARD_WRITE} fallback={<UnauthorisedPage />}><GuardFormPage /></RoleGuard></L>} />
+              <Route path="/guards/:id/edit"     element={<L><PermissionGuard permission="guards.edit" fallback={<PermissionDenied permission="guards.edit" />}><GuardFormPage /></PermissionGuard></L>} />
 
               {/* Attendance */}
               <Route path="/attendance"           element={<L><PermissionGuard permission="attendance.view" fallback={<PermissionDenied permission="attendance.view" />}><AttendancePage /></PermissionGuard></L>} />

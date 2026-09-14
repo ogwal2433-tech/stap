@@ -50,14 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // enough to know.
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  const loadPermissions = useCallback(async () => {
+  const loadPermissions = useCallback(async (keepOnFailure = false) => {
     try {
       const { data } = await api.get<{ data: { permissions: string[] } }>('/permissions/me');
       setPermissions(data.data.permissions ?? []);
     } catch {
-      // A failure here must not cost the user their session — it only means the
-      // UI falls back to showing nothing permission-gated.
-      setPermissions([]);
+      // A failure here must not cost the user their session. At sign-in it
+      // means the UI shows nothing permission-gated; on a background refresh it
+      // means keep what was already known, so a dropped request when a tab
+      // regains focus does not hide every gated page from someone mid-task.
+      if (!keepOnFailure) setPermissions([]);
     }
   }, []);
 
@@ -97,11 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const seconds = data.data.expiresIn ?? sessionConfig.current.accessTokenSeconds;
       sessionManager.scheduleRefresh(seconds * 1000);
+      // Grants can change while someone is signed in. Renewal already talks to
+      // the server on a timer, so permissions are re-read here too — otherwise
+      // a role granted guards.create only saw it after signing out and back in.
+      void loadPermissions(true);
       return true;
     } catch {
       return false;
     }
-  }, []);
+  }, [loadPermissions]);
 
   /**
    * Ends the session properly: the server drops the stored refresh token and
@@ -229,6 +235,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => setSessionLostHandler(null);
   }, [clearSession, navigate]);
+
+  /**
+   * Re-reads permissions when the tab comes back into view — the usual moment
+   * after an administrator has changed a grant in another tab or on another
+   * machine. Without it the change waits for the next token renewal.
+   */
+  useEffect(() => {
+    if (!state.isAuthenticated) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadPermissions(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [state.isAuthenticated, loadPermissions]);
 
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await api.post<{
