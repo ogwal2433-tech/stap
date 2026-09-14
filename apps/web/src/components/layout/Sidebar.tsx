@@ -18,7 +18,6 @@ import {
   HR_ROLES,
   DEPLOYMENT_VIEW_ROLES,
   REPORT_ROLES,
-  GUARD_WRITE_ROLES,
   type UserRole,
 } from '@stap/shared';
 
@@ -355,7 +354,9 @@ function NavGroupPanel({
                   <span>Overview</span>
                 </NavLink>
               </RoleGuard>
-              <RoleGuard allowedRoles={GUARD_WRITE_ROLES as UserRole[]}>
+              {/* Same permission as the Import button on the guards list and the
+                  /guards/import route, so the link appears exactly when the page opens. */}
+              <PermissionGuard permission="guards.create">
                 <NavLink
                   to="/guards/import"
                   onClick={onNavigate}
@@ -364,7 +365,7 @@ function NavGroupPanel({
                   <i className="bi bi-file-earmark-arrow-up" style={SUB_ICON_STYLE} />
                   <span>Bulk Import</span>
                 </NavLink>
-              </RoleGuard>
+              </PermissionGuard>
             </>
           )}
 

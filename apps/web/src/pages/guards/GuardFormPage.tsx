@@ -8,6 +8,7 @@ import {
 } from 'react-bootstrap';
 import { useGuard, useCreateGuard, useUpdateGuard } from '../../hooks/useGuards';
 import { guardsApi } from '../../lib/guards.api';
+import { getApiErrorMessage } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
@@ -386,8 +387,7 @@ export default function GuardFormPage() {
         showToast('Changes saved', 'success');
         navigate(`/guards/${id}`);
       } catch (err: unknown) {
-        const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
-        setApiError(axiosErr.response?.data?.error ?? 'An unexpected error occurred');
+        setApiError(getApiErrorMessage(err, 'An unexpected error occurred'));
       }
     } else {
       createGuard(payload, {
@@ -402,7 +402,10 @@ export default function GuardFormPage() {
             setError('nationalId', { type: 'manual', message: message || 'This National ID already exists' });
             document.querySelector('[name="nationalId"]')?.scrollIntoView({ behavior: 'smooth' });
           } else {
-            showToast(message || 'Failed to create guard', 'danger');
+            // A 400 carries per-field details. Reading only `error` showed
+            // "Validation failed" with no hint of which field, and a 403 showed
+            // the same generic toast as a real failure.
+            showToast(getApiErrorMessage(err, 'Failed to create guard'), 'danger');
           }
         },
       });

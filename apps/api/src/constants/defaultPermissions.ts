@@ -73,7 +73,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   ],
 
   OPERATIONS_SUPERVISOR: [
-    P.GUARDS_VIEW, P.GUARDS_TRANSFER,
+    // GUARDS_CREATE: operations supervisors recruit on the ground and were being
+    // granted this by hand. Listed here so "reset to defaults" keeps it and a
+    // fresh seed starts with it.
+    P.GUARDS_VIEW, P.GUARDS_CREATE, P.GUARDS_TRANSFER,
     P.CLIENTS_VIEW, P.SITES_VIEW,
     P.ROSTER_VIEW, P.ROSTER_BUILD, P.ROSTER_EDIT,
     P.ATTENDANCE_VIEW, P.ATTENDANCE_EDIT,
