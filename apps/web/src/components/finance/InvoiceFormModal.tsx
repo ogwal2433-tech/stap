@@ -2,12 +2,18 @@ import { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col, Table, Spinner, Alert, Badge } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useClientList } from '../../hooks/useClients';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useClientContracts } from '../../hooks/useContracts';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import { useGenerateInvoice } from '../../hooks/useFinance';
 import { invoicesApi } from '../../lib/finance.api';
 import type { ClientResponse, ContractResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
+
+/** Clients shown per search. Narrowing is by typing, not paging. */
+const CLIENT_RESULTS = 20;
+const SEARCH_DEBOUNCE_MS = 250;
 
 interface Props {
   onClose: () => void;
@@ -29,8 +35,23 @@ export default function InvoiceFormModal({ onClose }: Props) {
   const { showToast } = useToast();
   const generateMutation = useGenerateInvoice();
 
-  const { data: clientsRes } = useClientList();
-  const clients = clientsRes?.data ?? [];
+  // Clients are searched on the server as the user types. This used to load one
+  // unfiltered page — the first 20 by name — so every client after those could
+  // not be invoiced from here at all.
+  const [clientSearch, setClientSearch] = useState('');
+  const searchTerm = useDebouncedValue(clientSearch.trim(), SEARCH_DEBOUNCE_MS);
+  const { data: clientsRes, isLoading: clientsLoading } = useClientList({
+    search:    searchTerm || undefined,
+    limit:     CLIENT_RESULTS,
+    sortBy:    'clientName',
+    sortOrder: 'asc',
+  });
+  const clients     = clientsRes?.data ?? [];
+  const moreClients = clientsRes?.pagination?.hasNext ?? false;
+
+  // Held separately from clientId: once the search moves on, the chosen client
+  // is no longer in `clients`, and its name must stay in the field.
+  const [selectedClient, setSelectedClient] = useState<ClientResponse | null>(null);
 
   const [clientId,     setClientId]     = useState('');
   const [contractId,   setContractId]   = useState('');
@@ -134,12 +155,33 @@ export default function InvoiceFormModal({ onClose }: Props) {
           <Col md={6}>
             <Form.Group>
               <Form.Label className="fw-semibold small">Client <span className="text-danger">*</span></Form.Label>
-              <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                <option value="">Select client…</option>
-                {clients.map((c: ClientResponse) => (
-                  <option key={c.id} value={c.id}>{c.clientName}</option>
-                ))}
-              </Form.Select>
+              <SearchableSelect
+                options={clients.map((c: ClientResponse) => ({
+                  value:    c.id,
+                  label:    c.clientName,
+                  sublabel: c.systemId ?? undefined,
+                }))}
+                value={clientId}
+                selectedLabel={selectedClient?.clientName}
+                onChange={(id) => {
+                  // The contract, rate lines and preview reset through the
+                  // clientId effect above, for a new pick and a clear alike.
+                  setClientId(id);
+                  setSelectedClient(id ? clients.find((c) => c.id === id) ?? null : null);
+                }}
+                onSearchChange={setClientSearch}
+                isLoading={clientsLoading}
+                clearable
+                ariaLabel="Client"
+                placeholder="Search and select a client…"
+                searchPlaceholder="Type a client name, contact or ID…"
+                emptyText={clientSearch.trim() ? `No clients match "${clientSearch.trim()}"` : 'No clients yet'}
+                footer={moreClients && (
+                  <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
+                    Showing the first {CLIENT_RESULTS} — keep typing to narrow the list
+                  </div>
+                )}
+              />
             </Form.Group>
           </Col>
           <Col md={6}>
