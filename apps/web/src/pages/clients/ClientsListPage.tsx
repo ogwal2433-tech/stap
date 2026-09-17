@@ -8,6 +8,7 @@ import { useClientList, useClientSummary, useArchiveClient } from '../../hooks/u
 import ContractExpiryPanels from '../../components/clients/ContractExpiryPanels';
 import ClientImportModal from '../../components/clients/ClientImportModal';
 import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, type ClientResponse, type UserRole,
@@ -19,7 +20,6 @@ const CONTRACT_BADGE: Record<string, string> = {
   EXPIRED: 'danger',
 };
 
-const CLIENT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 /**
@@ -124,7 +124,9 @@ export default function ClientsListPage() {
 
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h4 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>Client Management</h4>
-        <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
+        {/* clients.create — what both the import and the create endpoints check,
+            so these buttons appear exactly when they will work. */}
+        <PermissionGuard permission="clients.create">
           <div className="d-flex gap-2">
             <Button variant="outline-primary" onClick={() => setShowImport(true)}>
               <i className="bi bi-file-earmark-spreadsheet me-1" />Import from Excel
@@ -136,7 +138,7 @@ export default function ClientsListPage() {
               <i className="bi bi-plus-lg me-1" />Add Client
             </Button>
           </div>
-        </RoleGuard>
+        </PermissionGuard>
       </div>
 
       {/* The import invalidates the client queries itself, so the list and the
@@ -313,11 +315,11 @@ export default function ClientsListPage() {
                         <Button size="sm" variant="outline-primary" onClick={() => navigate(`/clients/${c.id}`)}>
                           View
                         </Button>
-                        <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
+                        <PermissionGuard permission="clients.edit">
                           <Button size="sm" variant="outline-secondary" onClick={() => navigate(`/clients/${c.id}/edit`)}>
                             Edit
                           </Button>
-                        </RoleGuard>
+                        </PermissionGuard>
                         <RoleGuard allowedRoles={CLIENT_ARCHIVE_ROLES}>
                           {c.contractStatus !== 'INACTIVE' && (
                             <Button

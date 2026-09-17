@@ -103,6 +103,19 @@ export interface ClientContactResponse {
 
 // ── Client schemas ─────────────────────────────────────────────────────────────
 
+/** What a client's contact phone must reduce to: 10–15 digits, optionally a leading +. */
+export const CLIENT_PHONE_PATTERN = /^\+?[0-9]{10,15}$/;
+
+/**
+ * "0772 123 456", "+256-417-444444" and "(0772) 123456" are how phones are
+ * typed. Only digits and a leading + are kept, because Client.contactPhone is
+ * the MSISDN a mobile-money payment request charges — formatting there fails
+ * the payment rather than the save.
+ */
+export function normaliseClientPhone(phone: string): string {
+  return phone.replace(/[\s\-().]/g, '');
+}
+
 const _BaseClientSchema = z.object({
   clientName:     z.string().min(1).max(200),
   /**
@@ -111,7 +124,17 @@ const _BaseClientSchema = z.object({
    * NOT NULL and invoices read it.
    */
   contactPerson:  z.string().min(1).max(100).optional(),
-  contactPhone:   z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional(),
+  /**
+   * Derived from the primary contact card, which accepts a phone as typed. The
+   * two rules disagreed: a card phone with spaces, or none at all (every client
+   * from the Excel import), failed here on a field with no input of its own, so
+   * saving the client silently did nothing. Formatting is now stripped before
+   * the check, and blank means "no phone yet".
+   */
+  contactPhone:   z.string()
+    .transform(normaliseClientPhone)
+    .refine((p) => p === '' || CLIENT_PHONE_PATTERN.test(p), 'Enter 10 to 15 digits, e.g. +256772123456 — spaces and dashes are fine')
+    .optional(),
   email:          OptionalEmail,
   physicalAddress: z.string().min(1).max(500),
   billingAddress: z.string().max(500).optional(),

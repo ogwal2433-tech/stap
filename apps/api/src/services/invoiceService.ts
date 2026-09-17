@@ -1,3 +1,4 @@
+import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -676,10 +677,22 @@ class InvoiceService {
       throw new AppError('Invoice is not payable', 400);
     }
 
+    // The client's contact phone is the number charged. A client saved without
+    // one — every Excel import — or before phones were normalised would reach Yo
+    // as a blank or dashed MSISDN and fail with an error naming neither.
+    const msisdn = normaliseClientPhone(invoice.client.contactPhone ?? '');
+    if (!CLIENT_PHONE_PATTERN.test(msisdn)) {
+      throw new AppError(
+        `${invoice.client.clientName} has no valid phone number to charge. ` +
+        'Add one to their primary contact, then try again.',
+        400,
+      );
+    }
+
     const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'STAP';
     const resp = await yoPayments.requestPayment({
       amount:            invoice.totalAmount,
-      msisdn:            invoice.client.contactPhone,
+      msisdn,
       narrative:         `Invoice ${invoice.invoiceNumber} — STAP Security Ltd`,
       internalReference: `${prefix}-INV-${invoice.id}`,
     });

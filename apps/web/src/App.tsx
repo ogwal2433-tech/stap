@@ -69,7 +69,6 @@ const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, 
 const REQUISITION_ROLES: UserRole[] = INTERNAL_ROLES.filter(
   (r) => r !== ROLES.CLIENT && r !== ROLES.GUARD,
 );
-const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
 const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 // Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.
@@ -162,9 +161,11 @@ function App() {
 
               {/* Clients */}
               <Route path="/clients"          element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientsListPage /></PermissionGuard></L>} />
-              <Route path="/clients/new"      element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+              {/* Same permissions the API enforces. These used a role list, so a
+                  role granted clients.edit was refused the page. */}
+              <Route path="/clients/new"      element={<L><PermissionGuard permission="clients.create" fallback={<PermissionDenied permission="clients.create" />}><ClientFormPage /></PermissionGuard></L>} />
               <Route path="/clients/:id"      element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientDetailPage /></PermissionGuard></L>} />
-              <Route path="/clients/:id/edit" element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+              <Route path="/clients/:id/edit" element={<L><PermissionGuard permission="clients.edit" fallback={<PermissionDenied permission="clients.edit" />}><ClientFormPage /></PermissionGuard></L>} />
 
               {/* Complaints */}
               <Route path="/complaints"           element={<L><PermissionGuard permission="complaints.view" fallback={<PermissionDenied permission="complaints.view" />}><ComplaintsPage /></PermissionGuard></L>} />

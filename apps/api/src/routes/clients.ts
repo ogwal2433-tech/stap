@@ -131,13 +131,9 @@ router.use(authenticate);
 // a role list here meant revoking it only hid the nav item.
 const STAFF_ROLES = INTERNAL_ROLES as UserRole[];
 
-// Roles that can create/edit clients
-const CLIENT_WRITE_ROLES: UserRole[] = [
-  ROLES.DIRECTOR,
-  ROLES.ASSISTANT_MANAGER,
-  ROLES.MARKETING_HEAD,
-  ROLES.SALES,
-];
+// Creating and editing a client gate on clients.create and clients.edit. They
+// used a role list here, so granting either permission in the Roles page changed
+// nothing — a role holding clients.edit was still refused.
 
 // Roles that can manage client archiving
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
@@ -329,7 +325,7 @@ router.get(
 // ── POST / — create client ────────────────────────────────────────────────────
 router.post(
   '/',
-  requireRole(...CLIENT_WRITE_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_CREATE),
   validate(CreateClientSchema),
   asyncHandler(async (req, res) => {
     const client = await clientService.create(req.body, req.user!.userId);
@@ -350,7 +346,7 @@ router.get(
 // ── PATCH /:id — update client ────────────────────────────────────────────────
 router.patch(
   '/:id',
-  requireRole(...CLIENT_WRITE_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
   validate(UpdateClientSchema),
   asyncHandler(async (req, res) => {
     const client = await clientService.update(req.params.id, req.body, req.user!.userId);
@@ -361,10 +357,10 @@ router.patch(
 // ── Contact persons ───────────────────────────────────────────────────────────
 //
 // Gated exactly as the client itself is: contacts are client fields that grew
-// into rows, so whoever may edit a client may edit its contacts. PERMISSIONS
-// .CLIENTS_EDIT exists but currently gates nothing, and is held by a narrower
-// set than CLIENT_WRITE_ROLES — using it here would let Marketing Head create a
-// client with contacts and then be unable to add one to it.
+// into rows, so whoever may edit a client may edit its contacts. Marketing Head
+// and Sales, who reached these through the old role list, hold clients.edit by
+// default (migration 20260917000001) so they can still add a contact to a
+// client they created.
 
 // ── GET /:id/contacts — list a client's contacts ──────────────────────────────
 router.get(
@@ -379,7 +375,7 @@ router.get(
 // ── POST /:id/contacts — add a contact ────────────────────────────────────────
 router.post(
   '/:id/contacts',
-  requireRole(...CLIENT_WRITE_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
   validate(ClientContactSchema),
   asyncHandler(async (req, res) => {
     const contact = await clientService.addContact(req.params.id, req.body, req.user!.userId);
@@ -390,7 +386,7 @@ router.post(
 // ── PATCH /:id/contacts/:contactId — edit a contact ───────────────────────────
 router.patch(
   '/:id/contacts/:contactId',
-  requireRole(...CLIENT_WRITE_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
   validate(ClientContactSchema.partial()),
   asyncHandler(async (req, res) => {
     const contact = await clientService.updateContact(
@@ -403,7 +399,7 @@ router.patch(
 // ── DELETE /:id/contacts/:contactId — remove a contact ────────────────────────
 router.delete(
   '/:id/contacts/:contactId',
-  requireRole(...CLIENT_WRITE_ROLES),
+  requirePermission(PERMISSIONS.CLIENTS_EDIT),
   asyncHandler(async (req, res) => {
     await clientService.deleteContact(req.params.id, req.params.contactId, req.user!.userId);
     res.status(200).json({ success: true, message: 'Contact removed' });

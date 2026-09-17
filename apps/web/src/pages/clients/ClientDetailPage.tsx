@@ -23,7 +23,7 @@ import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
-import { useAuth, useHasPermission } from '../../context/AuthContext';
+import { useHasPermission } from '../../context/AuthContext';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -58,18 +58,16 @@ const SEVERITY_STYLE: Record<string, { bg?: string; text?: string; style?: React
   CRITICAL: { bg: 'danger' },
 };
 
-const CLIENT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR];
 const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 export default function ClientDetailPage() {
   const canSeeContracts = useHasPermission('contracts.view');
-  const { user } = useAuth();
-  // The same list the Edit Client button uses, and the same one the contact
-  // endpoints enforce — contacts are part of the client, not a separate thing
-  // to hold a separate opinion about.
-  const canEditClient = CLIENT_WRITE_ROLES.includes(user?.role as UserRole);
+  // The permission the Edit button, the edit page and the contact endpoints all
+  // check — contacts are part of the client, not a separate thing to hold a
+  // separate opinion about.
+  const canEditClient = useHasPermission('clients.edit');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -171,11 +169,11 @@ export default function ClientDetailPage() {
           )}
         </div>
         <ButtonGroup size="sm">
-          <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
+          <PermissionGuard permission="clients.edit">
             <Button variant="outline-primary" onClick={() => navigate(`/clients/${id}/edit`)}>
               <i className="bi bi-pencil me-1" />Edit
             </Button>
-          </RoleGuard>
+          </PermissionGuard>
           <RoleGuard allowedRoles={CLIENT_ARCHIVE_ROLES}>
             {client.contractStatus !== 'INACTIVE' && (
               <Button variant="outline-danger" onClick={handleArchive}>Archive</Button>

@@ -163,7 +163,9 @@ describe('confirm', () => {
       .set('Authorization', token).send({ rows: [row()] });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.imported).toBe(1);
+    // The row note says why a row was not imported — skipped as already on
+    // file, or the error that failed it — so print it on failure.
+    expect(res.body.data.imported, JSON.stringify(res.body.data.rows)).toBe(1);
     expect(res.body.data.contractsCreated).toBe(1);
 
     const client = await prisma.client.findFirstOrThrow({
@@ -198,8 +200,9 @@ describe('confirm', () => {
   });
 
   it('maps a sheet status of "Expired" onto both records', async () => {
-    await request(app).post(`${BASE}/import/confirm`).set('Authorization', token)
+    const res = await request(app).post(`${BASE}/import/confirm`).set('Authorization', token)
       .send({ rows: [row({ clientName: `${PREFIX} Expired Ltd`, contractStatus: 'Expired' })] });
+    expect(res.body.data.contractsCreated, JSON.stringify(res.body.data.rows)).toBe(1);
 
     const client = await prisma.client.findFirstOrThrow({
       where:   { clientName: `${PREFIX} Expired Ltd` },

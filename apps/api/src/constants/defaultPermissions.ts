@@ -176,8 +176,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
 
   // Everything marketing: every lead, targets, bids, all reports. Also
   // staff.view, so a head can see the sales officers leads are assigned to.
+  // Marketing Head and Sales win clients, so they create and edit them. They did
+  // that through a role list on the client routes until those moved onto
+  // clients.create and clients.edit; granted here so the move took nothing away.
   MARKETING_HEAD: [
-    P.CLIENTS_VIEW,
+    P.CLIENTS_VIEW, P.CLIENTS_CREATE, P.CLIENTS_EDIT,
     P.MARKETING_VIEW, P.MARKETING_PROSPECTS, P.MARKETING_BIDS,
     P.MARKETING_TARGETS, P.MARKETING_REPORTS,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
@@ -193,7 +196,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   // reports and no export — the pipeline this role can see is its own, and an
   // export is how that boundary would otherwise be walked around.
   SALES: [
-    P.CLIENTS_VIEW,
+    P.CLIENTS_VIEW, P.CLIENTS_CREATE, P.CLIENTS_EDIT,
     P.MARKETING_VIEW, P.MARKETING_PROSPECTS,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW,
