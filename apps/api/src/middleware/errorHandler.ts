@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 import { errorLogger } from '../services/errorLogger';
+import { logSecurityEvent } from '../lib/securityLog';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -22,6 +23,16 @@ export function errorHandler(
   // Persist to the database (fire-and-forget — never blocks the response).
   // 5xx are real bugs; 4xx (except 404, which is just noise) are worth a WARN.
   const statusCode = err.statusCode ?? err.status ?? 500;
+
+  // Refusals raised outside the permission and role middleware — a service's
+  // own check, client isolation, 2FA enforcement. The middleware records its
+  // own, with the permission that was missing, and marks the error, so this
+  // picks up only the rest. 401s are not recorded here: /auth/refresh answers
+  // 401 to every signed-out visitor, and the ones that matter are recorded by
+  // authenticate.
+  if (statusCode === 403 && !err?.securityLogged) {
+    logSecurityEvent(req, 'ACCESS_DENIED', { reason: err?.message ?? null });
+  }
   if (statusCode >= 500) {
     void errorLogger.logFromRequest(err, req, 'ERROR');
   } else if (statusCode >= 400 && statusCode !== 404) {

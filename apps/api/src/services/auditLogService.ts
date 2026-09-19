@@ -2,6 +2,12 @@ import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
 import { dateRangeFilter } from '../lib/dateUtils';
 import type { AuditLogQuery, AuditLogEntry, AuditLogListResult } from '@stap/shared';
+import { SECURITY_ACTIONS } from '@stap/shared';
+import type { SecurityLogQuery, SecurityLogResult } from '@stap/shared';
+
+/** How far back the Security Log's summary cards look. */
+const SUMMARY_DAYS = 7;
+const DENIALS = ['PERMISSION_DENIED', 'ROLE_DENIED', 'ACCESS_DENIED'];
 
 const INCLUDE = {
   user: { select: { id: true, name: true, role: true } },
@@ -83,6 +89,65 @@ class AuditLogService {
       pages: Math.max(1, Math.ceil(total / limit)),
       actionTypes: actions.map(a => a.action),
       entityTypes: dedupeCaseInsensitive(entities.map(e => e.entity)),
+    };
+  }
+
+  /** Refused requests and sign-in failures, newest first, with a short summary. */
+  async securityLog(query: SecurityLogQuery): Promise<SecurityLogResult> {
+    const { page, limit } = query;
+    const where: import('@prisma/client').Prisma.AuditLogWhereInput = {
+      action: query.action ?? { in: [...SECURITY_ACTIONS] },
+    };
+    if (query.role)   where.role   = query.role;
+    if (query.userId) where.userId = query.userId;
+    const createdAt = dateRangeFilter(query.dateFrom, query.dateTo, true);
+    if (createdAt) where.createdAt = createdAt;
+
+    const since = new Date(Date.now() - SUMMARY_DAYS * 86_400_000);
+
+    const [rows, total, byRole, byAction] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip:    (page - 1) * limit,
+        take:    limit,
+      }),
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.groupBy({
+        by:     ['role'],
+        where:  { action: { in: DENIALS }, createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+      prisma.auditLog.groupBy({
+        by:     ['action'],
+        where:  { action: { in: [...SECURITY_ACTIONS] }, createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return {
+      data: rows.map((r) => ({
+        id:        r.id,
+        action:    r.action,
+        createdAt: r.createdAt.toISOString(),
+        user:      r.user ? { id: r.user.id, name: r.user.name, email: r.user.email } : null,
+        role:      r.role,
+        required:  r.required,
+        method:    r.method,
+        path:      r.path,
+        ipAddress: r.ipAddress,
+        userAgent: r.userAgent,
+        reason:    (r.newValue as { reason?: string | null } | null)?.reason ?? null,
+      })),
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1,
+      summary: {
+        days:     SUMMARY_DAYS,
+        byRole:   byRole.map((g) => ({ role: g.role, count: g._count._all })).sort((a, b) => b.count - a.count),
+        byAction: byAction.map((g) => ({ action: g.action, count: g._count._all })).sort((a, b) => b.count - a.count),
+      },
     };
   }
 

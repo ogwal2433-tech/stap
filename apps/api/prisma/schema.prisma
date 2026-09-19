@@ -1103,6 +1103,17 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // ── Security events ─────────────────────────────────────────────────────────
+  /// Set on refused requests (see lib/securityLog.ts): the request, the caller's
+  /// role at the time, and the permission or role it lacked. Null elsewhere.
+  method   String?
+  path     String?
+  role     String?
+  required String?
+
+  @@index([action, createdAt])
+  @@index([createdAt])
 }
 
 model SystemError {

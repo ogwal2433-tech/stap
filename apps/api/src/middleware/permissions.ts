@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import prisma from '../db/prisma';
 import { ForbiddenError, UnauthorisedError } from '../errors/AppError';
 import type { PermissionKey } from '../constants/permissions';
+import { logSecurityEvent, logged } from '../lib/securityLog';
 
 /**
  * Permission checks on the hot path.
@@ -52,7 +53,8 @@ export function requirePermission(...keys: PermissionKey[]): RequestHandler {
       const held    = await getRolePermissions(req.user.role);
       const missing = keys.filter((k) => !held.has(k));
       if (missing.length) {
-        return next(new ForbiddenError(`Access denied. Missing permission: ${label(missing[0])}.`));
+        logSecurityEvent(req, 'PERMISSION_DENIED', { required: missing.join(', ') });
+        return next(logged(new ForbiddenError(`Access denied. Missing permission: ${label(missing[0])}.`)));
       }
       next();
     } catch (err) {
@@ -68,7 +70,8 @@ export function requireAnyPermission(...keys: PermissionKey[]): RequestHandler {
     try {
       const held = await getRolePermissions(req.user.role);
       if (!keys.some((k) => held.has(k))) {
-        return next(new ForbiddenError('Access denied. You do not have permission to perform this action.'));
+        logSecurityEvent(req, 'PERMISSION_DENIED', { required: keys.join(' or ') });
+        return next(logged(new ForbiddenError('Access denied. You do not have permission to perform this action.')));
       }
       next();
     } catch (err) {
