@@ -1,10 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { auditLogService } from '../services/auditLogService';
-import { ROLES, AuditLogQuerySchema } from '@stap/shared';
+import { AuditLogQuerySchema, SecurityLogQuerySchema } from '@stap/shared';
 
 /**
  * Read-only view of the audit trail.
@@ -15,9 +16,10 @@ import { ROLES, AuditLogQuerySchema } from '@stap/shared';
  */
 const router: IRouter = Router();
 
-const AUDIT_ADMIN_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
-
-router.use(authenticate, requireRole(...AUDIT_ADMIN_ROLES));
+// audit.log, the permission the page already asks for. This used a role list
+// of Director, Assistant Manager and Administrator — the same three roles that
+// hold audit.log today, so nobody's access changes; granting it now works.
+router.use(authenticate, requirePermission(PERMISSIONS.AUDIT_LOG));
 
 // GET /audit-logs — filtered, paginated trail
 router.get(
@@ -26,6 +28,16 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const data = await auditLogService.list(req.query as never);
     res.json({ success: true, data });
+  }),
+);
+
+// GET /audit-logs/security — refused requests and sign-in failures.
+// Before /:id, or "security" is read as an entry id.
+router.get(
+  '/security',
+  validateQuery(SecurityLogQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json({ success: true, data: await auditLogService.securityLog(req.query as never) });
   }),
 );
 

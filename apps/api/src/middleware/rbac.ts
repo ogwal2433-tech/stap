@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from 'express';
 import { hasMinimumRole, type UserRole } from '@stap/shared';
 import { ForbiddenError, UnauthorisedError } from '../errors/AppError';
+import { logSecurityEvent, logged } from '../lib/securityLog';
 
 /**
  * Middleware that enforces role-based access.
@@ -16,7 +17,8 @@ export function requireRole(...allowedRoles: UserRole[]): RequestHandler {
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      return next(new ForbiddenError());
+      logSecurityEvent(req, 'ROLE_DENIED', { required: allowedRoles.join(' | ') });
+      return next(logged(new ForbiddenError()));
     }
 
     next();
@@ -38,7 +40,8 @@ export function requireMinimumRole(minimumRole: UserRole): RequestHandler {
     }
 
     if (!hasMinimumRole(req.user.role, minimumRole)) {
-      return next(new ForbiddenError());
+      logSecurityEvent(req, 'ROLE_DENIED', { required: `${minimumRole} or above` });
+      return next(logged(new ForbiddenError()));
     }
 
     next();
@@ -78,7 +81,8 @@ export function requireOwnership(
         return next();
       }
 
-      next(new ForbiddenError());
+      logSecurityEvent(req, 'ACCESS_DENIED', { required: 'owner or DIRECTOR' });
+      next(logged(new ForbiddenError()));
     } catch (err) {
       next(err);
     }

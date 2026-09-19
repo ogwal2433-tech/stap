@@ -23,6 +23,11 @@ export interface AuditEntry {
   newValue?:  unknown;
   ipAddress?: string | null;
   userAgent?: string | null;
+  /** Refused requests only — see lib/securityLog.ts. */
+  method?:    string | null;
+  path?:      string | null;
+  role?:      string | null;
+  required?:  string | null;
 }
 
 /** Prisma's code for a foreign key constraint failure. */
@@ -42,6 +47,10 @@ export async function writeAuditLog(entry: AuditEntry): Promise<void> {
   if (entry.newValue  !== undefined) data.newValue  = entry.newValue;
   if (entry.ipAddress !== undefined) data.ipAddress = entry.ipAddress;
   if (entry.userAgent !== undefined) data.userAgent = entry.userAgent;
+  if (entry.method    !== undefined) data.method    = entry.method;
+  if (entry.path      !== undefined) data.path      = entry.path;
+  if (entry.role      !== undefined) data.role      = entry.role;
+  if (entry.required  !== undefined) data.required  = entry.required;
 
   try {
     await prisma.auditLog.create({ data: data as never });

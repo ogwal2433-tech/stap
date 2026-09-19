@@ -56,6 +56,7 @@ const ShiftHandoverPage            = lazyWithReload(() => import('@/pages/contro
 const SystemErrorsPage             = lazyWithReload(() => import('@/pages/admin/SystemErrorsPage'), 'SystemErrorsPage');
 const AuditLogPage                 = lazyWithReload(() => import('@/pages/admin/AuditLogPage'), 'AuditLogPage');
 const DeletedRecordsPage           = lazyWithReload(() => import('@/pages/admin/DeletedRecordsPage'), 'DeletedRecordsPage');
+const SecurityLogPage              = lazyWithReload(() => import('@/pages/admin/SecurityLogPage'), 'SecurityLogPage');
 const StaffPage                    = lazyWithReload(() => import('@/pages/staff/StaffPage'), 'StaffPage');
 
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
@@ -209,6 +210,7 @@ function App() {
               <Route path="/admin/audit-log" element={<L><PermissionGuard permission="audit.log" fallback={<PermissionDenied permission="audit.log" />}><AuditLogPage /></PermissionGuard></L>} />
               {/* Gates itself: it needs any one of five delete permissions. */}
               <Route path="/admin/deleted" element={<L><DeletedRecordsPage /></L>} />
+              <Route path="/admin/security-log" element={<L><PermissionGuard permission="audit.log" fallback={<PermissionDenied permission="audit.log" />}><SecurityLogPage /></PermissionGuard></L>} />
             </Route>
           </Route>
 
