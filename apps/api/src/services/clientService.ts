@@ -152,7 +152,7 @@ class ClientService {
         orderBy: { [sortBy]: sortOrder },
         include: {
           contacts: { orderBy: CONTACT_ORDER },
-          _count: { select: { sites: true, contracts: true, complaints: true } },
+          _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
         },
       }),
       prisma.client.count({ where }),
@@ -186,15 +186,15 @@ class ClientService {
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
-        sites: { orderBy: { siteName: 'asc' } },
-        contracts: { orderBy: { createdAt: 'desc' }, take: 3 },
+        sites: { where: { deletedAt: null }, orderBy: { siteName: 'asc' } },
+        contracts: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 3 },
         complaints: {
           where: { status: 'OPEN' },
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 
@@ -281,7 +281,7 @@ class ClientService {
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
       });
 
@@ -390,7 +390,7 @@ class ClientService {
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 
@@ -424,7 +424,7 @@ class ClientService {
       data: { contractStatus: 'INACTIVE' },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 

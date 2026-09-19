@@ -89,6 +89,7 @@
  */
 import { Router, type IRouter } from 'express';
 import { clientService } from '../services/clientService';
+import { softDeleteService } from '../services/softDeleteService';
 import { clientImportService } from '../services/clientImportService';
 import { accessService } from '../services/accessService';
 import { excelImportUpload } from '../config/multer';
@@ -275,12 +276,24 @@ router.patch(
 );
 
 // ── DELETE /sites/:siteId — delete site ───────────────────────────────────────
+// Soft: the site keeps its attendance and deployment history, and can be
+// restored from Deleted records. Refused while guards are still deployed there.
 router.delete(
   '/sites/:siteId',
-  requireRole(ROLES.DIRECTOR),
+  requirePermission(PERMISSIONS.SITES_DELETE),
   asyncHandler(async (req, res) => {
-    await siteService.delete(req.params.siteId, req.user!.userId);
-    res.status(200).json({ success: true, message: 'Site removed' });
+    const data = await softDeleteService.deleteSite(req.params.siteId, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /sites/:siteId/restore ───────────────────────────────────────────────
+router.post(
+  '/sites/:siteId/restore',
+  requirePermission(PERMISSIONS.SITES_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.restoreSite(req.params.siteId, req.user!.userId);
+    res.status(200).json({ success: true, data });
   }),
 );
 
@@ -403,6 +416,28 @@ router.delete(
   asyncHandler(async (req, res) => {
     await clientService.deleteContact(req.params.id, req.params.contactId, req.user!.userId);
     res.status(200).json({ success: true, message: 'Contact removed' });
+  }),
+);
+
+// ── DELETE /:id — soft-delete a client with nothing live underneath ─────────
+// Refused while it has sites, an open contract, an unpaid invoice or an active
+// portal login. Its paid history stays visible under its name.
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.CLIENTS_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.deleteClient(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /:id/restore ─────────────────────────────────────────────────────────
+router.post(
+  '/:id/restore',
+  requirePermission(PERMISSIONS.CLIENTS_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.restoreClient(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
   }),
 );
 

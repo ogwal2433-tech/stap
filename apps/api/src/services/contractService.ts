@@ -459,13 +459,6 @@ class ContractService {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
 
-  async delete(id: string): Promise<void> {
-    const contract = await prisma.contract.findUnique({ where: { id } });
-    if (!contract) throw new NotFoundError('Contract not found');
-
-    await prisma.contract.delete({ where: { id } });
-  }
-
   // ── Private: compute status ────────────────────────────────────────────────
 
   private computeStatus(start: Date, end: Date): 'ACTIVE' | 'EXPIRING' | 'EXPIRED' {

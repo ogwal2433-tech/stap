@@ -6,6 +6,7 @@ import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
 import { useSystemErrorStats } from '../../hooks/useSystemErrors';
 import { serviceRequestsApi } from '../../lib/serviceRequests.api';
+import { DELETE_PERMISSIONS } from '../../lib/deletedRecords.api';
 import RoleGuard from '../RoleGuard';
 import PermissionGuard from '../PermissionGuard';
 import InitialsAvatar from '../ui/InitialsAvatar';
@@ -48,6 +49,8 @@ interface NavItem {
    * list beside one only invites the two to drift apart.
    */
   permission?: string;
+  /** Shown when the user holds any one of these — for a page gathering several modules. */
+  anyPermission?: string[];
   roles?: UserRole[];
 }
 
@@ -124,6 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: 'bi-plug-fill',           label: 'Integrations', to: '/settings/integrations', roles: [ROLES.DIRECTOR] as UserRole[], permission: 'settings.edit' },
       { icon: 'bi-exclamation-triangle-fill', label: 'System Errors', to: '/admin/errors', roles: ERROR_ADMIN_ROLES as UserRole[] , permission: 'system.errors'},
       { icon: 'bi-search',              label: 'Audit Log',     to: '/admin/audit-log', roles: ERROR_ADMIN_ROLES as UserRole[] , permission: 'audit.log'},
+      { icon: 'bi-trash3',              label: 'Deleted Records', to: '/admin/deleted', anyPermission: DELETE_PERMISSIONS },
     ],
   },
 ];
@@ -147,7 +151,7 @@ const ALL_NAV_PATHS = new Set([
   '/finance', '/inventory', '/requisitions', '/settings/scheduled-jobs',
   '/hr', '/reports', '/settings', '/settings/roles', '/settings/integrations', '/staff', '/notifications', '/guns', '/marketing',
   '/guards/dashboard', '/guards/import',
-  '/attendance/dashboard', '/admin/errors', '/admin/audit-log',
+  '/attendance/dashboard', '/admin/errors', '/admin/audit-log', '/admin/deleted',
 ]);
 
 const ROLE_BADGE: Record<string, string> = {
@@ -172,6 +176,11 @@ const ROLE_BADGE: Record<string, string> = {
  * what stops the sidebar offering a page the router then refuses.
  */
 function NavGate({ item, children }: { item: NavItem; children: React.ReactNode }) {
+  const { permissions, isLoading } = useAuth();
+  if (item.anyPermission) {
+    if (isLoading) return null;
+    return item.anyPermission.some((p) => permissions.includes(p)) ? <>{children}</> : null;
+  }
   if (item.permission) {
     return <PermissionGuard permission={item.permission}>{children}</PermissionGuard>;
   }

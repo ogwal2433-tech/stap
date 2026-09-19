@@ -44,14 +44,15 @@ function toZoneResponse(z: Record<string, unknown>): ZoneResponse {
 const zoneInclude = {
   supervisor: { select: { id: true, name: true, role: true } },
   alternate:  { select: { id: true, name: true, role: true } },
-  _count:     { select: { sites: true } },
+  _count:     { select: { sites: { where: { deletedAt: null } } } },
 } as const;
 
 const zoneDetailInclude = {
   supervisor: { select: { id: true, name: true, role: true } },
   alternate:  { select: { id: true, name: true, role: true } },
-  _count:     { select: { sites: true } },
+  _count:     { select: { sites: { where: { deletedAt: null } } } },
   sites: {
+    where:  { deletedAt: null },
     select: {
       id: true, siteName: true, location: true,
       siteType: true, guardsRequired: true,
@@ -148,7 +149,7 @@ class ZoneService {
             select: {
               clientName: true,
               contracts:  {
-                where:   { status: 'ACTIVE' },
+                where:   { status: 'ACTIVE', deletedAt: null },
                 orderBy: { contractStart: 'desc' },
                 take:    1,
                 select:  { shiftPattern: true },
@@ -243,6 +244,7 @@ class ZoneService {
         supervisor: { select: { id: true, name: true, role: true } },
         alternate:  { select: { id: true, name: true, role: true } },
         sites: {
+          where:  { deletedAt: null },
           select: {
             id:                  true,
             siteName:            true,

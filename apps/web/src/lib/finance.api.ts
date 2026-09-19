@@ -90,6 +90,11 @@ export const invoicesApi = {
       .then((r) => r.data.data);
   },
 
+  /** Voids, never deletes: the invoice stays on file marked VOID with the reason. */
+  voidInvoice(invoiceId: string, reason: string): Promise<{ id: string; name: string }> {
+    return api.post(`/finance/invoices/${invoiceId}/void`, { reason }).then((r) => r.data.data);
+  },
+
   getARAgingReport(): Promise<ARAgingReport> {
     return api
       .get<{ success: boolean; data: ARAgingReport }>('/finance/invoices/aging')

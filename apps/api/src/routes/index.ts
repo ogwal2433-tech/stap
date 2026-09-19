@@ -28,6 +28,7 @@ import { marketingRouter } from './marketing';
 import { staffRouter } from './staff';
 import permissionsRouter from './permissions';
 import rolesRouter from './roles';
+import { deletedRecordsRouter } from './deletedRecords';
 import sitesRouter from './sites';
 
 const router: IRouter = Router();
@@ -43,6 +44,7 @@ router.use('/users', usersRouter);
 router.use('/staff', staffRouter);
 router.use('/permissions', permissionsRouter);
 router.use('/roles', rolesRouter);
+router.use('/deleted-records', deletedRecordsRouter);
 router.use('/sites', sitesRouter);
 router.use('/finance', financeRouter);
 router.use('/requisitions', requisitionsRouter);

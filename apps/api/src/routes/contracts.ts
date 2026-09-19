@@ -62,6 +62,7 @@
  */
 import { Router, type IRouter } from 'express';
 import { contractService } from '../services/contractService';
+import { softDeleteService } from '../services/softDeleteService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { requirePermission } from '../middleware/permissions';
@@ -192,14 +193,24 @@ router.patch(
 );
 
 // ── DELETE /:id — delete contract ─────────────────────────────────────────────
+// Soft. The hard delete this replaces cut every invoice loose from its contract
+// and destroyed the rate lines and amendment history. Refused with unpaid invoices.
 router.delete(
   '/:id',
-  requireRole(ROLES.DIRECTOR),
+  requirePermission(PERMISSIONS.CONTRACTS_DELETE),
   asyncHandler(async (req, res) => {
-    // Check no invoices linked (Sprint 3 Finance will add invoice model)
-    // For now, just proceed with deletion
-    await contractService.delete(req.params.id);
-    res.status(200).json({ success: true });
+    const data = await softDeleteService.deleteContract(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /:id/restore ─────────────────────────────────────────────────────────
+router.post(
+  '/:id/restore',
+  requirePermission(PERMISSIONS.CONTRACTS_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.restoreContract(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
   }),
 );
 

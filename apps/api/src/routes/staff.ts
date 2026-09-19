@@ -12,6 +12,9 @@ import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { staffService } from '../services/staffService';
+import { softDeleteService } from '../services/softDeleteService';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 
 const router: IRouter = Router();
 
@@ -146,6 +149,30 @@ router.patch(
   validate(DeactivateStaffSchema),
   asyncHandler(async (req, res) => {
     const data = await staffService.deactivate(req.params.id, req.body.reason, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── DELETE /:id — delete an account created by mistake ────────────────────────
+// Only one that has never signed in and has nothing recorded against it. Anyone
+// else is deactivated, which keeps their name on everything they touched.
+router.delete(
+  '/:id',
+  authenticate,
+  requirePermission(PERMISSIONS.STAFF_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.deleteStaff(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /:id/restore ─────────────────────────────────────────────────────────
+router.post(
+  '/:id/restore',
+  authenticate,
+  requirePermission(PERMISSIONS.STAFF_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.restoreStaff(req.params.id, req.user!.userId);
     res.status(200).json({ success: true, data });
   }),
 );

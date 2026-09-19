@@ -171,6 +171,7 @@ import fs from 'fs';
 import multer from 'multer';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
+import { softDeleteService } from '../services/softDeleteService';
 import { accessService } from '../services/accessService';
 import { bulkImportService } from '../services/bulkImportService';
 import { renderToPdf } from '../lib/pdfBase';
@@ -328,6 +329,28 @@ router.post(
       req.user!.userId,
     );
     res.status(200).json({ success: true, data: result });
+  }),
+);
+
+// ── DELETE /:id — delete a guard added by mistake ─────────────────────────────
+// Only a guard with no history. Anyone who has worked is terminated instead, so
+// their deployments, pay and attendance keep a record to point at.
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.GUARDS_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.deleteGuard(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
+// ── POST /:id/restore ─────────────────────────────────────────────────────────
+router.post(
+  '/:id/restore',
+  requirePermission(PERMISSIONS.GUARDS_DELETE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.restoreGuard(req.params.id, req.user!.userId);
+    res.status(200).json({ success: true, data });
   }),
 );
 

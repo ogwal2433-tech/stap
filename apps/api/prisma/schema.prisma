@@ -197,6 +197,19 @@ model User {
   clientId String?
   client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
 
+
+  // ── Soft delete ─────────────────────────────────────────────────────────────
+  /// Only a staff record created by mistake can be deleted — never signed in, no
+  /// recorded actions. Anyone with history is deactivated instead.
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedBy     User?      @relation("UserDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedUsers  User[]     @relation("UserDeletedBy")
+  deletedClients   Client[]   @relation("ClientDeletedBy")
+  deletedGuards    Guard[]    @relation("GuardDeletedBy")
+  deletedContracts Contract[] @relation("ContractDeletedBy")
+  deletedSites     Site[]     @relation("SiteDeletedBy")
+  voidedInvoices   Invoice[]  @relation("InvoiceVoidedBy")
   @@index([role, status])
 }
 
@@ -346,6 +359,13 @@ model Guard {
   associates         GuardAssociate[]
   transfers          GuardTransfer[]
   promotions         GuardPromotion[]
+
+  // ── Soft delete ─────────────────────────────────────────────────────────────
+  /// Set when the record is deleted. Every read skips it unless the query names
+  /// deletedAt itself (see db/prisma.ts); restore clears it. The row is never removed.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("GuardDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 }
 
 /// One row per rank change. Rank and salary names are snapshotted rather than
@@ -515,6 +535,13 @@ model Client {
   carryForwards   InvoiceCarryForward[]
   wonFromProspect ProspectiveClient?    @relation("ProspectConversion")
   contacts        ClientContact[]
+
+  // ── Soft delete ─────────────────────────────────────────────────────────────
+  /// Set when the record is deleted. Every read skips it unless the query names
+  /// deletedAt itself (see db/prisma.ts); restore clears it. The row is never removed.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ClientDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 }
 
 /// Everyone worth ringing at a client company.
@@ -596,6 +623,13 @@ model Site {
   serviceRequests   ServiceRequest[]
   gunsPresent       Gun[]               @relation("GunCurrentSite")
   gunMovements      GunMovement[]       @relation("GunMovementSite")
+
+  // ── Soft delete ─────────────────────────────────────────────────────────────
+  /// Set when the record is deleted. Every read skips it unless the query names
+  /// deletedAt itself (see db/prisma.ts); restore clears it. The row is never removed.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("SiteDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 }
 
 // ── Marketing ─────────────────────────────────────────────────────────────────
@@ -861,6 +895,13 @@ model Contract {
   invoices   Invoice[]
   guardRates ContractGuardRate[]
   amendments ContractAmendment[]
+
+  // ── Soft delete ─────────────────────────────────────────────────────────────
+  /// Set when the record is deleted. Every read skips it unless the query names
+  /// deletedAt itself (see db/prisma.ts); restore clears it. The row is never removed.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ContractDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 }
 
 /// One recorded change to a signed contract.
@@ -1131,7 +1172,7 @@ model Invoice {
   paidAmount         Int       @default(0)
   /// totalAmount - paidAmount, floored at 0.
   outstandingBalance Int       @default(0)
-  status             String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID
+  status             String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID | VOID
   pdfPath            String?
   yoPaymentRef       String?
   dueDate            DateTime
@@ -1148,6 +1189,14 @@ model Invoice {
   lineItems       InvoiceLineItem[]
   carriedFrom     InvoiceCarryForward[] @relation("CarryForwardSource")
   carriedOnto     InvoiceCarryForward[] @relation("CarryForwardTarget")
+
+  // ── Void ────────────────────────────────────────────────────────────────────
+  /// An invoice is voided, never deleted: it stays visible marked VOID and drops
+  /// out of balances, AR and revenue. Refused once any payment is recorded.
+  voidedAt   DateTime?
+  voidedById String?
+  voidedBy   User?     @relation("InvoiceVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason String?
 }
 
 /// An unpaid balance rolled from one invoice onto the client's next one.

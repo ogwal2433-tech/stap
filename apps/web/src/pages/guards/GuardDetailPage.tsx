@@ -14,6 +14,8 @@ import { lettersApi } from '../../lib/letters.api';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import PermissionGuard from '../../components/PermissionGuard';
+import DeleteConfirmModal from '../../components/shared/DeleteConfirmModal';
+import { useQueryClient } from '@tanstack/react-query';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import DocumentUploadModal from '../../components/guards/DocumentUploadModal';
@@ -326,6 +328,9 @@ export default function GuardDetailPage() {
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const { showToast: toast } = useToast();
+  const queryClient = useQueryClient();
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [deployPage, setDeployPage] = useState(1);
 
@@ -450,6 +455,24 @@ export default function GuardDetailPage() {
               </Dropdown>
             )}
           </PermissionGuard>
+          <PermissionGuard permission="guards.delete">
+            <Button variant="outline-danger" onClick={() => setShowDelete(true)}>
+              Delete
+            </Button>
+          </PermissionGuard>
+          <DeleteConfirmModal
+            show={showDelete}
+            onHide={() => setShowDelete(false)}
+            entityType="guard"
+            entityName={`${guard.firstName} ${guard.lastName}`}
+            warning="Only a guard added by mistake can be deleted — one with no deployments, attendance, pay or other history. Anyone who has worked is terminated instead."
+            onConfirm={async () => {
+              const r = await guardsApi.remove(id!);
+              toast(`${r.name} deleted. It can be restored from Deleted records.`, 'success');
+              queryClient.invalidateQueries({ queryKey: ['guards'] });
+              navigate('/guards');
+            }}
+          />
           {/* Stays on roles: the nearest permission is guards.documents, which the
                        Administrator does not hold, so mapping it would take ID-card printing away. */}
           <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as UserRole[]}>
