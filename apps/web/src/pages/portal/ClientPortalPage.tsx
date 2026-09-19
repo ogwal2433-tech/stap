@@ -12,6 +12,8 @@ import type { ComplaintResponse, InvoiceResponse } from '@stap/shared';
 
 const STA_BADGE: Record<string, string> = {
   PENDING: 'warning', OVERDUE: 'danger', PAID: 'success', PARTIALLY_PAID: 'info',
+  // Voided by STAP: kept on the client's statement, owes nothing.
+  VOID: 'secondary',
 };
 
 /** The statuses the server will accept a payment against. */

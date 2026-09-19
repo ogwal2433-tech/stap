@@ -9,9 +9,12 @@ import {
   useResetStaffPassword,
 } from '../../hooks/useStaff';
 import { useRoles } from '../../hooks/useRoles';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
+import { staffApi } from '../../lib/staff.api';
+import DeleteConfirmModal from '../shared/DeleteConfirmModal';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatRelativeDate, formatDateTime } from '../../lib/dateUtils';
 import InitialsAvatar from '../ui/InitialsAvatar';
 
@@ -58,6 +61,9 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
   const [editing, setEditing]               = useState(false);
   const [formError, setFormError]           = useState<string | null>(null);
   const [showDeactivate, setShowDeactivate] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const canDelete   = useHasPermission('staff.delete');
+  const queryClient = useQueryClient();
   const [reason, setReason]                 = useState('');
   const [form, setForm] = useState({
     name: '', phone: '', department: '', jobTitle: '',
@@ -467,6 +473,19 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
               </div>
             )}
 
+            <DeleteConfirmModal
+              show={showDelete}
+              onHide={() => setShowDelete(false)}
+              entityType="staff member"
+              entityName={staff.name}
+              warning="Only an account created by mistake can be deleted — one that has never signed in. Anyone else is deactivated instead, which keeps their name on what they did."
+              onConfirm={async () => {
+                const r = await staffApi.remove(staffId);
+                showToast(`${r.name} deleted. It can be restored from Deleted records.`, 'success');
+                queryClient.invalidateQueries({ queryKey: ['staff'] });
+                handleClose();
+              }}
+            />
             {/* ── Account actions ────────────────────────────────────────── */}
             {canControlAccount && (
               <>
@@ -544,6 +563,11 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                     >
                       {resetPass.isPending ? <Spinner size="sm" animation="border" /> : '🔑 Reset Password'}
                     </Button>
+                    {canDelete && !isSelf && (
+                      <Button size="sm" variant="outline-danger" onClick={() => setShowDelete(true)} disabled={busy}>
+                        🗑️ Delete
+                      </Button>
+                    )}
                   </div>
                 )}
 

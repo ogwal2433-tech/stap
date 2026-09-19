@@ -17,6 +17,8 @@ import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import FeeIncrementModal from '../../components/finance/FeeIncrementModal';
+import VoidInvoiceModal from '../../components/finance/VoidInvoiceModal';
+import PermissionGuard from '../../components/PermissionGuard';
 import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
@@ -33,6 +35,8 @@ function statusBadge(status: string) {
     PAID:      'success',
     OVERDUE:   'danger',
     CANCELLED: 'secondary',
+    // Voided, not deleted: stays on file and owes nothing.
+    VOID:      'dark',
   };
   return (
     <Badge bg={map[status] ?? 'secondary'} text={status === 'PENDING' ? 'dark' : undefined}>
@@ -118,6 +122,7 @@ function InvoicesTab() {
   const [showCreate, setShowCreate]       = useState(false);
   const [payInvoice,    setPayInvoice]    = useState<InvoiceResponse | null>(null);
   const [incrementInvoice, setIncrementInvoice] = useState<InvoiceResponse | null>(null);
+  const [voidTarget, setVoidTarget] = useState<InvoiceResponse | null>(null);
   const [pdfId, setPdfId] = useState<string | null>(null);
 
   const handleOpenPdf = async (inv: InvoiceResponse) => {
@@ -239,7 +244,14 @@ function InvoicesTab() {
                 <td style={{ color: isOverdue(inv.dueDate) && inv.status !== 'PAID' ? '#C0392B' : undefined }}>
                   {new Date(inv.dueDate).toLocaleDateString('en-GB')}
                 </td>
-                <td>{statusBadge(inv.status)}</td>
+                <td>
+                  {statusBadge(inv.status)}
+                  {inv.status === 'VOID' && inv.voidReason && (
+                    <div className="text-muted" style={{ fontSize: '0.68rem', maxWidth: 180 }} title={inv.voidReason}>
+                      {inv.voidReason}
+                    </div>
+                  )}
+                </td>
                 <td>
                   <div className="d-flex gap-1 flex-wrap">
                     <Button
@@ -260,7 +272,7 @@ function InvoicesTab() {
                       <Button
                         size="sm"
                         variant={inv.emailSentAt ? 'outline-secondary' : 'outline-primary'}
-                        disabled={!!inv.emailSentAt || sendingId === inv.id}
+                        disabled={!!inv.emailSentAt || sendingId === inv.id || inv.status === 'VOID'}
                         onClick={() => handleSendEmail(inv)}
                         title={inv.emailSentAt ? `Sent to ${inv.emailSentTo} on ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}` : 'Send invoice by email'}
                       >
@@ -273,7 +285,7 @@ function InvoicesTab() {
                         )}
                       </Button>
                     </RoleGuard>
-                    {inv.status !== 'PAID' && (
+                    {inv.status !== 'PAID' && inv.status !== 'VOID' && (
                       <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
                         <Button size="sm" variant="outline-warning" onClick={() => setIncrementInvoice(inv)} title="Charge for extra guards on this invoice">
                           ➕ Add Fees
@@ -290,6 +302,14 @@ function InvoicesTab() {
                         </Button>
                       </RoleGuard>
                     )}
+                    {/* Only while nothing has been received — the server refuses otherwise. */}
+                    {['PENDING', 'OVERDUE'].includes(inv.status) && inv.paidAmount === 0 && (
+                      <PermissionGuard permission="invoices.void">
+                        <Button size="sm" variant="outline-dark" onClick={() => setVoidTarget(inv)} title="Void — the invoice stays on file marked VOID">
+                          Void
+                        </Button>
+                      </PermissionGuard>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -299,6 +319,17 @@ function InvoicesTab() {
       )}
 
       {showCreate && <InvoiceFormModal onClose={() => setShowCreate(false)} />}
+      <VoidInvoiceModal
+        show={!!voidTarget}
+        onHide={() => setVoidTarget(null)}
+        invoiceNumber={voidTarget?.invoiceNumber ?? ''}
+        totalAmount={voidTarget?.totalAmount ?? 0}
+        onConfirm={async (reason) => {
+          const r = await invoicesApi.voidInvoice(voidTarget!.id, reason);
+          showToast(`${r.name} voided.`, 'success');
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        }}
+      />
       {incrementInvoice && (
         <FeeIncrementModal
           invoice={incrementInvoice}

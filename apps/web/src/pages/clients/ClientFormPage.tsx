@@ -1,3 +1,5 @@
+import type { FieldErrors } from 'react-hook-form';
+import { getApiErrorMessage } from '../../lib/api';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -16,6 +18,27 @@ import { useToast } from '../../context/ToastContext';
 import type { ClientFormInput, CreateClientInput } from '@stap/shared';
 
 const QUICK_TERMS = [7, 14, 30, 45, 60];
+
+/**
+ * Readable names for fields that can fail validation. contactPhone and
+ * contactPerson have no input of their own — they come from the primary
+ * contact card — so their errors are listed rather than shown under a field.
+ */
+const FIELD_NAMES: Record<string, string> = {
+  contactPhone:    'Primary contact phone',
+  contactPerson:   'Primary contact name',
+  clientName:      'Client name',
+  physicalAddress: 'Physical address',
+  billingAddress:  'Billing address',
+  billingTerms:    'Billing terms',
+  contractStatus:  'Contract status',
+  email:           'Email',
+  tin:             'TIN',
+  vatRate:         'VAT rate',
+  leadSource:      'Lead source',
+  referredBy:      'Referred by',
+  marketerName:    'Marketer name',
+};
 
 export default function ClientFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -184,14 +207,24 @@ export default function ClientFormPage() {
         navigate(`/clients/${created.id}`);
       }
     } catch (error) {
-      console.error('Create client error:', error);
-      const msg =
-        (error as any)?.response?.data?.error ||
-        (error as any)?.response?.data?.message ||
-        (error as any)?.message ||
-        'Failed to save client. Please try again.';
-      setApiError(msg);
+      // Names the failing fields on a 400 rather than "Validation failed".
+      setApiError(getApiErrorMessage(error, 'Failed to save client. Please try again.'));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  /**
+   * Called when the form's own validation refuses a save. Without it an error
+   * on a field with no input — contactPhone, derived from the contact card —
+   * had nowhere to appear, and clicking Save simply did nothing.
+   */
+  const onInvalid = (formErrors: FieldErrors<ClientFormInput>) => {
+    const problems = Object.entries(formErrors).map(([field, err]) =>
+      `${FIELD_NAMES[field] ?? field}: ${(err as { message?: string } | undefined)?.message ?? 'invalid'}`);
+    setApiError(`Please check: ${problems.join(' • ')}`);
+    // The message renders above the form and Save sits at the bottom of a long
+    // page — without this the refusal would still look like nothing happened.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (isEdit && isLoading) {
@@ -219,7 +252,7 @@ export default function ClientFormPage() {
         </Button>
       </div>
 
-      <Form onSubmit={handleSubmit(onSubmit)}>
+      <Form onSubmit={handleSubmit(onSubmit, onInvalid)}>
         {apiError && (
           <Alert variant="danger" dismissible onClose={() => setApiError(null)}>
             <strong>Error:</strong> {apiError}

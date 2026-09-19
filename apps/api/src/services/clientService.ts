@@ -1,3 +1,4 @@
+import { normaliseClientPhone } from '@stap/shared';
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
@@ -151,7 +152,7 @@ class ClientService {
         orderBy: { [sortBy]: sortOrder },
         include: {
           contacts: { orderBy: CONTACT_ORDER },
-          _count: { select: { sites: true, contracts: true, complaints: true } },
+          _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
         },
       }),
       prisma.client.count({ where }),
@@ -185,15 +186,15 @@ class ClientService {
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
-        sites: { orderBy: { siteName: 'asc' } },
-        contracts: { orderBy: { createdAt: 'desc' }, take: 3 },
+        sites: { where: { deletedAt: null }, orderBy: { siteName: 'asc' } },
+        contracts: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 3 },
         complaints: {
           where: { status: 'OPEN' },
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 
@@ -254,7 +255,9 @@ class ClientService {
         systemId,
         clientName:     data.clientName,
         contactPerson:  data.contactPerson?.trim() || primary.name,
-        contactPhone:   data.contactPhone?.trim() || primary.phone || '',
+        // Normalised here as well as in the schema: prospect conversion and the
+        // Excel import call create() directly, and this is the number MoMo charges.
+        contactPhone:   normaliseClientPhone(data.contactPhone?.trim() || primary.phone || ''),
         email:          blankToNull(data.email),
         physicalAddress: data.physicalAddress,
         // '' is what a blank input submits; these columns are nullable and mean
@@ -278,7 +281,7 @@ class ClientService {
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
       });
 
@@ -387,7 +390,7 @@ class ClientService {
       },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 
@@ -421,7 +424,7 @@ class ClientService {
       data: { contractStatus: 'INACTIVE' },
       include: {
         contacts: { orderBy: CONTACT_ORDER },
-        _count: { select: { sites: true, contracts: true, complaints: true } },
+        _count: { select: { sites: { where: { deletedAt: null } }, contracts: { where: { deletedAt: null } }, complaints: true } },
       },
     });
 
@@ -493,7 +496,9 @@ class ClientService {
         contactPerson: primary.name,
         // Only when there is one: contactPhone is NOT NULL, and blanking it
         // would break invoice disbursement for the sake of tidiness.
-        ...(primary.phone ? { contactPhone: primary.phone } : {}),
+        // A contact card takes a phone as typed; the client column is what a
+        // payment request dials, so it gets digits only.
+        ...(primary.phone ? { contactPhone: normaliseClientPhone(primary.phone) } : {}),
       },
     });
   }

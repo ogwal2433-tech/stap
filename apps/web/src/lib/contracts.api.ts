@@ -43,6 +43,10 @@ export const contractsApi = {
     return api.delete(`/contracts/${id}`).then(() => undefined);
   },
 
+  restore(id: string): Promise<{ id: string; name: string }> {
+    return api.post(`/contracts/${id}/restore`).then((r) => r.data.data);
+  },
+
   getExpiring(): Promise<ContractResponse[]> {
     return api
       .get<{ success: boolean; data: ContractResponse[] }>('/contracts/expiring')

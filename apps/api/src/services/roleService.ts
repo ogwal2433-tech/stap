@@ -16,7 +16,7 @@ import {
  * /permissions. This is only which roles exist and what they are called.
  */
 
-const WITH_COUNTS = { _count: { select: { users: true, permissions: true } } } as const;
+const WITH_COUNTS = { _count: { select: { users: { where: { deletedAt: null } }, permissions: true } } } as const;
 type RoleRow = Prisma.RoleGetPayload<{ include: typeof WITH_COUNTS }>;
 
 function fmt(r: RoleRow): RoleRecord {

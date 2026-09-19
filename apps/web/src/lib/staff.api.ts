@@ -59,6 +59,15 @@ export const staffApi = {
       .then((r) => r.data.data);
   },
 
+  /** Only an account that never signed in; anyone else is deactivated instead. */
+  remove(id: string): Promise<{ id: string; name: string }> {
+    return api.delete(`/staff/${id}`).then((r) => r.data.data);
+  },
+
+  restore(id: string): Promise<{ id: string; name: string }> {
+    return api.post(`/staff/${id}/restore`).then((r) => r.data.data);
+  },
+
   resetPassword(id: string): Promise<void> {
     return api.post(`/staff/${id}/reset-password`).then(() => undefined);
   },

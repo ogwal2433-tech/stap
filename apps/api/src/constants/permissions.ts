@@ -34,10 +34,12 @@ export const PERMISSIONS = {
   CONTRACTS_VIEW:   'contracts.view',
   CONTRACTS_CREATE: 'contracts.create',
   CONTRACTS_EDIT:   'contracts.edit',
+  CONTRACTS_DELETE: 'contracts.delete',
 
   SITES_VIEW:   'sites.view',
   SITES_CREATE: 'sites.create',
   SITES_EDIT:   'sites.edit',
+  SITES_DELETE: 'sites.delete',
 
   // ── Roster and attendance ───────────────────────────────────────────────────
   ROSTER_VIEW:     'roster.view',
@@ -54,6 +56,8 @@ export const PERMISSIONS = {
   INVOICES_CREATE: 'invoices.create',
   INVOICES_EDIT:   'invoices.edit',
   INVOICES_PRINT:  'invoices.print',
+  /** Voids, never deletes: the invoice stays on file marked VOID. */
+  INVOICES_VOID:   'invoices.void',
   PAYMENTS_VIEW:   'payments.view',
   PAYMENTS_RECORD: 'payments.record',
 
@@ -121,6 +125,7 @@ export const PERMISSIONS = {
   STAFF_CREATE:     'staff.create',
   STAFF_EDIT:       'staff.edit',
   STAFF_DEACTIVATE: 'staff.deactivate',
+  STAFF_DELETE:     'staff.delete',
 
   // ── System ──────────────────────────────────────────────────────────────────
   SETTINGS_VIEW: 'settings.view',

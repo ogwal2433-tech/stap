@@ -118,7 +118,7 @@ router.get(
     const [roles, counts] = await Promise.all([
       prisma.role.findMany({
         where:   { name: { notIn: [...PORTAL_ROLES] } },
-        include: { _count: { select: { users: true } } },
+        include: { _count: { select: { users: { where: { deletedAt: null } } } } },
       }),
       prisma.rolePermission.groupBy({ by: ['role'], _count: { id: true } }),
     ]);

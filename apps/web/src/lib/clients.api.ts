@@ -116,6 +116,22 @@ export const clientsApi = {
       .then((r) => r.data.data);
   },
 
+  // ── Soft delete ───────────────────────────────────────────────────────────
+  // Refused while anything is live underneath the client; the reason comes back
+  // as the error message. Restore lives on the Deleted records page.
+
+  remove(id: string): Promise<{ id: string; name: string }> {
+    return api.delete(`/clients/${id}`).then((r) => r.data.data);
+  },
+
+  restore(id: string): Promise<{ id: string; name: string }> {
+    return api.post(`/clients/${id}/restore`).then((r) => r.data.data);
+  },
+
+  restoreSite(siteId: string): Promise<{ id: string; name: string }> {
+    return api.post(`/clients/sites/${siteId}/restore`).then((r) => r.data.data);
+  },
+
   getSummary(): Promise<ClientSummary> {
     return api
       .get<{ success: boolean; data: ClientSummary }>('/clients/summary')

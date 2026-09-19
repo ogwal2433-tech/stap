@@ -139,6 +139,10 @@ import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { invoiceService } from '../services/invoiceService';
+import { softDeleteService } from '../services/softDeleteService';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
+import { VoidInvoiceSchema } from '@stap/shared';
 import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
 import { payrollService } from '../services/payrollService';
@@ -241,6 +245,19 @@ router.post(
 );
 
 // POST /finance/invoices/:id/send-email — send a specific invoice by email
+// ── POST /invoices/:id/void — void, never delete ──────────────────────────────
+// The invoice stays on file marked VOID with the reason, and drops out of
+// balances, AR and revenue. Refused once any money has moved against it.
+router.post(
+  '/invoices/:id/void',
+  requirePermission(PERMISSIONS.INVOICES_VOID),
+  validate(VoidInvoiceSchema),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.voidInvoice(req.params.id, req.body.reason, req.user!.userId);
+    res.status(200).json({ success: true, data });
+  }),
+);
+
 router.post(
   '/invoices/:id/send-email',
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),

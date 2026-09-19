@@ -278,7 +278,7 @@ class SiteService {
           client: {
             select: {
               contracts: {
-                where:   { status: 'ACTIVE' },
+                where:   { status: 'ACTIVE', deletedAt: null },
                 orderBy: { contractStart: 'desc' },
                 take:    1,
                 select:  { shiftPattern: true },
@@ -497,32 +497,6 @@ class SiteService {
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
-
-  async delete(id: string, deletedBy: string): Promise<void> {
-    const existing = await prisma.site.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundError(`Site ${id} not found`);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const activeDeployments = await prisma.deployment.count({
-      where: { siteId: id, date: { gte: today } },
-    });
-
-    if (activeDeployments > 0) {
-      throw new AppError('Cannot delete site with active deployments', 409);
-    }
-
-    await prisma.site.delete({ where: { id } });
-
-    await QueueService.logAudit({
-      userId:   deletedBy,
-      action:   'SITE_DELETED',
-      entity:   'site',
-      entityId: id,
-      oldValue: { siteName: existing.siteName, clientId: existing.clientId },
-    });
-  }
 }
 
 export const siteService = new SiteService();

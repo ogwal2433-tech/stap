@@ -55,6 +55,7 @@ const ScheduledJobsPage            = lazyWithReload(() => import('@/pages/settin
 const ShiftHandoverPage            = lazyWithReload(() => import('@/pages/controlRoom/ShiftHandoverPage'), 'ShiftHandoverPage');
 const SystemErrorsPage             = lazyWithReload(() => import('@/pages/admin/SystemErrorsPage'), 'SystemErrorsPage');
 const AuditLogPage                 = lazyWithReload(() => import('@/pages/admin/AuditLogPage'), 'AuditLogPage');
+const DeletedRecordsPage           = lazyWithReload(() => import('@/pages/admin/DeletedRecordsPage'), 'DeletedRecordsPage');
 const StaffPage                    = lazyWithReload(() => import('@/pages/staff/StaffPage'), 'StaffPage');
 
 const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
@@ -69,7 +70,6 @@ const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, 
 const REQUISITION_ROLES: UserRole[] = INTERNAL_ROLES.filter(
   (r) => r !== ROLES.CLIENT && r !== ROLES.GUARD,
 );
-const CLIENT_WRITE: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
 const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 // Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.
@@ -162,9 +162,11 @@ function App() {
 
               {/* Clients */}
               <Route path="/clients"          element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientsListPage /></PermissionGuard></L>} />
-              <Route path="/clients/new"      element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+              {/* Same permissions the API enforces. These used a role list, so a
+                  role granted clients.edit was refused the page. */}
+              <Route path="/clients/new"      element={<L><PermissionGuard permission="clients.create" fallback={<PermissionDenied permission="clients.create" />}><ClientFormPage /></PermissionGuard></L>} />
               <Route path="/clients/:id"      element={<L><PermissionGuard permission="clients.view" fallback={<PermissionDenied permission="clients.view" />}><ClientDetailPage /></PermissionGuard></L>} />
-              <Route path="/clients/:id/edit" element={<L><RoleGuard allowedRoles={CLIENT_WRITE} fallback={<UnauthorisedPage />}><ClientFormPage /></RoleGuard></L>} />
+              <Route path="/clients/:id/edit" element={<L><PermissionGuard permission="clients.edit" fallback={<PermissionDenied permission="clients.edit" />}><ClientFormPage /></PermissionGuard></L>} />
 
               {/* Complaints */}
               <Route path="/complaints"           element={<L><PermissionGuard permission="complaints.view" fallback={<PermissionDenied permission="complaints.view" />}><ComplaintsPage /></PermissionGuard></L>} />
@@ -205,6 +207,8 @@ function App() {
               {/* Admin */}
               <Route path="/admin/errors" element={<L><PermissionGuard permission="system.errors" fallback={<PermissionDenied permission="system.errors" />}><SystemErrorsPage /></PermissionGuard></L>} />
               <Route path="/admin/audit-log" element={<L><PermissionGuard permission="audit.log" fallback={<PermissionDenied permission="audit.log" />}><AuditLogPage /></PermissionGuard></L>} />
+              {/* Gates itself: it needs any one of five delete permissions. */}
+              <Route path="/admin/deleted" element={<L><DeletedRecordsPage /></L>} />
             </Route>
           </Route>
 

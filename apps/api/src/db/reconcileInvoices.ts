@@ -39,7 +39,9 @@ function expectedStatus(total: number, paid: number, dueDate: Date, current: str
 
 async function collect(invoiceNumber?: string): Promise<Drift[]> {
   const invoices = await prisma.invoice.findMany({
-    where:  invoiceNumber ? { invoiceNumber } : undefined,
+    // A void invoice has no payments to reconcile and must stay VOID —
+    // recomputing its status from payments would quietly bring it back.
+    where:  { ...(invoiceNumber ? { invoiceNumber } : {}), status: { not: 'VOID' } },
     select: {
       id: true, invoiceNumber: true, totalAmount: true, paidAmount: true,
       outstandingBalance: true, status: true, dueDate: true,

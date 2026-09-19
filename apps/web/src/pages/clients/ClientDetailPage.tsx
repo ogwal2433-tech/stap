@@ -17,13 +17,16 @@ import ClientContacts from '../../components/clients/ClientContacts';
 import ClientPortalAccess from '../../components/clients/ClientPortalAccess';
 import BillingSummaryCard from '../../components/clients/BillingSummaryCard';
 import PermissionGuard from '../../components/PermissionGuard';
+import DeleteConfirmModal from '../../components/shared/DeleteConfirmModal';
+import { useQueryClient } from '@tanstack/react-query';
+import { clientsApi } from '../../lib/clients.api';
 import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
 import { ROLES, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
-import { useAuth, useHasPermission } from '../../context/AuthContext';
+import { useHasPermission } from '../../context/AuthContext';
 
 const CLIENT_CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -58,21 +61,27 @@ const SEVERITY_STYLE: Record<string, { bg?: string; text?: string; style?: React
   CRITICAL: { bg: 'danger' },
 };
 
-const CLIENT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR];
 const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
+/** Said before the user confirms, so a refusal is not the first they hear of the rule. */
+const DELETE_WARNINGS: Record<'client' | 'site' | 'contract', string> = {
+  client:   'Only possible once the client has no sites, open contracts, unpaid invoices or portal logins. Its paid invoices stay on file under its name.',
+  site:     'Refused while guards are deployed there. Past attendance and deployments keep the site\u2019s name.',
+  contract: 'Refused while it has unpaid invoices. Its invoices stay linked to it.',
+};
+
 export default function ClientDetailPage() {
   const canSeeContracts = useHasPermission('contracts.view');
-  const { user } = useAuth();
-  // The same list the Edit Client button uses, and the same one the contact
-  // endpoints enforce — contacts are part of the client, not a separate thing
-  // to hold a separate opinion about.
-  const canEditClient = CLIENT_WRITE_ROLES.includes(user?.role as UserRole);
+  // The permission the Edit button, the edit page and the contact endpoints all
+  // check — contacts are part of the client, not a separate thing to hold a
+  // separate opinion about.
+  const canEditClient = useHasPermission('clients.edit');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: client, isLoading, isError, refetch } = useClient(id ?? '');
   const { data: sites, refetch: refetchSites } = useClientSites(id ?? '');
@@ -124,32 +133,43 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleDeleteContract = async (contractId: string) => {
-    if (!confirm('Delete this contract? This cannot be undone.')) return;
-    try {
-      await deleteContract.mutateAsync(contractId);
-      showToast('Contract deleted', 'success');
-      refetchContracts();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete contract';
-      showToast(msg, 'danger');
-    }
-  };
+  // What the delete dialog is about to remove. Deletes are soft and can be
+  // restored; a refusal from the server is shown inside the dialog.
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'client' }
+    | { kind: 'site' | 'contract'; id: string; name: string }
+    | null
+  >(null);
 
-  const handleDeleteSite = async (siteId: string, siteName: string) => {
-    if (!confirm(`Delete site "${siteName}"? This cannot be undone.`)) return;
-    try {
-      await deleteSite.mutateAsync({ siteId, clientId: id! });
-      showToast('Site deleted', 'success');
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === 'client') {
+      const r = await clientsApi.remove(id!);
+      showToast(`${r.name} deleted. It can be restored from Deleted records.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client-summary'] });
+      navigate('/clients');
+    } else if (deleteTarget.kind === 'site') {
+      await deleteSite.mutateAsync({ siteId: deleteTarget.id, clientId: id! });
+      showToast(`${deleteTarget.name} deleted.`, 'success');
       refetchSites();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete site';
-      showToast(msg, 'danger');
+    } else {
+      await deleteContract.mutateAsync(deleteTarget.id);
+      showToast(`${deleteTarget.name} deleted.`, 'success');
+      refetchContracts();
     }
   };
 
   return (
     <div>
+      <DeleteConfirmModal
+        show={!!deleteTarget}
+        onHide={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        entityType={deleteTarget?.kind ?? 'record'}
+        entityName={deleteTarget?.kind === 'client' ? (client?.clientName ?? '') : (deleteTarget?.name ?? '')}
+        warning={DELETE_WARNINGS[deleteTarget?.kind ?? 'client']}
+      />
       <Breadcrumb className="mb-3 small">
         <Breadcrumb.Item onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>Dashboard</Breadcrumb.Item>
         <Breadcrumb.Item onClick={() => navigate('/clients')} style={{ cursor: 'pointer' }}>Clients</Breadcrumb.Item>
@@ -171,16 +191,19 @@ export default function ClientDetailPage() {
           )}
         </div>
         <ButtonGroup size="sm">
-          <RoleGuard allowedRoles={CLIENT_WRITE_ROLES}>
+          <PermissionGuard permission="clients.edit">
             <Button variant="outline-primary" onClick={() => navigate(`/clients/${id}/edit`)}>
               <i className="bi bi-pencil me-1" />Edit
             </Button>
-          </RoleGuard>
+          </PermissionGuard>
           <RoleGuard allowedRoles={CLIENT_ARCHIVE_ROLES}>
             {client.contractStatus !== 'INACTIVE' && (
               <Button variant="outline-danger" onClick={handleArchive}>Archive</Button>
             )}
           </RoleGuard>
+          <PermissionGuard permission="clients.delete">
+            <Button variant="outline-danger" onClick={() => setDeleteTarget({ kind: 'client' })}>Delete</Button>
+          </PermissionGuard>
           <Button variant="outline-secondary" onClick={() => navigate('/clients')}>
             ← Back
           </Button>
@@ -458,11 +481,11 @@ export default function ClientDetailPage() {
                               Edit
                             </Button>
                           </RoleGuard>
-                          <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
-                            <Button size="sm" variant="outline-danger" onClick={() => handleDeleteSite(s.id, s.siteName)}>
+                          <PermissionGuard permission="sites.delete">
+                            <Button size="sm" variant="outline-danger" onClick={() => setDeleteTarget({ kind: 'site', id: s.id, name: s.siteName })}>
                               Delete
                             </Button>
-                          </RoleGuard>
+                          </PermissionGuard>
                         </div>
                       </td>
                     </tr>
@@ -662,15 +685,15 @@ export default function ClientDetailPage() {
                           >
                             History{c.amendmentCount > 0 ? ` (${c.amendmentCount})` : ''}
                           </Button>
-                          <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
+                          <PermissionGuard permission="contracts.delete">
                             <Button
                               size="sm"
                               variant="outline-danger"
-                              onClick={() => handleDeleteContract(c.id)}
+                              onClick={() => setDeleteTarget({ kind: 'contract', id: c.id, name: `Contract ${c.id.slice(-8).toUpperCase()}` })}
                             >
                               Delete
                             </Button>
-                          </RoleGuard>
+                          </PermissionGuard>
                         </div>
                       </td>
                     </tr>
