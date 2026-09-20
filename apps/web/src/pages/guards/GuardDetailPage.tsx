@@ -11,7 +11,7 @@ import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
 import { useGuardInventory } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
 import { lettersApi } from '../../lib/letters.api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, useHasPermission } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import PermissionGuard from '../../components/PermissionGuard';
 import DeleteConfirmModal from '../../components/shared/DeleteConfirmModal';
@@ -194,6 +194,8 @@ function IssuedItemsTab({ guardId, guardName, guardStatus }: {
 }) {
   const { data: items, isLoading, refetch } = useGuardInventory(guardId);
   const { showToast } = useToast();
+  // Seeing what a guard holds and taking it back are separate grants.
+  const canReturn = useHasPermission('inventory.return');
   const [returnTarget, setReturnTarget] = useState<{
     itemId: string; itemName: string; outstanding: number;
   } | null>(null);
@@ -214,7 +216,7 @@ function IssuedItemsTab({ guardId, guardName, guardStatus }: {
           <th>Item Name</th>
           <th>Type</th>
           <th className="text-center">Outstanding</th>
-          <th>Actions</th>
+          {canReturn && <th>Actions</th>}
         </tr>
       </thead>
       <tbody>
@@ -224,7 +226,7 @@ function IssuedItemsTab({ guardId, guardName, guardStatus }: {
             <td className="fw-medium">{row.item.itemName}</td>
             <td><Badge bg="secondary" style={{ fontSize: 10 }}>{row.item.itemType}</Badge></td>
             <td className="text-center fw-bold">{row.outstanding}</td>
-            <td>
+            {canReturn && <td>
               <Button
                 size="sm"
                 variant={hasLeft ? 'warning' : 'outline-warning'}
@@ -235,7 +237,7 @@ function IssuedItemsTab({ guardId, guardName, guardStatus }: {
               >
                 {hasLeft ? 'Collect return' : 'Return'}
               </Button>
-            </td>
+            </td>}
           </tr>
         ))}
       </tbody>
@@ -324,6 +326,9 @@ export default function GuardDetailPage() {
   const { showToast } = useToast();
   const { user } = useAuth();
   const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
+  // Issued items are an inventory view, not a payroll one: whoever is granted
+  // inventory.view sees them, with no role list of its own to drift.
+  const canViewIssuedItems = useHasPermission('inventory.view');
   const canReviewLetters = !!user && (HR_ROLES as string[]).includes(user.role);
 
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
@@ -1412,7 +1417,7 @@ export default function GuardDetailPage() {
         </Tab>
 
         {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
-        {canViewDeductions && <Tab eventKey="issued-items" title="Issued Items">
+        {canViewIssuedItems && <Tab eventKey="issued-items" title="Issued Items">
           <IssuedItemsTab guardId={id!} guardName={guard.fullName} guardStatus={guard.employmentStatus} />
         </Tab>}
 

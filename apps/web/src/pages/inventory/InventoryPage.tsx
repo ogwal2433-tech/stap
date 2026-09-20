@@ -4,6 +4,7 @@ import {
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
+import { useHasPermission } from '../../context/AuthContext';
 import {
   useInventoryItems, useLowStockItems, useInventoryTransactions, useOutstandingHolders,
   useCreateInventoryItem, useUpdateInventoryItem,
@@ -1027,6 +1028,14 @@ export default function InventoryPage() {
   const [lowStockOnly, setLowStockOnly]   = useState(false);
   const [search, setSearch]               = useState('');
   const [editItem, setEditItem]           = useState<InventoryItemResponse | 'new' | null>(null);
+  // The page itself needs inventory.view to open at all (see the route guard).
+  // What can be done once inside is a separate grant each, so a role given only
+  // view is not offered buttons the API will refuse.
+  const canEdit   = useHasPermission('inventory.edit');
+  const canIssue  = useHasPermission('inventory.issue');
+  const canReturn = useHasPermission('inventory.return');
+  const canActOnItems = canEdit || canIssue || canReturn;
+
   const [showIssue, setShowIssue]         = useState(false);
   const [showReturn, setShowReturn]       = useState(false);
   const [showAdjust, setShowAdjust]       = useState(false);
@@ -1086,18 +1095,26 @@ export default function InventoryPage() {
               />
             </div>
             <div className="d-flex gap-2 flex-wrap">
-              <Button size="sm" variant="primary" onClick={() => setEditItem('new')}>
-                <i className="bi bi-plus-lg me-1" />Add Item
-              </Button>
-              <Button size="sm" variant="outline-primary" onClick={() => setShowIssue(true)}>
-                Issue Items
-              </Button>
-              <Button size="sm" variant="outline-secondary" onClick={() => setShowReturn(true)}>
-                Record Return
-              </Button>
-              <Button size="sm" variant="outline-warning" onClick={() => setShowAdjust(true)}>
-                Adjust Stock
-              </Button>
+              {canEdit && (
+                <Button size="sm" variant="primary" onClick={() => setEditItem('new')}>
+                  <i className="bi bi-plus-lg me-1" />Add Item
+                </Button>
+              )}
+              {canIssue && (
+                <Button size="sm" variant="outline-primary" onClick={() => setShowIssue(true)}>
+                  Issue Items
+                </Button>
+              )}
+              {canReturn && (
+                <Button size="sm" variant="outline-secondary" onClick={() => setShowReturn(true)}>
+                  Record Return
+                </Button>
+              )}
+              {canEdit && (
+                <Button size="sm" variant="outline-warning" onClick={() => setShowAdjust(true)}>
+                  Adjust Stock
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1116,7 +1133,7 @@ export default function InventoryPage() {
                   <th>Stock by Condition</th>
                   <th className="text-center">Threshold</th>
                   <th>Status</th>
-                  <th>Actions</th>
+                  {canActOnItems && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1154,43 +1171,51 @@ export default function InventoryPage() {
                         ? <span style={{ fontSize: 12 }}>🔴 Low Stock</span>
                         : <span style={{ fontSize: 12 }}>✅ OK</span>}
                     </td>
-                    <td>
+                    {canActOnItems && <td>
                       <div className="d-flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline-primary"
-                          style={{ fontSize: 11, padding: '1px 6px' }}
-                          onClick={() => { setQuickItem(item); setShowIssue(true); }}
-                        >
-                          Issue
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline-secondary"
-                          style={{ fontSize: 11, padding: '1px 6px' }}
-                          onClick={() => { setQuickItem(item); setShowReturn(true); }}
-                        >
-                          Return
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline-dark"
-                          style={{ fontSize: 11, padding: '1px 6px' }}
-                          onClick={() => setEditItem(item)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline-secondary"
-                          style={{ fontSize: 11, padding: '1px 6px' }}
-                          title="Adjust condition breakdown"
-                          onClick={() => setConditionItem(item)}
-                        >
-                          📊
-                        </Button>
+                        {canIssue && (
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => { setQuickItem(item); setShowIssue(true); }}
+                          >
+                            Issue
+                          </Button>
+                        )}
+                        {canReturn && (
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => { setQuickItem(item); setShowReturn(true); }}
+                          >
+                            Return
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline-dark"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => setEditItem(item)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            title="Adjust condition breakdown"
+                            onClick={() => setConditionItem(item)}
+                          >
+                            📊
+                          </Button>
+                        )}
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
@@ -1255,7 +1280,7 @@ export default function InventoryPage() {
                       </td>
                       <td className="small">{t.recordedBy.name}</td>
                       <td className="text-end">
-                        {t.action === 'ISSUED' && (
+                        {t.action === 'ISSUED' && canEdit && (
                           <Button
                             size="sm"
                             variant="outline-secondary"
