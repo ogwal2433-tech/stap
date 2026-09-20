@@ -248,6 +248,24 @@ router.post(
   }),
 );
 
+// ── GET /export — every guard, for the Excel export ───────────────────────────
+// Declared before /:id so the literal path is not read as a guard id.
+router.get(
+  '/export',
+  requirePermission(PERMISSIONS.GUARDS_VIEW),
+  asyncHandler(async (_req, res) => {
+    const guards = await guardService.listForExport();
+    res.status(200).json({
+      success: true,
+      data: {
+        guards,
+        totalCount: guards.length,
+        exportedAt: new Date().toISOString(),
+      },
+    });
+  }),
+);
+
 // ── GET /id-stats — how the active workforce is documented ────────────────────
 // Declared before /:id so the literal path is not read as a guard id.
 router.get(

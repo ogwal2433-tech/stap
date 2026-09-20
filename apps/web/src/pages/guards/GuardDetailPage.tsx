@@ -12,6 +12,7 @@ import { useGuardInventory } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
 import { lettersApi } from '../../lib/letters.api';
 import { useAuth, useHasPermission } from '../../context/AuthContext';
+import { exportGuardProfile } from '../../lib/exportToExcel';
 import RoleGuard from '../../components/RoleGuard';
 import PermissionGuard from '../../components/PermissionGuard';
 import DeleteConfirmModal from '../../components/shared/DeleteConfirmModal';
@@ -499,6 +500,14 @@ export default function GuardDetailPage() {
               )}
             </Button>
           </RoleGuard>
+          <PermissionGuard permission="guards.view">
+            <Button
+              variant="outline-success"
+              onClick={() => exportGuardProfile(guard)}
+            >
+              📊 Export Details
+            </Button>
+          </PermissionGuard>
           {guard.employmentStatus === 'ACTIVE' && (
             <PermissionGuard permission="guards.promote">
               <Button
