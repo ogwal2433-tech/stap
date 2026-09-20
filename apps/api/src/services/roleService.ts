@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../db/prisma';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
-import { clearPermissionCache } from '../middleware/permissions';
+import { invalidatePermissions } from '../middleware/permissions';
 import { PORTAL_ROLES } from '../constants/systemRoles';
 import {
   ROLE_HIERARCHY, ROLE_NAME_PATTERN, normaliseRoleName,
@@ -131,7 +131,7 @@ export const roleService = {
 
     // Enabling or disabling changes what the role may do from this request on.
     if (input.isActive !== undefined && input.isActive !== existing.isActive) {
-      clearPermissionCache(name);
+      invalidatePermissions(name);
     }
 
     await audit({
@@ -171,7 +171,7 @@ export const roleService = {
       throw err;
     }
 
-    clearPermissionCache(name);
+    invalidatePermissions(name);
     await audit({
       userId: actorId, action: 'ROLE_DELETED', entity: 'role', entityId: existing.id,
       oldValue: { name, label: existing.label, grants: existing._count.permissions },

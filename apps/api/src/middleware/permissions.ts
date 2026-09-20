@@ -3,14 +3,16 @@ import prisma from '../db/prisma';
 import { ForbiddenError, UnauthorisedError } from '../errors/AppError';
 import type { PermissionKey } from '../constants/permissions';
 import { logSecurityEvent, logged } from '../lib/securityLog';
+import { publishPermissionChange, startPermissionCacheSync as startBus } from '../lib/permissionCacheBus';
 
 /**
  * Permission checks on the hot path.
  *
  * Every guarded request needs the set of permissions its role holds, so it is
- * cached per role rather than queried each time. The cache is per process: with
- * more than one API container a grant made on one is not seen by the others
- * until their entry expires, which is why the TTL is short.
+ * cached per role rather than queried each time. The cache is per process, and
+ * the API runs as several PM2 instances, so a grant is broadcast over Redis
+ * (see lib/permissionCacheBus.ts) and every instance drops the role at once.
+ * The TTL remains as the floor if Redis is unavailable.
  */
 const TTL_MS = 5 * 60 * 1000;
 
@@ -34,10 +36,26 @@ async function getRolePermissions(role: string): Promise<Set<string>> {
   return keys;
 }
 
-/** Called after a grant or revoke so the change takes effect immediately. */
+/** Clears this process only. Application code wants invalidatePermissions. */
 export function clearPermissionCache(role?: string): void {
   if (role) cache.delete(role);
   else cache.clear();
+}
+
+/**
+ * Clears everywhere: here at once, and on every other API instance through
+ * Redis. Clearing locally alone left the other instances answering with the
+ * old permissions until their entry expired — which is why a grant seemed to
+ * work or not depending on which instance served the next request.
+ */
+export function invalidatePermissions(role?: string): void {
+  clearPermissionCache(role);
+  publishPermissionChange(role);
+}
+
+/** Subscribes this process to invalidations. Called once at start-up. */
+export function startPermissionCacheSync(): void {
+  startBus(clearPermissionCache);
 }
 
 /** "guards.edit" → "Guards Edit", so a refusal names something readable. */

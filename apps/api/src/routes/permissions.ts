@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../db/prisma';
 import { authenticate } from '../middleware/authenticate';
-import { requirePermission, clearPermissionCache } from '../middleware/permissions';
+import { requirePermission, invalidatePermissions } from '../middleware/permissions';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
@@ -171,6 +171,31 @@ router.get(
 
 // ── Grant and revoke ──────────────────────────────────────────────────────────
 
+/**
+ * Re-reads a role's permissions everywhere, now.
+ *
+ * Grants and revokes already do this. This is for a change made outside the
+ * app — a direct SQL grant, a restored backup — where no instance was told.
+ * Without a role it refreshes every role.
+ */
+router.post(
+  '/cache/refresh',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { role } = req.body as { role?: string };
+    if (role) await assertManagedRole(role);
+    invalidatePermissions(role);
+    res.json({
+      success: true,
+      data: {
+        role: role ?? null,
+        message: role
+          ? `${role} will be read fresh on the next request, on every instance.`
+          : 'Every role will be read fresh on the next request, on every instance.',
+      },
+    });
+  }),
+);
+
 router.post(
   '/roles/:role/grant',
   asyncHandler(async (req: Request, res: Response) => {
@@ -189,7 +214,7 @@ router.post(
       create: { role: role as never, permissionId: permission.id, grantedById: req.user!.userId },
     });
 
-    clearPermissionCache(role);
+    invalidatePermissions(role);
     await QueueService.logAudit({
       userId:   req.user!.userId,
       action:   'PERMISSION_GRANTED',
@@ -216,7 +241,7 @@ router.delete(
       where: { role: role as never, permissionId: permission.id },
     });
 
-    clearPermissionCache(role);
+    invalidatePermissions(role);
     await QueueService.logAudit({
       userId:   req.user!.userId,
       action:   'PERMISSION_REVOKED',
@@ -263,7 +288,7 @@ router.put(
       }),
     ]);
 
-    clearPermissionCache(role);
+    invalidatePermissions(role);
     await QueueService.logAudit({
       userId:   req.user!.userId,
       action:   'PERMISSIONS_BULK_UPDATED',
