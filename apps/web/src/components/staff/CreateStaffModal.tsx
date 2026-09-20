@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Button, Form, Modal, Row, Col, Spinner } from 'react-bootstrap';
 import {
   ROLE_CONFIG, type StaffRole,
-  JOB_TITLES, JOB_TITLE_CATEGORIES, generatePassword,
+  generatePassword,
 } from '@stap/shared';
 import TemporaryPasswordField from '../common/TemporaryPasswordField';
 import { useRoles } from '../../hooks/useRoles';
+import { useStaffPositions } from '../../hooks/useSettings';
 import { useCreateStaff } from '../../hooks/useStaff';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
@@ -43,6 +44,10 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
   // Roles are rows now — created and disabled at runtime — so the list comes from
   // the API rather than a constant that would never show a new one.
   const { data: assignableRoles = [], isLoading: rolesLoading } = useRoles(true);
+  // Positions come from the database now, so a title added in Settings appears
+  // here without a release. Only active ones are offered.
+  const { data: positions = [], isLoading: loadingPositions } = useStaffPositions(true);
+  const positionDepartments = [...new Set(positions.map(p => p.department))];
   const roleConfig = form.role ? (assignableRoles.find(r => r.name === form.role) ?? null) : null;
 
   const handleClose = () => {
@@ -229,18 +234,24 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
                   size="sm"
                   value={form.jobTitle}
                   onChange={e => set('jobTitle', e.target.value)}
+                  disabled={loadingPositions}
                 >
-                  <option value="">— Select position —</option>
-                  {JOB_TITLE_CATEGORIES.map(cat => (
-                    <optgroup key={cat} label={cat}>
-                      {JOB_TITLES.filter(j => j.category === cat).map(j => (
-                        <option key={j.value} value={j.value}>{j.label}</option>
+                  <option value="">
+                    {loadingPositions ? 'Loading positions…' : '— Select position —'}
+                  </option>
+                  {positionDepartments.map(dept => (
+                    <optgroup key={dept} label={dept}>
+                      {positions.filter(p => p.department === dept).map(p => (
+                        <option key={p.id} value={p.code}>
+                          {p.title}{p.grade ? ` (${p.grade})` : ''}
+                        </option>
                       ))}
                     </optgroup>
                   ))}
                 </Form.Select>
                 <Form.Text className="text-muted">
                   A label only — the system role below is what grants access.
+                  Positions are managed in Settings → Positions.
                 </Form.Text>
               </Form.Group>
             </Col>

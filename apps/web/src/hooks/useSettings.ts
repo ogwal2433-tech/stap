@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../lib/settings.api';
 import type {
+  CreateStaffPositionInput,
+  UpdateStaffPositionInput,
   UserRole,
   CreateGuardRankInput,
   UpdateGuardRankInput,
@@ -79,6 +81,62 @@ export function useDeactivateUser() {
 }
 
 // ── Guard Rank hooks ───────────────────────────────────────────────────────────
+
+// ── Staff Positions ────────────────────────────────────────────────────────────
+
+export function useStaffPositions(activeOnly = true) {
+  return useQuery({
+    queryKey:  ['staff-positions', activeOnly],
+    queryFn:   () => settingsApi.getStaffPositions(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Includes deactivated positions — for the settings page, not the staff form. */
+export function useAllStaffPositions() {
+  return useStaffPositions(false);
+}
+
+export function useCreateStaffPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateStaffPositionInput) => settingsApi.createStaffPosition(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['staff-positions'] }),
+  });
+}
+
+export function useUpdateStaffPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateStaffPositionInput }) =>
+      settingsApi.updateStaffPosition(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff-positions'] }),
+  });
+}
+
+export function useDeactivateStaffPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deactivateStaffPosition(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['staff-positions'] }),
+  });
+}
+
+export function useActivateStaffPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.activateStaffPosition(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['staff-positions'] }),
+  });
+}
+
+export function useDeleteStaffPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deleteStaffPosition(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['staff-positions'] }),
+  });
+}
 
 export function useGuardRanks(activeOnly = true) {
   return useQuery({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, ROLES, type StaffRole , JOB_TITLES, JOB_TITLE_CATEGORIES, getJobTitleLabel, isLegacyJobTitle } from '@stap/shared';
+import { ROLE_CONFIG, ROLES, type StaffRole, getJobTitleLabel } from '@stap/shared';
+import { useStaffPositions } from '../../hooks/useSettings';
 import {
   useStaffMember,
   useUpdateStaff,
@@ -52,6 +53,17 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
   const { data: assignableRoles = [] } = useRoles(true);
   const { user }      = useAuth();
   const { showToast } = useToast();
+
+  // All positions, not just the active ones: someone may hold a position that
+  // has since been retired, and their profile should still name it rather than
+  // showing a bare code — or quietly clearing it on an unrelated edit.
+  const { data: allPositions = [] } = useStaffPositions(false);
+  const offeredPositions    = allPositions.filter(p => p.isActive);
+  const positionDepartments = [...new Set(offeredPositions.map(p => p.department))];
+
+  /** Falls back to the shared helper, then the raw value, for titles typed before this list. */
+  const positionLabel = (code: string | null | undefined): string =>
+    allPositions.find(p => p.code === code)?.title ?? getJobTitleLabel(code);
 
   const update      = useUpdateStaff();
   const deactivate  = useDeactivateStaff();
@@ -375,13 +387,17 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                       {/* A title recorded before this list existed is offered as
                           itself, so editing someone's phone number does not
                           quietly clear the position they already hold. */}
-                      {isLegacyJobTitle(form.jobTitle) && (
-                        <option value={form.jobTitle}>{form.jobTitle} (not on the current list)</option>
+                      {!!form.jobTitle && !offeredPositions.some(p => p.code === form.jobTitle) && (
+                        <option value={form.jobTitle}>
+                          {positionLabel(form.jobTitle)} (no longer offered)
+                        </option>
                       )}
-                      {JOB_TITLE_CATEGORIES.map(cat => (
-                        <optgroup key={cat} label={cat}>
-                          {JOB_TITLES.filter(j => j.category === cat).map(j => (
-                            <option key={j.value} value={j.value}>{j.label}</option>
+                      {positionDepartments.map(dept => (
+                        <optgroup key={dept} label={dept}>
+                          {offeredPositions.filter(p => p.department === dept).map(p => (
+                            <option key={p.id} value={p.code}>
+                              {p.title}{p.grade ? ` (${p.grade})` : ''}
+                            </option>
                           ))}
                         </optgroup>
                       ))}
@@ -418,7 +434,7 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                 <Col md={6}><Field label="Email"             value={staff.email} /></Col>
                 <Col md={6}><Field label="Phone"             value={staff.phone} /></Col>
                 <Col md={6}><Field label="Department"        value={staff.department} /></Col>
-                <Col md={6}><Field label="Position"          value={getJobTitleLabel(staff.jobTitle)} /></Col>
+                <Col md={6}><Field label="Position"          value={positionLabel(staff.jobTitle)} /></Col>
                 <Col md={6}><Field label="Emergency Contact" value={staff.emergencyContact} /></Col>
                 <Col md={6}><Field label="Emergency Phone"   value={staff.emergencyPhone} /></Col>
               </Row>

@@ -1,5 +1,8 @@
 import api from './api';
 import type {
+  StaffPositionResponse,
+  CreateStaffPositionInput,
+  UpdateStaffPositionInput,
   SystemSettingResponse,
   UserResponse,
   PaginatedResponse,
@@ -71,6 +74,46 @@ export const settingsApi = {
     return api
       .post(`/settings/users/${id}/deactivate`)
       .then(() => undefined);
+  },
+
+  // ── Staff Positions ──────────────────────────────────────────────────────────
+
+  getStaffPositions(activeOnly = true): Promise<StaffPositionResponse[]> {
+    return api
+      .get<{ success: boolean; data: StaffPositionResponse[] }>('/settings/staff-positions', {
+        params: { activeOnly: activeOnly ? 'true' : 'false' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  createStaffPosition(data: CreateStaffPositionInput): Promise<StaffPositionResponse> {
+    return api
+      .post<{ success: boolean; data: StaffPositionResponse }>('/settings/staff-positions', data)
+      .then((r) => r.data.data);
+  },
+
+  updateStaffPosition(id: string, data: UpdateStaffPositionInput): Promise<StaffPositionResponse> {
+    return api
+      .patch<{ success: boolean; data: StaffPositionResponse }>(`/settings/staff-positions/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  deactivateStaffPosition(id: string): Promise<{ position: StaffPositionResponse; staffWithPosition: number }> {
+    return api
+      .patch<{ success: boolean; data: StaffPositionResponse; staffWithPosition: number }>(
+        `/settings/staff-positions/${id}/deactivate`,
+      )
+      .then((r) => ({ position: r.data.data, staffWithPosition: r.data.staffWithPosition }));
+  },
+
+  activateStaffPosition(id: string): Promise<StaffPositionResponse> {
+    return api
+      .patch<{ success: boolean; data: StaffPositionResponse }>(`/settings/staff-positions/${id}/activate`)
+      .then((r) => r.data.data);
+  },
+
+  deleteStaffPosition(id: string): Promise<void> {
+    return api.delete(`/settings/staff-positions/${id}`).then(() => undefined);
   },
 
   // ── Guard Ranks ──────────────────────────────────────────────────────────────

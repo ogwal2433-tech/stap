@@ -160,6 +160,7 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { settingsService } from '../services/settingsService';
 import { rankService } from '../services/rankService';
+import { staffPositionService } from '../services/staffPositionService';
 import { shiftTypeService } from '../services/shiftTypeService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -171,6 +172,9 @@ import {
   CreateGuardRankSchema,
   UpdateGuardRankSchema,
   ReorderGuardRanksSchema,
+  CreateStaffPositionSchema,
+  UpdateStaffPositionSchema,
+  ReorderStaffPositionsSchema,
   CreateDeductionTypeSchema,
   UpdateDeductionTypeSchema,
   ReorderDeductionTypesSchema,
@@ -369,6 +373,79 @@ router.delete(
   requireRole(ROLES.DIRECTOR),
   asyncHandler(async (req, res) => {
     await rankService.deleteRank(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  }),
+);
+
+// ── Staff Position Management ──────────────────────────────────────────────────
+
+// GET /staff-positions — any signed-in user: the staff form needs the dropdown.
+router.get(
+  '/staff-positions',
+  asyncHandler(async (req, res) => {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const data = await staffPositionService.listPositions(activeOnly);
+    res.json({ success: true, data });
+  }),
+);
+
+// PUT /staff-positions/reorder — before /:id, or "reorder" is read as an id.
+router.put(
+  '/staff-positions/reorder',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const parsed = ReorderStaffPositionsSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await staffPositionService.reorderPositions(parsed.data.orderedIds);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/staff-positions',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const parsed = CreateStaffPositionSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await staffPositionService.createPosition(parsed.data, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/staff-positions/:id',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const parsed = UpdateStaffPositionSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await staffPositionService.updatePosition(req.params.id, parsed.data, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/staff-positions/:id/deactivate',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const result = await staffPositionService.deactivatePosition(req.params.id, req.user!.userId);
+    res.json({ success: true, data: result.position, staffWithPosition: result.staffWithPosition });
+  }),
+);
+
+router.patch(
+  '/staff-positions/:id/activate',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    const data = await staffPositionService.activatePosition(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+router.delete(
+  '/staff-positions/:id',
+  requirePermission(PERMISSIONS.SETTINGS_EDIT),
+  asyncHandler(async (req, res) => {
+    await staffPositionService.deletePosition(req.params.id, req.user!.userId);
     res.json({ success: true });
   }),
 );

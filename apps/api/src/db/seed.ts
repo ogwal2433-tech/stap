@@ -521,6 +521,47 @@ async function main() {
     console.log(`✅ Seeded rank: ${rank.name}`);
   }
 
+  // ── Staff Positions ─────────────────────────────────────────────────────────
+
+  // The codes are the ones User.jobTitle already stores, so seeding adopts the
+  // staff who were recorded before positions became configurable rather than
+  // stranding them on a value nothing resolves.
+  const defaultStaffPositions = [
+    { code: 'MD',                         title: 'MD',                         department: 'Executive',      grade: 'Director',   displayOrder: 1 },
+    { code: 'ASSISTANT_MANAGER',          title: 'Assistant Manager',          department: 'Executive',      grade: 'Manager',    displayOrder: 2 },
+
+    { code: 'OPERATIONS_MANAGER',         title: 'Operations Manager',         department: 'Operations',     grade: 'Manager',    displayOrder: 1 },
+    { code: 'FIELD_OPERATIONS_MANAGER',   title: 'Field Operations Manager',   department: 'Operations',     grade: 'Manager',    displayOrder: 2 },
+    { code: 'QRF',                        title: 'QRF — Quick Reaction Force', department: 'Operations',     grade: 'Officer',    displayOrder: 3 },
+
+    { code: 'ADMINISTRATOR',              title: 'Administrator',              department: 'Administration', grade: 'Officer',    displayOrder: 1 },
+
+    { code: 'HEAD_OF_SUPERVISORS',        title: 'Head of Supervisors',        department: 'Supervisors',    grade: 'Head',       displayOrder: 1 },
+    { code: 'NORTHERN_REGION_SUPERVISOR', title: 'Northern Region Supervisor', department: 'Supervisors',    grade: 'Supervisor', displayOrder: 2 },
+    { code: 'MOYO_REGION_SUPERVISOR',     title: 'Moyo Region Supervisor',     department: 'Supervisors',    grade: 'Supervisor', displayOrder: 3 },
+    { code: 'ZONE_1_SUPERVISOR',          title: 'Zone 1 Supervisor',          department: 'Supervisors',    grade: 'Supervisor', displayOrder: 4 },
+    { code: 'ZONE_2_SUPERVISOR',          title: 'Zone 2 Supervisor',          department: 'Supervisors',    grade: 'Supervisor', displayOrder: 5 },
+    { code: 'ZONE_3_SUPERVISOR',          title: 'Zone 3 Supervisor',          department: 'Supervisors',    grade: 'Supervisor', displayOrder: 6 },
+    { code: 'ZONE_4_SUPERVISOR',          title: 'Zone 4 Supervisor',          department: 'Supervisors',    grade: 'Supervisor', displayOrder: 7 },
+    { code: 'DAY_SUPERVISOR',             title: 'Day Supervisor',             department: 'Supervisors',    grade: 'Supervisor', displayOrder: 8 },
+
+    { code: 'CONTROLLER',                 title: 'Controller',                 department: 'Control Room',   grade: 'Officer',    displayOrder: 1 },
+    { code: 'ASSISTANT_CONTROLLER',       title: 'Assistant Controller',       department: 'Control Room',   grade: 'Assistant',  displayOrder: 2 },
+
+    { code: 'TRAINER',                    title: 'Trainer',                    department: 'Training',       grade: 'Officer',    displayOrder: 1 },
+
+    { code: 'COMPANY_TAX_CONSULTANT',     title: 'Company Tax Consultant',     department: 'Finance',        grade: 'Consultant', displayOrder: 1 },
+  ];
+
+  for (const pos of defaultStaffPositions) {
+    await prisma.staffPosition.upsert({
+      where:  { code: pos.code },
+      update: {},
+      create: pos,
+    });
+  }
+  console.log(`✅ Seeded ${defaultStaffPositions.length} staff positions`);
+
   // ── Deduction Types ──────────────────────────────────────────────────────────
 
   const defaultDeductionTypes = [
