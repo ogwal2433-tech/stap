@@ -4,13 +4,11 @@ import {
   Alert, Badge, Breadcrumb, Button, Card, Col, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { useZone, useUpdateZone, useRemoveSitesFromZone, useDeactivateZone, useActivateZone } from '../../hooks/useZones';
-import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import { useToast } from '../../context/ToastContext';
 import ZoneFormModal from '../../components/zones/ZoneFormModal';
 import SiteAssignmentModal from '../../components/zones/SiteAssignmentModal';
-import { ROLES, type UserRole } from '@stap/shared';
 
-const MGMT_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 
 const SITE_TYPE_BADGE: Record<string, string> = {
   TEMPORARY:     'warning',
@@ -89,7 +87,7 @@ export default function ZoneDetailPage() {
             <p className="text-muted mb-0">{zone.description}</p>
           )}
         </div>
-        <RoleGuard allowedRoles={MGMT_ROLES}>
+        <PermissionGuard permission="sites.edit">
           <div className="d-flex gap-2 flex-wrap">
             <Button variant="outline-primary" size="sm" onClick={() => setShowEdit(true)}>
               <i className="bi bi-pencil me-1" /> Edit
@@ -102,7 +100,7 @@ export default function ZoneDetailPage() {
               {zone.isActive ? 'Deactivate' : 'Activate'}
             </Button>
           </div>
-        </RoleGuard>
+        </PermissionGuard>
       </div>
 
       <Row className="g-4">
@@ -194,11 +192,11 @@ export default function ZoneDetailPage() {
                 <i className="bi bi-building me-2 text-primary" />
                 Sites ({zone.siteCount})
               </span>
-              <RoleGuard allowedRoles={MGMT_ROLES}>
+              <PermissionGuard permission="sites.edit">
                 <Button variant="outline-primary" size="sm" onClick={() => setShowAssign(true)}>
                   <i className="bi bi-plus me-1" /> Assign Sites
                 </Button>
-              </RoleGuard>
+              </PermissionGuard>
             </Card.Header>
             <Card.Body className="p-0">
               {zone.sites.length === 0 ? (
@@ -215,9 +213,9 @@ export default function ZoneDetailPage() {
                       <th>Location</th>
                       <th>Type</th>
                       <th>Guards</th>
-                      <RoleGuard allowedRoles={MGMT_ROLES}>
+                      <PermissionGuard permission="sites.edit">
                         <th />
-                      </RoleGuard>
+                      </PermissionGuard>
                     </tr>
                   </thead>
                   <tbody>
@@ -232,7 +230,7 @@ export default function ZoneDetailPage() {
                           </Badge>
                         </td>
                         <td>{site.guardsRequired}</td>
-                        <RoleGuard allowedRoles={MGMT_ROLES}>
+                        <PermissionGuard permission="sites.edit">
                           <td>
                             <Button
                               variant="link"
@@ -243,7 +241,7 @@ export default function ZoneDetailPage() {
                               <i className="bi bi-x-lg" />
                             </Button>
                           </td>
-                        </RoleGuard>
+                        </PermissionGuard>
                       </tr>
                     ))}
                   </tbody>

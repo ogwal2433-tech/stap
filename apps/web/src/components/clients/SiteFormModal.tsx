@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCreateSite, useUpdateSite } from '../../hooks/useClients';
 import { useShiftTypes } from '../../hooks/useSettings';
+import { useZones } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
 import { DEFAULT_SITE_TYPE, type SiteResponse } from '@stap/shared';
 import { z } from 'zod';
@@ -22,6 +23,7 @@ const SiteFormSchema = z.object({
   siteManagerName:     z.string().max(100).optional().transform((v) => v || undefined),
   siteManagerContact:  z.string().optional().transform((v) => v || undefined),
   guardsRequired:      z.coerce.number().int().min(1).default(1),
+  zoneId:              z.string().optional().nullable(),
   siteType:             z.enum(['TEMPORARY', 'SPECIAL_DUTIES', 'PERMANENT']).default(DEFAULT_SITE_TYPE),
   sitePeriodStart: z.string().optional().nullable(),
   sitePeriodEnd:   z.string().optional().nullable(),
@@ -68,6 +70,10 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
   const createSite  = useCreateSite();
   const updateSite  = useUpdateSite();
   const { data: shiftTypes = [] } = useShiftTypes(true);
+  // Only active zones are offered: a site should not be filed under a zone
+  // that has been retired.
+  const { data: zonesData, isLoading: zonesLoading } = useZones({ isActive: true, limit: 200 });
+  const zones = zonesData?.data ?? [];
   const isEdit = Boolean(site);
 
   // Equipment items state (structured list)
@@ -102,6 +108,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
       siteManagerName:     site?.siteManagerName ?? undefined,
       siteManagerContact:  site?.siteManagerContact ?? undefined,
       guardsRequired:      site?.guardsRequired ?? 1,
+      zoneId:              (site as any)?.zoneId ?? null,
       siteType:             normaliseSiteType(site?.siteType),
       sitePeriodStart: (site as any)?.sitePeriodStart ?? null,
       sitePeriodEnd:   (site as any)?.sitePeriodEnd   ?? null,
@@ -125,6 +132,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
         siteManagerName:     site.siteManagerName ?? undefined,
         siteManagerContact:  site.siteManagerContact ?? undefined,
         guardsRequired:      site.guardsRequired,
+        zoneId:              (site as any).zoneId ?? null,
         siteType:             normaliseSiteType(site.siteType),
         sitePeriodStart: (site as any).sitePeriodStart ?? null,
         sitePeriodEnd:   (site as any).sitePeriodEnd   ?? null,
@@ -182,6 +190,7 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
     const needsPeriod = ['TEMPORARY', 'SPECIAL_DUTIES'].includes(values.siteType);
     const payload = {
       ...values,
+      zoneId: values.zoneId ? values.zoneId : null,
       sitePeriodStart: needsPeriod && periodStart
         ? new Date(periodStart).toISOString() : null,
       sitePeriodEnd: needsPeriod && periodEnd
@@ -369,6 +378,29 @@ export default function SiteFormModal({ clientId, site, onClose, onSuccess }: Pr
                 <Form.Label className="small">Guards Required</Form.Label>
                 <Form.Control type="number" min={1} {...register('guardsRequired', { valueAsNumber: true })} isInvalid={!!errors.guardsRequired} />
                 <Form.Control.Feedback type="invalid">{errors.guardsRequired?.message}</Form.Control.Feedback>
+              </Form.Group>
+            </Col>
+
+            <Col md={4}>
+              <Form.Group controlId="site-zone">
+                <Form.Label className="small">
+                  Zone <span className="text-muted">(optional)</span>
+                </Form.Label>
+                <Form.Select {...register('zoneId')} disabled={zonesLoading}>
+                  <option value="">
+                    {zonesLoading ? 'Loading zones…' : '— No zone —'}
+                  </option>
+                  {zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </Form.Select>
+                {!zonesLoading && zones.length === 0 && (
+                  <Form.Text className="text-muted">
+                    No zones yet — create one on the Zones page.
+                  </Form.Text>
+                )}
               </Form.Group>
             </Col>
             <Col md={4}>
