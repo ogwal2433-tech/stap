@@ -972,9 +972,11 @@ export default function SettingsPage() {
         <Tab eventKey="deduction-types" title={<><i className="bi bi-dash-circle me-1" />Deduction Types</>}>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h6 className="fw-semibold mb-0">Deduction Types</h6>
-            <Button size="sm" onClick={() => setShowAddDeductionType(true)}>
-              <i className="bi bi-plus-lg me-1" />Add Type
-            </Button>
+            {canEditSettings && (
+              <Button size="sm" onClick={() => setShowAddDeductionType(true)}>
+                <i className="bi bi-plus-lg me-1" />Add Type
+              </Button>
+            )}
           </div>
           <Alert variant="info" className="small py-2">
             Deduction types appear in the deduction form dropdown when adding a charge to a guard's payroll.
@@ -1042,6 +1044,7 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="d-flex gap-1">
+                        {canEditSettings && (<>
                         {!dt.isAutomatic && (
                           <Button
                             size="sm" variant="outline-secondary"
@@ -1082,6 +1085,7 @@ export default function SettingsPage() {
                             <i className="bi bi-trash" />
                           </Button>
                         )}
+                        </>)}
                       </div>
                     </li>
                   ))}
