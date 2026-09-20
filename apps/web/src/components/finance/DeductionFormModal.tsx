@@ -14,15 +14,6 @@ interface Props {
   onClose:   () => void;
 }
 
-const TYPES = [
-  { value: 'UNIFORM_RECOVERY',         label: 'Uniform Recovery' },
-  { value: 'DAMAGE_LOSS',              label: 'Damage / Loss' },
-  { value: 'DISCIPLINARY_PENALTY',     label: 'Disciplinary Penalty' },
-  { value: 'SALARY_ADVANCE_REPAYMENT', label: 'Salary Advance Repayment' },
-  { value: 'LATE_COMING',              label: 'Late Coming' },
-  { value: 'NSSF',                     label: 'NSSF Contribution' },
-];
-
 function firstOfNextMonth(): string {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth() + 1, 1)
@@ -46,6 +37,14 @@ export default function DeductionFormModal({ guardId, guardName, onClose }: Prop
   function handleTypeChange(code: string) {
     const found = deductionTypes.find((t) => t.code === code) ?? null;
     setSelectedType(found);
+
+    // Fill the amount from the type's default, which is what the settings page
+    // tells administrators a default amount does. An amount already typed is
+    // left alone — the "Reset to default" link below puts it back.
+    const current = getValues('amount');
+    if (found?.defaultAmount != null && !current) {
+      setValue('amount', found.defaultAmount, { shouldValidate: true });
+    }
   }
 
   const {
@@ -53,12 +52,17 @@ export default function DeductionFormModal({ guardId, guardName, onClose }: Prop
     control,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<CreateDeductionInput>({
     resolver: zodResolver(CreateDeductionSchema),
     defaultValues: {
       guardId,
-      type:          'UNIFORM_RECOVERY',
+      // No default type: deduction types are configurable, and the one that
+      // used to be hardcoded here could be deactivated or deleted — leaving the
+      // dropdown blank while the form still held that value, and recording a
+      // charge against a retired type on submit.
+      type:          '',
       effectiveDate: firstOfNextMonth(),
     },
   });
@@ -90,7 +94,7 @@ export default function DeductionFormModal({ guardId, guardName, onClose }: Prop
         <Modal.Body>
           <Row className="g-3">
             <Col md={12}>
-              <Form.Group>
+              <Form.Group controlId="deduction-type">
                 <Form.Label>Type <span className="text-danger">*</span></Form.Label>
                 <Form.Select
                   {...register('type')}
@@ -116,7 +120,7 @@ export default function DeductionFormModal({ guardId, guardName, onClose }: Prop
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group>
+              <Form.Group controlId="deduction-amount">
                 <Form.Label>Amount (UGX) <span className="text-danger">*</span></Form.Label>
                 <InputGroup>
                   <InputGroup.Text>UGX</InputGroup.Text>
@@ -165,7 +169,7 @@ export default function DeductionFormModal({ guardId, guardName, onClose }: Prop
               </Form.Group>
             </Col>
             <Col md={12}>
-              <Form.Group>
+              <Form.Group controlId="deduction-description">
                 <Form.Label>Description <span className="text-danger">*</span></Form.Label>
                 <Form.Control
                   as="textarea" rows={2}

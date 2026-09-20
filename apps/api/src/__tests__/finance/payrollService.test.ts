@@ -112,7 +112,7 @@ describe('payrollService.calculateRun()', () => {
   it('applies pending deductions and reflects in totalDeductions', async () => {
     mp.guard.findMany.mockResolvedValue([MOCK_GUARD]);
     mp.guardDeduction.findMany.mockResolvedValue([
-      { id: 'ded-1', type: 'NSSF', amount: 48000, description: 'NSSF 10%' },
+      { id: 'ded-1', type: 'NSSF', amount: 48000, description: 'NSSF 10%', effectiveDate: new Date('2026-04-15') },
     ]);
     await payrollService.calculateRun(4, 2026, 'user-1');
     const createData = mp.payslip.create.mock.calls[0][0].data;
@@ -123,7 +123,7 @@ describe('payrollService.calculateRun()', () => {
   it('net salary never goes below 0', async () => {
     mp.guard.findMany.mockResolvedValue([MOCK_GUARD]);
     mp.guardDeduction.findMany.mockResolvedValue([
-      { id: 'ded-1', type: 'DAMAGE_LOSS', amount: 600000, description: 'Equipment' },
+      { id: 'ded-1', type: 'DAMAGE_LOSS', amount: 600000, description: 'Equipment', effectiveDate: new Date('2026-04-15') },
     ]);
     await payrollService.calculateRun(4, 2026, 'user-1');
     const createData = mp.payslip.create.mock.calls[0][0].data;
