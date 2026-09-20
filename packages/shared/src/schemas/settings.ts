@@ -44,6 +44,55 @@ export type CreateDeductionTypeInput   = z.infer<typeof CreateDeductionTypeSchem
 export type UpdateDeductionTypeInput   = z.infer<typeof UpdateDeductionTypeSchema>;
 export type ReorderDeductionTypesInput = z.infer<typeof ReorderDeductionTypesSchema>;
 
+// ── Staff Position schemas ─────────────────────────────────────────────────────
+
+/**
+ * A position is a label. The system role beside it is what grants access, so
+ * adding or renaming one changes what a profile reads, never what it may reach.
+ */
+export const CreateStaffPositionSchema = z.object({
+  title:        z.string().min(1).max(100),
+  department:   z.string().min(1).max(60),
+  grade:        z.string().max(60).optional().nullable(),
+  description:  z.string().max(300).optional().nullable(),
+  displayOrder: z.coerce.number().int().min(0).default(0),
+});
+
+/**
+ * `code` is absent on purpose: it is what staff records already point at, so it
+ * is set once when the position is created and never edited afterwards.
+ */
+export const UpdateStaffPositionSchema = z.object({
+  title:        z.string().min(1).max(100).optional(),
+  department:   z.string().min(1).max(60).optional(),
+  grade:        z.string().max(60).optional().nullable(),
+  description:  z.string().max(300).optional().nullable(),
+  displayOrder: z.coerce.number().int().min(0).optional(),
+  isActive:     z.boolean().optional(),
+});
+
+export const ReorderStaffPositionsSchema = z.object({
+  orderedIds: z.array(z.string().min(1)).min(1),
+});
+
+export interface StaffPositionResponse {
+  id:           string;
+  code:         string;
+  title:        string;
+  department:   string;
+  grade:        string | null;
+  description:  string | null;
+  displayOrder: number;
+  isActive:     boolean;
+  /** How many staff currently hold this position. */
+  staffCount:   number;
+  createdAt:    string;
+}
+
+export type CreateStaffPositionInput   = z.infer<typeof CreateStaffPositionSchema>;
+export type UpdateStaffPositionInput   = z.infer<typeof UpdateStaffPositionSchema>;
+export type ReorderStaffPositionsInput = z.infer<typeof ReorderStaffPositionsSchema>;
+
 // ── Guard Rank schemas ─────────────────────────────────────────────────────────
 
 export const CreateGuardRankSchema = z.object({

@@ -8,6 +8,8 @@ import {
   useSystemSettings, useUpdateSettings,
   useUsers, useCreateUser, useUpdateUser, useResetPassword, useDeactivateUser,
   useAllGuardRanks, useDeactivateRank, useActivateRank, useDeleteRank, useReorderRanks,
+  useAllStaffPositions, useCreateStaffPosition, useUpdateStaffPosition,
+  useDeactivateStaffPosition, useActivateStaffPosition, useDeleteStaffPosition,
   useAllDeductionTypes, useDeactivateDeductionType, useActivateDeductionType,
   useDeleteDeductionType, useReorderDeductionTypes,
   useAllShiftTypes, useDeactivateShiftType, useActivateShiftType, useDeleteShiftType, useReorderShiftTypes,
@@ -15,10 +17,12 @@ import {
 import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
 import { useRoles } from '../../hooks/useRoles';
-import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse, StaffPositionResponse } from '@stap/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { getApiErrorMessage } from '../../lib/api';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { useHasPermission } from '../../context/AuthContext';
+import StaffPositionModal from '../../components/settings/StaffPositionModal';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
 import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeModal';
@@ -426,6 +430,47 @@ export default function SettingsPage() {
   const { data: usersData, isLoading: loadingUsers } = useUsers({ page: 1, limit: 100 });
   const deactivate = useDeactivateUser();
 
+  // ── Staff positions ────────────────────────────────────────────────────────
+  // Settings opens on settings.view, which HR holds too — but writing needs
+  // settings.edit, so the controls follow that rather than offering buttons
+  // the API will refuse.
+  const canEditSettings = useHasPermission('settings.edit');
+  const { data: allPositions = [], isLoading: loadingPositions } = useAllStaffPositions();
+  const deactivatePosition = useDeactivateStaffPosition();
+  const activatePosition   = useActivateStaffPosition();
+  const deletePosition     = useDeleteStaffPosition();
+
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [editPosition, setEditPosition] = useState<StaffPositionResponse | null>(null);
+
+  /** Departments in the order the positions are listed. */
+  const positionDepartments = [...new Set(allPositions.map((p) => p.department))];
+
+  const handleTogglePosition = (position: StaffPositionResponse) => {
+    const mutation = position.isActive ? deactivatePosition : activatePosition;
+    mutation.mutate(position.id, {
+      onSuccess: () => showToast(
+        position.isActive
+          ? `"${position.title}" hidden from the staff form`
+          : `"${position.title}" is available again`,
+        'success',
+      ),
+      onError: (err: any) => showToast(
+        err?.response?.data?.error ?? 'Could not update the position', 'danger',
+      ),
+    });
+  };
+
+  const handleDeletePosition = (position: StaffPositionResponse) => {
+    if (!window.confirm(`Delete "${position.title}"? This cannot be undone.`)) return;
+    deletePosition.mutate(position.id, {
+      onSuccess: () => showToast('Position deleted', 'success'),
+      onError: (err: any) => showToast(
+        err?.response?.data?.error ?? 'Could not delete the position', 'danger',
+      ),
+    });
+  };
+
   const { data: allRanks = [], isLoading: loadingRanks } = useAllGuardRanks();
   const deactivateRank = useDeactivateRank();
   const activateRank   = useActivateRank();
@@ -689,6 +734,113 @@ export default function SettingsPage() {
             )}
           </Tab>
         ))}
+
+        {/* ── Staff Positions ──────────────────────────────────────────────────── */}
+        <Tab eventKey="staff-positions" title={<><i className="bi bi-person-badge me-1" />Positions</>}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-semibold mb-0">Staff Positions</h6>
+            {canEditSettings && (
+              <Button size="sm" onClick={() => { setEditPosition(null); setShowPositionModal(true); }}>
+                <i className="bi bi-plus-lg me-1" />Add Position
+              </Button>
+            )}
+          </div>
+
+          <Alert variant="info" className="small py-2 px-3 mb-3">
+            Positions fill the job title dropdown on the staff form, grouped by department.
+            A position is a label — the system role beside it is what grants access, so adding
+            or renaming one changes what a profile reads, never what it may reach.
+            Deactivating hides a position from the form while leaving it on existing staff records.
+          </Alert>
+
+          {loadingPositions ? (
+            <div className="text-center py-5"><Spinner /></div>
+          ) : allPositions.length === 0 ? (
+            <Alert variant="secondary">
+              No positions configured. Click <strong>Add Position</strong> to create the first one.
+            </Alert>
+          ) : (
+            positionDepartments.map((dept) => (
+              <div key={dept} className="card border-0 shadow-sm mb-3">
+                <div className="card-header bg-white d-flex align-items-center justify-content-between py-2">
+                  <span className="fw-semibold small">{dept}</span>
+                  <Badge bg="light" text="dark" className="small">
+                    {allPositions.filter((p) => p.department === dept).length}
+                  </Badge>
+                </div>
+                <ul className="list-group list-group-flush">
+                  {allPositions
+                    .filter((p) => p.department === dept)
+                    .map((position) => (
+                      <li key={position.id} className="list-group-item d-flex align-items-center gap-2">
+                        <Badge bg="light" text="dark" className="small">#{position.displayOrder}</Badge>
+
+                        <span className={`flex-grow-1 ${position.isActive ? 'fw-medium' : 'text-muted text-decoration-line-through'}`}>
+                          {position.title}
+                          {position.grade && (
+                            <span className="ms-2 badge bg-light text-dark" style={{ fontSize: 10 }}>
+                              {position.grade}
+                            </span>
+                          )}
+                          {!position.isActive && (
+                            <span className="ms-2 badge bg-secondary" style={{ fontSize: 10 }}>inactive</span>
+                          )}
+                          {position.description && (
+                            <div className="text-muted" style={{ fontSize: '0.72rem' }}>{position.description}</div>
+                          )}
+                        </span>
+
+                        <span className="small text-muted me-1" style={{ minWidth: 110, textAlign: 'right' }}>
+                          {position.staffCount > 0
+                            ? `${position.staffCount} staff`
+                            : <span className="fst-italic">Nobody yet</span>}
+                        </span>
+
+                        <div className="d-flex gap-1">
+                          {canEditSettings && (<>
+                          <Button
+                            size="sm" variant="outline-secondary"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => { setEditPosition(position); setShowPositionModal(true); }}
+                            title="Edit position"
+                          >
+                            <i className="bi bi-pencil" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={position.isActive ? 'outline-warning' : 'outline-success'}
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => handleTogglePosition(position)}
+                            title={position.isActive ? 'Hide from the staff form' : 'Offer on the staff form again'}
+                          >
+                            <i className={position.isActive ? 'bi bi-eye-slash' : 'bi bi-eye'} />
+                          </Button>
+                          <Button
+                            size="sm" variant="outline-danger"
+                            style={{ fontSize: 11, padding: '1px 6px' }}
+                            onClick={() => handleDeletePosition(position)}
+                            title={position.staffCount > 0
+                              ? 'Staff hold this position — deactivate it instead'
+                              : 'Delete position'}
+                          >
+                            <i className="bi bi-trash" />
+                          </Button>
+                          </>)}
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))
+          )}
+
+          <StaffPositionModal
+            show={showPositionModal}
+            position={editPosition}
+            departments={positionDepartments}
+            onHide={() => { setShowPositionModal(false); setEditPosition(null); }}
+          />
+        </Tab>
 
         {/* ── Guard Ranks ──────────────────────────────────────────────────────── */}
         <Tab eventKey="ranks" title={<><i className="bi bi-award me-1" />Ranks</>}>

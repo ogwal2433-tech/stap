@@ -1932,6 +1932,31 @@ model ServiceRequest {
   @@index([clientId, status])
 }
 
+/// A staff position: the job title a member of staff holds, configurable in
+/// Settings rather than compiled in.
+///
+/// `code` is what User.jobTitle stores, the same arrangement Guard.rank has with
+/// GuardRank — a stable identifier, so a title can be reworded without orphaning
+/// the staff who hold it. A position is a label: the system role beside it is
+/// what grants access, and changing a title grants nothing.
+model StaffPosition {
+  id           String   @id @default(cuid())
+  /// Stable identifier stored on User.jobTitle, e.g. "ZONE_1_SUPERVISOR".
+  code         String   @unique
+  title        String
+  /// Groups the position in the dropdown and on the settings page.
+  department   String
+  /// Level within the department, e.g. "Supervisor", "Manager". Free text.
+  grade        String?
+  description  String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([title, department])
+}
+
 model DeductionType {
   id            String   @id @default(cuid())
   name          String   @unique

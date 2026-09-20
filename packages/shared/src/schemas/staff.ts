@@ -1,4 +1,3 @@
-import { JOB_TITLE_VALUES } from '../constants/jobTitles';
 import { z } from 'zod';
 import { ROLES } from '../types/roles';
 
@@ -138,10 +137,12 @@ export const CreateStaffSchema = z.object({
   role:       StaffRoleEnum,
   phone:      z.string().max(20).optional().nullable(),
   department: z.string().max(100).optional().nullable(),
-  // Held to the list so titles stay consistent across the directory. A value
-  // recorded before the list existed still displays via getJobTitleLabel; it
-  // simply cannot be re-saved as free text.
-  jobTitle:   z.enum(JOB_TITLE_VALUES).optional().nullable(),
+  // A StaffPosition code. Positions are configured in Settings, so this cannot
+  // be a compiled enum any more — a title added today would be refused by a
+  // build that predates it. Bounded like Guard.rank, which stores a GuardRank
+  // name the same way; values recorded before the list existed still display
+  // through getJobTitleLabel.
+  jobTitle:   z.string().max(100).optional().nullable(),
   /** Left blank, a secure password is generated and emailed to the new account. */
   password:   z.string().min(8).max(128).optional(),
 });
@@ -150,7 +151,7 @@ export const UpdateStaffSchema = z.object({
   name:             z.string().min(2).max(100).optional(),
   phone:            z.string().max(20).optional().nullable(),
   department:       z.string().max(100).optional().nullable(),
-  jobTitle:         z.enum(JOB_TITLE_VALUES).optional().nullable(),
+  jobTitle:         z.string().max(100).optional().nullable(),
   role:             StaffRoleEnum.optional(),
   emergencyContact: z.string().max(100).optional().nullable(),
   emergencyPhone:   z.string().max(20).optional().nullable(),
