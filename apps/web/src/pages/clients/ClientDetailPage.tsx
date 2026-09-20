@@ -103,6 +103,14 @@ export default function ClientDetailPage() {
   const [showComplaintDetail, setShowComplaintDetail] = useState(false);
   const [complaintFilter, setComplaintFilter] = useState<string>('ALL');
 
+  // What the delete dialog is about to remove. Deletes are soft and can be
+  // restored; a refusal from the server is shown inside the dialog.
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'client' }
+    | { kind: 'site' | 'contract'; id: string; name: string }
+    | null
+  >(null);
+
   const complaints = complaintsData?.data ?? [];
   const filteredComplaints = complaints.filter(c => complaintFilter === 'ALL' || c.status === complaintFilter);
 
@@ -132,14 +140,6 @@ export default function ClientDetailPage() {
       showToast('Failed to archive', 'danger');
     }
   };
-
-  // What the delete dialog is about to remove. Deletes are soft and can be
-  // restored; a refusal from the server is shown inside the dialog.
-  const [deleteTarget, setDeleteTarget] = useState<
-    | { kind: 'client' }
-    | { kind: 'site' | 'contract'; id: string; name: string }
-    | null
-  >(null);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
