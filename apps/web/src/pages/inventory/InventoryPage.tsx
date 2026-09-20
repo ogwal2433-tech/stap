@@ -9,10 +9,12 @@ import {
   useCreateInventoryItem, useUpdateInventoryItem,
   useReturnItem, useAdjustStock, useAdjustCondition, useBatchIssueItems,
 } from '../../hooks/useInventory';
-import { useGuardList } from '../../hooks/useGuards';
+import { useGuardList, useGuard } from '../../hooks/useGuards';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import EditIssuedItemModal from '../../components/inventory/EditIssuedItemModal';
 import type {
+  GuardResponse,
   InventoryItemResponse,
   InventoryTransactionResponse,
   StockConditionBreakdown,
@@ -27,6 +29,10 @@ import {
 } from '@stap/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
+
+/** Guards shown per search in the issue form. Narrowing is by typing, not paging. */
+const GUARD_RESULTS = 20;
+const SEARCH_DEBOUNCE_MS = 250;
 
 const TYPE_BADGES: Record<string, string> = {
   UNIFORM:    'primary',
@@ -488,7 +494,7 @@ function LineItemRow({
 
 // ── Issue Items Modal (multi-item batch) ───────────────────────────────────────
 
-function IssueItemModal({
+export function IssueItemModal({
   show,
   preItem,
   onHide,
@@ -500,14 +506,27 @@ function IssueItemModal({
   const { showToast }  = useToast();
   const mutation       = useBatchIssueItems();
   const { data: itemsData } = useInventoryItems({ page: 1, limit: 200 });
-  const { data: guardsData, isLoading: guardsLoading } = useGuardList({ page: 1, limit: 200 });
+  // Guards are searched on the server as the user types. This used to load one
+  // unfiltered page — the first 200 by date added — so every guard after those
+  // could not be issued to from here at all.
+  const [guardSearch, setGuardSearch] = useState('');
+  const guardTerm = useDebouncedValue(guardSearch.trim(), SEARCH_DEBOUNCE_MS);
+  const { data: guardsData, isLoading: guardsLoading } = useGuardList({
+    search:    guardTerm || undefined,
+    limit:     GUARD_RESULTS,
+    sortBy:    'firstName',
+    sortOrder: 'asc',
+  });
   const inventoryItems = itemsData?.data ?? [];
   const guards         = guardsData?.data ?? [];
+  const moreGuards     = guardsData?.pagination?.hasNext ?? false;
 
   const [selectedGuardId, setSelectedGuardId] = useState('');
   const [lineItems, setLineItems]             = useState<LineItem[]>([]);
 
-  const selectedGuard = guards.find(g => g.id === selectedGuardId) ?? null;
+  // Held separately from selectedGuardId: once the search moves on, the chosen
+  // guard is no longer in `guards`, and their name must stay in the field.
+  const [selectedGuard, setSelectedGuard] = useState<GuardResponse | null>(null);
 
   // Pre-populate first line item when opened from a catalogue row
   React.useEffect(() => {
@@ -536,6 +555,8 @@ function IssueItemModal({
 
   const handleClose = () => {
     setSelectedGuardId('');
+    setSelectedGuard(null);
+    setGuardSearch('');
     setLineItems([]);
     onHide();
   };
@@ -599,13 +620,27 @@ function IssueItemModal({
             options={guards.map(g => ({
               value:    g.id,
               label:    `${g.firstName} ${g.lastName}`,
-              sublabel: g.rank ?? 'Guard',
+              sublabel: [g.systemId, g.rank].filter(Boolean).join(' · ') || 'Guard',
             }))}
             value={selectedGuardId}
-            onChange={id => { setSelectedGuardId(id); setLineItems([]); }}
-            placeholder="— Search and select guard —"
-            searchPlaceholder="Type guard name…"
+            selectedLabel={selectedGuard ? `${selectedGuard.firstName} ${selectedGuard.lastName}` : undefined}
+            onChange={id => {
+              setSelectedGuardId(id);
+              setSelectedGuard(id ? guards.find(g => g.id === id) ?? null : null);
+              setLineItems([]);
+            }}
+            onSearchChange={setGuardSearch}
             isLoading={guardsLoading}
+            clearable
+            ariaLabel="Guard"
+            placeholder="— Search and select guard —"
+            searchPlaceholder="Type a guard name, ID or phone…"
+            emptyText={guardSearch.trim() ? `No guards match "${guardSearch.trim()}"` : 'No guards yet'}
+            footer={moreGuards && (
+              <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
+                Showing the first {GUARD_RESULTS} — keep typing to narrow the list
+              </div>
+            )}
           />
           {selectedGuard && (
             <div style={{
@@ -734,7 +769,7 @@ function IssueItemModal({
 
 // ── Return Item Modal ──────────────────────────────────────────────────────────
 
-function ReturnItemModal({
+export function ReturnItemModal({
   show,
   preItem,
   preGuardId,
@@ -748,9 +783,21 @@ function ReturnItemModal({
   const { showToast } = useToast();
   const ret = useReturnItem();
   const { data: itemsData } = useInventoryItems({ page: 1, limit: 200 });
-  const { data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards } = useGuardList({ page: 1, limit: 200 });
-  const items  = itemsData?.data  ?? [];
-  const guards = guardsData?.data ?? [];
+  // Searched on the server, as in the issue form. A single page of 200 also hid
+  // the guard being returned for when they were opened from a holder row.
+  const [guardSearch, setGuardSearch] = useState('');
+  const guardTerm = useDebouncedValue(guardSearch.trim(), SEARCH_DEBOUNCE_MS);
+  const {
+    data: guardsData, isLoading: guardsLoading, isError: guardsError, refetch: refetchGuards,
+  } = useGuardList({
+    search:    guardTerm || undefined,
+    limit:     GUARD_RESULTS,
+    sortBy:    'firstName',
+    sortOrder: 'asc',
+  });
+  const items      = itemsData?.data  ?? [];
+  const guards     = guardsData?.data ?? [];
+  const moreGuards = guardsData?.pagination?.hasNext ?? false;
   const [form, setForm] = useState({
     itemId: preItem?.id ?? '',
     guardId: preGuardId ?? '',
@@ -759,6 +806,10 @@ function ReturnItemModal({
     conditionNote: '',
     chargedAmount: '' as string,
   });
+
+  // Names the chosen guard even when the search has moved past them, and when
+  // the modal opened with one already set from a holder row.
+  const { data: chosenGuard } = useGuard(form.guardId);
 
   React.useEffect(() => {
     setForm(f => ({
@@ -814,10 +865,28 @@ function ReturnItemModal({
                 <Button size="sm" variant="link" className="p-0 ms-2" onClick={() => refetchGuards()}>Retry</Button>
               </Alert>
             ) : (
-              <Form.Select size="sm" value={form.guardId} onChange={e => setForm(f => ({ ...f, guardId: e.target.value }))} required disabled={guardsLoading}>
-                <option value="">{guardsLoading ? 'Loading guards…' : 'Select guard…'}</option>
-                {guards.map(g => <option key={g.id} value={g.id}>{g.firstName} {g.lastName}</option>)}
-              </Form.Select>
+              <SearchableSelect
+                options={guards.map(g => ({
+                  value:    g.id,
+                  label:    `${g.firstName} ${g.lastName}`,
+                  sublabel: [g.systemId, g.rank].filter(Boolean).join(' · ') || 'Guard',
+                }))}
+                value={form.guardId}
+                selectedLabel={chosenGuard ? `${chosenGuard.firstName} ${chosenGuard.lastName}` : undefined}
+                onChange={id => setForm(f => ({ ...f, guardId: id }))}
+                onSearchChange={setGuardSearch}
+                isLoading={guardsLoading}
+                clearable
+                ariaLabel="Guard"
+                placeholder="Select guard…"
+                searchPlaceholder="Type a guard name, ID or phone…"
+                emptyText={guardSearch.trim() ? `No guards match "${guardSearch.trim()}"` : 'No guards yet'}
+                footer={moreGuards && (
+                  <div style={{ fontSize: '0.72rem', color: '#6c757d' }}>
+                    Showing the first {GUARD_RESULTS} — keep typing to narrow the list
+                  </div>
+                )}
+              />
             )}
           </Form.Group>
           <Row className="mb-2">
