@@ -38,6 +38,7 @@ import { swaggerSpec } from './lib/swagger';
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
+import { startPermissionCacheSync } from './middleware/permissions';
 import { authenticate } from './middleware/authenticate';
 import { errorLogger } from './services/errorLogger';
 import { APP_NAME } from '@stap/shared';
@@ -109,6 +110,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);
+
+// Permission changes made on another instance land here too — the cache is
+// per process and the API runs as several of them.
+startPermissionCacheSync();
 
 // ── Start server ───────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
