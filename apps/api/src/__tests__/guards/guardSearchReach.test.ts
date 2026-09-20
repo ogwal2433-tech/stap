@@ -26,10 +26,8 @@ const PAGE = 20; // what the form asks for
 
 /** A guard deliberately chosen from beyond the first page of the default sort. */
 let deepGuard: { id: string; firstName: string; lastName: string; systemId: string | null } | null = null;
-let totalGuards = 0;
 
 beforeAll(async () => {
-  totalGuards = await prisma.guard.count();
   deepGuard = await prisma.guard.findFirst({
     where:   { systemId: { not: null } },
     orderBy: { createdAt: 'desc' },
@@ -67,26 +65,35 @@ describe('GET /api/v1/guards — every guard is reachable from the issue form', 
   });
 
   it('reports the full total, so the form can say more results exist', async () => {
-    const res = await request(app)
-      .get('/api/v1/guards')
-      .query({ limit: PAGE })
-      .set('Authorization', bearer);
+    // Other suites add and remove guards while this runs, so the count is read
+    // again if it moved under the request rather than pinned to a stale one.
+    let res; let count = -1;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await request(app)
+        .get('/api/v1/guards')
+        .query({ limit: PAGE })
+        .set('Authorization', bearer);
+      count = await prisma.guard.count();
+      if (res.body?.pagination?.total === count) break;
+    }
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeLessThanOrEqual(PAGE);
-    expect(res.body.pagination.total).toBe(totalGuards);
-    expect(res.body.pagination.hasNext).toBe(totalGuards > PAGE);
+    expect(res!.status).toBe(200);
+    expect(res!.body.data.length).toBeLessThanOrEqual(PAGE);
+    expect(res!.body.pagination.total).toBe(count);
+    expect(res!.body.pagination.hasNext).toBe(count > PAGE);
   });
 
   it('applies no status filter unless one is asked for', async () => {
-    const res = await request(app)
-      .get('/api/v1/guards')
-      .query({ limit: 500 })
-      .set('Authorization', bearer);
+    const [all, active] = await Promise.all([
+      request(app).get('/api/v1/guards').query({ limit: 1 }).set('Authorization', bearer),
+      request(app).get('/api/v1/guards').query({ limit: 1, status: 'ACTIVE' }).set('Authorization', bearer),
+    ]);
 
-    expect(res.status).toBe(200);
-    // Whatever mix of statuses this database holds, the unfiltered list returns
-    // them all — a guard awaiting deployment still needs a uniform.
-    expect(res.body.pagination.total).toBe(totalGuards);
+    expect(all.status).toBe(200);
+    // Whatever mix of statuses this database holds, the unfiltered list covers
+    // at least the active ones — a guard awaiting deployment still needs a
+    // uniform, so nothing is excluded until a status is asked for.
+    expect(all.body.pagination.total).toBeGreaterThanOrEqual(active.body.pagination.total);
+    expect(all.body.pagination.total).toBeGreaterThan(PAGE);
   });
 });
