@@ -27,6 +27,7 @@ import type {
   GuardTransferResponse,
   PromoteGuardInput,
   GuardPromotionResponse,
+  GuardExportRow,
 } from '@stap/shared';
 
 // Roles allowed to see the accountNumber field
@@ -703,6 +704,68 @@ class GuardService {
    * Counts only ACTIVE guards: an exited guard's paperwork is history, and
    * including them would make the figures answer a question nobody asked.
    */
+  /**
+   * Every guard, for the spreadsheet export. Not paginated on purpose: the
+   * point of the export is the whole roll, and paging it would reintroduce the
+   * cut-off the caller is trying to escape.
+   *
+   * The open deployment record (the one with no end date) is what says where a
+   * guard is now, the same rule the profile uses, so a transfer moves them here
+   * without a second column to keep in step.
+   */
+  async listForExport(): Promise<GuardExportRow[]> {
+    const guards = await prisma.guard.findMany({
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      include: {
+        deploymentHistory: {
+          where:  { endDate: null },
+          take:   1,
+          select: {
+            site: {
+              select: {
+                siteName: true,
+                client: { select: { clientName: true } },
+                zone:   { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+    return guards.map((g) => {
+      const site = g.deploymentHistory[0]?.site ?? null;
+      return {
+        systemId:         g.systemId,
+        firstName:        g.firstName,
+        lastName:         g.lastName,
+        otherNames:       g.otherNames,
+        fullName:         [g.firstName, g.otherNames, g.lastName].filter(Boolean).join(' '),
+        gender:           g.gender,
+        dateOfBirth:      iso(g.dateOfBirth),
+        nationalId:       g.nationalId,
+        idType:           g.idType,
+        phone:            g.phone,
+        rank:             g.rank,
+        employmentStatus: g.employmentStatus,
+        contractType:     g.contractType,
+        probationStatus:  g.probationStatus,
+        salaryRate:       g.salaryRate,
+        currentSiteName:  site?.siteName ?? null,
+        clientName:       site?.client?.clientName ?? null,
+        zoneName:         site?.zone?.name ?? null,
+        nextOfKinName:    g.nextOfKinName,
+        nextOfKinPhone:   g.nextOfKinPhone,
+        district:         g.district,
+        contractStart:    g.contractStart.toISOString(),
+        contractEnd:      iso(g.contractEnd),
+        createdAt:        g.createdAt.toISOString(),
+      };
+    });
+  }
+
   async getIdStats() {
     const where = { employmentStatus: 'ACTIVE' as const };
     const [total, ownId, relativeId, otherDoc] = await Promise.all([

@@ -6,6 +6,7 @@ export interface GuardIdStats {
 import api from './api';
 import type {
   GuardResponse,
+  GuardExportResponse,
   GuardDocumentResponse,
   DeploymentHistoryEntry,
   PaginatedResponse,
@@ -135,6 +136,13 @@ export const guardsApi = {
 
   restore(id: string): Promise<{ id: string; name: string }> {
     return api.post(`/guards/${id}/restore`).then((r) => r.data.data);
+  },
+
+  /** Every guard, for the Excel export — deliberately not paginated. */
+  exportAll(): Promise<GuardExportResponse> {
+    return api
+      .get<{ success: boolean; data: GuardExportResponse }>('/guards/export')
+      .then((r) => r.data.data);
   },
 
   idStats(): Promise<GuardIdStats> {

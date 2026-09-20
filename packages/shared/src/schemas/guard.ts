@@ -628,6 +628,49 @@ export interface DeploymentHistoryEntry {
   createdAt:  string;
 }
 
+/**
+ * One guard as the Excel export needs them: the fields the guards list already
+ * shows, plus where they are deployed — which the list response cannot carry,
+ * because the current site is derived from the open deployment record and only
+ * single-guard responses load it.
+ *
+ * The bank account number is deliberately absent. It is kept from everyone but
+ * the Director and Assistant Manager on the guard profile, and a spreadsheet
+ * that anyone holding guards.view could download is no place to reintroduce it.
+ */
+export interface GuardExportRow {
+  systemId:         string | null;
+  firstName:        string;
+  lastName:         string;
+  otherNames:       string | null;
+  fullName:         string;
+  gender:           string | null;
+  dateOfBirth:      string | null;
+  nationalId:       string | null;
+  idType:           string | null;
+  phone:            string | null;
+  rank:             string;
+  employmentStatus: string;
+  contractType:     string;
+  probationStatus:  string;
+  salaryRate:       number;
+  currentSiteName:  string | null;
+  clientName:       string | null;
+  zoneName:         string | null;
+  nextOfKinName:    string | null;
+  nextOfKinPhone:   string | null;
+  district:         string | null;
+  contractStart:    string;
+  contractEnd:      string | null;
+  createdAt:        string;
+}
+
+export interface GuardExportResponse {
+  guards:     GuardExportRow[];
+  totalCount: number;
+  exportedAt: string;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {

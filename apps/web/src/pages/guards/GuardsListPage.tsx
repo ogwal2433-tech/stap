@@ -12,6 +12,7 @@ import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
+import { exportGuardsList } from '../../lib/exportToExcel';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
@@ -145,6 +146,28 @@ export default function GuardsListPage() {
     );
   };
 
+  // Exporting asks the server for the whole roll rather than the page on screen:
+  // the point of the export is every guard, and the list response also cannot
+  // say where each one is deployed.
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { guards: rows, exportedAt } = await guardsApi.exportAll();
+      if (rows.length === 0) {
+        showToast('There are no guards to export yet.', 'warning');
+        return;
+      }
+      exportGuardsList(rows, new Date(exportedAt));
+      showToast(`Exported ${rows.length} guard${rows.length === 1 ? '' : 's'}.`, 'success');
+    } catch {
+      showToast('Could not export the guard list. Please try again.', 'danger');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       {/* Header row */}
@@ -158,6 +181,18 @@ export default function GuardsListPage() {
               onClick={() => navigate('/guards/import')}
             >
               📥 Import
+            </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="guards.view">
+            <Button
+              variant="outline-success"
+              size="sm"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting
+                ? <><Spinner as="span" size="sm" animation="border" className="me-1" />Exporting…</>
+                : <>📊 Export to Excel</>}
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="guards.create">

@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
-import type { DailySheetResponse, GuardAttendanceSummaryResponse } from '@stap/shared';
+import type {
+  DailySheetResponse, GuardAttendanceSummaryResponse, GuardExportRow, GuardResponse,
+} from '@stap/shared';
 
 // ── Company constants ──────────────────────────────────────────────────────────
 
@@ -344,4 +346,178 @@ export function exportAttendanceSummary(data: GuardAttendanceSummaryResponse): v
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
 
   triggerBlob(wb, `STAP_Attendance_${from.replace(/-/g, '')}_to_${to.replace(/-/g, '')}.xlsx`);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GUARD LIST EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Columns of the guard roll, in the order they appear in the sheet. */
+const GUARD_COLUMNS: { header: string; width: number; value: (g: GuardExportRow) => CellValue }[] = [
+  { header: 'System ID',    width: 12, value: (g) => g.systemId },
+  { header: 'Full Name',    width: 26, value: (g) => g.fullName },
+  { header: 'First Name',   width: 15, value: (g) => g.firstName },
+  { header: 'Last Name',    width: 15, value: (g) => g.lastName },
+  { header: 'Gender',       width: 9,  value: (g) => g.gender },
+  { header: 'Date of Birth', width: 13, value: (g) => fmtDay(g.dateOfBirth) },
+  { header: 'National ID',  width: 18, value: (g) => g.nationalId },
+  { header: 'ID Type',      width: 15, value: (g) => fmtCode(g.idType) },
+  { header: 'Phone',        width: 15, value: (g) => g.phone },
+  { header: 'Rank',         width: 15, value: (g) => fmtRank(g.rank) },
+  { header: 'Status',       width: 13, value: (g) => fmtCode(g.employmentStatus) },
+  { header: 'Contract Type', width: 13, value: (g) => fmtCode(g.contractType) },
+  { header: 'Probation',    width: 14, value: (g) => fmtCode(g.probationStatus) },
+  // A number, not a formatted string, so the column can be summed in Excel.
+  { header: 'Salary (UGX)', width: 14, value: (g) => g.salaryRate },
+  { header: 'Deployed Site', width: 26, value: (g) => g.currentSiteName ?? 'Unassigned' },
+  { header: 'Client',       width: 26, value: (g) => g.clientName },
+  { header: 'Zone',         width: 16, value: (g) => g.zoneName ?? 'No zone' },
+  { header: 'Next of Kin',  width: 22, value: (g) => g.nextOfKinName },
+  { header: 'Next of Kin Phone', width: 16, value: (g) => g.nextOfKinPhone },
+  { header: 'District',     width: 16, value: (g) => g.district },
+  { header: 'Contract Start', width: 13, value: (g) => fmtDay(g.contractStart) },
+  { header: 'Contract End', width: 13, value: (g) => fmtDay(g.contractEnd) },
+  { header: 'Date Added',   width: 13, value: (g) => fmtDay(g.createdAt) },
+];
+
+function fmtDay(iso: string | null | undefined): string {
+  return iso ? new Date(iso).toLocaleDateString('en-GB') : '';
+}
+
+/** TITLE_CASE codes read as words in a spreadsheet: ON_PROBATION → On Probation. */
+function fmtCode(code: string | null | undefined): string {
+  if (!code) return '';
+  return code
+    .toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Counts by one field, highest first — the shape the Summary sheet wants. */
+function tally(rows: GuardExportRow[], pick: (g: GuardExportRow) => string): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = pick(row) || 'Unknown';
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+/** A plain data sheet: headers in row 1, so it sorts and filters in Excel. */
+function guardSheet(rows: GuardExportRow[], emptyNote: string): XLSX.WorkSheet {
+  if (rows.length === 0) {
+    return buildSheet([[emptyNote]], [40], [], [14]);
+  }
+
+  const aoa: CellValue[][] = [
+    GUARD_COLUMNS.map((c) => c.header),
+    ...rows.map((g) => GUARD_COLUMNS.map((c) => c.value(g))),
+  ];
+
+  const ws = buildSheet(aoa, GUARD_COLUMNS.map((c) => c.width), [], [16]);
+  // Freeze the header and turn on the filter dropdowns — this is a sheet people
+  // sort and slice, not one they print.
+  ws['!freeze'] = { xSplit: '0', ySplit: '1' };
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: rows.length, c: GUARD_COLUMNS.length - 1 },
+  }) };
+  return ws;
+}
+
+/**
+ * The whole guard roll as a workbook: the full list, a summary, and the list
+ * split by whether the guard is currently deployed.
+ *
+ * The letterhead sits on the Summary sheet rather than above the data. Banner
+ * rows above a table push the headers out of row 1, which stops Excel's filter
+ * and sort from reading the columns — and this is a sheet meant to be worked,
+ * not printed.
+ */
+export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date()): void {
+  const wb = XLSX.utils.book_new();
+
+  const deployed   = guards.filter((g) => g.currentSiteName);
+  const unassigned = guards.filter((g) => !g.currentSiteName);
+
+  // ── Summary ────────────────────────────────────────────────────────────────
+  const summary: CellValue[][] = [
+    [CO_NAME],
+    [CO_ADDRESS],
+    [CO_LINE2],
+    [],
+    ['GUARD LIST EXPORT'],
+    ['Generated', exportedAt.toLocaleString('en-GB')],
+    ['Total guards', guards.length],
+    ['Deployed', deployed.length],
+    ['Unassigned', unassigned.length],
+    [],
+    ['BY STATUS', 'COUNT'],
+    ...tally(guards, (g) => fmtCode(g.employmentStatus)),
+    [],
+    ['BY RANK', 'COUNT'],
+    ...tally(guards, (g) => fmtRank(g.rank)),
+    [],
+    ['BY ZONE', 'COUNT'],
+    ...tally(guards, (g) => g.zoneName ?? 'No zone'),
+  ];
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    buildSheet(summary, [28, 14], [], [22, 14, 12, 8, 18, 14]),
+    'Summary',
+  );
+
+  XLSX.utils.book_append_sheet(wb, guardSheet(guards, 'No guards to export'), 'All Guards');
+  XLSX.utils.book_append_sheet(wb, guardSheet(deployed, 'No guards are currently deployed'), 'Deployed');
+  XLSX.utils.book_append_sheet(wb, guardSheet(unassigned, 'Every guard is currently deployed'), 'Unassigned');
+
+  const stamp = exportedAt.toISOString().slice(0, 10);
+  triggerBlob(wb, `STAP_Guards_${stamp}.xlsx`);
+}
+
+/**
+ * One guard as a profile sheet — the detail page's counterpart to the roll.
+ *
+ * Laid out as label/value pairs rather than a table: a single record read down
+ * the page, not a row to be sorted. The bank account number is left out here
+ * too, for the same reason it is left out of the roll.
+ */
+export function exportGuardProfile(guard: GuardResponse, exportedAt = new Date()): void {
+  const rows: CellValue[][] = [
+    [CO_NAME],
+    [CO_ADDRESS],
+    [],
+    ['GUARD PROFILE'],
+    ['Generated', exportedAt.toLocaleString('en-GB')],
+    [],
+    ['System ID',        guard.systemId],
+    ['Full Name',        guard.fullName],
+    ['Gender',           guard.gender],
+    ['Date of Birth',    fmtDay(guard.dateOfBirth)],
+    ['National ID',      guard.nationalId],
+    ['ID Type',          fmtCode(guard.idType)],
+    ['Phone',            guard.phone],
+    [],
+    ['Rank',             fmtRank(guard.rank)],
+    ['Status',           fmtCode(guard.employmentStatus)],
+    ['Contract Type',    fmtCode(guard.contractType)],
+    ['Probation',        fmtCode(guard.probationStatus)],
+    ['Salary (UGX)',     guard.salaryRate],
+    ['Contract Start',   fmtDay(guard.contractStart)],
+    ['Contract End',     fmtDay(guard.contractEnd)],
+    ['Deployed Site',    guard.currentSiteName ?? 'Unassigned'],
+    [],
+    ['Next of Kin',      guard.nextOfKinName],
+    ['Next of Kin Phone', guard.nextOfKinPhone],
+    ['District',         guard.district],
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, buildSheet(rows, [22, 34], [], [22, 14, 8, 18]), 'Guard Profile');
+
+  const who = guard.systemId ?? guard.lastName;
+  triggerBlob(wb, `STAP_Guard_${who}_${exportedAt.toISOString().slice(0, 10)}.xlsx`);
 }
