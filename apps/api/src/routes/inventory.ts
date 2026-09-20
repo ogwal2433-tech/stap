@@ -27,7 +27,7 @@
  *               $ref: '#/components/schemas/PaginatedResponse'
  *   post:
  *     tags: [Inventory]
- *     summary: Create a new inventory item (DIRECTOR only)
+ *     summary: Create a new inventory item (requires inventory.edit)
  *     requestBody:
  *       required: true
  *       content:
@@ -141,16 +141,16 @@
  *       200:
  *         description: List of outstanding items
  */
-import { Router, type IRouter } from 'express';
+import { Router, type IRouter, type RequestHandler } from 'express';
 import { inventoryService } from '../services/inventoryService';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/permissions';
+import { PERMISSIONS } from '../constants/permissions';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ForbiddenError } from '../errors/AppError';
 import {
   ROLES,
-  INTERNAL_ROLES,
   CreateInventoryItemSchema,
   UpdateInventoryItemSchema,
   IssueItemSchema,
@@ -165,14 +165,11 @@ const router: IRouter = Router();
 
 router.use(authenticate);
 
-const MGMT_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as const;
-const VIEW_ROLES = INTERNAL_ROLES.filter((r) => r !== ROLES.GUARD && r !== ROLES.CLIENT);
-
 // ── Item CRUD ──────────────────────────────────────────────────────────────────
 
 router.get(
   '/items',
-  requireRole(...VIEW_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(async (req, res) => {
     const page       = Number(req.query.page)  || 1;
     const limit      = Number(req.query.limit) || 20;
@@ -187,7 +184,7 @@ router.get(
 
 router.post(
   '/items',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_EDIT),
   validate(CreateInventoryItemSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.createItem(req.body, req.user!.userId);
@@ -197,7 +194,7 @@ router.post(
 
 router.get(
   '/items/low-stock',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(async (_req, res) => {
     const data = await inventoryService.checkLowStock();
     res.json({ success: true, data });
@@ -208,7 +205,7 @@ router.get(
 // NOTE: /items/issue, /items/return, /items/adjust-stock must be before /:id
 router.post(
   '/items/issue/batch',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  requirePermission(PERMISSIONS.INVENTORY_ISSUE),
   validate(BatchIssueSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.batchIssue(req.body.guardId, req.body.items, req.user!.userId);
@@ -218,7 +215,7 @@ router.post(
 
 router.post(
   '/items/issue',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_ISSUE),
   validate(IssueItemSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.issueItem(req.body, req.user!.userId);
@@ -228,7 +225,7 @@ router.post(
 
 router.post(
   '/items/return',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_RETURN),
   validate(ReturnItemSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.returnItem(req.body, req.user!.userId);
@@ -239,7 +236,7 @@ router.post(
 // ── PATCH /transactions/:id — correct an already-recorded issue ───────────────
 router.patch(
   '/transactions/:id',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_EDIT),
   validate(UpdateIssuedTransactionSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.updateIssuedTransaction(
@@ -254,7 +251,7 @@ router.patch(
 // ── GET /outstanding — who still holds equipment, ex-guards flagged ───────────
 router.get(
   '/outstanding',
-  requireRole(...VIEW_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(async (req, res) => {
     const exGuardsOnly = req.query.exGuardsOnly === 'true';
     const data = await inventoryService.getOutstandingHolders(!exGuardsOnly);
@@ -264,7 +261,7 @@ router.get(
 
 router.post(
   '/items/adjust-stock',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requirePermission(PERMISSIONS.INVENTORY_EDIT),
   validate(StockAdjustmentSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.adjustStock(req.body, req.user!.userId);
@@ -274,7 +271,7 @@ router.post(
 
 router.get(
   '/items/:id',
-  requireRole(...VIEW_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.getById(req.params.id);
     res.json({ success: true, data });
@@ -283,7 +280,7 @@ router.get(
 
 router.patch(
   '/items/:id',
-  requireRole(...MGMT_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_EDIT),
   validate(UpdateInventoryItemSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.updateItem(req.params.id, req.body, req.user!.userId);
@@ -293,7 +290,7 @@ router.patch(
 
 router.patch(
   '/items/:id/condition',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  requirePermission(PERMISSIONS.INVENTORY_EDIT),
   validate(AdjustConditionSchema),
   asyncHandler(async (req, res) => {
     const data = await inventoryService.adjustCondition(req.params.id, req.body, req.user!.userId);
@@ -305,7 +302,7 @@ router.patch(
 
 router.get(
   '/transactions',
-  requireRole(...VIEW_ROLES),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(async (req, res) => {
     const page    = Number(req.query.page)  || 1;
     const limit   = Number(req.query.limit) || 20;
@@ -319,9 +316,19 @@ router.get(
 
 // ── Guard inventory ────────────────────────────────────────────────────────────
 
+/**
+ * A guard reaching their own issued items is not an inventory permission —
+ * they hold none, and the handler below checks the record is theirs. Everyone
+ * else passes the same inventory.view check as the rest of this module.
+ */
+const viewGuardItems: RequestHandler = (req, res, next) =>
+  req.user?.role === ROLES.GUARD
+    ? next()
+    : requirePermission(PERMISSIONS.INVENTORY_VIEW)(req, res, next);
+
 router.get(
   '/guards/:guardId/items',
-  requireRole(...MGMT_ROLES, ROLES.GUARD),
+  viewGuardItems,
   asyncHandler(async (req, res) => {
     if (req.user!.role === ROLES.GUARD) {
       const guard = await import('../db/prisma').then((m) =>

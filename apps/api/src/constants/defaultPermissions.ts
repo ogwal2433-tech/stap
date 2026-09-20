@@ -65,6 +65,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // Reconciled with the pages this role already reaches, so moving the nav
     // and route guards onto permissions does not take access away.
     P.ATTENDANCE_VIEW, P.COMPLAINTS_VIEW, P.INVENTORY_VIEW, P.REQUISITIONS_VIEW, P.SERVICE_REQUESTS_VIEW,
+    // Inventory management, which this role did by virtue of its name until the
+    // routes moved onto permissions. Listed so the move takes nothing away and
+    // a reset to defaults keeps it.
+    P.INVENTORY_ISSUE, P.INVENTORY_RETURN, P.INVENTORY_EDIT,
     // The old service-request guard was a role list this role was on, so it
     // could already reply. Stating it keeps that true now the route asks for
     // the permission instead.

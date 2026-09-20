@@ -102,7 +102,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Finance & Resources',
     items: [
       { icon: 'bi-cash-coin',      label: 'Finance',      to: '/finance',      roles: FINANCE_ROLES as UserRole[] , permission: 'finance.view'},
-      { icon: 'bi-box-seam-fill',  label: 'Inventory',    to: '/inventory',    roles: ADMIN_ONLY as UserRole[] , permission: 'inventory.view'},
+      { icon: 'bi-box-seam-fill',  label: 'Inventory',    to: '/inventory',    permission: 'inventory.view' },
       { icon: 'bi-clipboard2-fill', label: 'Requisitions', to: '/requisitions', roles: NON_GUARD_INTERNAL as UserRole[] , permission: 'requisitions.view'},
     ],
   },
