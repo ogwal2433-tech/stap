@@ -113,11 +113,29 @@ export default function AttendancePage() {
   const markAttendanceMutation = useMarkAttendance();
   const deleteDeploymentMutation = useDeleteDeployment();
 
-  // Flat list of sites in the current sheet (for site filter dropdown)
-  const allSites = useMemo(() => {
-    if (!sheet) return [];
-    return sheet.zones.flatMap((z) => z.sites).map((s) => s.site);
-  }, [sheet]);
+  // Options for the site dropdown.
+  //
+  // Deliberately read from a sheet that is filtered by zone but NOT by site.
+  // The displayed sheet narrows to the chosen site, so deriving the options
+  // from it left the dropdown holding only the site already selected — there
+  // was no way to switch to another without clearing the filter first.
+  //
+  // With no site selected this is the same query as the sheet above, so react
+  // query serves both from one request; the second fetch only happens while a
+  // single site is being looked at.
+  const { data: zoneSheet } = useDailySheet(
+    selectedDate,
+    undefined,
+    selectedZoneId || undefined,
+  );
+
+  const siteOptions = useMemo(() => {
+    const source = zoneSheet ?? sheet;
+    if (!source) return [];
+    return source.zones.flatMap((z) =>
+      z.sites.map((s) => ({ ...s.site, zoneName: z.zoneName })),
+    );
+  }, [zoneSheet, sheet]);
 
   // Flat list of all deployments for summary bar
   const allDeployments = useMemo(() => {
@@ -368,8 +386,9 @@ export default function AttendancePage() {
               />
             </Col>
             <Col xs={6} md={3}>
-              <Form.Label className="small fw-semibold">Zone</Form.Label>
+              <Form.Label className="small fw-semibold" htmlFor="attendance-zone">Zone</Form.Label>
               <Form.Select
+                id="attendance-zone"
                 value={selectedZoneId}
                 onChange={(e) => { setSelectedZoneId(e.target.value); setSelectedSiteId(''); }}
               >
@@ -380,14 +399,21 @@ export default function AttendancePage() {
               </Form.Select>
             </Col>
             <Col xs={12} md={3}>
-              <Form.Label className="small fw-semibold">Site</Form.Label>
+              <Form.Label className="small fw-semibold" htmlFor="attendance-site">Site</Form.Label>
               <Form.Select
+                id="attendance-site"
                 value={selectedSiteId}
                 onChange={(e) => setSelectedSiteId(e.target.value)}
               >
-                <option value="">All Sites</option>
-                {allSites.map((s) => (
-                  <option key={s.id} value={s.id}>{s.siteName}</option>
+                <option value="">
+                  {selectedZoneId ? 'All sites in this zone' : 'All Sites'}
+                </option>
+                {siteOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.siteName}
+                    {/* The zone is only worth naming when the list spans more than one. */}
+                    {!selectedZoneId && s.zoneName ? ` (${s.zoneName})` : ''}
+                  </option>
                 ))}
               </Form.Select>
             </Col>
