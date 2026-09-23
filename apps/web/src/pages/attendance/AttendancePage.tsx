@@ -6,8 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDailySheet, useMarkAttendance, useDeleteDeployment } from '../../hooks/useAttendance';
 import { useZones, useMyZones } from '../../hooks/useZones';
+import { useAllSites } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, useHasPermission } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import CopyRosterModal from '../../components/attendance/CopyRosterModal';
@@ -115,14 +116,21 @@ export default function AttendancePage() {
 
   // Options for the site dropdown.
   //
-  // Deliberately read from a sheet that is filtered by zone but NOT by site.
-  // The displayed sheet narrows to the chosen site, so deriving the options
-  // from it left the dropdown holding only the site already selected — there
-  // was no way to switch to another without clearing the filter first.
-  //
-  // With no site selected this is the same query as the sheet above, so react
-  // query serves both from one request; the second fetch only happens while a
-  // single site is being looked at.
+  // Read from /sites rather than from the sheet, for two reasons. The sheet
+  // narrows to the chosen site, so deriving the options from it left the
+  // dropdown holding only the site already selected. And the sheet lists only
+  // sites with someone deployed today, so a site nobody was rostered to could
+  // not be selected at all — which is exactly the case a supervisor is
+  // checking when they go looking for it.
+  const canListSites = useHasPermission('sites.view');
+  const { data: sitesInZone } = useAllSites(
+    { zoneId: selectedZoneId || undefined },
+    canListSites,
+  );
+
+  // HR reaches the attendance sheet without sites.view. Falling back to the
+  // sheet keeps their dropdown working — with the sites deployed today, as
+  // before — rather than handing them an empty one.
   const { data: zoneSheet } = useDailySheet(
     selectedDate,
     undefined,
@@ -130,12 +138,19 @@ export default function AttendancePage() {
   );
 
   const siteOptions = useMemo(() => {
+    if (canListSites && sitesInZone) {
+      return sitesInZone.map((s) => ({
+        id:       s.id,
+        siteName: s.siteName,
+        zoneName: s.zone?.name ?? null,
+      }));
+    }
     const source = zoneSheet ?? sheet;
     if (!source) return [];
     return source.zones.flatMap((z) =>
-      z.sites.map((s) => ({ ...s.site, zoneName: z.zoneName })),
+      z.sites.map((s) => ({ id: s.site.id, siteName: s.site.siteName, zoneName: z.zoneName })),
     );
-  }, [zoneSheet, sheet]);
+  }, [canListSites, sitesInZone, zoneSheet, sheet]);
 
   // Flat list of all deployments for summary bar
   const allDeployments = useMemo(() => {

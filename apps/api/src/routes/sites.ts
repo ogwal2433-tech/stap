@@ -27,7 +27,10 @@ router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const result = await siteService.listAll(
-      req.query as { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string },
+      req.query as {
+        page?: number; limit?: number; search?: string;
+        clientId?: string; unzoned?: string; zoneId?: string;
+      },
     );
     res.json({ success: true, ...result });
   }),

@@ -14,8 +14,11 @@ import AttendancePage from '../pages/attendance/AttendancePage';
  */
 
 const h = vi.hoisted(() => ({
-  /** Every (date, siteId, zoneId) the page asked for. */
+  /** Every (date, siteId, zoneId) the page asked the sheet for. */
   calls: [] as { date: string; siteId?: string; zoneId?: string }[],
+  /** Every (zoneId, enabled) the page asked the sites endpoint for. */
+  siteCalls: [] as { zoneId?: string; enabled: boolean }[],
+  canListSites: true,
 }));
 
 const site = (id: string, siteName: string) => ({
@@ -57,6 +60,21 @@ vi.mock('../hooks/useAttendance', () => ({
   useDeleteDeployment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock('../hooks/useClients', () => ({
+  useAllSites: (params: { zoneId?: string }, enabled = true) => {
+    h.siteCalls.push({ zoneId: params?.zoneId, enabled });
+    if (!enabled) return { data: undefined };
+    const all = [
+      { id: 's1', siteName: 'Garden City', zone: { id: 'z1', name: 'Kampala Central' } },
+      { id: 's2', siteName: 'Acacia Mall', zone: { id: 'z1', name: 'Kampala Central' } },
+      // In zone 1 but nobody deployed today — absent from the sheet entirely.
+      { id: 's4', siteName: 'Quiet Depot',  zone: { id: 'z1', name: 'Kampala Central' } },
+      { id: 's3', siteName: 'Gulu Depot',  zone: { id: 'z2', name: 'Northern Region' } },
+    ];
+    return { data: params?.zoneId ? all.filter((s) => s.zone.id === params.zoneId) : all };
+  },
+}));
+
 vi.mock('../hooks/useZones', () => ({
   useZones: () => ({ data: { data: [
     { id: 'z1', name: 'Kampala Central' },
@@ -69,7 +87,8 @@ vi.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: vi.fn(
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', role: 'DIRECTOR', name: 'Dir' }, permissions: [] }),
-  useHasPermission: () => true,
+  // Flipped per test: HR reaches attendance without sites.view.
+  useHasPermission: () => h.canListSites,
 }));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
@@ -87,7 +106,7 @@ const zoneField = () => screen.getByLabelText('Zone') as HTMLSelectElement;
 const siteField = () => screen.getByLabelText('Site') as HTMLSelectElement;
 const siteOptionText = () => Array.from(siteField().options).map((o) => o.textContent?.trim());
 
-beforeEach(() => { h.calls = []; });
+beforeEach(() => { h.calls = []; h.siteCalls = []; h.canListSites = true; });
 
 describe('attendance zone and site filters', () => {
   it('lists every site, named with its zone, when no zone is chosen', () => {
@@ -99,6 +118,14 @@ describe('attendance zone and site filters', () => {
     expect(options).toContain('Gulu Depot (Northern Region)');
   });
 
+  it('offers a site nobody is deployed to today', () => {
+    render(<AttendancePage />);
+
+    // Quiet Depot is in no daily sheet — it is exactly what someone checking
+    // "was anyone rostered there?" needs to be able to select.
+    expect(siteOptionText()).toContain('Quiet Depot (Kampala Central)');
+  });
+
   it('narrows the sites to the chosen zone', () => {
     render(<AttendancePage />);
     fireEvent.change(zoneField(), { target: { value: 'z1' } });
@@ -107,6 +134,13 @@ describe('attendance zone and site filters', () => {
     expect(options).toContain('Garden City');
     expect(options).toContain('Acacia Mall');
     expect(options.join(' ')).not.toContain('Gulu Depot');
+  });
+
+  it('asks the sites endpoint for that zone', () => {
+    render(<AttendancePage />);
+    fireEvent.change(zoneField(), { target: { value: 'z1' } });
+
+    expect(h.siteCalls.at(-1)).toMatchObject({ zoneId: 'z1', enabled: true });
   });
 
   it('says the empty choice means all sites in that zone', () => {
@@ -129,8 +163,8 @@ describe('attendance zone and site filters', () => {
     fireEvent.change(zoneField(), { target: { value: 'z1' } });
     fireEvent.change(siteField(), { target: { value: 's1' } });
 
-    // The regression: the sheet narrows to Garden City, and the options used to
-    // narrow with it, stranding the user on the site they had just picked.
+    // The original regression: the sheet narrows to Garden City, and the
+    // options used to narrow with it, stranding the user on their own choice.
     expect(siteField().value).toBe('s1');
     expect(siteOptionText()).toContain('Acacia Mall');
   });
@@ -149,22 +183,25 @@ describe('attendance zone and site filters', () => {
     expect(siteOptionText()).toContain('Gulu Depot');
   });
 
-  it('asks the server for the zone, and for the options without the site', () => {
+  it('still narrows the sheet itself by both zone and site', () => {
     render(<AttendancePage />);
     fireEvent.change(zoneField(), { target: { value: 'z1' } });
     fireEvent.change(siteField(), { target: { value: 's1' } });
 
-    // The sheet on screen is narrowed to both; the options query carries the
-    // zone only.
     expect(h.calls).toContainEqual({ date: expect.any(String), siteId: 's1', zoneId: 'z1' });
-    expect(h.calls).toContainEqual({ date: expect.any(String), siteId: undefined, zoneId: 'z1' });
   });
 
-  it('copes with a zone that has no sites on the day', () => {
+  it('falls back to the sheet for someone who cannot read sites', () => {
+    // HR holds attendance.view without sites.view. The dropdown must still
+    // work — with the sites deployed today — rather than coming back empty.
+    h.canListSites = false;
     render(<AttendancePage />);
-    fireEvent.change(zoneField(), { target: { value: 'z3' } });
 
-    // Unknown zone → the mock returns the full sheet; what matters is it renders.
-    expect(siteField()).toBeInTheDocument();
+    const options = siteOptionText();
+    expect(options).toContain('Garden City (Kampala Central)');
+    expect(options).toContain('Gulu Depot (Northern Region)');
+    // The quiet site is only knowable from /sites, which they cannot read.
+    expect(options.join(' ')).not.toContain('Quiet Depot');
+    expect(h.siteCalls.every((c) => !c.enabled)).toBe(true);
   });
 });

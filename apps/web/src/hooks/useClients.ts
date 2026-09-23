@@ -86,11 +86,20 @@ export function useArchiveClient() {
   });
 }
 
-export function useAllSites() {
+/**
+ * Every site, or every site in one zone.
+ *
+ * `enabled` is the caller's, because reading sites needs sites.view and not
+ * everyone who reaches a site picker holds it — HR can open the attendance
+ * sheet without it. A caller that cannot read sites passes false and falls back
+ * to whatever list it already has.
+ */
+export function useAllSites(params?: { zoneId?: string }, enabled = true) {
   return useQuery({
-    queryKey: ['all-sites'],
-    queryFn:  () => clientsApi.getAllSites({ limit: 500 }).then(r => r.data),
+    queryKey: ['all-sites', params?.zoneId ?? null],
+    queryFn:  () => clientsApi.getAllSites({ limit: 500, zoneId: params?.zoneId }).then(r => r.data),
     staleTime: 2 * 60 * 1000,
+    enabled,
   });
 }
 

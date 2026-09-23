@@ -155,7 +155,10 @@ export const clientsApi = {
    * roles — a Trainer deploying a firearm needs the site list and has no client
    * access. Site writes and incidents stay under /clients below.
    */
-  getAllSites(params?: { page?: number; limit?: number; search?: string; clientId?: string; unzoned?: string }): Promise<PaginatedResponse<SiteResponse>> {
+  getAllSites(params?: {
+    page?: number; limit?: number; search?: string;
+    clientId?: string; unzoned?: string; zoneId?: string;
+  }): Promise<PaginatedResponse<SiteResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<SiteResponse>>('/sites', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

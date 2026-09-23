@@ -214,6 +214,7 @@ class SiteService {
     search?: string;
     clientId?: string;
     unzoned?: string;
+    zoneId?: string;
   }): Promise<PaginatedResponse<SiteResponse>> {
     const page  = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
@@ -222,6 +223,9 @@ class SiteService {
     const where: import('@prisma/client').Prisma.SiteWhereInput = {};
     if (query.clientId) where.clientId = query.clientId;
     if (query.unzoned === 'true') where.zoneId = null;
+    // Narrows the pickers to one zone. `unzoned` wins if both are given: it is
+    // the more specific request, and asking for both is a caller's mistake.
+    else if (query.zoneId) where.zoneId = query.zoneId;
     if (query.search) {
       where.OR = [
         { siteName: { contains: query.search, mode: 'insensitive' } },
