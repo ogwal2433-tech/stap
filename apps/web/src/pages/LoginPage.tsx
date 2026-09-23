@@ -173,7 +173,7 @@ export default function LoginPage() {
           </Card.Body>
 
           <Card.Footer className="text-center text-muted small py-3 bg-white border-0">
-            &copy; 2026 {COMPANY_NAME}
+            &copy; 2026 {COMPANY_NAME}. All rights reserved.
           </Card.Footer>
         </Card>
       </div>
