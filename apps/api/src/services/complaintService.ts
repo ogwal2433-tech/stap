@@ -420,7 +420,7 @@ class ComplaintService {
     // to a staff member, so this endpoint's rules do not apply to them.
     if (complaint.direction === 'OUTBOUND') {
       throw new AppError(
-        'This is a notice STAP sent to a client. Close it with the resolve-notice action instead.',
+        `This is a notice ${COMPANY_NAME} sent to a client. Close it with the resolve-notice action instead.`,
         400,
       );
     }

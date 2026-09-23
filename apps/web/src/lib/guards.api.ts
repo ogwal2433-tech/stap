@@ -4,6 +4,7 @@ export interface GuardIdStats {
 }
 
 import api from './api';
+import { FILE_PREFIX } from './branding';
 import type {
   GuardResponse,
   GuardExportResponse,
@@ -113,7 +114,7 @@ export const guardsApi = {
         const url = URL.createObjectURL(new Blob([r.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'STAP_Guard_Import_Template.xlsx';
+        a.download = `${FILE_PREFIX}_Guard_Import_Template.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -177,7 +178,7 @@ export const guardsApi = {
         const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = `STAP-Guard-ID-${guardId}.pdf`;
+        a.download = `${FILE_PREFIX}-Guard-ID-${guardId}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       });

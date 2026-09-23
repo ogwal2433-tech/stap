@@ -7,7 +7,7 @@ import {
   DEFAULT_COMPANY_NAME,
   DEFAULT_APP_TAGLINE,
 } from '@stap/shared';
-import { APP_NAME, APP_TAGLINE, COMPANY_NAME } from '../lib/branding';
+import { APP_NAME, APP_TAGLINE, COMPANY_NAME, FILE_PREFIX } from '../lib/branding';
 
 /**
  * The product and the business are two different names that used to be spelled
@@ -74,6 +74,28 @@ describe('resolveBranding()', () => {
 
   it('an empty environment is the default brand', () => {
     expect(resolveBranding().appName).toBe(DEFAULT_APP_NAME);
+  });
+});
+
+describe('download filenames follow the deployment', () => {
+  it('is the product name with nothing a filesystem dislikes', () => {
+    expect(FILE_PREFIX).toBe(APP_NAME.replace(/[^A-Za-z0-9]+/g, '_'));
+    expect(FILE_PREFIX).not.toMatch(/[^A-Za-z0-9_]/);
+  });
+
+  it('is derived, so a rebrand renames the downloads with it', () => {
+    // Pinning a literal here would let the files keep the old brand after a
+    // rename — which is how they came to say STAP on a Security360 stack.
+    const s = src('lib/exportToExcel.ts');
+    expect(s).toContain('FILE_PREFIX');
+    expect(s).not.toMatch(/`STAP_/);
+  });
+
+  it('the login card no longer carries a copyright line', () => {
+    // Removed on request: the card names the product, and the legal entity
+    // belongs on documents rather than the sign-in screen.
+    const s = src('pages/LoginPage.tsx');
+    expect(s).not.toContain('All rights reserved');
   });
 });
 

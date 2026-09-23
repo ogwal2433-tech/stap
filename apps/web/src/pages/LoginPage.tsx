@@ -11,7 +11,7 @@ import {
   Spinner,
 } from 'react-bootstrap';
 import { LoginSchema, ROLES, type LoginInput } from '@stap/shared';
-import { APP_NAME, APP_TAGLINE, COMPANY_NAME } from '../lib/branding';
+import { APP_NAME, APP_TAGLINE } from '../lib/branding';
 import { useAuth } from '../context/AuthContext';
 import type { AxiosError } from 'axios';
 
@@ -172,9 +172,6 @@ export default function LoginPage() {
             </Form>
           </Card.Body>
 
-          <Card.Footer className="text-center text-muted small py-3 bg-white border-0">
-            &copy; 2026 {COMPANY_NAME}. All rights reserved.
-          </Card.Footer>
         </Card>
       </div>
     </div>

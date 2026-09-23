@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { COMPANY_NAME_UPPER } from './branding';
+import { COMPANY_NAME_UPPER, FILE_PREFIX } from './branding';
 import type {
   DailySheetResponse, GuardAttendanceSummaryResponse, GuardExportRow, GuardResponse,
 } from '@stap/shared';
@@ -171,7 +171,7 @@ export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): 
   const ws = buildSheet(rows, wch, merges, rowHeights);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance Sheet');
-  triggerBlob(wb, `STAP_Attendance_${date.replace(/-/g, '')}.xlsx`);
+  triggerBlob(wb, `${FILE_PREFIX}_Attendance_${date.replace(/-/g, '')}.xlsx`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -259,7 +259,7 @@ export function exportRosterDraft(data: RosterExportData): void {
   XLSX.utils.book_append_sheet(wb, ws, 'Deployment Roster');
 
   const siteSlug = data.siteName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
-  triggerBlob(wb, `STAP_Roster_${siteSlug}_${data.date.replace(/-/g, '')}.xlsx`);
+  triggerBlob(wb, `${FILE_PREFIX}_Roster_${siteSlug}_${data.date.replace(/-/g, '')}.xlsx`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -346,7 +346,7 @@ export function exportAttendanceSummary(data: GuardAttendanceSummaryResponse): v
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
 
-  triggerBlob(wb, `STAP_Attendance_${from.replace(/-/g, '')}_to_${to.replace(/-/g, '')}.xlsx`);
+  triggerBlob(wb, `${FILE_PREFIX}_Attendance_${from.replace(/-/g, '')}_to_${to.replace(/-/g, '')}.xlsx`);
 }
 
 
@@ -476,7 +476,7 @@ export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date
   XLSX.utils.book_append_sheet(wb, guardSheet(unassigned, 'Every guard is currently deployed'), 'Unassigned');
 
   const stamp = exportedAt.toISOString().slice(0, 10);
-  triggerBlob(wb, `STAP_Guards_${stamp}.xlsx`);
+  triggerBlob(wb, `${FILE_PREFIX}_Guards_${stamp}.xlsx`);
 }
 
 /**
@@ -520,5 +520,5 @@ export function exportGuardProfile(guard: GuardResponse, exportedAt = new Date()
   XLSX.utils.book_append_sheet(wb, buildSheet(rows, [22, 34], [], [22, 14, 8, 18]), 'Guard Profile');
 
   const who = guard.systemId ?? guard.lastName;
-  triggerBlob(wb, `STAP_Guard_${who}_${exportedAt.toISOString().slice(0, 10)}.xlsx`);
+  triggerBlob(wb, `${FILE_PREFIX}_Guard_${who}_${exportedAt.toISOString().slice(0, 10)}.xlsx`);
 }

@@ -88,6 +88,7 @@
  *         description: Incident recorded
  */
 import { Router, type IRouter } from 'express';
+import { FILE_PREFIX } from '../config/branding';
 import { clientService } from '../services/clientService';
 import { softDeleteService } from '../services/softDeleteService';
 import { clientImportService } from '../services/clientImportService';
@@ -191,7 +192,7 @@ router.get(
   asyncHandler(async (_req, res) => {
     const buffer = await clientImportService.generateTemplate();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=STAP_Client_Import_Template.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename=${FILE_PREFIX}_Client_Import_Template.xlsx`);
     res.send(buffer);
   }),
 );

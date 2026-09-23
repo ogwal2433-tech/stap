@@ -167,7 +167,7 @@
  *         description: Document uploaded
  */
 import { Router, type IRouter } from 'express';
-import { COMPANY_NAME } from '../config/branding';
+import { COMPANY_NAME, FILE_PREFIX } from '../config/branding';
 import fs from 'fs';
 import multer from 'multer';
 import prisma from '../db/prisma';
@@ -319,7 +319,7 @@ router.get(
     `;
     const buffer = await renderToPdf(slip, { marginTop: '56mm', marginBottom: '14mm', marginLeft: '14mm', marginRight: '14mm' });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=STAP-Payment-Slip.pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${FILE_PREFIX}-Payment-Slip.pdf`);
     res.send(buffer);
   }),
 );
@@ -331,7 +331,7 @@ router.get(
   asyncHandler(async (_req, res) => {
     const buffer = await bulkImportService.generateTemplate();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=STAP_Guard_Import_Template.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename=${FILE_PREFIX}_Guard_Import_Template.xlsx`);
     res.send(buffer);
   }),
 );
@@ -729,7 +729,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const buffer = await guardService.generateIdCard(req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=STAP-Guard-ID-${req.params.id}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=${FILE_PREFIX}-Guard-ID-${req.params.id}.pdf`);
     res.send(buffer);
   }),
 );

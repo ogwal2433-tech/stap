@@ -159,7 +159,7 @@ export default function CreateStaffModal({ show, onClose, onSuccess }: CreateSta
                   type="email"
                   value={form.email}
                   onChange={e => set('email', e.target.value)}
-                  placeholder="name@stapsecurity.co.ug"
+                  placeholder="name@example.com"
                 />
                 <Form.Text className="text-muted">This is what they log in with.</Form.Text>
               </Form.Group>

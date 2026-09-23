@@ -1,4 +1,5 @@
 import api from './api';
+import { FILE_PREFIX } from './branding';
 import type {
   ClientContactInput,
   ClientContactResponse,
@@ -94,7 +95,7 @@ export const clientsApi = {
         const url = URL.createObjectURL(new Blob([r.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'STAP_Client_Import_Template.xlsx';
+        a.download = `${FILE_PREFIX}_Client_Import_Template.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
       });

@@ -13,3 +13,13 @@ export const APP_NAME           = branding.appName;
 export const APP_TAGLINE        = branding.appTagline;
 export const COMPANY_NAME       = branding.companyName;
 export const COMPANY_NAME_UPPER = branding.companyNameUpper;
+
+/**
+ * Prefix for anything the user downloads, e.g. Security360_Guards_2026-09-23.xlsx.
+ *
+ * Derived from the product name rather than written out, so each branded
+ * deployment names its own files. Punctuation and spaces collapse to
+ * underscores because a filename carrying either is awkward to handle once it
+ * reaches someone's machine.
+ */
+export const FILE_PREFIX = APP_NAME.trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');

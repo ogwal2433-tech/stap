@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as XLSX from 'xlsx';
 import type { GuardExportRow } from '@stap/shared';
 import { exportGuardsList } from '../lib/exportToExcel';
+import { FILE_PREFIX } from '../lib/branding';
 
 /**
  * The guards export writes a workbook straight to a download, so what it puts
@@ -77,9 +78,12 @@ describe('guard list Excel export', () => {
     expect(written!.SheetNames).toEqual(['Summary', 'All Guards', 'Deployed', 'Unassigned']);
   });
 
-  it('names the file with the export date', () => {
+  it('names the file with the deployment and the export date', () => {
     exportGuardsList([guard()], new Date('2026-09-20T09:00:00Z'));
-    expect(filename).toBe('STAP_Guards_2026-09-20.xlsx');
+    // The prefix follows this build's product name, so a second brand on the
+    // same host does not hand its users the first one's filenames.
+    expect(filename).toBe(`${FILE_PREFIX}_Guards_2026-09-20.xlsx`);
+    expect(FILE_PREFIX).not.toContain(' ');
   });
 
   it('puts the headers in row 1, so the sheet can be sorted and filtered', () => {

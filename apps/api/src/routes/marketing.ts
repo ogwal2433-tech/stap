@@ -47,6 +47,7 @@
  *       200: { description: Report }
  */
 import { Router, type IRouter, type Request, type Response } from 'express';
+import { FILE_PREFIX } from '../config/branding';
 import * as XLSX from 'xlsx';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -139,7 +140,7 @@ router.get(
     XLSX.utils.book_append_sheet(wb, sheet, report.title.slice(0, 31));
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    const filename = `STAP_${report.type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const filename = `${FILE_PREFIX}_${report.type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buf);
