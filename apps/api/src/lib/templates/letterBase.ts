@@ -1,3 +1,5 @@
+import { COMPANY_NAME } from '../../config/branding';
+
 export interface LetterHtmlOptions {
   refNumber:    string;
   issueDate:    string;
@@ -51,7 +53,7 @@ export function buildLetterHtml(opts: LetterHtmlOptions): string {
       <div class="sig-label">Signature &amp; Date: _______________</div>
     </div>
     <div class="sig-col">
-      <div class="sig-label">For STAP Security Ltd</div>
+      <div class="sig-label">For ${COMPANY_NAME}</div>
       <div class="sig-line"></div>
       <div><strong>${opts.directorName}</strong></div>
       <div class="sig-label">Director &nbsp;&nbsp; Date: _______________</div>

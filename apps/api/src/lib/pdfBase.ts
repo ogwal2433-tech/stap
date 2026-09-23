@@ -1,6 +1,7 @@
 import puppeteer, { type Browser } from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
+import { companyProfile, type CompanyProfile } from '../services/integrationSettings';
 
 // ── Singleton browser ──────────────────────────────────────────────────────────
 
@@ -70,12 +71,42 @@ function getWatermarkBase64(): string {
 // Left 1/3 : transparent logo PNG centred, amber shows through.
 // Right 2/3 : company name, tagline, phone / email / website.
 
-function buildHeaderHtml(logoBase64: string): string {
+// Letterhead icons, held apart from the markup so the contact rows below read
+// as data rather than a wall of paths.
+const PIN_SVG       = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="12" viewBox="0 0 24 30" fill="white" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.5 8 18 8 18S20 13.5 20 8c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z"/></svg>';
+const FACEBOOK_SVG  = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>';
+const INSTAGRAM_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><rect x="7" y="7" width="10" height="10" rx="3" ry="3" fill="#f2aa20"/><circle cx="12" cy="12" r="3" fill="white"/><circle cx="17" cy="7" r="1.5" fill="white"/></svg>';
+const TWITTER_SVG   = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.264 5.634L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+const PHONE_SVG     = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.58.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.29 21 3 13.71 3 4.5c0-.55.45-1 1-1H7.5c.55 0 1 .45 1 1 0 1.25.2 2.46.57 3.58.11.35.03.74-.24 1.02L6.6 10.8z"/></svg>';
+const WHATSAPP_SVG  = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.07L2 22l5.07-1.36C8.44 21.51 10.19 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm.01 18c-1.63 0-3.15-.45-4.46-1.23l-.32-.19-3.27.87.88-3.21-.21-.33A7.95 7.95 0 0 1 4 12c0-4.42 3.59-8 8.01-8 4.43 0 7.99 3.58 7.99 8s-3.57 8-7.99 8zm4.39-5.96c-.24-.12-1.41-.69-1.63-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.93-1.18-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.29-.74-1.77-.19-.46-.39-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.39 1.37.5.57.18 1.09.15 1.5.09.46-.07 1.41-.58 1.61-1.13.2-.56.2-1.03.14-1.13-.06-.1-.22-.16-.46-.28z"/></svg>';
+
+function buildHeaderHtml(logoBase64: string, company: CompanyProfile): string {
   const logoContent = logoBase64
     ? `<img src="${logoBase64}"
-            alt="STAP Security Ltd"
+            alt="${company.name}"
             style="width:100%; height:100%; object-fit:contain; display:block;" />`
-    : `<span style="font-weight:900; font-size:11pt; color:#1B3A6B;">STAP</span>`;
+    : `<span style="font-weight:900; font-size:11pt; color:#1B3A6B;">${company.nameUpper.slice(0, 4)}</span>`;
+
+  // Each contact row is dropped when nothing has been configured for it, rather
+  // than printing a placeholder: a wrong address on a letter is worse than none.
+  const icon = (svg: string, text: string) =>
+    `${svg}<span style="vertical-align:middle;">${text}</span>`;
+
+  const addressLine = [
+    company.address ? icon(PIN_SVG, company.address) : '',
+    company.email   ? `&nbsp;&nbsp;&#9993;&nbsp;<span style="vertical-align:middle;">${company.email}</span>` : '',
+  ].join('');
+
+  const socialLine = [
+    company.facebook  ? icon(FACEBOOK_SVG,  company.facebook)  : '',
+    company.instagram ? icon(INSTAGRAM_SVG, company.instagram) : '',
+    company.twitter   ? icon(TWITTER_SVG,   company.twitter)   : '',
+  ].filter(Boolean).join('&nbsp;&nbsp;');
+
+  const phoneLine = [
+    company.phone    ? icon(PHONE_SVG,    company.phone)    : '',
+    company.whatsapp ? icon(WHATSAPP_SVG, company.whatsapp) : '',
+  ].filter(Boolean).join('&nbsp;&nbsp;');
 
   return `<div style="
       width:              210mm;
@@ -120,28 +151,21 @@ function buildHeaderHtml(logoBase64: string): string {
           line-height:    1.05;
           text-align:     center;
           white-space:    nowrap;
-        ">STAP SECURITY LTD</div>
+        ">${company.nameUpper}</div>
 
         <!-- Row 2 — address + email -->
         <div style="font-size:10pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="12" viewBox="0 0 24 30" fill="white" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.5 8 18 8 18S20 13.5 20 8c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z"/></svg><span style="vertical-align:middle;">P. O. Box 11518 Kampala Uganda</span>
-          &nbsp;&nbsp;&#9993;&nbsp;<span style="vertical-align:middle;">staps218@gmail.com</span>
+          ${addressLine}
         </div>
 
         <!-- Row 3 — social handles -->
         <div style="font-size:8.5pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><span style="vertical-align:middle;">STAP security ltd</span>
-          &nbsp;&nbsp;
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><rect x="7" y="7" width="10" height="10" rx="3" ry="3" fill="#f2aa20"/><circle cx="12" cy="12" r="3" fill="white"/><circle cx="17" cy="7" r="1.5" fill="white"/></svg><span style="vertical-align:middle;">stapsecurity</span>
-          &nbsp;&nbsp;
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.264 5.634L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg><span style="vertical-align:middle;">@stapsecurity2</span>
+          ${socialLine}
         </div>
 
         <!-- Row 4 — phone / whatsapp -->
         <div style="font-size:8pt;font-weight:400;color:#ffffff;text-align:center;white-space:nowrap;line-height:1;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.58.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.29 21 3 13.71 3 4.5c0-.55.45-1 1-1H7.5c.55 0 1 .45 1 1 0 1.25.2 2.46.57 3.58.11.35.03.74-.24 1.02L6.6 10.8z"/></svg><span style="vertical-align:middle;">0700467551</span>
-          &nbsp;&nbsp;
-          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.07L2 22l5.07-1.36C8.44 21.51 10.19 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm.01 18c-1.63 0-3.15-.45-4.46-1.23l-.32-.19-3.27.87.88-3.21-.21-.33A7.95 7.95 0 0 1 4 12c0-4.42 3.59-8 8.01-8 4.43 0 7.99 3.58 7.99 8s-3.57 8-7.99 8zm4.39-5.96c-.24-.12-1.41-.69-1.63-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.93-1.18-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.29-.74-1.77-.19-.46-.39-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.39 1.37.5.57.18 1.09.15 1.5.09.46-.07 1.41-.58 1.61-1.13.2-.56.2-1.03.14-1.13-.06-.1-.22-.16-.46-.28z"/></svg><span style="vertical-align:middle;">0787417404</span>
+          ${phoneLine}
         </div>
 
         <!-- Row 5 — tagline -->
@@ -227,16 +251,17 @@ export function wrapContent(
 // Header + footer are inlined (not Puppeteer templates) so you can open it
 // directly at /dev/letter-preview and refresh after editing pdfBase.ts.
 
-export function buildPreviewHtml(contentHtml: string): string {
+export async function buildPreviewHtml(contentHtml: string): Promise<string> {
+  const company         = await companyProfile();
   const logoBase64      = getLogoBase64();
   const watermarkBase64 = getWatermarkBase64();
-  const header          = buildHeaderHtml(logoBase64);
+  const header          = buildHeaderHtml(logoBase64, company);
   const footer          = buildFooterHtml();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Letter Preview — STAP</title>
+  <title>Letter Preview — ${company.name}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #e0e0e0; font-family: Arial, Helvetica, sans-serif; padding: 24px; }
@@ -296,7 +321,7 @@ export interface PdfRenderOptions {
 }
 
 /**
- * Render an A4 PDF with the STAP letterhead header and footer on every page.
+ * Render an A4 PDF with the company letterhead header and footer on every page.
  * Pass only the inner content HTML — this function wraps it and adds
  * the header/footer via Puppeteer's displayHeaderFooter mechanism.
  *
@@ -306,10 +331,11 @@ export async function renderToPdf(
   contentHtml: string,
   opts?: PdfRenderOptions,
 ): Promise<Buffer> {
+  const company    = await companyProfile();
   const logoBase64 = getLogoBase64();
   const html       = wrapContent(
     contentHtml,
-    buildHeaderHtml(logoBase64),
+    buildHeaderHtml(logoBase64, company),
     buildFooterHtml(),
     opts?.marginTop,    // becomes body padding-top
     opts?.marginBottom,

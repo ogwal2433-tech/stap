@@ -1,4 +1,5 @@
 import { PAID_STATUSES } from '@stap/shared';
+import { COMPANY_NAME } from '../config/branding';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -374,7 +375,7 @@ class PayrollService {
           // What the wallet is registered as, which need not be the legal name.
             accountName: payslip.guard.momoAccountName
               || `${payslip.guard.firstName} ${payslip.guard.lastName}`,
-          description: `STAP Security - Salary ${run.month}/${run.year}`,
+          description: `${COMPANY_NAME} - Salary ${run.month}/${run.year}`,
           receiverFirstName: payslip.guard.firstName,
           receiverLastName:  payslip.guard.lastName,
         });

@@ -13,6 +13,11 @@ export interface InvoiceEmailData {
   tax:          number;
   totalAmount:  number;
   currency:     string;
+  /** From Settings → Company details, so the invoice names the right business. */
+  company: {
+    name:  string;
+    email: string | null;
+  };
 }
 
 export function buildInvoiceEmail(data: InvoiceEmailData): string {
@@ -31,7 +36,7 @@ export function buildInvoiceEmail(data: InvoiceEmailData): string {
 <body style="font-family:Arial,sans-serif;color:#1A1A1A;max-width:640px;margin:0 auto;padding:0">
 
   <div style="background:#1B3A6B;padding:24px 32px">
-    <h1 style="color:#fff;margin:0;font-size:1.4rem">STAP Security Ltd</h1>
+    <h1 style="color:#fff;margin:0;font-size:1.4rem">${data.company.name}</h1>
     <p style="color:#D6E0F0;margin:4px 0 0">Invoice</p>
   </div>
 
@@ -66,7 +71,9 @@ export function buildInvoiceEmail(data: InvoiceEmailData): string {
     </div>
 
     <p style="margin-top:24px;font-size:0.85rem;color:#6c757d">
-      For queries contact <a href="mailto:accounts@stapsecurity.co.ug" style="color:#1B3A6B">accounts@stapsecurity.co.ug</a>
+      ${data.company.email
+        ? `For queries contact <a href="mailto:${data.company.email}" style="color:#1B3A6B">${data.company.email}</a>`
+        : ''}
     </p>
   </div>
 

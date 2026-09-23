@@ -114,12 +114,18 @@ describe('client- and guard-facing surfaces name the company', () => {
 
   it('the client portal still says who is writing to them', () => {
     // A notice that named the platform rather than the business would leave a
-    // client unsure who sent it.
+    // client unsure who sent it. The name is now read per deployment rather
+    // than written into the page, so what is pinned is that it is the company.
     const s = src('pages/portal/ClientPortalPage.tsx');
-    expect(s).toContain('Notices from STAP Security');
+    expect(s).toMatch(/Notices from \{COMPANY_NAME\}/);
+    expect(s).not.toContain('Notices from STAP Security');
   });
 
   it('letter content keeps the legal entity', () => {
-    expect(src('components/letters/HRLetterModal.tsx')).toContain('STAP Security Ltd');
+    // Still the company rather than the product, but resolved per deployment:
+    // a second brand on the same host must sign its own letters.
+    const s = src('components/letters/HRLetterModal.tsx');
+    expect(s).toContain('COMPANY_NAME');
+    expect(s).not.toContain('STAP Security Ltd');
   });
 });

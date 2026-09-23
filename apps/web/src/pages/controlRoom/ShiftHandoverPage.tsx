@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { COMPANY_NAME_UPPER } from '../../lib/branding';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Badge, Button, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -179,7 +180,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         borderBottom: `3px solid ${NAVY}`, paddingBottom: 12,
       }}>
         <div style={{ fontSize: '1.1rem', fontWeight: 700, color: NAVY, letterSpacing: 1 }}>
-          STAP SECURITY LTD
+          {COMPANY_NAME_UPPER}
         </div>
         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY }}>
           CONTROL ROOM SHIFT HANDOVER REPORT

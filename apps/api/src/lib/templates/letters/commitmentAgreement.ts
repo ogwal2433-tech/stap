@@ -1,3 +1,5 @@
+import { COMPANY_NAME } from '../../../config/branding';
+
 export interface CommitmentAgreementData {
   guardName:     string;
   startDate:     string;
@@ -8,13 +10,13 @@ export function buildCommitmentAgreementBody(data: CommitmentAgreementData): str
   return `
 <p>Dear <strong>${data.guardName}</strong>,</p>
 
-<p>We are pleased to offer you employment as a Security Guard with STAP Security Ltd. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
+<p>We are pleased to offer you employment as a Security Guard with ${COMPANY_NAME}. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
 
 <p>By signing this agreement, you acknowledge and commit to the following terms:</p>
 
 <p style="font-weight:bold;margin-top:14px;">1. Minimum Service Period:</p>
 <ul style="margin:4px 0 10px 24px;line-height:1.6;">
-  <li>You agree to work with STAP Security Ltd for a minimum of <strong>${data.minimumPeriod}</strong> from <strong>${data.startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
+  <li>You agree to work with ${COMPANY_NAME} for a minimum of <strong>${data.minimumPeriod}</strong> from <strong>${data.startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
 </ul>
 
 <p style="font-weight:bold;margin-top:14px;">2. Resignation or Termination Before Committed Period:</p>
@@ -59,7 +61,7 @@ export function buildCommitmentAgreementBody(data: CommitmentAgreementData): str
     </tr>
   </table>
 
-  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of STAP Security Ltd:</p>
+  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of ${COMPANY_NAME}:</p>
   <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:10pt;">
     <tr>
       <td style="width:55%;padding-bottom:6px;">Authorized Representative Name: <span style="display:inline-block;width:100px;border-bottom:1px solid #333;">&nbsp;</span></td>

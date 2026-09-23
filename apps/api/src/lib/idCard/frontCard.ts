@@ -1,3 +1,5 @@
+import { COMPANY_NAME_UPPER } from '../../config/branding';
+
 export interface FrontCardData {
   systemId:    string;
   fullName:    string;
@@ -57,7 +59,7 @@ export function buildFrontCard(data: FrontCardData): string {
     <!-- Company name + tagline -->
     <div style="display:flex;flex-direction:column;justify-content:center;">
       <div style="font-size:12pt;font-weight:900;color:#ffffff;letter-spacing:0.6px;line-height:1.05;text-shadow:0.3mm 0.3mm 0 rgba(0,0,0,0.2);">
-        STAP SECURITY LTD
+        ${COMPANY_NAME_UPPER}
       </div>
       <div style="font-family:Georgia,serif;font-style:italic;font-size:7.5pt;color:#ffffff;margin-top:0.3mm;letter-spacing:0.2px;line-height:1.1;">
         Secure Your Future

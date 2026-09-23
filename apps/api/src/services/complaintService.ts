@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { COMPANY_NAME } from '../config/branding';
 import { writeAuditLog } from '../lib/auditLog';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
@@ -186,9 +187,9 @@ class ComplaintService {
         notificationService.send({
           userId:     u.id,
           type:       'SYSTEM',
-          title:      '📋 Notice from STAP Security',
+          title:      `📋 Notice from ${COMPANY_NAME}`,
           message:
-            `STAP Security has sent you a notice: "${complaint.subject}". ` +
+            `${COMPANY_NAME} has sent you a notice: "${complaint.subject}". ` +
             'Log in to your portal to read and acknowledge it.',
           entityType: 'complaint',
           entityId:   complaint.id,
@@ -238,7 +239,7 @@ class ComplaintService {
 
     if (complaint.direction !== 'OUTBOUND') {
       throw new AppError(
-        'Only notices sent by STAP can be acknowledged. This is a complaint you raised with us.',
+        `Only notices sent by ${COMPANY_NAME} can be acknowledged. This is a complaint you raised with us.`,
         400,
       );
     }

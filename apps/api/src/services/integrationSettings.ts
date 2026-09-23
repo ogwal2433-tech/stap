@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/settingsEncryption';
 import { SETTINGS_CONFIG, definitionFor, type SettingsGroup } from '../constants/settingsConfig';
+import { COMPANY_NAME } from '../config/branding';
 import { AppError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
 
@@ -71,6 +72,57 @@ async function resolveAll(): Promise<Map<string, Resolved>> {
 /** One resolved value, or null when neither the database nor .env has it. */
 export async function getSetting(key: string): Promise<string | null> {
   return (await resolveAll()).get(key)?.value ?? null;
+}
+
+export interface CompanyProfile {
+  /** Legal entity. Falls back to the deployment's COMPANY_NAME branding. */
+  name:      string;
+  nameUpper: string;
+  email:     string | null;
+  phone:     string | null;
+  whatsapp:  string | null;
+  website:   string | null;
+  address:   string | null;
+  facebook:  string | null;
+  instagram: string | null;
+  twitter:   string | null;
+}
+
+/**
+ * The company as it should appear on anything printed or posted.
+ *
+ * Saved in Settings → Company details, falling back to the environment and
+ * finally to the branding defaults, so a deployment that has configured
+ * nothing still prints a name rather than a blank letterhead.
+ *
+ * Contacts have no fallback on purpose: a wrong address on an invoice is worse
+ * than none, so an unset one is omitted from the document instead of guessed.
+ */
+export async function companyProfile(): Promise<CompanyProfile> {
+  const all = await resolveAll();
+  const val = (key: string): string | null => {
+    const v = all.get(key)?.value;
+    return v && v.trim() ? v.trim() : null;
+  };
+
+  // The registered name has a home already: the `company_name` system setting
+  // the HR letter templates substitute. Read it here rather than keeping a
+  // second copy, falling back to this deployment's branding.
+  const stored = await prisma.systemSetting.findUnique({ where: { key: 'company_name' } });
+  const name = (stored?.value?.trim() || COMPANY_NAME);
+
+  return {
+    name,
+    nameUpper: name.toUpperCase(),
+    email:     val('company.email'),
+    phone:     val('company.phone'),
+    whatsapp:  val('company.whatsapp'),
+    website:   val('company.website'),
+    address:   val('company.address'),
+    facebook:  val('company.facebook'),
+    instagram: val('company.instagram'),
+    twitter:   val('company.twitter'),
+  };
 }
 
 export async function smtpConfig(): Promise<{

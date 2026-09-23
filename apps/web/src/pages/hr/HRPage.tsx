@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import {
   Alert, Badge, Button, Col, Form, ListGroup, Modal, Offcanvas,
   ProgressBar, Row, Spinner, Tab, Table, Tabs,
@@ -104,8 +105,8 @@ const SAMPLE_DATA: Record<string, string> = {
   salary:          '650,000',
   contract_start:  '01/01/2026',
   contract_end:    '31/12/2026',
-  ref_number:      'STAP/HR/2026/001',
-  company_name:    'STAP Security Ltd',
+  ref_number:      'HR/2026/001',
+  company_name:    COMPANY_NAME,
   company_address: 'Kampala, Uganda',
 };
 

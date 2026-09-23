@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useMutation } from '@tanstack/react-query';
 import { portalApi } from '../../lib/portal.api';
@@ -58,7 +59,7 @@ export default function AcknowledgeNoticeModal({ notice, show, onClose, onSucces
         >
           <div className="fw-bold" style={{ fontSize: '0.92rem' }}>{notice.subject}</div>
           <div className="text-muted small">
-            From STAP Security Ltd · {fmtDate(notice.sentAt ?? notice.createdAt)}
+            From {COMPANY_NAME} · {fmtDate(notice.sentAt ?? notice.createdAt)}
           </div>
         </div>
 
@@ -76,7 +77,7 @@ export default function AcknowledgeNoticeModal({ notice, show, onClose, onSucces
             size="sm"
             maxLength={2000}
             value={response}
-            placeholder="Add any comments or questions for STAP Security…"
+            placeholder={`Add any comments or questions for ${COMPANY_NAME}…`}
             onChange={e => setResponse(e.target.value)}
           />
         </Form.Group>

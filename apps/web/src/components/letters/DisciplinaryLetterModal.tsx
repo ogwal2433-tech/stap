@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
@@ -75,7 +76,7 @@ export default function DisciplinaryLetterModal({
         date:          fmt,
         reason:        disciplinaryRecord.reason,
         outcome:       disciplinaryRecord.outcome,
-        company_name:  'STAP Security Ltd',
+        company_name:  COMPANY_NAME,
       },
     });
     setBody(html);

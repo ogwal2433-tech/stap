@@ -71,7 +71,7 @@ export default function StaffServiceRequestsPage() {
       <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div>
           <h5 className="fw-bold mb-0" style={{ color: '#1B3A6B' }}>📋 Service Requests</h5>
-          <div className="text-muted small">What clients have asked STAP to do</div>
+          <div className="text-muted small">What clients have asked us to do</div>
         </div>
         {!!summary?.pending && (
           <Badge bg="danger" style={{ fontSize: '0.85rem', padding: '6px 12px' }}>

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { COMPANY_NAME } from '../config/branding';
 import path from 'path';
 import fs from 'fs';
 import prisma from '../db/prisma';
@@ -120,7 +121,7 @@ class BulkImportService {
 
     // Row 1: Title (merged A1 to last column)
     ws['A1'] = {
-      v: 'STAP Security Ltd — Guard Import Template', t: 's',
+      v: `${COMPANY_NAME} — Guard Import Template`, t: 's',
       s: {
         font:      { bold: true, color: { rgb: WHITE }, sz: 13 },
         fill:      { fgColor: { rgb: NAVY } },
@@ -169,7 +170,7 @@ class BulkImportService {
 
     // ── Sheet 2: Instructions ──────────────────────────────────────────────────
     const instructions = [
-      ['STAP Security Ltd — Guard Import Instructions'],
+      [`${COMPANY_NAME} — Guard Import Instructions`],
       [''],
       ['HOW TO USE THIS TEMPLATE'],
       ['1. Do not change column headers or their order.'],

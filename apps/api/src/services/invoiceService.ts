@@ -1,4 +1,6 @@
 import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
+import { COMPANY_NAME } from '../config/branding';
+import { companyProfile } from './integrationSettings';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -361,7 +363,7 @@ class InvoiceService {
     if (client.email) {
       await QueueService.sendEmail({
         to:       client.email,
-        subject:  `Invoice ${invoiceNumber} from STAP Security Ltd`,
+        subject:  `Invoice ${invoiceNumber} from ${COMPANY_NAME}`,
         template: 'invoice',
         data: {
           invoiceNumber,
@@ -698,7 +700,7 @@ class InvoiceService {
     const resp = await yoPayments.requestPayment({
       amount:            invoice.totalAmount,
       msisdn,
-      narrative:         `Invoice ${invoice.invoiceNumber} — STAP Security Ltd`,
+      narrative:         `Invoice ${invoice.invoiceNumber} — ${COMPANY_NAME}`,
       internalReference: `${prefix}-INV-${invoice.id}`,
     });
 
@@ -756,11 +758,12 @@ class InvoiceService {
       tax:           invoice.taxAmount,
       totalAmount:   invoice.totalAmount,
       currency:      'UGX',
+      company:       await companyProfile(),
     });
 
     await sendEmail({
       to:      recipientEmail,
-      subject: `Invoice ${invoice.invoiceNumber} — STAP Security Ltd — Due ${new Date(invoice.dueDate).toLocaleDateString('en-GB')}`,
+      subject: `Invoice ${invoice.invoiceNumber} — ${COMPANY_NAME} — Due ${new Date(invoice.dueDate).toLocaleDateString('en-GB')}`,
       html,
     });
 

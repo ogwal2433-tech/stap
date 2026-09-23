@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
@@ -889,7 +890,7 @@ export default function GuardDetailPage() {
                   </Col>
                 )}
               </Row>
-              <div className="fw-semibold small text-muted text-uppercase mb-2">STAP Contract</div>
+              <div className="fw-semibold small text-muted text-uppercase mb-2">{COMPANY_NAME} Contract</div>
               <Row className="g-3">
                 {([
                   ['Contract Start', new Date(guard.contractStart).toLocaleDateString()],

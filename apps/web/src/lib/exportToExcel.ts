@@ -1,11 +1,12 @@
 import * as XLSX from 'xlsx';
+import { COMPANY_NAME_UPPER } from './branding';
 import type {
   DailySheetResponse, GuardAttendanceSummaryResponse, GuardExportRow, GuardResponse,
 } from '@stap/shared';
 
 // ── Company constants ──────────────────────────────────────────────────────────
 
-const CO_NAME    = 'STAP SECURITY LTD';
+const CO_NAME    = COMPANY_NAME_UPPER;
 const CO_ADDRESS = 'Kampala, Uganda';
 const CO_LINE2   = 'Security Guards · Investigations · Event Security';
 

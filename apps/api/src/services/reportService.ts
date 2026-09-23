@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { APP_NAME } from '../config/branding';
 import cron from 'node-cron';
 import prisma from '../db/prisma';
 import { OUTSTANDING_STATUSES } from './invoiceService';
@@ -205,7 +206,7 @@ class ReportService {
     ]);
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'STAP Security';
+    wb.creator = APP_NAME;
 
     // Sheet 1: Summary
     const summary = wb.addWorksheet('Summary');

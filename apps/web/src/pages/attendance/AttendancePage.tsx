@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import {
   Alert, Badge, Button, Card, Col, Form, Row, Spinner, Tab, Tabs, Table,
 } from 'react-bootstrap';
@@ -441,7 +442,7 @@ export default function AttendancePage() {
 
       {/* Print header */}
       <div className="d-none d-print-block mb-3">
-        <h5 className="fw-bold">STAP Security Ltd — Daily Deployment Sheet</h5>
+        <h5 className="fw-bold">{COMPANY_NAME} — Daily Deployment Sheet</h5>
         <div className="small">Date: {selectedDate}</div>
       </div>
 

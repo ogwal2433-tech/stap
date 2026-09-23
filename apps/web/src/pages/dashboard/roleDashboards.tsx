@@ -1,4 +1,5 @@
 import type { DashboardData, DashboardFeedItem, DashboardRole } from '@stap/shared';
+import { COMPANY_NAME } from '../../lib/branding';
 import type { StatColour } from './StatCard';
 
 /**
@@ -226,7 +227,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
   },
 
   CLIENT: {
-    caption: 'Your account with STAP Security',
+    caption: `Your account with ${COMPANY_NAME}`,
     stats: [
       { key: 'activeSites',         label: 'Your Sites',        icon: '🏭', colour: 'navy',  linkTo: '/portal' },
       { key: 'activeContracts',     label: 'Active Contracts',  icon: '📝', colour: 'teal',  linkTo: '/portal' },

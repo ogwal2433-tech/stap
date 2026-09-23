@@ -88,7 +88,7 @@ export default function LoginPage() {
                 <Form.Label>Email Address</Form.Label>
                 <Form.Control
                   type="email"
-                  placeholder="you@stapsecurity.co.ug"
+                  placeholder="you@example.com"
                   isInvalid={!!errors.email}
                   disabled={isSubmitting}
                   {...emailRest}

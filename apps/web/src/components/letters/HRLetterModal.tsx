@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
@@ -9,13 +10,13 @@ function buildCommitmentAgreementBody(guardName: string, startDate: string, mini
   return `
 <p>Dear <strong>${guardName}</strong>,</p>
 
-<p>We are pleased to offer you employment as a Security Guard with STAP Security Ltd. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
+<p>We are pleased to offer you employment as a Security Guard with ${COMPANY_NAME}. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
 
 <p>By signing this agreement, you acknowledge and commit to the following terms:</p>
 
 <p style="font-weight:bold;margin-top:14px;">1. Minimum Service Period:</p>
 <ul style="margin:4px 0 10px 24px;line-height:1.6;">
-  <li>You agree to work with STAP Security Ltd for a minimum of <strong>${minimumPeriod}</strong> from <strong>${startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
+  <li>You agree to work with ${COMPANY_NAME} for a minimum of <strong>${minimumPeriod}</strong> from <strong>${startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
 </ul>
 
 <p style="font-weight:bold;margin-top:14px;">2. Resignation or Termination Before Committed Period:</p>
@@ -60,7 +61,7 @@ function buildCommitmentAgreementBody(guardName: string, startDate: string, mini
     </tr>
   </table>
 
-  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of STAP Security Ltd:</p>
+  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of ${COMPANY_NAME}:</p>
   <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:10pt;">
     <tr>
       <td style="width:55%;padding-bottom:6px;">Authorized Representative Name: <span style="display:inline-block;width:100px;border-bottom:1px solid #333;">&nbsp;</span></td>
@@ -112,7 +113,7 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
       sampleData: {
         guard_name:   guardName,
         date:         new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-        company_name: 'STAP Security Ltd',
+        company_name: COMPANY_NAME,
       },
     });
     setBody(html);

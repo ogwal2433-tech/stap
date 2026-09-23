@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { COMPANY_NAME } from '../config/branding';
 import { renderToPdf } from '../lib/pdfBase';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -247,7 +248,7 @@ class LetterService {
       refNumber,
       issueDate,
       body:         l.body,
-      directorName: 'Director, STAP Security Ltd',
+      directorName: `Director, ${COMPANY_NAME}`,
       employeeName: l.subjectName,
       skipSigBlock: (STRUCTURED_LETTER_TYPES as readonly string[]).includes(l.letterType),
     });
@@ -290,7 +291,7 @@ class LetterService {
           <li><strong>Title:</strong> ${l.title}</li>
         </ul>
         <p>Please print and have the employee sign the attached copy.</p>
-        <p style="color:#999;font-size:11px;">STAP Security Ltd — Automated HR System</p>
+        <p style="color:#999;font-size:11px;">${COMPANY_NAME} — Automated HR System</p>
       `,
       attachments: [{
         filename:    `${l.letterType}-${l.subjectName.replace(/\s+/g, '_')}.pdf`,

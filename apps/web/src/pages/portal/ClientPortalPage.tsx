@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COMPANY_NAME } from '../../lib/branding';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@stap/shared';
@@ -25,7 +26,7 @@ function is403(err: unknown): boolean {
 }
 
 const NOT_LINKED_MSG =
-  'Your account is not yet linked to a client record. Please contact STAP Security to activate your portal access.';
+  `Your account is not yet linked to a client record. Please contact ${COMPANY_NAME} to activate your portal access.`;
 
 function TabSpinner() {
   return (
@@ -315,7 +316,7 @@ export default function ClientPortalPage() {
           <div className="mb-4">
             <div className="d-flex align-items-center gap-2 mb-3">
               <h6 className="fw-semibold mb-0" style={{ color: '#1B3A6B' }}>
-                📤 Notices from STAP Security
+                📤 Notices from {COMPANY_NAME}
               </h6>
               {unreadNotices > 0 && (
                 <Badge bg="danger" style={{ fontSize: '0.7rem' }}>{unreadNotices} unread</Badge>
@@ -331,7 +332,7 @@ export default function ClientPortalPage() {
                   padding: '20px', textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
                 }}
               >
-                No notices from STAP Security
+                No notices from {COMPANY_NAME}
               </div>
             ) : (
               notices.map(n => (
@@ -365,7 +366,7 @@ export default function ClientPortalPage() {
                       <div className="fw-bold" style={{ fontSize: '0.92rem' }}>{n.subject}</div>
 
                       <div className="text-muted small mt-1">
-                        From STAP Security Ltd ·{' '}
+                        From {COMPANY_NAME} ·{' '}
                         {new Date(n.sentAt ?? n.createdAt).toLocaleDateString('en-GB', {
                           day: 'numeric', month: 'long', year: 'numeric',
                         })}
@@ -428,7 +429,7 @@ export default function ClientPortalPage() {
           <hr className="my-4" />
 
           <h6 className="fw-semibold mb-3" style={{ color: '#1B3A6B' }}>
-            📥 My Complaints to STAP
+            📥 My Complaints to {COMPANY_NAME}
           </h6>
 
           <Row>
@@ -527,7 +528,7 @@ export default function ClientPortalPage() {
                 <Alert variant="success">
                   <strong>Request submitted!</strong><br />
                   Reference: <code>#{srSubmitted.slice(-8).toUpperCase()}</code><br />
-                  <small className="text-muted">STAP Security has been notified and will contact you directly.</small>
+                  <small className="text-muted">{COMPANY_NAME} has been notified and will contact you directly.</small>
                   <div className="mt-2">
                     <Button size="sm" variant="outline-success" onClick={() => setSrSubmitted(null)}>Submit Another</Button>
                   </div>
@@ -613,7 +614,7 @@ export default function ClientPortalPage() {
                               marginTop:    '8px',
                             }}
                           >
-                            <div className="fw-bold small text-success mb-1">✅ STAP response</div>
+                            <div className="fw-bold small text-success mb-1">✅ {COMPANY_NAME} response</div>
                             <div style={{
                               fontSize: '0.85rem', color: '#2C3E50',
                               whiteSpace: 'pre-wrap', lineHeight: 1.6,

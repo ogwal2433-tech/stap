@@ -86,27 +86,29 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'tru
 
 // ── Dev letter preview (non-production only) ──────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
-  app.get('/dev/letter-preview', (_req, res) => {
+  app.get('/dev/letter-preview', async (_req, res) => {
+    const { companyProfile } = await import('./services/integrationSettings');
+    const company = await companyProfile();
     const sampleContent = `
       <div style="display:flex;justify-content:space-between;margin-bottom:24px;font-size:10pt;color:#444;">
-        <span>Ref: STAP/2026/VW/001</span>
+        <span>Ref: SAMPLE/2026/VW/001</span>
         <span>10 June 2026</span>
       </div>
       <p><strong>To:</strong> John Doe &nbsp;|&nbsp; NIN: CM12345 &nbsp;|&nbsp; Position: Security Guard</p>
       <p style="font-weight:bold;text-decoration:underline;margin:16px 0;">VERBAL WARNING — MISCONDUCT</p>
       <p>This letter serves as formal documentation of a verbal warning issued to you on <strong>10 June 2026</strong>.</p>
-      <p>You were verbally informed of this matter and reminded of the conduct standards required of all STAP Security Ltd employees. You are expected to improve your conduct with immediate effect.</p>
+      <p>You were verbally informed of this matter and reminded of the conduct standards required of all ${company.name} employees. You are expected to improve your conduct with immediate effect.</p>
       <p><strong>Outcome:</strong> Verbal warning issued. No further action at this time.</p>
       <p>Should a similar incident recur, a written warning will be issued. Repeated misconduct may result in suspension or termination of employment.</p>
       <div style="margin-top:40px;">
         <p>Yours sincerely,</p>
         <div style="border-top:1px solid #333;width:200px;margin:30px 0 4px;"></div>
         <p><strong>Director</strong></p>
-        <p>For: STAP Security Ltd</p>
+        <p>For: ${company.name}</p>
       </div>
     `;
     res.setHeader('Content-Type', 'text/html');
-    res.send(buildPreviewHtml(sampleContent));
+    res.send(await buildPreviewHtml(sampleContent));
   });
   console.log('🔍 Letter preview: http://localhost:3001/dev/letter-preview');
 }

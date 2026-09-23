@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { APP_NAME } from '../config/branding';
 import { QueueService } from '../jobs/QueueService';
 import { PaginatedResponse } from '@stap/shared';
 import type { NotificationResponse } from '@stap/shared';
@@ -102,7 +103,7 @@ class NotificationService {
       jobs.push(
         QueueService.sendSms({
           to:      (user as any).phone,
-          message: `STAP: ${params.title} — ${params.message.substring(0, 100)}`,
+          message: `${APP_NAME}: ${params.title} — ${params.message.substring(0, 100)}`,
         }),
       );
     }

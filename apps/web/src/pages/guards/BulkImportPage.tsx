@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { APP_NAME } from '../../lib/branding';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
@@ -242,7 +243,7 @@ export default function BulkImportPage() {
                 <div className="flex-grow-1">
                   <h5 className="fw-bold mb-1">Step 1 — Download the Import Template</h5>
                   <p className="text-muted small mb-3">
-                    Download the official STAP Excel template. Fill in guard details — one guard per row.
+                    Download the official {APP_NAME} Excel template. Fill in guard details — one guard per row.
                     Do not change column headers or their order.
                   </p>
 

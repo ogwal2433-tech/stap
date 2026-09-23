@@ -890,7 +890,7 @@ export default function GuardFormPage() {
             </Row>
 
             {/* B(6): Employment Details */}
-            <div className="fw-semibold small text-muted text-uppercase mb-2 mt-3" style={{ letterSpacing: '0.05em' }}>B6 — STAP Employment Details</div>
+            <div className="fw-semibold small text-muted text-uppercase mb-2 mt-3" style={{ letterSpacing: '0.05em' }}>B6 — Employment Details</div>
             <div className="mb-3">
               <ContractDurationPicker
                 startDateValue={contractStart ? contractStart.slice(0, 10) : ''}
