@@ -27,6 +27,20 @@ const DEFAULT_SETTINGS: Array<{
   { key: 'director_name',        value: '',                        label: 'Director Name',                  group: 'GENERAL' },
   { key: 'financial_year_start', value: '01/07',                   label: 'Financial Year Start (DD/MM)',   group: 'GENERAL' },
 
+  // ── GUARD FIELDS ─────────────────────────────────────────────────────
+  // Which optional guard fields this deployment insists on. Only fields the
+  // database allows to be absent appear here: firstName, lastName, dateOfBirth,
+  // salaryRate and contractStart are NOT NULL and are always required.
+  { key: 'guard_field_phone_required',                   value: 'false', label: 'Phone number required',        group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_nationalId_required',              value: 'false', label: 'National ID required',         group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_idType_required',                  value: 'false', label: 'ID type required',             group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_gender_required',                  value: 'false', label: 'Gender required',              group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_district_required',                value: 'false', label: 'District required',            group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_nextOfKinName_required',           value: 'false', label: 'Next of kin name required',    group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_nextOfKinPhone_required',          value: 'false', label: 'Next of kin phone required',   group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_preferredPaymentContact_required', value: 'false', label: 'Mobile money number required', group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_mobileNetwork_required',           value: 'false', label: 'Mobile network required',      group: 'GUARD_FIELDS', dataType: 'boolean' },
+
   // ── PAYROLL ──────────────────────────────────────────────────────────
   { key: 'payroll_working_days', value: '26',    label: 'Working Days per Month',         group: 'PAYROLL', dataType: 'number' },
   { key: 'payroll_currency',     value: 'UGX',   label: 'Payroll Currency',               group: 'PAYROLL' },

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
+import { useGuardFieldRules, NO_EXTRA_REQUIRED } from '../../hooks/useGuardFieldRules';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Alert, Breadcrumb, Button, Card, Col, Form, InputGroup, Row, Spinner, Table,
@@ -153,6 +154,13 @@ export default function GuardFormPage() {
     });
     return () => obs.disconnect();
   }, []);
+
+  const { data: fieldRules = NO_EXTRA_REQUIRED } = useGuardFieldRules();
+  /** Marks a label when this deployment has made the field mandatory. */
+  const Req = ({ field }: { field: string }) =>
+    isRequired(field) ? <span className="text-danger ms-1">*</span> : null;
+  /** True when this deployment has made the field mandatory. */
+  const isRequired = (field: string) => fieldRules.required[field] === true;
 
   const {
     register,
@@ -358,6 +366,24 @@ export default function GuardFormPage() {
   const onSubmit = async (data: CreateGuardInput) => {
     setApiError('');
 
+    // Fields this deployment insists on, beyond what the schema already demands.
+    // The server refuses these too; checking here saves a round trip and names
+    // them all at once instead of one per attempt.
+    const missing = Object.entries(fieldRules.required)
+      .filter(([, required]) => required)
+      .map(([field]) => field)
+      .filter((field) => {
+        const value = (data as Record<string, unknown>)[field];
+        return value === undefined || value === null
+          || (typeof value === 'string' && !value.trim());
+      })
+      .map((field) => fieldRules.labels[field] ?? field);
+
+    if (missing.length > 0) {
+      setApiError(`${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required.`);
+      return;
+    }
+
     // Attach vettingData
     const payload: CreateGuardInput = {
       ...data,
@@ -505,7 +531,7 @@ export default function GuardFormPage() {
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Gender</Form.Label>
+                  <Form.Label>Gender<Req field="gender" /></Form.Label>
                   <Form.Select {...register('gender')}>
                     <option value="">— Select —</option>
                     <option value="MALE">Male</option>
@@ -636,14 +662,20 @@ export default function GuardFormPage() {
             <Row className="g-3 mb-3">
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Phone Number <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
+                  <Form.Label>
+                    Phone Number
+                    <Req field="phone" />
+                    {!isRequired('phone') && (
+                      <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span>
+                    )}
+                  </Form.Label>
                   <Form.Control {...register('phone')} isInvalid={!!errors.phone} placeholder="+256 7XX XXX XXX" />
                   <Form.Control.Feedback type="invalid">{errors.phone?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Preferred Payment Contact (MoMo)</Form.Label>
+                  <Form.Label>Preferred Payment Contact (MoMo)<Req field="preferredPaymentContact" /></Form.Label>
                   <Form.Control {...register('preferredPaymentContact')} placeholder="+256..." isInvalid={!!errors.preferredPaymentContact} />
                   <Form.Text className="text-muted">MoMo number for salary payment — may differ from main phone.</Form.Text>
                   <Form.Control.Feedback type="invalid">{errors.preferredPaymentContact?.message}</Form.Control.Feedback>
@@ -654,7 +686,7 @@ export default function GuardFormPage() {
                     that guess is wrong, which is what fails a salary payment. */}
                 <Col md={6}>
                   <Form.Group>
-                    <Form.Label>Mobile Network</Form.Label>
+                    <Form.Label>Mobile Network<Req field="mobileNetwork" /></Form.Label>
                     <Form.Select {...register('mobileNetwork')}>
                       <option value="">Detect from number</option>
                       <option value="MTN">MTN</option>
@@ -719,7 +751,7 @@ export default function GuardFormPage() {
 
                   {idType === 'OWN_ID' && (
                     <div style={{ background: '#EBF5FB', border: '1px solid #D6E0F0', borderRadius: '0.5rem', padding: '12px 14px' }}>
-                      <Form.Label className="small fw-bold">National ID number</Form.Label>
+                      <Form.Label className="small fw-bold">National ID number<Req field="nationalId" /></Form.Label>
                       <Form.Control {...register('nationalId')} isInvalid={!!errors.nationalId} placeholder="CM90210..." />
                       <Form.Control.Feedback type="invalid">{errors.nationalId?.message}</Form.Control.Feedback>
                     </div>
@@ -830,7 +862,7 @@ export default function GuardFormPage() {
               </Col>
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>District</Form.Label>
+                  <Form.Label>District<Req field="district" /></Form.Label>
                   <Form.Control {...register('district')} placeholder="e.g. Kampala" />
                 </Form.Group>
               </Col>
@@ -1088,14 +1120,14 @@ export default function GuardFormPage() {
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Next of Kin Name <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
+                  <Form.Label>Next of Kin Name <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span><Req field="nextOfKinName" /></Form.Label>
                   <Form.Control {...register('nextOfKinName')} isInvalid={!!errors.nextOfKinName} />
                   <Form.Control.Feedback type="invalid">{errors.nextOfKinName?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Next of Kin Phone <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span></Form.Label>
+                  <Form.Label>Next of Kin Phone <span className="text-muted fw-normal ms-1" style={{ fontSize: '0.78rem' }}>(optional)</span><Req field="nextOfKinPhone" /></Form.Label>
                   <Form.Control {...register('nextOfKinPhone')} isInvalid={!!errors.nextOfKinPhone} placeholder="+256..." />
                   <Form.Control.Feedback type="invalid">{errors.nextOfKinPhone?.message}</Form.Control.Feedback>
                 </Form.Group>

@@ -32,10 +32,11 @@ import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const GROUP_ORDER = ['GENERAL', 'ID_FORMAT', 'PAYROLL', 'BILLING', 'SECURITY', 'NOTIFICATIONS'];
+const GROUP_ORDER = ['GENERAL', 'ID_FORMAT', 'GUARD_FIELDS', 'PAYROLL', 'BILLING', 'SECURITY', 'NOTIFICATIONS'];
 /** Titles that do not survive being title-cased from the group key. */
 const GROUP_LABELS: Record<string, string> = {
-  ID_FORMAT: 'ID Formats',
+  ID_FORMAT:    'ID Formats',
+  GUARD_FIELDS: 'Guard Fields',
 };
 
 const groupLabel = (group: string): string =>
@@ -44,6 +45,7 @@ const groupLabel = (group: string): string =>
 const GROUP_ICONS: Record<string, string> = {
   GENERAL:       'bi-building',
   ID_FORMAT:     'bi-123',
+  GUARD_FIELDS:  'bi-person-lines-fill',
   PAYROLL:       'bi-cash-coin',
   BILLING:       'bi-receipt',
   SECURITY:      'bi-shield-lock',
@@ -691,6 +693,16 @@ export default function SettingsPage() {
                       {updateSettings.isPending ? <Spinner size="sm" /> : 'Save Changes'}
                     </Button>
                   </div>
+                  {group === 'GUARD_FIELDS' && (
+                    <Alert variant="info" className="small py-2">
+                      Switching one on makes that field mandatory when a guard is added or
+                      edited, in the form and in the API. Name, date of birth, salary and
+                      contract start are always required and are not listed — a guard cannot
+                      be stored without them. Everything else is optional by default, because
+                      a guard is often registered from a paper form before they have produced
+                      a phone number or named a next of kin.
+                    </Alert>
+                  )}
                   {group === 'ID_FORMAT' && (
                     <Alert variant="warning" className="small py-2">
                       A prefix applies to records created after it is saved. Nothing already

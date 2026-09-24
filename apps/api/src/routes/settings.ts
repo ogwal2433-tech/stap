@@ -161,6 +161,9 @@ import { z } from 'zod';
 import { settingsService } from '../services/settingsService';
 import { rankService } from '../services/rankService';
 import { staffPositionService } from '../services/staffPositionService';
+import {
+  guardFieldRules, CONFIGURABLE_GUARD_FIELDS, ALWAYS_REQUIRED_GUARD_FIELDS,
+} from '../lib/guardFieldRules';
 import { shiftTypeService } from '../services/shiftTypeService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -374,6 +377,24 @@ router.delete(
   asyncHandler(async (req, res) => {
     await rankService.deleteRank(req.params.id, req.user!.userId);
     res.json({ success: true });
+  }),
+);
+
+// GET /guard-fields — which guard fields this deployment requires.
+// Any signed-in user: the guard form needs it to mark its labels.
+router.get(
+  '/guard-fields',
+  asyncHandler(async (_req, res) => {
+    const [required, labels] = [await guardFieldRules(), CONFIGURABLE_GUARD_FIELDS];
+    res.json({
+      success: true,
+      data: {
+        required,
+        labels,
+        // Named so the form can mark them without pretending they are a choice.
+        alwaysRequired: ALWAYS_REQUIRED_GUARD_FIELDS,
+      },
+    });
   }),
 );
 

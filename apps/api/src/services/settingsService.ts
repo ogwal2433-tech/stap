@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { clearIdFormatCache } from '../lib/systemId';
+import { clearGuardFieldCache } from '../lib/guardFieldRules';
 import prisma from '../db/prisma';
 import { assertAssignableRole } from './roleService';
 import { writeAuditLog } from '../lib/auditLog';
@@ -122,6 +123,7 @@ class SettingsService {
     // so the next record created uses what was just saved rather than waiting
     // for the cache to lapse.
     clearIdFormatCache();
+    clearGuardFieldCache();
 
     return fmtSetting(updated);
   }

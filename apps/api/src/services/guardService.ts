@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { assertRequiredGuardFields } from '../lib/guardFieldRules';
 import path from 'path';
 import prisma from '../db/prisma';
 import { writeAuditLog } from '../lib/auditLog';
@@ -203,6 +204,11 @@ class GuardService {
         effectiveSalary = matchedRank.defaultSalary;
       }
     }
+
+    // Refused here as well as in the form: the setting is a rule about the
+    // records this business will hold, and one only the browser applies is one
+    // any other caller can ignore.
+    await assertRequiredGuardFields(guardFields as Record<string, unknown>);
 
     const systemId = await generateGuardId();
 
