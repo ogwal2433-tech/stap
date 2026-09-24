@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../db/prisma';
 
 /**
@@ -113,13 +114,14 @@ function escapeRegex(value: string): string {
  */
 async function maxIssued(table: IdTable, prefix: string, body = ''): Promise<number> {
   const head = `${prefix}${body}`;
-  const rows = await prisma.$queryRawUnsafe<{ max_num: number | null }[]>(
-    `SELECT MAX(CAST(SUBSTRING("systemId" FROM $2::int) AS BIGINT)) AS max_num
-       FROM "${table}"
-      WHERE "systemId" ~ $1`,
-    `^${escapeRegex(head)}[0-9]+$`,
-    head.length + 1,
-  );
+  // Prisma.sql rather than $queryRawUnsafe: the pattern and the offset go in as
+  // bound parameters, and only the table name — a closed union, never user
+  // input — is interpolated.
+  const rows = await prisma.$queryRaw<{ max_num: number | null }[]>(Prisma.sql`
+    SELECT MAX(CAST(SUBSTRING("systemId" FROM ${head.length + 1}::int) AS BIGINT)) AS max_num
+      FROM ${Prisma.raw(`"${table}"`)}
+     WHERE "systemId" ~ ${`^${escapeRegex(head)}[0-9]+$`}
+  `);
   return Number(rows[0]?.max_num ?? 0);
 }
 

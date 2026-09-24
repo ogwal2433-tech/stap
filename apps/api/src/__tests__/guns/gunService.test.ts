@@ -7,6 +7,10 @@ vi.mock('../../db/prisma', () => ({
     gunMovement: { findMany: vi.fn(), create: vi.fn() },
     site:        { findUnique: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
+    // The gun's system ID is now issued from the shared generator, which reads
+    // the highest number already used through a raw query.
+    $queryRaw:    vi.fn().mockResolvedValue([{ max_num: 0 }]),
+    systemSetting: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
