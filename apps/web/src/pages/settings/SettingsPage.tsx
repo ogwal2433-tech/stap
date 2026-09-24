@@ -32,9 +32,18 @@ import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const GROUP_ORDER = ['GENERAL', 'PAYROLL', 'BILLING', 'SECURITY', 'NOTIFICATIONS'];
+const GROUP_ORDER = ['GENERAL', 'ID_FORMAT', 'PAYROLL', 'BILLING', 'SECURITY', 'NOTIFICATIONS'];
+/** Titles that do not survive being title-cased from the group key. */
+const GROUP_LABELS: Record<string, string> = {
+  ID_FORMAT: 'ID Formats',
+};
+
+const groupLabel = (group: string): string =>
+  GROUP_LABELS[group] ?? group.charAt(0) + group.slice(1).toLowerCase();
+
 const GROUP_ICONS: Record<string, string> = {
   GENERAL:       'bi-building',
+  ID_FORMAT:     'bi-123',
   PAYROLL:       'bi-cash-coin',
   BILLING:       'bi-receipt',
   SECURITY:      'bi-shield-lock',
@@ -665,7 +674,7 @@ export default function SettingsPage() {
           <Tab
             key={group}
             eventKey={group.toLowerCase()}
-            title={<><i className={`bi ${GROUP_ICONS[group]} me-1`} />{group.charAt(0) + group.slice(1).toLowerCase()}</>}
+            title={<><i className={`bi ${GROUP_ICONS[group]} me-1`} />{groupLabel(group)}</>}
           >
             {loadingSettings ? (
               <div className="text-center py-5"><Spinner /></div>
@@ -673,7 +682,7 @@ export default function SettingsPage() {
               <div className="card border-0 shadow-sm">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="fw-semibold mb-0">{group.charAt(0) + group.slice(1).toLowerCase()} Settings</h6>
+                    <h6 className="fw-semibold mb-0">{groupLabel(group)} Settings</h6>
                     <Button
                       size="sm"
                       onClick={() => handleSaveGroup(group)}
@@ -682,6 +691,13 @@ export default function SettingsPage() {
                       {updateSettings.isPending ? <Spinner size="sm" /> : 'Save Changes'}
                     </Button>
                   </div>
+                  {group === 'ID_FORMAT' && (
+                    <Alert variant="warning" className="small py-2">
+                      A prefix applies to records created after it is saved. Nothing already
+                      issued is renamed, and numbering carries on from the highest ID already
+                      used under that prefix.
+                    </Alert>
+                  )}
                   {saveError?.group === group && (
                     <Alert
                       variant="danger"

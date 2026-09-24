@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { generateShiftReportId } from '../lib/systemId';
 import prisma from '../db/prisma';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { writeAuditLog } from '../lib/auditLog';
@@ -6,24 +7,6 @@ import type { ShiftReportInput } from '@stap/shared';
 
 /** Prisma's own JSON input type — the section arrays go in as-is. */
 type Json = Prisma.InputJsonValue;
-
-/**
- * SHR-YYYY-NNN, numbered per calendar year.
- *
- * Taken from the highest number already issued this year rather than a row
- * count: a deleted report would otherwise make the next one reuse an ID that
- * is already written on a printed sheet.
- */
-async function nextSystemId(year: number): Promise<string> {
-  const prefix = `SHR-${year}-`;
-  const last = await prisma.shiftHandoverReport.findFirst({
-    where:   { systemId: { startsWith: prefix } },
-    orderBy: { systemId: 'desc' },
-    select:  { systemId: true },
-  });
-  const n = last?.systemId ? Number(last.systemId.slice(prefix.length)) : 0;
-  return `${prefix}${String((Number.isFinite(n) ? n : 0) + 1).padStart(3, '0')}`;
-}
 
 const INCLUDE = {
   controller:         { select: { id: true, name: true } },
@@ -133,7 +116,7 @@ export const shiftReportService = {
     // A draft is not numbered. It gets its SHR- id when it is submitted, so a
     // half-written sheet abandoned at handover does not consume one.
     const systemId = status === 'SUBMITTED'
-      ? await nextSystemId(new Date(data.date).getFullYear())
+      ? await generateShiftReportId(new Date(data.date).getFullYear())
       : null;
 
     const report = await prisma.shiftHandoverReport.create({
@@ -170,7 +153,7 @@ export const shiftReportService = {
 
     const status   = data.status ?? 'SUBMITTED';
     const systemId = status === 'SUBMITTED' && !existing.systemId
-      ? await nextSystemId(new Date(data.date).getFullYear())
+      ? await generateShiftReportId(new Date(data.date).getFullYear())
       : existing.systemId;
 
     const report = await prisma.shiftHandoverReport.update({

@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { generateGunId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { GUN_STATUSES, GUN_MOVEMENT_TYPES, ARMOURY_LABEL } from '@stap/shared';
@@ -26,21 +27,6 @@ const MOVEMENT_INCLUDE = {
   site:           { select: { id: true, siteName: true } },
   recordedByUser: { select: { id: true, name: true } },
 } as const;
-
-/**
- * GUN-001, continuing past the highest already issued rather than counting rows
- * — a deleted gun would otherwise make the next registration reuse an id that
- * is already written in a movement record.
- */
-async function nextGunSystemId(): Promise<string> {
-  const last = await prisma.gun.findFirst({
-    where:   { systemId: { startsWith: 'GUN-' } },
-    orderBy: { systemId: 'desc' },
-    select:  { systemId: true },
-  });
-  const n = last?.systemId ? Number(last.systemId.slice(4)) : 0;
-  return `GUN-${String((Number.isFinite(n) ? n : 0) + 1).padStart(3, '0')}`;
-}
 
 function sanitise(gun: any): GunResponse {
   return {
@@ -124,7 +110,7 @@ class GunService {
 
     const gun = await prisma.gun.create({
       data: {
-        systemId:       await nextGunSystemId(),
+        systemId:       await generateGunId(),
         serialNumber,
         gunType:        data.gunType,
         ownership:      data.ownership,

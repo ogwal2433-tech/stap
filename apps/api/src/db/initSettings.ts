@@ -39,6 +39,16 @@ const DEFAULT_SETTINGS: Array<{
   { key: 'tax_rate',              value: '0',        label: 'Tax Rate (%)',                  group: 'BILLING', dataType: 'number' },
   { key: 'yo_payment_enabled',    value: 'false',    label: 'Yo! Payments Enabled',          group: 'BILLING', dataType: 'boolean' },
 
+  // ── ID FORMATS ───────────────────────────────────────────────────────
+  // Prefixes for generated system IDs. Changing one affects records created
+  // afterwards; nothing already issued is renamed.
+  { key: 'guard_id_prefix',    value: 'SSLG', label: 'Guard ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'client_id_prefix',   value: 'SSLC', label: 'Client ID Prefix',          group: 'ID_FORMAT' },
+  { key: 'staff_id_prefix',    value: 'SSLS', label: 'Staff ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'gun_id_prefix',      value: 'GUN',  label: 'Gun ID Prefix',             group: 'ID_FORMAT' },
+  { key: 'shift_report_prefix',value: 'SHR',  label: 'Shift Report ID Prefix',    group: 'ID_FORMAT' },
+  { key: 'id_padding',         value: '3',    label: 'ID Number Padding (digits)', group: 'ID_FORMAT', dataType: 'number' },
+
   // ── SECURITY ─────────────────────────────────────────────────────────
   { key: 'max_failed_logins',    value: '5',     label: 'Max Failed Login Attempts',      group: 'SECURITY', dataType: 'number' },
   { key: 'session_timeout_mins', value: '480',   label: 'Session Timeout (minutes)',      group: 'SECURITY', dataType: 'number' },

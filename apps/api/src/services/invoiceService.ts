@@ -1,6 +1,7 @@
 import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
 import { COMPANY_NAME } from '../config/branding';
 import { companyProfile } from './integrationSettings';
+import { invoicePrefix } from '../lib/systemId';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -161,13 +162,20 @@ export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
 }
 
 class InvoiceService {
+  /**
+   * STAP/INV/2026/0001, with the prefix taken from Settings.
+   *
+   * The invoice_prefix setting has existed since the settings table did; it was
+   * simply never read, so editing it changed nothing. It is read here now.
+   */
   private async generateInvoiceNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await prisma.invoice.count({
-      where: { createdAt: { gte: new Date(`${year}-01-01`) } },
-    });
+    const [prefix, count] = await Promise.all([
+      invoicePrefix(),
+      prisma.invoice.count({ where: { createdAt: { gte: new Date(`${year}-01-01`) } } }),
+    ]);
     const seq = String(count + 1).padStart(4, '0');
-    return `STAP/INV/${year}/${seq}`;
+    return `${prefix}/${year}/${seq}`;
   }
 
   /**

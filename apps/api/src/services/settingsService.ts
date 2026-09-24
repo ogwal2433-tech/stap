@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { clearIdFormatCache } from '../lib/systemId';
 import prisma from '../db/prisma';
 import { assertAssignableRole } from './roleService';
 import { writeAuditLog } from '../lib/auditLog';
@@ -116,6 +117,11 @@ class SettingsService {
       oldValue: { key, value: existing.value },
       newValue: { key, value },
     });
+
+    // An ID prefix or the padding is cached where the IDs are issued; drop it
+    // so the next record created uses what was just saved rather than waiting
+    // for the cache to lapse.
+    clearIdFormatCache();
 
     return fmtSetting(updated);
   }
