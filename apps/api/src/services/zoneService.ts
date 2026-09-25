@@ -278,10 +278,12 @@ class ZoneService {
         select: { guardId: true },
       }),
       prisma.guard.findMany({
-        where: {
-          employmentStatus: { in: DEPLOYABLE_STATUSES },
-          isIncompleteNID:  false,
-        },
+        // Guards with a pending National ID are listed like any other. They
+        // used to be filtered out here, which on one database hid 186 of 485
+        // active guards with nothing on screen saying why. The gap comes back
+        // as a flag so the builder can show it and the paperwork can be
+        // chased; it does not stop them being rostered.
+        where: { employmentStatus: { in: DEPLOYABLE_STATUSES } },
         select: {
           id:        true,
           firstName: true,
@@ -289,6 +291,7 @@ class ZoneService {
           rank:      true,
           photoUrl:  true,
           phone:     true,
+          isIncompleteNID: true,
         },
         orderBy: { firstName: 'asc' },
       }),
@@ -304,7 +307,8 @@ class ZoneService {
       rank:            g.rank ?? null,
       photoUrl:        g.photoUrl ?? null,
       phone:           g.phone,
-      alreadyDeployed: deployedIds.has(g.id),
+      alreadyDeployed:   deployedIds.has(g.id),
+      pendingNationalId: g.isIncompleteNID === true,
     }));
 
     const sites = (zone.sites as typeof zone.sites).map((s) => ({

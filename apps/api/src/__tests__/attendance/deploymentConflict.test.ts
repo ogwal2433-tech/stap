@@ -179,18 +179,18 @@ describe('createRoster() — guard eligibility validation', () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('TEST 7: guard with incomplete NID → throws AppError 400', async () => {
+  it('TEST 7: a guard with an incomplete NID can be rostered', async () => {
+    // This used to be refused. Blocking it also kept those guards out of the
+    // roster builder — on one database 186 of 485 active guards, absent with
+    // nothing saying why. The gap is still recorded on the guard and still
+    // reported; it no longer stops them working.
     mp.guard.findMany.mockResolvedValue([
       { ...GUARD1, isIncompleteNID: true },
     ]);
 
     await expect(
       deploymentService.createRoster(BASE_INPUT, 'user1'),
-    ).rejects.toThrow(AppError);
-
-    await expect(
-      deploymentService.createRoster(BASE_INPUT, 'user1'),
-    ).rejects.toMatchObject({ statusCode: 400 });
+    ).resolves.toBeDefined();
   });
 
   it('TEST 8: guard ID does not exist → throws NotFoundError', async () => {

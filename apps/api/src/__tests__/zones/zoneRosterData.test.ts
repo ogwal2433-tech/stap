@@ -116,15 +116,25 @@ describe('zoneService.getRosterData()', () => {
     expect(queryArg.where.onLeave).toBeUndefined();
   });
 
-  it('TEST 5 — guards with incomplete NID excluded', async () => {
+  it('TEST 5 — guards with an incomplete NID are listed, flagged, not hidden', async () => {
+    // This used to assert they were left out of the query altogether. Dropping
+    // them made 186 of 485 active guards vanish from the builder with nothing
+    // saying why. createRoster still refuses them, so they cannot be rostered
+    // either way — they are returned flagged for the builder to disable, which
+    // is a reason on screen rather than an absence.
     mp.zone.findUnique.mockResolvedValue(makeZone());
-    mp.guard.findMany.mockResolvedValue([makeGuard('g-complete-nid')]);
+    mp.guard.findMany.mockResolvedValue([
+      makeGuard('g-complete-nid'),
+      { ...makeGuard('g-pending-nid'), isIncompleteNID: true },
+    ]);
 
     const result = await zoneService.getRosterData(ZONE_ID, DATE_STR);
 
     const queryArg = mp.guard.findMany.mock.calls[0][0];
-    expect(queryArg.where.isIncompleteNID).toBe(false);
-    expect(result.guards).toHaveLength(1);
+    expect(queryArg.where.isIncompleteNID).toBeUndefined();
+    expect(result.guards).toHaveLength(2);
+    expect(result.guards.find((g) => g.id === 'g-pending-nid')!.pendingNationalId).toBe(true);
+    expect(result.guards.find((g) => g.id === 'g-complete-nid')!.pendingNationalId).toBe(false);
   });
 
   it('TEST 6 — only deployable statuses included', async () => {

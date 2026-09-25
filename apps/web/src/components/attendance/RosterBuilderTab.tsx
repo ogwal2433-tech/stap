@@ -705,23 +705,31 @@ export default function RosterBuilderTab() {
                                 {guardSearch ? 'No guards match your search' : 'No guards left to assign'}
                               </div>
                             ) : (
-                              availableGuards.map((guard) => (
+                              availableGuards.map((guard) => {
+                                // A pending National ID is shown so the
+                                // paperwork can be chased, but it no longer
+                                // stops the guard being rostered.
+                                const pendingId = guard.pendingNationalId;
+                                const disabled = isAtLimit;
+                                return (
                                 <div
                                   key={guard.id}
                                   role="button"
-                                  tabIndex={isAtLimit ? -1 : 0}
+                                  tabIndex={disabled ? -1 : 0}
                                   onClick={() => addGuard(site.id, guard)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addGuard(site.id, guard); }
                                   }}
                                   title={isAtLimit
                                     ? `Maximum ${requiredGuards} guard(s) already selected`
-                                    : `Add ${guard.firstName} ${guard.lastName}`}
+                                    : pendingId
+                                      ? `Add ${guard.firstName} ${guard.lastName} — National ID still outstanding`
+                                      : `Add ${guard.firstName} ${guard.lastName}`}
                                   className="d-flex align-items-center gap-2"
                                   style={{
                                     padding: '7px 12px', borderBottom: '1px solid #f0f0f0',
-                                    cursor: isAtLimit ? 'not-allowed' : 'pointer', userSelect: 'none',
-                                    opacity: isAtLimit ? 0.35 : 1,
+                                    cursor: disabled ? 'not-allowed' : 'pointer', userSelect: 'none',
+                                    opacity: disabled ? 0.35 : 1,
                                     pointerEvents: isAtLimit ? 'none' : 'auto',
                                   }}
                                 >
@@ -737,6 +745,17 @@ export default function RosterBuilderTab() {
                                       {guard.rank?.replace(/_/g, ' ') ?? 'Guard'}
                                     </div>
                                   </div>
+                                  {pendingId && (
+                                    <span
+                                      title="National ID still outstanding"
+                                      style={{
+                                        fontSize: '0.64rem', background: '#F2F4F7', color: '#6c757d',
+                                        padding: '1px 5px', borderRadius: 4, flexShrink: 0, fontWeight: 500,
+                                      }}
+                                    >
+                                      No ID
+                                    </span>
+                                  )}
                                   {guard.alreadyDeployed ? (
                                     <span style={{
                                       fontSize: '0.64rem', background: '#fff3cd', color: '#856404',
@@ -750,7 +769,8 @@ export default function RosterBuilderTab() {
                                     </span>
                                   )}
                                 </div>
-                              ))
+                                );
+                              })
                             )}
                           </div>
                         </div>

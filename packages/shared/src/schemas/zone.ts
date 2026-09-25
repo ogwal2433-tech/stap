@@ -130,6 +130,12 @@ export interface ZoneRosterGuard {
   /** Optional on a guard, so it can be absent here too. */
   phone:           string | null;
   alreadyDeployed: boolean;
+  /**
+   * True when the guard's National ID is still outstanding. Shown so the
+   * paperwork can be chased — it does not stop the guard being rostered, and
+   * these guards used to be left out of the list altogether.
+   */
+  pendingNationalId: boolean;
 }
 
 export interface ZoneRosterData {

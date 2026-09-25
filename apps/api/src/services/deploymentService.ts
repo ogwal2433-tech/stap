@@ -78,11 +78,11 @@ class DeploymentService {
       throw new AppError(`The following guards cannot be deployed: ${names}`, 400);
     }
 
-    const pendingNid = guards.filter((g) => g.isIncompleteNID);
-    if (pendingNid.length) {
-      const names = pendingNid.map((g) => `${g.firstName} ${g.lastName}`).join(', ');
-      throw new AppError(`The following guards have a pending National ID and cannot be deployed: ${names}`, 400);
-    }
+    // A pending National ID no longer blocks a deployment. It used to, which
+    // also kept those guards out of the roster builder — on one database that
+    // was 186 of 485 active guards, absent with nothing saying why. The gap is
+    // still recorded on the guard and still reported, so it can be chased; it
+    // just no longer stops them working.
 
     // Verify supervisor exists and has correct role
     const supervisor = await prisma.user.findUnique({
