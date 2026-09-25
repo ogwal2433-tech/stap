@@ -155,13 +155,33 @@ export function idSummary(g: {
   }
 }
 
+/**
+ * A field left blank on a form arrives as "", not as absent.
+ *
+ * `.optional()` permits undefined and nothing else, so an optional field
+ * carrying a content check still ran it against the empty string: a blank
+ * phone read as malformed, a blank name as too short. Blank now means "not
+ * given", which is what the person leaving it alone meant.
+ *
+ * The checks themselves are untouched — a phone that is present and wrong is
+ * still rejected.
+ */
+const blank = (v: unknown): unknown =>
+  typeof v === 'string' && v.trim() === '' ? undefined : v;
+
+/** An empty number input yields NaN, which reads as "expected number, received nan". */
+const blankNumber = (v: unknown): unknown =>
+  (typeof v === 'number' && Number.isNaN(v)) || (typeof v === 'string' && v.trim() === '')
+    ? undefined
+    : v;
+
 const GuardFieldsSchema = z.object({
   // Existing required fields
   firstName:     z.string().min(1).max(100),
   lastName:      z.string().min(1).max(100),
   otherNames:    z.string().max(100).optional(),
   idType:           z.enum(GUARD_ID_TYPE_VALUES).optional().nullable(),
-  nationalId:       z.string().min(1).max(50).optional().nullable(),
+  nationalId: z.preprocess(blank, z.string().min(1).max(50).optional().nullable()),
   relativeIdName:   z.string().max(100).optional().nullable(),
   relativeIdNumber: z.string().max(50).optional().nullable(),
   otherDocType:     z.string().max(100).optional().nullable(),
@@ -172,15 +192,16 @@ const GuardFieldsSchema = z.object({
   // until then means the guard exists on paper and nowhere else. The format
   // check still applies to a value that is given — optional means "may be
   // absent", not "may be anything".
-  phone:         z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable(),
+  phone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable()),
   dateOfBirth:   z.string().datetime(),
-  nextOfKinName: z.string().min(1).max(100).optional().nullable(),
-  nextOfKinPhone:z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable(),
+  nextOfKinName: z.preprocess(blank, z.string().min(1).max(100).optional().nullable()),
+  nextOfKinPhone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number').optional().nullable()),
   bankName:      z.string().max(100).optional(),
   accountNumber: z.string().max(50).optional(),
-  salaryRate:    z.number().int().positive().describe('Monthly salary in UGX'),
+  salaryRate:    z.preprocess(blankNumber, z.number({ required_error: 'Salary is required' }).int().positive())
+    .describe('Monthly salary in UGX'),
   contractStart: z.string().datetime(),
-  contractEnd:   z.string().datetime().optional(),
+  contractEnd: z.preprocess(blank, z.string().datetime().optional()),
   psoCertNumber: z.string().max(50).optional(),
 
   // ── Section A: Personal Particulars ──────────────────────────────────────────
@@ -188,16 +209,16 @@ const GuardFieldsSchema = z.object({
   tribe:                   z.string().max(100).optional(),
   placeOfBirth:            z.string().max(200).optional(),
   educationLevel:          z.enum(['PRIMARY', 'O_LEVEL', 'A_LEVEL', 'CERTIFICATE', 'DIPLOMA', 'DEGREE', 'MASTERS', 'OTHER']).optional(),
-  rank:                    z.string().min(1).max(100).optional(),
+  rank: z.preprocess(blank, z.string().min(1).max(100).optional()),
   contractType:            z.enum(['TEMPORARY', 'PERMANENT']).default('PERMANENT').optional(),
   probationStatus:         z.enum(['ON_PROBATION', 'CONFIRMED']).default('ON_PROBATION').optional(),
-  probationEndDate:        z.string().datetime().optional(),
+  probationEndDate: z.preprocess(blank, z.string().datetime().optional()),
   registeredNames:         z.string().max(200).optional(),
   maritalStatus:           z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
   spouseName:              z.string().max(100).optional(),
   spouseWorkplace:         z.string().max(200).optional(),
-  spouseTelephone:         z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
-  preferredPaymentContact: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  spouseTelephone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/).optional()),
+  preferredPaymentContact: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/).optional()),
   /// Overrides the network inferred from the number's prefix.
   mobileNetwork:           z.enum(['MTN', 'AIRTEL']).optional().nullable(),
   /// The name registered on the wallet, when it differs from the legal name.
@@ -214,7 +235,7 @@ const GuardFieldsSchema = z.object({
   lc1Zone:            z.string().max(100).optional(),
   lcOfficialName:     z.string().max(100).optional(),
   lcOfficialPosition: z.string().max(100).optional(),
-  lcOfficialPhone:    z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  lcOfficialPhone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/).optional()),
 
   // ── Section B(3-5): ID Numbers + Employment ───────────────────────────────────
   nssfNumber:        z.string().max(50).optional(),
@@ -233,7 +254,7 @@ const GuardFieldsSchema = z.object({
   fatherDistrict:    z.string().max(100).optional(),
   fatherNationality: z.string().max(100).optional(),
   fatherOccupation:  z.string().max(200).optional(),
-  fatherPhone:       z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  fatherPhone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/).optional()),
 
   // ── Section C: Mother Details ─────────────────────────────────────────────────
   motherName:        z.string().max(100).optional(),
@@ -245,7 +266,7 @@ const GuardFieldsSchema = z.object({
   motherDistrict:    z.string().max(100).optional(),
   motherNationality: z.string().max(100).optional(),
   motherOccupation:  z.string().max(200).optional(),
-  motherPhone:       z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  motherPhone: z.preprocess(blank, z.string().regex(/^\+?[0-9]{10,15}$/).optional()),
 
   // ── Section C: Dependents ─────────────────────────────────────────────────────
   numberOfDependents: z.coerce.number().int().min(0).optional(),
