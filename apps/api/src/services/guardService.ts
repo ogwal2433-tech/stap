@@ -351,6 +351,13 @@ class GuardService {
     const existing = await prisma.guard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Guard not found');
 
+    // Only the fields this payload actually carries are judged. Merging the
+    // stored guard in first would mean that making a field required blocks
+    // every later edit to a guard recorded before the rule existed — you could
+    // not log a suspension until you had first found their phone number.
+    // Clearing a required field is still refused.
+    await assertRequiredGuardFields(data as Record<string, unknown>, { partial: true });
+
     // Check nationalId uniqueness when changing it
     if (data.nationalId && data.nationalId !== existing.nationalId) {
       const conflict = await prisma.guard.findUnique({

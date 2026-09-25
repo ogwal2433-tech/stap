@@ -27,6 +27,9 @@ export const CONFIGURABLE_GUARD_FIELDS = {
   nextOfKinPhone:          'Next of kin phone',
   preferredPaymentContact: 'Mobile money number',
   mobileNetwork:           'Mobile network',
+  // Has a database default of GUARD, so it is never absent once stored.
+  // Requiring it means insisting the rank is chosen rather than fallen into.
+  rank:                    'Rank',
 } as const;
 
 export type ConfigurableGuardField = keyof typeof CONFIGURABLE_GUARD_FIELDS;

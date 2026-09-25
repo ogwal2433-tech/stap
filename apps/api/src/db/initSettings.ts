@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS: Array<{
   { key: 'guard_field_nextOfKinPhone_required',          value: 'false', label: 'Next of kin phone required',   group: 'GUARD_FIELDS', dataType: 'boolean' },
   { key: 'guard_field_preferredPaymentContact_required', value: 'false', label: 'Mobile money number required', group: 'GUARD_FIELDS', dataType: 'boolean' },
   { key: 'guard_field_mobileNetwork_required',           value: 'false', label: 'Mobile network required',      group: 'GUARD_FIELDS', dataType: 'boolean' },
+  { key: 'guard_field_rank_required',                    value: 'false', label: 'Rank required',                group: 'GUARD_FIELDS', dataType: 'boolean' },
 
   // ── PAYROLL ──────────────────────────────────────────────────────────
   { key: 'payroll_working_days', value: '26',    label: 'Working Days per Month',         group: 'PAYROLL', dataType: 'number' },

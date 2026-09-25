@@ -694,6 +694,36 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   {group === 'GUARD_FIELDS' && (
+                    <div className="mb-3">
+                      <div className="text-muted fw-bold mb-2" style={{ fontSize: '0.75rem', letterSpacing: '0.5px' }}>
+                        ALWAYS REQUIRED
+                      </div>
+                      {[
+                        ['First name',    'firstName'],
+                        ['Last name',     'lastName'],
+                        ['Date of birth', 'dateOfBirth'],
+                        ['Salary rate',   'salaryRate'],
+                        ['Contract start', 'contractStart'],
+                      ].map(([label, field]) => (
+                        <div
+                          key={field}
+                          className="d-flex align-items-center gap-2 px-3 py-2 mb-1 rounded border bg-light"
+                          style={{ fontSize: '0.86rem' }}
+                        >
+                          <i className="bi bi-lock-fill text-muted" />
+                          <span>{label}</span>
+                          <span className="ms-auto text-success small">
+                            Always required
+                          </span>
+                        </div>
+                      ))}
+                      <div className="text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                        These columns are NOT NULL — a guard cannot be stored without them, so
+                        they are not offered as a choice.
+                      </div>
+                    </div>
+                  )}
+                  {group === 'GUARD_FIELDS' && (
                     <Alert variant="info" className="small py-2">
                       Switching one on makes that field mandatory when a guard is added or
                       edited, in the form and in the API. Name, date of birth, salary and

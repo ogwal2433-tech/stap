@@ -98,6 +98,27 @@ describe('configurable guard fields', () => {
       .rejects.toThrow(/Phone number/i);
   });
 
+  it('can insist the rank is chosen rather than fallen into', async () => {
+    // rank has a database default of GUARD, so it is never absent once stored.
+    // Requiring it is a rule about the payload, not about the column.
+    await setRequired('rank', true);
+
+    await expect(assertRequiredGuardFields(bare)).rejects.toThrow(/Rank is required/i);
+    await expect(assertRequiredGuardFields({ ...bare, rank: 'SERGEANT' }))
+      .resolves.toBeUndefined();
+  });
+
+  it('does not block an unrelated edit to a guard recorded before the rule', async () => {
+    await setRequired('phone', true);
+
+    // The guard has no phone and the payload does not mention one. Refusing
+    // here would mean no field of theirs could be edited until someone found
+    // their phone number.
+    await expect(
+      assertRequiredGuardFields({ employmentStatus: 'SUSPENDED' }, { partial: true }),
+    ).resolves.toBeUndefined();
+  });
+
   it('offers only fields the database allows to be absent', async () => {
     const configurable = Object.keys(CONFIGURABLE_GUARD_FIELDS);
 

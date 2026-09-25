@@ -597,7 +597,7 @@ export default function GuardFormPage() {
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Rank</Form.Label>
+                  <Form.Label>Rank<Req field="rank" /></Form.Label>
                   <Form.Select {...register('rank')} disabled={ranksLoading}>
                     <option value="">
                       {ranksLoading ? 'Loading ranks...' : 'Select rank'}
