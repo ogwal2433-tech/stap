@@ -488,7 +488,6 @@ function PayrollTab() {
   const unflagPayslip          = useUnflagPayslip();
   const { showToast }          = useToast();
   const { user }               = useAuth();
-  const agingTitle = useReportTitle('receivables_aging_report');
 
   const runs    = data?.data ?? [];
   const thisRun = runs.find((r) => r.month === month && r.year === year);
@@ -1019,6 +1018,7 @@ import { Form } from 'react-bootstrap';
 
 export default function FinancePage() {
   const navigate = useNavigate();
+  const agingTitle = useReportTitle('receivables_aging_report');
 
   return (
     <div className="py-4 px-3">
@@ -1041,7 +1041,7 @@ export default function FinancePage() {
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />
             </Tab>
-            <Tab eventKey="aging" title={agingTitle.shortTitle}>
+            <Tab eventKey="aging" title={agingTitle.shortTitle ?? agingTitle.title}>
               <ARAgingTab />
             </Tab>
           </Tabs>
