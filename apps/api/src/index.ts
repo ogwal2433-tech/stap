@@ -41,6 +41,8 @@ import { errorHandler } from './middleware/errorHandler';
 import { startPermissionCacheSync } from './middleware/permissions';
 import { settingsService } from './services/settingsService';
 import { startReportTitleCacheSync, stopReportTitleCacheSync } from './lib/reportTitleCacheBus';
+import { startCompanyBrandingCacheSync, stopCompanyBrandingCacheSync } from './lib/companyBrandingCacheBus';
+import { clearCompanyBrandingCache } from './services/companyBrandingService';
 import { authenticate } from './middleware/authenticate';
 import { errorLogger } from './services/errorLogger';
 import { APP_NAME } from './config/branding';
@@ -122,6 +124,7 @@ app.use(errorHandler);
 // per process and the API runs as several of them.
 startPermissionCacheSync();
 startReportTitleCacheSync(() => settingsService.clearReportTitleCache());
+startCompanyBrandingCacheSync(clearCompanyBrandingCache);
 
 // ── Start server ───────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
@@ -146,6 +149,7 @@ async function gracefulShutdown(signal: string) {
     ...Object.values(queues).map((q) => q.close()),
     ...workers.map((w) => w.close()),
     stopReportTitleCacheSync(),
+    stopCompanyBrandingCacheSync(),
   ]);
 
   console.log('All queues and workers closed.');

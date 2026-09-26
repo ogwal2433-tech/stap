@@ -167,7 +167,8 @@
  *         description: Document uploaded
  */
 import { Router, type IRouter } from 'express';
-import { COMPANY_NAME, FILE_PREFIX } from '../config/branding';
+import { FILE_PREFIX } from '../config/branding';
+import { companyProfile } from '../services/integrationSettings';
 import fs from 'fs';
 import multer from 'multer';
 import prisma from '../db/prisma';
@@ -292,6 +293,7 @@ router.get(
   '/payment-slip',
   requireRole(...INTERNAL_ROLES, ROLES.HR),
   asyncHandler(async (_req, res) => {
+    const company = await companyProfile();
     const slip = `
       <style>
         .slip { border-bottom: 1px dashed #888; padding: 5px 0 8px; }
@@ -305,7 +307,7 @@ router.get(
       </style>
       ${Array(6).fill(null).map(() => `
       <div class="slip">
-        <p class="slip-title">${COMPANY_NAME} Payment Details Confirmation:</p>
+        <p class="slip-title">${company.name} Payment Details Confirmation:</p>
         <table>
           <tr><td class="label">Name:</td><td class="value">&nbsp;</td></tr>
           <tr><td class="label">Deployment:</td><td class="value">&nbsp;</td></tr>
@@ -314,7 +316,7 @@ router.get(
           <tr><td class="label">Signature:</td><td class="value">&nbsp;</td></tr>
           <tr><td class="label">Date:</td><td class="value">&nbsp;</td></tr>
         </table>
-        <p class="nb"><strong>N.B:</strong> If there is a change of this number, strictly whatsapp or call <strong>0787417404</strong>. ${COMPANY_NAME} will not be liable for any money loss out of changing the phone number without communication to the above specific office number.</p>
+        <p class="nb"><strong>N.B:</strong> If there is a change of this number, strictly whatsapp or call <strong>0787417404</strong>. ${company.name} will not be liable for any money loss out of changing the phone number without communication to the above specific office number.</p>
       </div>`).join('')}
     `;
     const buffer = await renderToPdf(slip, { marginTop: '56mm', marginBottom: '14mm', marginLeft: '14mm', marginRight: '14mm' });

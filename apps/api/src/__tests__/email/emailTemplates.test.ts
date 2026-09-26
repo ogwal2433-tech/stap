@@ -22,6 +22,12 @@ describe('client-portal-welcome', () => {
     expect(html).toContain('Open the portal');
   });
 
+  it('uses a runtime company name when rendering queued email', () => {
+    const html = renderEmail('client-portal-welcome', 'ignored', { ...CREDENTIALS, companyName: 'Example Security Ltd' });
+    expect(html).toContain('Example Security Ltd');
+    expect(html).not.toContain('STAP Security Ltd');
+  });
+
   it('says what the portal is for', () => {
     const html = renderEmail('client-portal-welcome', 'ignored', CREDENTIALS);
     expect(html).toContain('invoices');

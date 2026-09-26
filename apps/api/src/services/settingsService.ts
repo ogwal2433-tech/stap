@@ -12,6 +12,9 @@ import { redisConnection } from '../lib/redis';
 import { APP_NAME } from '../config/branding';
 import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, ReportTitleConfigPatchSchema, resolveReportTitle, type ReportKey, type ReportTitleConfig, type ReportTitlesMap } from '@stap/shared';
 import { publishReportTitleChange } from '../lib/reportTitleCacheBus';
+import { clearCompanyBrandingCache } from './companyBrandingService';
+import { publishCompanyBrandingChange } from '../lib/companyBrandingCacheBus';
+import { COMPANY_BRANDING_KEYS } from '@stap/shared';
 import type {
   SystemSettingResponse,
   UserResponse,
@@ -211,6 +214,10 @@ class SettingsService {
     // for the cache to lapse.
     clearIdFormatCache();
     clearGuardFieldCache();
+    if (COMPANY_BRANDING_KEYS.includes(key as any)) {
+      clearCompanyBrandingCache();
+      publishCompanyBrandingChange();
+    }
 
     return fmtSetting(updated);
   }

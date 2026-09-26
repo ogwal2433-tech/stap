@@ -17,9 +17,19 @@ import type {
   CreateShiftTypeInput,
   UpdateShiftTypeInput,
   ReportKey, ReportTitleConfig, ReportTitlesMap,
+  CompanyBranding, CompanyBrandingKey,
 } from '@stap/shared';
 
 export const settingsApi = {
+  getCompanyBranding(): Promise<CompanyBranding> {
+    return api.get<{ data: CompanyBranding }>('/settings/company-branding').then(r => r.data.data);
+  },
+  updateCompanyBranding(values: Partial<CompanyBranding>): Promise<CompanyBranding> {
+    return api.patch<{ data: CompanyBranding }>('/settings/company-branding', values).then(r => r.data.data);
+  },
+  resetCompanyBranding(keys?: CompanyBrandingKey[]): Promise<CompanyBranding> {
+    return api.post<{ data: CompanyBranding }>('/settings/company-branding/reset', keys ? { keys } : {}).then(r => r.data.data);
+  },
   getReportTitles(): Promise<ReportTitlesMap> {
     return api.get<{ data: ReportTitlesMap }>('/settings/report-titles').then(r => r.data.data);
   },

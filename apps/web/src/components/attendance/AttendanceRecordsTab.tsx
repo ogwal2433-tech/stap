@@ -9,6 +9,7 @@ import { useAllSites } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
 import { exportAttendanceSummary } from '../../lib/exportToExcel';
 import { getApiErrorMessage } from '../../lib/api';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -47,6 +48,7 @@ const PAGE_SIZE = 50;
 
 export default function AttendanceRecordsTab() {
   const { showToast } = useToast();
+  const { data: companyBranding } = useCompanyBranding();
 
   const defaultFrom = shiftDays(-6);
   const [dateFrom, setDateFrom] = useState(defaultFrom);
@@ -105,7 +107,7 @@ export default function AttendanceRecordsTab() {
     }
     setExporting(true);
     try {
-      exportAttendanceSummary(summary);
+      exportAttendanceSummary(summary, companyBranding.company_name);
       showToast(`Exported ${summary.guardCount} guard(s) for the selected period.`, 'success');
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Could not build the Excel file.'), 'danger');

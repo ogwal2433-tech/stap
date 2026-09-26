@@ -32,3 +32,4 @@ export * from './constants/training';
 export * from './constants/leave';
 export * from './schemas/roles';
 export * from './reportTitles';
+export * from './companyBranding';

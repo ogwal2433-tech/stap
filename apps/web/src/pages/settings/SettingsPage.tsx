@@ -30,6 +30,7 @@ import EditDeductionTypeModal from '../../components/settings/EditDeductionTypeM
 import AddShiftTypeModal from '../../components/settings/AddShiftTypeModal';
 import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
 import ReportTitlesPanel from '../../components/settings/ReportTitlesPanel';
+import CompanyBrandingPanel from '../../components/settings/CompanyBrandingPanel';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -793,6 +794,7 @@ export default function SettingsPage() {
             )}
           </Tab>
         ))}
+        <Tab eventKey="company-branding" title="Company Branding"><CompanyBrandingPanel /></Tab>
         <Tab eventKey="report-titles" title="Report Titles"><ReportTitlesPanel /></Tab>
 
         {/* ── Staff Positions ──────────────────────────────────────────────────── */}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { COMPANY_NAME_UPPER } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Badge, Button, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -64,6 +64,7 @@ const countFilled = (rows: Row[], keys: string[]) =>
   rows.filter(r => keys.some(k => (r[k] ?? '').trim() !== '')).length;
 
 export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boolean }) {
+  const { data: companyBranding } = useCompanyBranding();
   const reportTitle = useReportTitle('shift_handover_report');
   const { id }        = useParams<{ id: string }>();
   const navigate      = useNavigate();
@@ -182,7 +183,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         borderBottom: `3px solid ${NAVY}`, paddingBottom: 12,
       }}>
         <div style={{ fontSize: '1.1rem', fontWeight: 700, color: NAVY, letterSpacing: 1 }}>
-          {COMPANY_NAME_UPPER}
+          {companyBranding.company_name.toUpperCase()}
         </div>
         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY }}>
           {reportTitle.title}

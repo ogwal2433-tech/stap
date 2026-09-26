@@ -156,4 +156,11 @@ describe('guard list Excel export', () => {
     expect(flat).toContain('GUARD|2');
     expect(flat).toContain('No zone|2');
   });
+
+  it('uses the configured company name in the export header', () => {
+    exportGuardsList([guard()], new Date('2026-09-20T09:00:00Z'), 'Example Security Ltd');
+    const flat = aoa('Summary').map((r) => r.filter((c) => c !== null && c !== '').join('|'));
+    expect(flat).toContain('EXAMPLE SECURITY LTD');
+    expect(flat).not.toContain('STAP SECURITY LTD');
+  });
 });

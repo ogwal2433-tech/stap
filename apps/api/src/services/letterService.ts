@@ -1,5 +1,5 @@
 import prisma from '../db/prisma';
-import { COMPANY_NAME } from '../config/branding';
+import { companyProfile } from './integrationSettings';
 import { renderToPdf } from '../lib/pdfBase';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -230,14 +230,15 @@ class LetterService {
     COMMITMENT_AGREEMENT: 'CA',
   };
 
-  private buildPdfHtml(l: {
+  private async buildPdfHtml(l: {
     letterType: string;
     body: string;
     subjectName: string;
     title: string;
     generatedAt: Date;
     id: string;
-  }): string {
+  }): Promise<string> {
+    const company = await companyProfile();
     const issueDate = l.generatedAt.toLocaleDateString('en-GB', {
       day: 'numeric', month: 'long', year: 'numeric',
     });
@@ -248,7 +249,8 @@ class LetterService {
       refNumber,
       issueDate,
       body:         l.body,
-      directorName: `Director, ${COMPANY_NAME}`,
+      directorName: `Director, ${company.name}`,
+      companyName: company.name,
       employeeName: l.subjectName,
       skipSigBlock: (STRUCTURED_LETTER_TYPES as readonly string[]).includes(l.letterType),
     });
@@ -261,7 +263,7 @@ class LetterService {
     });
     if (!l) throw new NotFoundError('Letter not found');
 
-    const html   = this.buildPdfHtml(l);
+    const html   = await this.buildPdfHtml(l);
     const buffer = await renderToPdf(html);
     const safeName = l.subjectName.replace(/\s+/g, '_');
     const fileName = `${l.letterType}-${safeName}-${l.id.substring(0, 8)}.pdf`;
@@ -277,7 +279,8 @@ class LetterService {
     body: string;
     generatedAt: Date;
   }): Promise<void> {
-    const pdfBuffer = await renderToPdf(this.buildPdfHtml(l as any));
+    const company = await companyProfile();
+    const pdfBuffer = await renderToPdf(await this.buildPdfHtml(l as any));
     const hrEmail   = process.env.HR_EMAIL ?? 'hr@stapsecurity.co.ug';
 
     await sendEmail({
@@ -291,7 +294,7 @@ class LetterService {
           <li><strong>Title:</strong> ${l.title}</li>
         </ul>
         <p>Please print and have the employee sign the attached copy.</p>
-        <p style="color:#999;font-size:11px;">${COMPANY_NAME} — Automated HR System</p>
+        <p style="color:#999;font-size:11px;">${company.name} — Automated HR System</p>
       `,
       attachments: [{
         filename:    `${l.letterType}-${l.subjectName.replace(/\s+/g, '_')}.pdf`,

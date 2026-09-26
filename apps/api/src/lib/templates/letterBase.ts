@@ -1,4 +1,4 @@
-import { COMPANY_NAME } from '../../config/branding';
+import { DEFAULT_COMPANY_NAME } from '@stap/shared';
 
 export interface LetterHtmlOptions {
   refNumber:    string;
@@ -7,6 +7,7 @@ export interface LetterHtmlOptions {
   directorName: string;
   employeeName: string;
   skipSigBlock?: boolean;
+  companyName?: string;
 }
 
 /**
@@ -14,6 +15,7 @@ export interface LetterHtmlOptions {
  * Does NOT include DOCTYPE/html/head/body — pass the result to renderToPdf() from pdfBase.ts.
  */
 export function buildLetterHtml(opts: LetterHtmlOptions): string {
+  const companyName = opts.companyName?.trim() || DEFAULT_COMPANY_NAME;
   return `<style>
     .date-ref {
       display: flex;
@@ -53,7 +55,7 @@ export function buildLetterHtml(opts: LetterHtmlOptions): string {
       <div class="sig-label">Signature &amp; Date: _______________</div>
     </div>
     <div class="sig-col">
-      <div class="sig-label">For ${COMPANY_NAME}</div>
+    <div class="sig-label">For ${companyName}</div>
       <div class="sig-line"></div>
       <div><strong>${opts.directorName}</strong></div>
       <div class="sig-label">Director &nbsp;&nbsp; Date: _______________</div>

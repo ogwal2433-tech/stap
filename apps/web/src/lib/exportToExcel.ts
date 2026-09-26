@@ -1,12 +1,13 @@
 import * as XLSX from 'xlsx';
-import { COMPANY_NAME_UPPER, FILE_PREFIX } from './branding';
+import { FILE_PREFIX } from './branding';
+import { DEFAULT_COMPANY_NAME } from '@stap/shared';
 import type {
   DailySheetResponse, GuardAttendanceSummaryResponse, GuardExportRow, GuardResponse,
 } from '@stap/shared';
 
 // ── Company constants ──────────────────────────────────────────────────────────
 
-const CO_NAME    = COMPANY_NAME_UPPER;
+const companyTitle = (name: string) => name.trim().toUpperCase() || DEFAULT_COMPANY_NAME.toUpperCase();
 const CO_ADDRESS = 'Kampala, Uganda';
 const CO_LINE2   = 'Security Guards · Investigations · Event Security';
 
@@ -65,7 +66,7 @@ function buildSheet(
 // ATTENDANCE SHEET EXPORT
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): void {
+export function exportAttendanceSheet(sheet: DailySheetResponse, date: string, companyName = DEFAULT_COMPANY_NAME): void {
   // Column definitions: #, Guard Name, Rank, Shift, Status, Notes
   const NUM_COLS = 6;
   const wch      = [4, 26, 18, 7, 12, 32];
@@ -85,7 +86,7 @@ export function exportAttendanceSheet(sheet: DailySheetResponse, date: string): 
   const addBlank = (hpt = 6) => { rows.push([]); rowHeights.push(hpt); };
 
   // ── Letterhead ─────────────────────────────────────────────────────────────
-  addBanner(CO_NAME, 22);
+  addBanner(companyTitle(companyName), 22);
   addBanner(CO_ADDRESS, 14);
   addBanner(CO_LINE2, 12);
   addBlank();
@@ -190,7 +191,7 @@ export interface RosterExportData {
   guards: { firstName: string; lastName: string; rank: string | null }[];
 }
 
-export function exportRosterDraft(data: RosterExportData): void {
+export function exportRosterDraft(data: RosterExportData, companyName = DEFAULT_COMPANY_NAME): void {
   // Columns: #, Guard Name, Rank, Signature
   const NUM_COLS = 4;
   const wch      = [4, 30, 20, 28];
@@ -218,7 +219,7 @@ export function exportRosterDraft(data: RosterExportData): void {
     : 'NO LIMIT SET';
 
   // ── Letterhead ─────────────────────────────────────────────────────────────
-  addBanner(CO_NAME, 22);
+  addBanner(companyTitle(companyName), 22);
   addBanner(CO_ADDRESS, 13);
   addBanner(CO_LINE2, 11);
   addBlank();
@@ -271,13 +272,13 @@ export function exportRosterDraft(data: RosterExportData): void {
  * guards attendance" report. Day counts are written as numbers, not text, so
  * the sheet can be summed and sorted in Excel.
  */
-export function exportAttendanceSummary(data: GuardAttendanceSummaryResponse): void {
+export function exportAttendanceSummary(data: GuardAttendanceSummaryResponse, companyName = DEFAULT_COMPANY_NAME): void {
   const from = data.dateFrom.slice(0, 10);
   const to   = data.dateTo.slice(0, 10);
   const periodLabel = `${fmtDate(from)} to ${fmtDate(to)}`;
 
   const header: CellValue[][] = [
-    [CO_NAME],
+    [companyTitle(companyName)],
     ['ATTENDANCE SUMMARY REPORT'],
     [CO_ADDRESS],
     [CO_LINE2],
@@ -437,7 +438,7 @@ function guardSheet(rows: GuardExportRow[], emptyNote: string): XLSX.WorkSheet {
  * and sort from reading the columns — and this is a sheet meant to be worked,
  * not printed.
  */
-export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date()): void {
+export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date(), companyName = DEFAULT_COMPANY_NAME): void {
   const wb = XLSX.utils.book_new();
 
   const deployed   = guards.filter((g) => g.currentSiteName);
@@ -445,7 +446,7 @@ export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date
 
   // ── Summary ────────────────────────────────────────────────────────────────
   const summary: CellValue[][] = [
-    [CO_NAME],
+    [companyTitle(companyName)],
     [CO_ADDRESS],
     [CO_LINE2],
     [],
@@ -486,9 +487,9 @@ export function exportGuardsList(guards: GuardExportRow[], exportedAt = new Date
  * the page, not a row to be sorted. The bank account number is left out here
  * too, for the same reason it is left out of the roll.
  */
-export function exportGuardProfile(guard: GuardResponse, exportedAt = new Date()): void {
+export function exportGuardProfile(guard: GuardResponse, exportedAt = new Date(), companyName = DEFAULT_COMPANY_NAME): void {
   const rows: CellValue[][] = [
-    [CO_NAME],
+    [companyTitle(companyName)],
     [CO_ADDRESS],
     [],
     ['GUARD PROFILE'],

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useMutation } from '@tanstack/react-query';
 import { portalApi } from '../../lib/portal.api';
@@ -19,6 +19,7 @@ const fmtDate = (iso: string | null) =>
 
 /** Confirms receipt of a notice from STAP, with an optional reply. */
 export default function AcknowledgeNoticeModal({ notice, show, onClose, onSuccess }: Props) {
+  const { data: companyBranding } = useCompanyBranding();
   const { showToast } = useToast();
   const [response, setResponse] = useState('');
 
@@ -59,7 +60,7 @@ export default function AcknowledgeNoticeModal({ notice, show, onClose, onSucces
         >
           <div className="fw-bold" style={{ fontSize: '0.92rem' }}>{notice.subject}</div>
           <div className="text-muted small">
-            From {COMPANY_NAME} · {fmtDate(notice.sentAt ?? notice.createdAt)}
+            From {companyBranding.company_name} · {fmtDate(notice.sentAt ?? notice.createdAt)}
           </div>
         </div>
 
@@ -77,7 +78,7 @@ export default function AcknowledgeNoticeModal({ notice, show, onClose, onSucces
             size="sm"
             maxLength={2000}
             value={response}
-            placeholder={`Add any comments or questions for ${COMPANY_NAME}…`}
+            placeholder={`Add any comments or questions for ${companyBranding.company_name}…`}
             onChange={e => setResponse(e.target.value)}
           />
         </Form.Group>
