@@ -1,4 +1,5 @@
 export interface InvoiceEmailData {
+  title: string;
   clientName:    string;
   invoiceNumber: string;
   issueDate:     string;
@@ -37,7 +38,7 @@ export function buildInvoiceEmail(data: InvoiceEmailData): string {
 
   <div style="background:#1B3A6B;padding:24px 32px">
     <h1 style="color:#fff;margin:0;font-size:1.4rem">${data.company.name}</h1>
-    <p style="color:#D6E0F0;margin:4px 0 0">Invoice</p>
+    <p style="color:#D6E0F0;margin:4px 0 0">${data.title}</p>
   </div>
 
   <div style="padding:32px">

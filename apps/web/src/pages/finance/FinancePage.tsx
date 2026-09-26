@@ -12,6 +12,7 @@ import {
   useCashbook, useCashbookSummary, usePayrollDetail,
 } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
+import { useReportTitle } from '../../hooks/useReportTitles';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
@@ -487,6 +488,7 @@ function PayrollTab() {
   const unflagPayslip          = useUnflagPayslip();
   const { showToast }          = useToast();
   const { user }               = useAuth();
+  const agingTitle = useReportTitle('receivables_aging_report');
 
   const runs    = data?.data ?? [];
   const thisRun = runs.find((r) => r.month === month && r.year === year);
@@ -952,6 +954,7 @@ function CashbookTab() {
 // ── AR Aging Tab ──────────────────────────────────────────────────────────────
 
 function ARAgingTab() {
+  const agingTitle = useReportTitle('receivables_aging_report');
   const { data, isLoading } = useARAgingReport();
 
   if (isLoading) return <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>;
@@ -970,7 +973,7 @@ function ARAgingTab() {
 
   return (
     <>
-      <h6 className="fw-semibold mb-3">Accounts Receivable Aging Report</h6>
+      <h6 className="fw-semibold mb-3">{agingTitle.title}</h6>
       <Row className="g-2 mb-4">
         {buckets.map(({ label, value, color }) => (
           <Col xs={6} lg={3} key={label}>
@@ -1038,7 +1041,7 @@ export default function FinancePage() {
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />
             </Tab>
-            <Tab eventKey="aging" title="AR Aging">
+            <Tab eventKey="aging" title={agingTitle.shortTitle}>
               <ARAgingTab />
             </Tab>
           </Tabs>

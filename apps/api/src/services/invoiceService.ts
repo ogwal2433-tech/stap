@@ -8,6 +8,7 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import { yoPayments } from '../lib/yoPayments';
 import { sendEmail } from '../lib/mailer';
 import { buildInvoiceEmail } from '../lib/templates/invoiceEmail';
+import { settingsService } from './settingsService';
 import { renderToPdf } from '../lib/pdfBase';
 import { buildInvoiceHtml } from '../lib/templates/invoicePdf';
 import type {
@@ -645,7 +646,8 @@ class InvoiceService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice));
+    const invoiceTitle = await settingsService.getReportTitle('invoice');
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title));
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
 
@@ -756,6 +758,7 @@ class InvoiceService {
           },
         ];
 
+    const invoiceTitle = await settingsService.getReportTitle('invoice');
     const html = buildInvoiceEmail({
       clientName:    invoice.client.clientName,
       invoiceNumber: invoice.invoiceNumber,
@@ -767,6 +770,7 @@ class InvoiceService {
       totalAmount:   invoice.totalAmount,
       currency:      'UGX',
       company:       await companyProfile(),
+      title:         invoiceTitle.title,
     });
 
     await sendEmail({

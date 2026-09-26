@@ -8,6 +8,7 @@ import { useToast } from '../../context/ToastContext';
 import RoleGuard from '../../components/RoleGuard';
 import { ROLES } from '@stap/shared';
 import type { ScheduledReportInput } from '@stap/shared';
+import { useReportTitle } from '../../hooks/useReportTitles';
 
 // ── Scheduled report form modal ────────────────────────────────────────────────
 
@@ -98,6 +99,9 @@ function ScheduleFormModal({ onClose }: { onClose: () => void }) {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  const dailyOpsTitle = useReportTitle('daily_operations_report');
+  const payrollTitle = useReportTitle('monthly_payroll_report');
+  const agingTitle = useReportTitle('receivables_aging_report');
   const { showToast } = useToast();
   const qc = useQueryClient();
   const [showSchedule, setShowSchedule] = useState(false);
@@ -137,7 +141,7 @@ export default function ReportsPage() {
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="d-flex flex-column gap-2 p-4">
               <div style={{ fontSize: '2rem' }}>📅</div>
-              <Card.Title className="fs-6 fw-semibold">Daily Operations Report</Card.Title>
+              <Card.Title className="fs-6 fw-semibold">{dailyOpsTitle.title}</Card.Title>
               <Card.Text className="text-muted small">Guard deployments, attendance, incidents, and supervisor check-ins for any given day.</Card.Text>
               <Form.Control type="date" size="sm" value={opsDate} onChange={e => setOpsDate(e.target.value)} style={{ maxWidth: 180 }} />
               <div className="mt-auto">
@@ -154,7 +158,7 @@ export default function ReportsPage() {
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="d-flex flex-column gap-2 p-4">
               <div style={{ fontSize: '2rem' }}>📄</div>
-              <Card.Title className="fs-6 fw-semibold">AR Aging Report</Card.Title>
+              <Card.Title className="fs-6 fw-semibold">{agingTitle.title}</Card.Title>
               <Card.Text className="text-muted small">Outstanding invoices grouped by overdue period.</Card.Text>
               <div className="mt-auto">
                 <Button size="sm" variant="outline-primary" disabled={loading === 'ar'} onClick={() => download('ar', reportsApi.downloadARAgingExcel)}>
@@ -170,7 +174,7 @@ export default function ReportsPage() {
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="d-flex flex-column gap-2 p-4">
               <div style={{ fontSize: '2rem' }}>💼</div>
-              <Card.Title className="fs-6 fw-semibold">Monthly Payroll Report</Card.Title>
+              <Card.Title className="fs-6 fw-semibold">{payrollTitle.title}</Card.Title>
               <Card.Text className="text-muted small">Full payroll breakdown with guard-level salary and deductions.</Card.Text>
               <div className="d-flex gap-2">
                 <Form.Select size="sm" value={prMonth} onChange={e => setPrMonth(+e.target.value)} style={{ width: 100 }}>

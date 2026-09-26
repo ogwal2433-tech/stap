@@ -8,6 +8,7 @@ import type { MotorcycleReport, PendingMatter, ShiftReportInput } from '@stap/sh
 import { shiftReportsApi } from '../../lib/shiftReports.api';
 import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useReportTitle } from '../../hooks/useReportTitles';
 import { getApiErrorMessage } from '../../lib/api';
 import {
   SectionHeader, DynamicTable, FixedTable, PendingMattersSection, MotorcycleSection, NAVY,
@@ -63,6 +64,7 @@ const countFilled = (rows: Row[], keys: string[]) =>
   rows.filter(r => keys.some(k => (r[k] ?? '').trim() !== '')).length;
 
 export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boolean }) {
+  const reportTitle = useReportTitle('shift_handover_report');
   const { id }        = useParams<{ id: string }>();
   const navigate      = useNavigate();
   const { user }      = useAuth();
@@ -183,7 +185,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
           {COMPANY_NAME_UPPER}
         </div>
         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY }}>
-          CONTROL ROOM SHIFT HANDOVER REPORT
+          {reportTitle.title}
         </div>
         {existing && (
           <div className="mt-2 d-flex gap-2 justify-content-center align-items-center">

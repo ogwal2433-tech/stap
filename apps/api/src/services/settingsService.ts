@@ -10,6 +10,8 @@ import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
 import { APP_NAME } from '../config/branding';
+import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, ReportTitleConfigPatchSchema, resolveReportTitle, type ReportKey, type ReportTitleConfig, type ReportTitlesMap } from '@stap/shared';
+import { publishReportTitleChange } from '../lib/reportTitleCacheBus';
 import type {
   SystemSettingResponse,
   UserResponse,
@@ -79,6 +81,91 @@ function validateSettingValue(dataType: string, value: string): void {
 // ── SettingsService ────────────────────────────────────────────────────────────
 
 class SettingsService {
+  private reportTitlesCache: { value: ReportTitlesMap; expiresAt: number } | null = null;
+  private emailPrefixCache: { value: string; expiresAt: number } | null = null;
+
+  clearReportTitleCache(): void { this.reportTitlesCache = null; this.emailPrefixCache = null; }
+
+  async getReportTitles(): Promise<ReportTitlesMap> {
+    if (this.reportTitlesCache && this.reportTitlesCache.expiresAt > Date.now()) return this.reportTitlesCache.value;
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'report_titles' } });
+    let overrides: Partial<ReportTitlesMap> = {};
+    if (row?.value) {
+      try { overrides = JSON.parse(row.value); } catch { overrides = {}; }
+    }
+    const value = Object.fromEntries(REPORT_KEYS.map(key => [key, resolveReportTitle(key, overrides)])) as ReportTitlesMap;
+    this.reportTitlesCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+    return value;
+  }
+
+  async getReportTitle(key: ReportKey): Promise<ReportTitleConfig> { return (await this.getReportTitles())[key]; }
+
+  private async writeReportTitleOverrides(overrides: Partial<ReportTitlesMap>, actorId: string, action: string): Promise<void> {
+    const prior = await prisma.systemSetting.findUnique({ where: { key: 'report_titles' } });
+    const value = JSON.stringify(overrides);
+    if (Object.keys(overrides).length === 0) {
+      if (prior) await prisma.systemSetting.delete({ where: { key: 'report_titles' } });
+    } else {
+      await prisma.systemSetting.upsert({ where: { key: 'report_titles' }, update: { value, updatedBy: actorId }, create: {
+        key: 'report_titles', value, label: 'Report Titles', group: 'REPORT_TITLES', dataType: 'json', updatedBy: actorId,
+      } });
+    }
+    await QueueService.logAudit({ userId: actorId, action, entity: 'SystemSetting', entityId: prior?.id ?? 'report_titles',
+      ...(prior?.value ? { oldValue: { key: 'report_titles', value: prior.value } } : {}),
+      ...(Object.keys(overrides).length ? { newValue: { key: 'report_titles', value } } : {}) });
+    this.clearReportTitleCache();
+    publishReportTitleChange();
+  }
+
+  async updateReportTitles(partial: Partial<ReportTitlesMap>, actorId: string): Promise<ReportTitlesMap> {
+    const currentRow = await prisma.systemSetting.findUnique({ where: { key: 'report_titles' } });
+    let overrides: Partial<ReportTitlesMap> = {};
+    if (currentRow?.value) { try { overrides = JSON.parse(currentRow.value); } catch { /* recover with validated input */ } }
+    for (const [rawKey, config] of Object.entries(partial)) {
+      if (!REPORT_KEYS.includes(rawKey as ReportKey)) throw new AppError(`Unknown report key "${rawKey}". Valid keys: ${REPORT_KEYS.join(', ')}`, 400);
+      const key = rawKey as ReportKey;
+      const parsed = ReportTitleConfigPatchSchema.parse(config);
+      overrides[key] = { ...overrides[key], ...parsed } as ReportTitleConfig;
+    }
+    await this.writeReportTitleOverrides(overrides, actorId, 'REPORT_TITLES_UPDATED');
+    return this.getReportTitles();
+  }
+
+  async resetReportTitle(key: ReportKey, actorId: string): Promise<ReportTitlesMap> {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'report_titles' } });
+    let overrides: Partial<ReportTitlesMap> = {};
+    if (row?.value) { try { overrides = JSON.parse(row.value); } catch { /* reset is still safe */ } }
+    delete overrides[key];
+    await this.writeReportTitleOverrides(overrides, actorId, 'REPORT_TITLE_RESET');
+    return this.getReportTitles();
+  }
+
+  async resetAllReportTitles(actorId: string): Promise<ReportTitlesMap> {
+    await this.writeReportTitleOverrides({}, actorId, 'REPORT_TITLES_RESET');
+    return this.getReportTitles();
+  }
+
+  async getScheduledReportEmailPrefix(): Promise<string> {
+    if (this.emailPrefixCache && this.emailPrefixCache.expiresAt > Date.now()) return this.emailPrefixCache.value;
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'scheduled_report_email_prefix' } });
+    const value = row?.value?.trim() || 'STAP Report';
+    this.emailPrefixCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+    return value;
+  }
+
+  async updateScheduledReportEmailPrefix(prefix: string, actorId: string): Promise<string> {
+    const clean = prefix.trim();
+    if (!clean) throw new AppError('Email prefix cannot be blank', 400);
+    const prior = await prisma.systemSetting.findUnique({ where: { key: 'scheduled_report_email_prefix' } });
+    await prisma.systemSetting.upsert({ where: { key: 'scheduled_report_email_prefix' }, update: { value: clean, updatedBy: actorId }, create: {
+      key: 'scheduled_report_email_prefix', value: clean, label: 'Scheduled Report Email Prefix', group: 'REPORT_TITLES', dataType: 'string', updatedBy: actorId,
+    } });
+    await QueueService.logAudit({ userId: actorId, action: 'SCHEDULED_REPORT_EMAIL_PREFIX_UPDATED', entity: 'SystemSetting', entityId: prior?.id ?? 'scheduled_report_email_prefix',
+      ...(prior?.value ? { oldValue: { value: prior.value } } : {}), newValue: { value: clean } });
+    this.clearReportTitleCache(); publishReportTitleChange();
+    return clean;
+  }
+
   async getAll(): Promise<SystemSettingResponse[]> {
     const settings = await prisma.systemSetting.findMany({
       orderBy: [{ group: 'asc' }, { key: 'asc' }],

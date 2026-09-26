@@ -29,6 +29,7 @@ import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeMod
 import EditDeductionTypeModal from '../../components/settings/EditDeductionTypeModal';
 import AddShiftTypeModal from '../../components/settings/AddShiftTypeModal';
 import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
+import ReportTitlesPanel from '../../components/settings/ReportTitlesPanel';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -792,6 +793,7 @@ export default function SettingsPage() {
             )}
           </Tab>
         ))}
+        <Tab eventKey="report-titles" title="Report Titles"><ReportTitlesPanel /></Tab>
 
         {/* ── Staff Positions ──────────────────────────────────────────────────── */}
         <Tab eventKey="staff-positions" title={<><i className="bi bi-person-badge me-1" />Positions</>}>

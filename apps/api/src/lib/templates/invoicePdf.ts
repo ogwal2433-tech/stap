@@ -24,7 +24,7 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-export function buildInvoiceHtml(invoice: any): string {
+export function buildInvoiceHtml(invoice: any, title: string): string {
   const status = invoice.status as string;
   const badge  = STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
 
@@ -53,7 +53,7 @@ export function buildInvoiceHtml(invoice: any): string {
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
       <div>
-        <div style="font-size:17pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">INVOICE</div>
+        <div style="font-size:17pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">${title === 'Invoice' ? 'INVOICE' : esc(title)}</div>
         <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(invoice.invoiceNumber)}</div>
       </div>
       <div style="text-align:right">

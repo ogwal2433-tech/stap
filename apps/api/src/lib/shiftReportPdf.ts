@@ -1,4 +1,5 @@
 import { renderToPdf } from './pdfBase';
+import { settingsService } from '../services/settingsService';
 import { computeDuration, PRIORITY_LEVELS } from '@stap/shared';
 import type { MotorcycleReport, PendingMatter } from '@stap/shared';
 
@@ -129,6 +130,7 @@ function motorcycleBlock(mc: MotorcycleReport): string {
 
 /** Renders the handover onto the STAP letterhead, laid out as the paper form. */
 export async function renderShiftReportPdf(r: ShiftReportPdfData): Promise<Buffer> {
+  const reportTitle = await settingsService.getReportTitle('shift_handover_report');
   const dateStr = new Date(r.date).toLocaleDateString('en-GB',
     { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -148,7 +150,7 @@ export async function renderShiftReportPdf(r: ShiftReportPdfData): Promise<Buffe
     <div style="text-align:center;border-bottom:2px solid ${NAVY};
                 padding-bottom:6px;margin-bottom:10px;">
       <div style="font-size:11pt;font-weight:700;color:${NAVY};letter-spacing:.6px;">
-        CONTROL ROOM SHIFT HANDOVER REPORT
+        ${esc(reportTitle.title)}
       </div>
       ${r.systemId ? `<div style="font-size:8.5pt;color:#666;">${esc(r.systemId)}</div>` : ''}
     </div>

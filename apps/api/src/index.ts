@@ -39,6 +39,8 @@ import { swaggerSpec } from './lib/swagger';
 // ── Middleware ─────────────────────────────────────────────────────────────────
 import { errorHandler } from './middleware/errorHandler';
 import { startPermissionCacheSync } from './middleware/permissions';
+import { settingsService } from './services/settingsService';
+import { startReportTitleCacheSync, stopReportTitleCacheSync } from './lib/reportTitleCacheBus';
 import { authenticate } from './middleware/authenticate';
 import { errorLogger } from './services/errorLogger';
 import { APP_NAME } from './config/branding';
@@ -119,6 +121,7 @@ app.use(errorHandler);
 // Permission changes made on another instance land here too — the cache is
 // per process and the API runs as several of them.
 startPermissionCacheSync();
+startReportTitleCacheSync(() => settingsService.clearReportTitleCache());
 
 // ── Start server ───────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
@@ -142,6 +145,7 @@ async function gracefulShutdown(signal: string) {
   await Promise.all([
     ...Object.values(queues).map((q) => q.close()),
     ...workers.map((w) => w.close()),
+    stopReportTitleCacheSync(),
   ]);
 
   console.log('All queues and workers closed.');
