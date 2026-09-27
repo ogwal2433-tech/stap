@@ -415,7 +415,6 @@ export default function GuardsListPage() {
                   <th>Photo</th>
                   <th>Name / NIN</th>
                   <th>Rank</th>
-                  <th>Contract Type</th>
                   <th>Phone</th>
                   <th>Status</th>
                   <th>Contract</th>
@@ -473,15 +472,6 @@ export default function GuardsListPage() {
                         bg={RANK_BADGE_COLORS[((ranks.find((r) => r.name === g.rank)?.displayOrder ?? 1) - 1) % RANK_BADGE_COLORS.length]}
                       >
                         {g.rank}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge
-                        bg={g.contractType === 'PERMANENT' ? 'success' : 'warning'}
-                        text={g.contractType === 'TEMPORARY' ? 'dark' : undefined}
-                        style={{ fontSize: '0.7rem' }}
-                      >
-                        {GUARD_CONTRACT_TYPES[g.contractType] ?? g.contractType}
                       </Badge>
                     </td>
                     <td>{g.phone}</td>
