@@ -482,6 +482,12 @@ export interface GuardResponse {
   createdAt:       string;
   updatedAt:       string;
 
+  /**
+   * Only returned in list responses: the site the guard is deployed to today
+   * (deployment date = today), or null when they are not deployed today.
+   */
+  todaySiteName?: string | null;
+
   // ── Section A ────────────────────────────────────────────────────────────────
   gender:                  string | null;
   tribe:                   string | null;
