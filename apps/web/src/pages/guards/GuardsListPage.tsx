@@ -9,7 +9,6 @@ import { guardsApi } from '../../lib/guards.api';
 import { useGuardList, useUpdateGuardStatus } from '../../hooks/useGuards';
 import RoleGuard from '../../components/RoleGuard';
 import PermissionGuard from '../../components/PermissionGuard';
-import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
 import { exportGuardsList } from '../../lib/exportToExcel';
@@ -412,7 +411,7 @@ export default function GuardsListPage() {
             <Table striped hover responsive className="align-middle small">
               <thead className="table-dark">
                 <tr>
-                  <th>Photo</th>
+                  <th>Site (Today)</th>
                   <th>Name / NIN</th>
                   <th>Rank</th>
                   <th>Phone</th>
@@ -430,16 +429,10 @@ export default function GuardsListPage() {
                 {guards.map((g) => (
                   <tr key={g.id}>
                     <td>
-                      {g.photoUrl ? (
-                        <img
-                          src={g.photoUrl}
-                          alt={g.fullName}
-                          width={40}
-                          height={40}
-                          className="rounded-circle object-fit-cover"
-                        />
+                      {g.todaySiteName ? (
+                        <span className="fw-semibold" style={{ color: '#1B3A6B' }}>{g.todaySiteName}</span>
                       ) : (
-                        <InitialsAvatar name={g.fullName} size={40} />
+                        <span className="text-muted">Not deployed today</span>
                       )}
                     </td>
                     <td>

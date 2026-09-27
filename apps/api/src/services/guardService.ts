@@ -118,8 +118,31 @@ class GuardService {
 
     const totalPages = Math.ceil(total / limit);
 
+    // Today's posting for the guards on this page. Same day boundary the roster
+    // uses — today's EAT date bucketed into the UTC day, since deployment dates
+    // are normalised to UTC midnight — so the list and the daily sheet never
+    // disagree about what counts as "today".
+    const eatNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const dayStr = eatNow.toISOString().slice(0, 10);
+    const dayStart = new Date(`${dayStr}T00:00:00.000Z`);
+    const dayEnd = new Date(`${dayStr}T23:59:59.999Z`);
+
+    const todaysDeployments = guards.length
+      ? await prisma.deployment.findMany({
+          where: {
+            guardId: { in: guards.map((g) => g.id) },
+            date: { gte: dayStart, lte: dayEnd },
+          },
+          select: { guardId: true, site: { select: { siteName: true } } },
+        })
+      : [];
+    const todaySiteByGuard = new Map(todaysDeployments.map((d) => [d.guardId, d.site.siteName]));
+
     return {
-      data: guards.map((g) => this.sanitiseGuard(g, requestingUserRole, true)),
+      data: guards.map((g) => ({
+        ...this.sanitiseGuard(g, requestingUserRole, true),
+        todaySiteName: todaySiteByGuard.get(g.id) ?? null,
+      })),
       pagination: {
         page,
         limit,
