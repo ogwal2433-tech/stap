@@ -49,9 +49,14 @@ export const CreateDeductionSchema = z.object({
   effectiveDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Invalid date' }),
 });
 
+/**
+ * Payroll is run per payroll group per period. The group must be active —
+ * that is checked against the database at calculation time, not here.
+ */
 export const RunPayrollSchema = z.object({
-  month: z.number().int().min(1).max(12),
-  year:  z.number().int().min(2024).max(2030),
+  month:         z.number().int().min(1).max(12),
+  year:          z.number().int().min(2024).max(2030),
+  payrollGroupId: z.string().min(1, 'Select a payroll group'),
 });
 
 export const CashbookEntrySchema = z.object({
@@ -179,6 +184,9 @@ export interface PayrollRunResponse {
   id:             string;
   month:          number;
   year:           number;
+  // Null only on historical runs from before payroll was grouped.
+  payrollGroupId:   string | null;
+  payrollGroupName: string | null;
   totalGuards:    number;
   totalGross:     number;
   totalDeductions:number;
@@ -251,6 +259,8 @@ export interface ARAgingReport {
 export interface PayrollSummary {
   month:          number;
   year:           number;
+  payrollGroupId:   string;
+  payrollGroupName: string;
   totalGuards:    number;
   totalGross:     number;
   totalDeductions:number;

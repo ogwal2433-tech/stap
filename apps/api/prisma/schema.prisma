@@ -1285,6 +1285,8 @@ model PayrollRun {
   id              String    @id @default(cuid())
   month           Int
   year            Int
+  payrollGroupId  String?
+  payrollGroup    PayrollGroup? @relation(fields: [payrollGroupId], references: [id], onDelete: Restrict)
   totalGuards     Int
   totalGross      Int
   totalDeductions Int
@@ -1312,6 +1314,11 @@ model PayrollRun {
 
   payslips   Payslip[]
   deductions GuardDeduction[]
+
+  /// One payroll run per group per period. payrollGroupId is null only on
+  /// historical runs from before payroll was grouped; Postgres treats those
+  /// nulls as distinct, so legacy rows never collide.
+  @@unique([month, year, payrollGroupId])
 }
 
 model Payslip {
@@ -1358,6 +1365,10 @@ model PayrollGroup {
   updatedAt   DateTime @updatedAt
 
   members GuardPayrollGroupMember[]
+
+  /// Payroll runs are per group per month. Restrict: once a group has money
+  /// history the run rows must keep pointing at it.
+  payrollRuns PayrollRun[]
 }
 
 /// Join row between a guard and a payroll group. A guard holds at most ONE

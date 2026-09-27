@@ -364,8 +364,9 @@ router.get(
   requireRole(...FINANCE_ROLES, ...HR_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
     const result = await payrollService.getRunHistory({
-      page:  Number(req.query.page ?? 1),
-      limit: Number(req.query.limit ?? 20),
+      page:           Number(req.query.page ?? 1),
+      limit:          Number(req.query.limit ?? 20),
+      payrollGroupId: typeof req.query.payrollGroupId === 'string' ? req.query.payrollGroupId : undefined,
     });
     res.json({ success: true, ...result });
   }),
@@ -379,6 +380,7 @@ router.post(
     const summary = await payrollService.calculateRun(
       req.body.month,
       req.body.year,
+      req.body.payrollGroupId,
       req.user!.userId,
     );
     res.status(201).json({ success: true, data: summary });

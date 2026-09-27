@@ -117,7 +117,7 @@ export function useCancelDeduction() {
 
 // ── Payroll hooks ──────────────────────────────────────────────────────────────
 
-export function usePayrollRuns(params?: { page?: number; limit?: number }) {
+export function usePayrollRuns(params?: { page?: number; limit?: number; payrollGroupId?: string }) {
   return useQuery({
     queryKey: ['payroll', params],
     queryFn:  () => payrollApi.list(params),

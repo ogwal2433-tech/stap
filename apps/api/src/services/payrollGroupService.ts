@@ -187,9 +187,18 @@ class PayrollGroupService {
   async remove(id: string, deletedBy: string): Promise<void> {
     const group = await prisma.payrollGroup.findUnique({
       where:   { id },
-      include: { _count: { select: { members: true } } },
+      include: { _count: { select: { members: true, payrollRuns: true } } },
     });
     if (!group) throw new NotFoundError('Payroll group not found');
+
+    // The FK from PayrollRun is Restrict: a group with money history stays.
+    // Saying so here beats surfacing the raw constraint violation.
+    if (group._count.payrollRuns > 0) {
+      throw new AppError(
+        `"${group.name}" has ${group._count.payrollRuns} payroll run(s) against it and cannot be deleted.`,
+        409,
+      );
+    }
 
     // Memberships are join rows — cascade removes them, never the guards.
     await prisma.payrollGroup.delete({ where: { id } });

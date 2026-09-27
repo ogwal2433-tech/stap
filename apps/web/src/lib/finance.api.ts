@@ -157,7 +157,7 @@ export const deductionsApi = {
 // ── Payroll ───────────────────────────────────────────────────────────────────
 
 export const payrollApi = {
-  list(params?: { page?: number; limit?: number }): Promise<PaginatedResponse<PayrollRunResponse>> {
+  list(params?: { page?: number; limit?: number; payrollGroupId?: string }): Promise<PaginatedResponse<PayrollRunResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<PayrollRunResponse>>('/finance/payroll', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));

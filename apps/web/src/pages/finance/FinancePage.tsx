@@ -481,6 +481,14 @@ function PayrollTab() {
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
 
+  // Payroll is run per group: only ACTIVE groups are selectable, and the
+  // chosen group scopes both the calculate action and the card below.
+  const { data: allGroups } = usePayrollGroups();
+  const activeGroups = (allGroups ?? []).filter((g) => g.isActive);
+  const [groupId, setGroupId] = useState('');
+  const selectedGroupId = activeGroups.some((g) => g.id === groupId) ? groupId : (activeGroups[0]?.id ?? '');
+  const selectedGroup = activeGroups.find((g) => g.id === selectedGroupId);
+
   const { data, isLoading }   = usePayrollRuns();
   const runPayroll             = useRunPayroll();
   const approvePayroll         = useApprovePayroll();
@@ -491,7 +499,7 @@ function PayrollTab() {
   const { user }               = useAuth();
 
   const runs    = data?.data ?? [];
-  const thisRun = runs.find((r) => r.month === month && r.year === year);
+  const thisRun = runs.find((r) => r.month === month && r.year === year && r.payrollGroupId === selectedGroupId);
 
   const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
   const payslips = runDetail?.payslips ?? [];
@@ -500,7 +508,7 @@ function PayrollTab() {
 
   const handleCalculate = async () => {
     try {
-      await runPayroll.mutateAsync({ month, year });
+      await runPayroll.mutateAsync({ month, year, payrollGroupId: selectedGroupId });
       showToast('Payroll calculated', 'success');
       setConfirming(false);
     } catch (err: any) {
@@ -533,8 +541,14 @@ function PayrollTab() {
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
+        <Form.Select size="sm" style={{ width: 260 }} value={selectedGroupId} onChange={(e) => setGroupId(e.target.value)}>
+          {activeGroups.length === 0 && <option value="">— No active payroll groups —</option>}
+          {activeGroups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name} ({g.memberCount} members)</option>
+          ))}
+        </Form.Select>
         <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
-          {!thisRun && (
+          {!thisRun && selectedGroup && (
             <Button
               size="sm"
               style={{ background: NAVY, borderColor: NAVY }}
@@ -550,7 +564,9 @@ function PayrollTab() {
       {confirming && (
         <Card className="border-warning mb-3">
           <Card.Body className="small">
-            <strong>Confirm:</strong> Calculate payroll for {MONTHS[month - 1]} {year} for all active guards?
+            <strong>Confirm:</strong> Calculate payroll for {MONTHS[month - 1]} {year} — group{' '}
+            <strong>{selectedGroup?.name}</strong> ({selectedGroup?.memberCount ?? 0} members)? Only this
+            group's guards are included.
             <div className="mt-2 d-flex gap-2">
               <Button size="sm" variant="primary" onClick={handleCalculate} disabled={runPayroll.isPending}>
                 {runPayroll.isPending ? 'Calculating…' : 'Proceed'}
@@ -577,6 +593,9 @@ function PayrollTab() {
                       </Badge>
                     );
                   })()}
+                  <div className="small fw-semibold" style={{ color: NAVY }}>
+                    {thisRun.payrollGroupName ?? 'Ungrouped (historical run)'}
+                  </div>
                   <div className="small">
                     <strong>{thisRun.totalGuards}</strong> guards &nbsp;|&nbsp;
                     Gross: <strong>{fmtUGX(thisRun.totalGross)}</strong> &nbsp;|&nbsp;
@@ -747,7 +766,9 @@ function PayrollTab() {
         </>
       ) : (
         <div className="text-muted small text-center py-4">
-          No payroll run for {MONTHS[month - 1]} {year}. Use "Calculate Payroll" to generate one.
+          {selectedGroup
+            ? <>No payroll run for {MONTHS[month - 1]} {year} in group <strong>{selectedGroup.name}</strong>. Use "Calculate Payroll" to generate one.</>
+            : 'No active payroll groups — create and activate one in the Payroll Groups tab before running payroll.'}
         </div>
       )}
 
@@ -773,7 +794,7 @@ function PayrollTab() {
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
           <thead className="table-light">
-            <tr><th>Period</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
+            <tr><th>Period</th><th>Group</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
           </thead>
           <tbody>
             {runs.map((r) => {
@@ -781,6 +802,7 @@ function PayrollTab() {
               return (
                 <tr key={r.id}>
                   <td>{MONTHS[r.month - 1]} {r.year}</td>
+                  <td>{r.payrollGroupName ?? '—'}</td>
                   <td>{r.totalGuards}</td>
                   <td>{fmtUGX(r.totalGross)}</td>
                   <td>{fmtUGX(r.totalNet)}</td>

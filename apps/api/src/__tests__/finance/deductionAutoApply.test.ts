@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../db/prisma', () => ({
   default: {
     payrollRun:       { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    payrollGroup:     { findUnique: vi.fn() },
     payslip:          { create: vi.fn(), findMany: vi.fn() },
     guard:            { findMany: vi.fn() },
     attendanceRecord: { count: vi.fn() },
@@ -81,6 +82,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mp.payrollRun.findFirst.mockResolvedValue(null);  // no duplicate run
   mp.payrollRun.create.mockResolvedValue(baseRun());
+  mp.payrollGroup.findUnique.mockResolvedValue({ id: 'group-1', name: 'Alpha Squad', isActive: true });
   mp.attendanceRecord.count.mockResolvedValue(26);  // full month attendance
 });
 
@@ -96,7 +98,7 @@ describe('deduction auto-apply in calculateRun()', () => {
       basePayslip('g-1', 480_000, 30_000, [{ deductionId: 'd-1', type: 'LATE_COMING', amount: 30_000, description: ded.description, effectiveDate: ded.effectiveDate.toISOString() }])
     );
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).toHaveBeenCalledWith(['d-1'], 'run-1');
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
@@ -119,7 +121,7 @@ describe('deduction auto-apply in calculateRun()', () => {
       })))
     );
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).toHaveBeenCalledWith(['d-1', 'd-2', 'd-3'], 'run-1');
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
@@ -134,7 +136,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([ded]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 50_000, 80_000));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
     expect(payslipArg.netSalary).toBe(0);         // floored at 0
@@ -150,7 +152,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([thisMonth]);  // B excluded by DB filter
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 10_000));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     // Only deduction A should be applied
     expect(mockApply).toHaveBeenCalledWith(['d-A'], 'run-1');
@@ -164,7 +166,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 0));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).not.toHaveBeenCalled();
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
@@ -178,7 +180,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 0));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).not.toHaveBeenCalled();
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
@@ -190,7 +192,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 0));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).not.toHaveBeenCalled();
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
@@ -209,7 +211,7 @@ describe('deduction auto-apply in calculateRun()', () => {
       .mockResolvedValueOnce(basePayslip('g-1', 450_000, 30_000))
       .mockResolvedValueOnce(basePayslip('g-2', 500_000, 0));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     const runArg = mp.payrollRun.create.mock.calls[0][0].data;
     expect(runArg.totalGross).toBe(980_000);      // 480k + 500k (gross before deductions)
@@ -223,7 +225,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([ded]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 10_000));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).toHaveBeenCalledWith(['d-X'], 'run-1');
     // Verify the second argument (payrollRunId) matches the created run id
@@ -239,7 +241,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([ded]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 10_000));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).toHaveBeenCalledWith(['d-boundary'], 'run-1');
   });
@@ -251,7 +253,7 @@ describe('deduction auto-apply in calculateRun()', () => {
     mp.guardDeduction.findMany.mockResolvedValue([]);
     mp.payslip.create.mockResolvedValue(basePayslip('g-1', 480_000, 0));
 
-    await payrollService.calculateRun(MONTH, YEAR, 'user-1');
+    await payrollService.calculateRun(MONTH, YEAR, 'group-1', 'user-1');
 
     expect(mockApply).not.toHaveBeenCalled();
     const payslipArg = mp.payslip.create.mock.calls[0][0].data;
