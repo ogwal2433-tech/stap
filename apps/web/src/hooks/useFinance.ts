@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { invoicesApi, deductionsApi, payrollApi, cashbookApi } from '../lib/finance.api';
+import { invoicesApi, deductionsApi, payrollApi, payrollGroupsApi, cashbookApi } from '../lib/finance.api';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
@@ -9,6 +9,8 @@ import type {
   RunPayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
+  CreatePayrollGroupInput,
+  UpdatePayrollGroupInput,
 } from '@stap/shared';
 
 // ── Invoice hooks ──────────────────────────────────────────────────────────────
@@ -207,5 +209,39 @@ export function useCashbookSummary(month: number, year: number) {
   return useQuery({
     queryKey: ['cashbook-summary', month, year],
     queryFn:  () => cashbookApi.getMonthSummary(month, year),
+  });
+}
+
+// ── Payroll group hooks ─────────────────────────────────────────────────────────────
+
+export function usePayrollGroups() {
+  return useQuery({
+    queryKey: ['payroll-groups'],
+    queryFn:  () => payrollGroupsApi.list(),
+  });
+}
+
+export function useCreatePayrollGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreatePayrollGroupInput) => payrollGroupsApi.create(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
+  });
+}
+
+export function useUpdatePayrollGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdatePayrollGroupInput }) =>
+      payrollGroupsApi.update(id, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
+  });
+}
+
+export function useDeletePayrollGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => payrollGroupsApi.remove(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
   });
 }

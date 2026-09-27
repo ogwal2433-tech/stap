@@ -296,3 +296,42 @@ export const VoidInvoiceSchema = z.object({
   reason: z.string().trim().min(5, 'Say why the invoice is being voided (at least 5 characters).').max(500),
 });
 export type VoidInvoiceInput = z.infer<typeof VoidInvoiceSchema>;
+
+// ── Payroll groups ─────────────────────────────────────────────────────────────────────
+
+/**
+ * A named grouping of guards for payroll organisation (teams, sites, pay
+ * batches). guardIds replaces the whole membership on create/update rather
+ * than adding to it, so the editor can save exactly what is on screen.
+ */
+export const CreatePayrollGroupSchema = z.object({
+  name:        z.string().trim().min(2, 'Name is too short').max(80),
+  description: z.string().trim().max(300).optional().nullable(),
+  isActive:    z.boolean().default(true),
+  guardIds:    z.array(z.string().min(1)).default([]),
+});
+
+export const UpdatePayrollGroupSchema = CreatePayrollGroupSchema.partial();
+
+export type CreatePayrollGroupInput = z.input<typeof CreatePayrollGroupSchema>;
+export type UpdatePayrollGroupInput = z.infer<typeof UpdatePayrollGroupSchema>;
+
+/** A guard inside a group, reduced to what the member list displays. */
+export interface PayrollGroupMember {
+  id:       string;
+  fullName: string;
+  rank:     string;
+}
+
+export interface PayrollGroupResponse {
+  id:          string;
+  name:        string;
+  description: string | null;
+  isActive:    boolean;
+  memberCount: number;
+  /** Only present on detail/list responses that asked for members. */
+  members?:    PayrollGroupMember[];
+  createdAt:   string;
+  updatedAt:   string;
+}
+

@@ -358,6 +358,7 @@ model Guard {
   relatives          GuardRelative[]
   associates         GuardAssociate[]
   transfers          GuardTransfer[]
+  payrollGroups      GuardPayrollGroupMember[]
   promotions         GuardPromotion[]
 
   // ── Soft delete ─────────────────────────────────────────────────────────────
@@ -1343,6 +1344,36 @@ model Payslip {
   webhookPayload    Json?
 
   createdAt DateTime @default(now())
+}
+
+/// A named grouping of guards for payroll organisation (teams, sites, pay
+/// batches). Reference data only for now — no payroll run depends on it yet,
+/// which is why membership cascades rather than restricts.
+model PayrollGroup {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members GuardPayrollGroupMember[]
+}
+
+/// Join row between a guard and a payroll group. A guard holds at most ONE
+/// group — the unique index on guardId makes the database, not just the UI,
+/// the authority. Deleting the group or the guard removes the link, never the
+/// people either side of it.
+model GuardPayrollGroupMember {
+  id        String   @id @default(cuid())
+  guardId   String   @unique
+  groupId   String
+  createdAt DateTime @default(now())
+
+  guard Guard        @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  group PayrollGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([guardId, groupId])
 }
 
 model CashbookEntry {
