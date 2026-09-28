@@ -25,6 +25,9 @@ function fmtRun(r: any): PayrollRunResponse {
     id:              r.id,
     month:           r.month,
     year:            r.year,
+    // Null on historical runs created before payroll was grouped.
+    payrollGroupId:   r.payrollGroupId ?? null,
+    payrollGroupName: r.payrollGroup?.name ?? null,
     totalGuards:     r.totalGuards,
     totalGross:      r.totalGross,
     totalDeductions: r.totalDeductions,
@@ -71,21 +74,44 @@ function fmtPayslip(p: any): PayslipResponse {
 // ── PayrollService ─────────────────────────────────────────────────────────────
 
 class PayrollService {
-  async calculateRun(month: number, year: number, calculatedBy: string): Promise<PayrollSummary> {
-    // Prevent duplicate runs
+  async calculateRun(
+    month: number,
+    year: number,
+    payrollGroupId: string,
+    calculatedBy: string,
+  ): Promise<PayrollSummary> {
+    // Only active groups can be paid; a deleted-or-archived group id sitting
+    // in a stale browser form must not produce a run.
+    const group = await prisma.payrollGroup.findUnique({ where: { id: payrollGroupId } });
+    if (!group) throw new NotFoundError('Payroll group not found');
+    if (!group.isActive) throw new AppError(`"${group.name}" is inactive — reactivate it before running its payroll.`, 400);
+
+    // Prevent duplicate runs for the same group and period
     const existing = await prisma.payrollRun.findFirst({
-      where: { month, year, status: { in: ['DRAFT', 'APPROVED', 'DISBURSED'] } },
+      where: { month, year, payrollGroupId, status: { in: ['DRAFT', 'APPROVED', 'DISBURSED'] } },
     });
-    if (existing) throw new AppError('Payroll already run for this period', 409);
+    if (existing) {
+      throw new AppError(`Payroll already run for "${group.name}" in this period`, 409);
+    }
 
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd   = new Date(year, month, 0, 23, 59, 59);
 
     // Guards on leave stay on the payroll — they are still employed. Suspended,
-    // resigned and terminated guards are excluded.
+    // resigned and terminated guards are excluded. Since payroll is grouped,
+    // only members of this group are considered.
     const guards = await prisma.guard.findMany({
-      where: { employmentStatus: { in: PAID_STATUSES } },
+      where: {
+        employmentStatus: { in: PAID_STATUSES },
+        payrollGroups:    { some: { groupId: payrollGroupId } },
+      },
     });
+    if (guards.length === 0) {
+      throw new AppError(
+        `"${group.name}" has no active guards to pay. Add members to the group first.`,
+        400,
+      );
+    }
 
     let totalGross      = 0;
     let totalDeductions = 0;
@@ -148,6 +174,7 @@ class PayrollService {
       data: {
         month,
         year,
+        payrollGroupId,
         totalGuards:     guards.length,
         totalGross,
         totalDeductions,
@@ -183,6 +210,8 @@ class PayrollService {
     return {
       month,
       year,
+      payrollGroupId,
+      payrollGroupName: group.name,
       totalGuards:     guards.length,
       totalGross,
       totalDeductions,
@@ -294,7 +323,10 @@ class PayrollService {
   // ── Finance: disburse an HR-approved run via XCEL mobile money ──────────────
 
   async disburse(payrollRunId: string, disbursedBy: string): Promise<void> {
-    const run = await prisma.payrollRun.findUnique({ where: { id: payrollRunId } });
+    const run = await prisma.payrollRun.findUnique({
+      where:  { id: payrollRunId },
+      include: { payrollGroup: true },
+    });
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'HR_APPROVED') {
       throw new AppError(
@@ -467,18 +499,24 @@ class PayrollService {
     });
   }
 
-  async getRunHistory(query: { page: number; limit: number }): Promise<PaginatedResponse<PayrollRunResponse>> {
-    const { page, limit } = query;
+  async getRunHistory(query: {
+    page: number;
+    limit: number;
+    payrollGroupId?: string;
+  }): Promise<PaginatedResponse<PayrollRunResponse>> {
+    const { page, limit, payrollGroupId } = query;
     const skip = (page - 1) * limit;
+    const where = payrollGroupId ? { payrollGroupId } : {};
 
     const [runs, total] = await Promise.all([
       prisma.payrollRun.findMany({
+        where,
         orderBy: [{ year: 'desc' }, { month: 'desc' }],
         skip,
         take: limit,
-        include: { _count: { select: { payslips: true } } },
+        include: { payrollGroup: true, _count: { select: { payslips: true } } },
       }),
-      prisma.payrollRun.count(),
+      prisma.payrollRun.count({ where }),
     ]);
 
     const totalPages = Math.ceil(total / limit);
@@ -491,7 +529,7 @@ class PayrollService {
   async getRunDetail(runId: string): Promise<PayrollRunResponse & { payslips: PayslipResponse[] }> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: runId },
-      include: { payslips: { include: { guard: true } }, _count: { select: { payslips: true } } },
+      include: { payslips: { include: { guard: true } }, payrollGroup: true, _count: { select: { payslips: true } } },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
 

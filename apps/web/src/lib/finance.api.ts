@@ -18,6 +18,9 @@ import type {
   RunPayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
+  PayrollGroupResponse,
+  CreatePayrollGroupInput,
+  UpdatePayrollGroupInput,
 } from '@stap/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -154,7 +157,7 @@ export const deductionsApi = {
 // ── Payroll ───────────────────────────────────────────────────────────────────
 
 export const payrollApi = {
-  list(params?: { page?: number; limit?: number }): Promise<PaginatedResponse<PayrollRunResponse>> {
+  list(params?: { page?: number; limit?: number; payrollGroupId?: string }): Promise<PaginatedResponse<PayrollRunResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<PayrollRunResponse>>('/finance/payroll', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
@@ -212,6 +215,32 @@ export const payrollApi = {
     return api
       .get<{ success: boolean; data: PayslipResponse }>(`/finance/payslips/${id}`)
       .then((r) => r.data.data);
+  },
+};
+
+// ── Payroll groups ─────────────────────────────────────────────────────────────────
+
+export const payrollGroupsApi = {
+  list(): Promise<PayrollGroupResponse[]> {
+    return api
+      .get<{ success: boolean; data: PayrollGroupResponse[] }>('/finance/payroll-groups')
+      .then((r) => r.data.data);
+  },
+
+  create(data: CreatePayrollGroupInput): Promise<PayrollGroupResponse> {
+    return api
+      .post<{ success: boolean; data: PayrollGroupResponse }>('/finance/payroll-groups', data)
+      .then((r) => r.data.data);
+  },
+
+  update(id: string, data: UpdatePayrollGroupInput): Promise<PayrollGroupResponse> {
+    return api
+      .patch<{ success: boolean; data: PayrollGroupResponse }>(`/finance/payroll-groups/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  remove(id: string): Promise<void> {
+    return api.delete(`/finance/payroll-groups/${id}`).then(() => undefined);
   },
 };
 

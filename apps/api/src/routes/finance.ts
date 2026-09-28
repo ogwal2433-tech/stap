@@ -160,7 +160,10 @@ import {
   CashbookEntrySchema,
   FlagPayslipSchema,
   HrApprovePayrollSchema,
+  CreatePayrollGroupSchema,
+  UpdatePayrollGroupSchema,
 } from '@stap/shared';
+import { payrollGroupService } from '../services/payrollGroupService';
 
 const router: IRouter = Router();
 router.use(authenticate);
@@ -361,8 +364,9 @@ router.get(
   requireRole(...FINANCE_ROLES, ...HR_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
     const result = await payrollService.getRunHistory({
-      page:  Number(req.query.page ?? 1),
-      limit: Number(req.query.limit ?? 20),
+      page:           Number(req.query.page ?? 1),
+      limit:          Number(req.query.limit ?? 20),
+      payrollGroupId: typeof req.query.payrollGroupId === 'string' ? req.query.payrollGroupId : undefined,
     });
     res.json({ success: true, ...result });
   }),
@@ -376,6 +380,7 @@ router.post(
     const summary = await payrollService.calculateRun(
       req.body.month,
       req.body.year,
+      req.body.payrollGroupId,
       req.user!.userId,
     );
     res.status(201).json({ success: true, data: summary });
@@ -466,6 +471,46 @@ router.get(
       }
     }
     res.json({ success: true, data: payslip });
+  }),
+);
+
+// ── Payroll groups ───────────────────────────────────────────────────────────
+
+router.get(
+  '/payroll-groups',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const groups = await payrollGroupService.list();
+    res.json({ success: true, data: groups });
+  }),
+);
+
+router.post(
+  '/payroll-groups',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(CreatePayrollGroupSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const group = await payrollGroupService.create(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: group });
+  }),
+);
+
+router.patch(
+  '/payroll-groups/:id',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(UpdatePayrollGroupSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const group = await payrollGroupService.update(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: group });
+  }),
+);
+
+router.delete(
+  '/payroll-groups/:id',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    await payrollGroupService.remove(req.params.id, req.user!.userId);
+    res.json({ success: true });
   }),
 );
 
