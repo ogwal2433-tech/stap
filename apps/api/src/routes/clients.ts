@@ -96,6 +96,7 @@ import { accessService } from '../services/accessService';
 import { excelImportUpload } from '../config/multer';
 import { AppError } from '../errors/AppError';
 import { siteService } from '../services/siteService';
+import { deploymentService } from '../services/deploymentService';
 import { incidentService } from '../services/incidentService';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -113,6 +114,7 @@ import {
   UpdateClientSchema,
   CreateSiteSchema,
   CreateSiteInputSchema,
+  ClientDeploymentsQuerySchema,
   UpdateSiteSchema,
   CreateIncidentSchema,
   GrantClientPortalSchema,
@@ -473,6 +475,22 @@ router.post(
       req.user!.userId,
     );
     res.status(201).json({ success: true, data: site });
+  }),
+);
+
+// ── GET /:clientId/deployments — guards deployed across this client's sites ───
+// CLIENTS_VIEW rather than SITES_VIEW: this is the client profile's own roster
+// view, and the page it feeds is already gated on that permission. It names
+// guards and the supervisor who posted them — no rates, no billing, which is
+// what the contracts route next door deliberately keeps behind CONTRACTS_VIEW.
+router.get(
+  '/:clientId/deployments',
+  requirePermission(PERMISSIONS.CLIENTS_VIEW),
+  validateQuery(ClientDeploymentsQuerySchema),
+  asyncHandler(async (req, res) => {
+    const query = req.query as unknown as import('@stap/shared').ClientDeploymentsQuery;
+    const result = await deploymentService.listByClient(req.params.clientId, query);
+    res.status(200).json({ success: true, ...result });
   }),
 );
 

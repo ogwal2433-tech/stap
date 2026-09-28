@@ -276,6 +276,35 @@ export interface DeploymentResponse {
   } | null;
 }
 
+/**
+ * One guard's stint on one of a client's sites, for the client detail page.
+ *
+ * Read from DeploymentHistory, not Deployment: the roster table holds a row per
+ * deployed day and is regenerated constantly, while the history rows carry the
+ * start date a client actually asks about. `endDate: null` means the guard is
+ * still on post — the same convention the guards list uses to name a guard's
+ * current client.
+ */
+export interface ClientDeploymentEntry {
+  id:         string;
+  guard:      { id: string; fullName: string; systemId: string | null; rank: string | null };
+  site:       { id: string; siteName: string };
+  shiftType:  string;
+  startDate:  string;
+  /** null while the guard is still deployed there. */
+  endDate:    string | null;
+  supervisor: { id: string; name: string };
+}
+
+export const ClientDeploymentsQuerySchema = z.object({
+  page:   z.coerce.number().int().positive().default(1),
+  limit:  z.coerce.number().int().min(1).max(100).default(20),
+  /** CURRENT narrows to open stints; the default returns the history too. */
+  status: z.enum(['ALL', 'CURRENT']).default('ALL'),
+});
+
+export type ClientDeploymentsQuery = z.infer<typeof ClientDeploymentsQuerySchema>;
+
 export interface AttendanceRecord {
   id:        string;
   guard:     { id: string; fullName: string; photoUrl: string | null };
