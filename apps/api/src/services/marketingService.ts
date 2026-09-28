@@ -1,4 +1,5 @@
 import prisma from '../db/prisma';
+import { settingsService } from './settingsService';
 import { QueueService } from '../jobs/QueueService';
 import { safeDate, dateRangeFilter } from '../lib/dateUtils';
 import { AppError, NotFoundError } from '../errors/AppError';
@@ -795,6 +796,8 @@ class MarketingService {
       dateFrom:    from?.toISOString() ?? null,
       dateTo:      to?.toISOString() ?? null,
     };
+    const titleKey = ({ PIPELINE: 'pipeline_report', PROSPECTS: 'prospects_report', CLOSED_BUSINESS: 'closed_business_report', BIDS: 'bid_performance_report', PERFORMANCE: 'marketing_performance_report' } as const)[type];
+    const reportTitle = await settingsService.getReportTitle(titleKey);
 
     if (type === 'PIPELINE') {
       const grouped = await prisma.prospectiveClient.groupBy({
@@ -815,7 +818,7 @@ class MarketingService {
       const totalValue = rows.reduce((s, r) => s + (r[2] as number), 0);
       return {
         ...base,
-        title:   'Pipeline Report',
+        title:   reportTitle.title,
         columns: ['Stage', 'Prospects', 'Estimated Monthly Value (UGX)'],
         rows,
         summary: [
@@ -833,7 +836,7 @@ class MarketingService {
       });
       return {
         ...base,
-        title:   'Prospects Report',
+        title:   reportTitle.title,
         columns: ['Company', 'Contact', 'Industry', 'Status', 'Est. Value (UGX)', 'Assigned To', 'Created'],
         rows: items.map(p => [
           p.companyName,
@@ -857,7 +860,7 @@ class MarketingService {
       const total = items.reduce((s, p) => s + (p.estimatedValue ?? 0), 0);
       return {
         ...base,
-        title:   'Closed Business Report',
+        title:   reportTitle.title,
         columns: ['Company', 'Date Won', 'Contract Value (UGX)', 'Marketing Officer', 'Client Status'],
         rows: items.map(p => [
           p.companyName,
@@ -883,7 +886,7 @@ class MarketingService {
       const decided  = items.filter(b => b.status === 'WON' || b.status === 'LOST').length;
       return {
         ...base,
-        title:   'Bid Performance Report',
+        title:   reportTitle.title,
         columns: ['Organisation', 'Type', 'Amount (UGX)', 'Submitted', 'Closing', 'Status', 'Assigned To'],
         rows: items.map(b => [
           b.organization,
@@ -932,7 +935,7 @@ class MarketingService {
 
     return {
       ...base,
-      title:   'Marketing Performance Report',
+      title:   reportTitle.title,
       columns: ['Officer', 'Prospects', 'Won', 'Lost', 'Conversion', 'Bids Submitted', 'Bids Won', 'Value Won (UGX)'],
       rows,
       summary: [{ label: 'Officers', value: String(officers.length) }],

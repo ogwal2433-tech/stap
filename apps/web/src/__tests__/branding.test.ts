@@ -6,6 +6,8 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_COMPANY_NAME,
   DEFAULT_APP_TAGLINE,
+  COMPANY_BRANDING_DEFAULTS,
+  resolveCompanyBranding,
 } from '@stap/shared';
 import { APP_NAME, APP_TAGLINE, COMPANY_NAME, FILE_PREFIX } from '../lib/branding';
 
@@ -75,6 +77,11 @@ describe('resolveBranding()', () => {
   it('an empty environment is the default brand', () => {
     expect(resolveBranding().appName).toBe(DEFAULT_APP_NAME);
   });
+
+  it('company branding resolves blank overrides to safe defaults', () => {
+    expect(resolveCompanyBranding({ company_name: '   ' }).company_name).toBe(COMPANY_BRANDING_DEFAULTS.company_name);
+    expect(resolveCompanyBranding({ company_name: ' Example Ltd ' }).company_name).toBe('Example Ltd');
+  });
 });
 
 describe('download filenames follow the deployment', () => {
@@ -130,8 +137,8 @@ describe('client- and guard-facing surfaces name the company', () => {
   it.each([
     ['components/layout/PortalLayout.tsx'],
     ['pages/attendance/CheckinPage.tsx'],
-  ])('%s uses COMPANY_NAME', (file) => {
-    expect(src(file)).toContain('COMPANY_NAME');
+  ])('%s reads the runtime company setting', (file) => {
+    expect(src(file)).toContain('useCompanyBranding');
   });
 
   it('the client portal still says who is writing to them', () => {
@@ -139,7 +146,7 @@ describe('client- and guard-facing surfaces name the company', () => {
     // client unsure who sent it. The name is now read per deployment rather
     // than written into the page, so what is pinned is that it is the company.
     const s = src('pages/portal/ClientPortalPage.tsx');
-    expect(s).toMatch(/Notices from \{COMPANY_NAME\}/);
+    expect(s).toMatch(/Notices from \{companyName\}/);
     expect(s).not.toContain('Notices from STAP Security');
   });
 
@@ -147,7 +154,8 @@ describe('client- and guard-facing surfaces name the company', () => {
     // Still the company rather than the product, but resolved per deployment:
     // a second brand on the same host must sign its own letters.
     const s = src('components/letters/HRLetterModal.tsx');
-    expect(s).toContain('COMPANY_NAME');
+    expect(s).toContain('useCompanyBranding');
+    expect(s).toContain('company_name: companyBranding.company_name');
     expect(s).not.toContain('STAP Security Ltd');
   });
 });

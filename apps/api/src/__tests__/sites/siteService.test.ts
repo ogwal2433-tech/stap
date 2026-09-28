@@ -101,6 +101,16 @@ beforeEach(() => {
 // ── create() ──────────────────────────────────────────────────────────────────
 
 describe('siteService.create()', () => {
+  it('persists the selected zoneId', async () => {
+    await siteService.create({ ...baseCreateInput, zoneId: 'zone-1' }, 'user1');
+
+    expect(mock.site.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ zoneId: 'zone-1' }),
+      }),
+    );
+  });
+
   it('creates site with siteType = PERMANENT by default', async () => {
     await siteService.create(baseCreateInput, 'user1');
 

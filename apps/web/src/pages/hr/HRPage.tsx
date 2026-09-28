@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import {
   Alert, Badge, Button, Col, Form, ListGroup, Modal, Offcanvas,
   ProgressBar, Row, Spinner, Tab, Table, Tabs,
@@ -106,7 +106,6 @@ const SAMPLE_DATA: Record<string, string> = {
   contract_start:  '01/01/2026',
   contract_end:    '31/12/2026',
   ref_number:      'HR/2026/001',
-  company_name:    COMPANY_NAME,
   company_address: 'Kampala, Uganda',
 };
 
@@ -842,6 +841,7 @@ function TemplateEditorModal({
   template: LetterTemplateResponse | null;
   onHide: () => void;
 }) {
+  const { data: companyBranding } = useCompanyBranding();
   const { showToast } = useToast();
   const save    = useSaveLetterTemplate();
   const preview = usePreviewTemplate();
@@ -871,7 +871,7 @@ function TemplateEditorModal({
 
   const handlePreview = () => {
     preview.mutate(
-      { letterType: template.letterType, sampleData: SAMPLE_DATA },
+      { letterType: template.letterType, sampleData: { ...SAMPLE_DATA, company_name: companyBranding.company_name } },
       {
         onSuccess: (html) => { setPreviewHtml(html); setShowPreview(true); },
         onError:   (err: any) => showToast(err?.response?.data?.error || 'Preview failed', 'danger'),

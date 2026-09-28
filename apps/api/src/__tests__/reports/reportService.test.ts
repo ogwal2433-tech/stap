@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import ExcelJS from 'exceljs';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ vi.mock('../../db/prisma', () => ({
     contract:         { count: vi.fn() },
     incident:         { findMany: vi.fn() },
     scheduledReport:  { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    systemSetting: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn(), delete: vi.fn() },
   },
 }));
 
@@ -34,6 +36,7 @@ vi.mock('node-cron', () => ({
 
 import prisma from '../../db/prisma';
 import { reportService } from '../../services/reportService';
+import { settingsService } from '../../services/settingsService';
 
 const mp = prisma as any;
 
@@ -45,6 +48,8 @@ function mockAgg(value: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  settingsService.clearReportTitleCache();
+  mp.systemSetting.findUnique.mockResolvedValue(null);
 
   // Scalar counts
   mp.deployment.count.mockResolvedValue(10);
@@ -139,6 +144,16 @@ describe('reportService.generateDailyOpsReport()', () => {
 
     expect(buf).toBeInstanceOf(Buffer);
     expect((buf as Buffer).length).toBeGreaterThan(0);
+  });
+
+  it('renders the configured title in the workbook without changing worksheet names', async () => {
+    mp.systemSetting.findUnique.mockResolvedValue({
+      key: 'report_titles', value: JSON.stringify({ daily_operations_report: { title: 'Operations Brief' } }),
+    });
+    const buf = await reportService.generateDailyOpsReport('2026-04-16');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as any);
+    expect(wb.getWorksheet('Summary')?.getCell('A1').value).toBe('Operations Brief');
   });
 
   it('queries deployment and attendance for the given date', async () => {

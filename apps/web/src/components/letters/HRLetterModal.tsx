@@ -1,22 +1,22 @@
 import { useState } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
 import { LetterEditor } from './LetterEditor';
 import { HR_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
 
-function buildCommitmentAgreementBody(guardName: string, startDate: string, minimumPeriod: string): string {
+function buildCommitmentAgreementBody(guardName: string, startDate: string, minimumPeriod: string, companyName: string): string {
   return `
 <p>Dear <strong>${guardName}</strong>,</p>
 
-<p>We are pleased to offer you employment as a Security Guard with ${COMPANY_NAME}. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
+<p>We are pleased to offer you employment as a Security Guard with ${companyName}. To ensure stability and continuity in our security operations, we require a commitment from you regarding the minimum service period.</p>
 
 <p>By signing this agreement, you acknowledge and commit to the following terms:</p>
 
 <p style="font-weight:bold;margin-top:14px;">1. Minimum Service Period:</p>
 <ul style="margin:4px 0 10px 24px;line-height:1.6;">
-  <li>You agree to work with ${COMPANY_NAME} for a minimum of <strong>${minimumPeriod}</strong> from <strong>${startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
+  <li>You agree to work with ${companyName} for a minimum of <strong>${minimumPeriod}</strong> from <strong>${startDate}</strong>, unless otherwise terminated in accordance with company policies.</li>
 </ul>
 
 <p style="font-weight:bold;margin-top:14px;">2. Resignation or Termination Before Committed Period:</p>
@@ -61,7 +61,7 @@ function buildCommitmentAgreementBody(guardName: string, startDate: string, mini
     </tr>
   </table>
 
-  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of ${COMPANY_NAME}:</p>
+  <p style="font-weight:bold;margin-top:24px;">For &amp; On Behalf of ${companyName}:</p>
   <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:10pt;">
     <tr>
       <td style="width:55%;padding-bottom:6px;">Authorized Representative Name: <span style="display:inline-block;width:100px;border-bottom:1px solid #333;">&nbsp;</span></td>
@@ -90,6 +90,7 @@ interface Props {
  * never linked to a disciplinary record. Disciplinary letters (warning/suspension/
  * termination) are generated from the specific incident on the Disciplinary Records tab. */
 export default function HRLetterModal({ guardId, guardName, show, onClose, onSuccess }: Props) {
+  const { data: companyBranding } = useCompanyBranding();
   const mutation = useGenerateLetterRecord();
   const { data: templates = [] } = useLetterTemplates();
   const previewTemplate = usePreviewTemplate();
@@ -113,7 +114,7 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
       sampleData: {
         guard_name:   guardName,
         date:         new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-        company_name: COMPANY_NAME,
+        company_name: companyBranding.company_name,
       },
     });
     setBody(html);
@@ -144,7 +145,7 @@ export default function HRLetterModal({ guardId, guardName, show, onClose, onSuc
       const formattedDate = new Date(startDate).toLocaleDateString('en-GB', {
         day: 'numeric', month: 'long', year: 'numeric',
       });
-      finalBody = buildCommitmentAgreementBody(guardName, formattedDate, minimumPeriod.trim());
+      finalBody = buildCommitmentAgreementBody(guardName, formattedDate, minimumPeriod.trim(), companyBranding.company_name);
       if (!title.trim()) { setError('Letter title is required.'); return; }
     } else {
       if (!title.trim()) { setError('Letter title is required.'); return; }

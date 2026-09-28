@@ -1,4 +1,5 @@
-import { COMPANY_NAME, APP_NAME } from '../../config/branding';
+import { APP_NAME } from '../../config/branding';
+import { DEFAULT_COMPANY_NAME } from '@stap/shared';
 
 /**
  * Email bodies for the queued mail templates.
@@ -19,14 +20,14 @@ function esc(v: unknown): string {
 const NAVY = '#1B3A6B';
 const GOLD = '#F2AA20';
 
-function layout(title: string, body: string): string {
+function layout(title: string, body: string, companyName: string): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#F2F4F7;font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2F4F7;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;">
         <tr><td style="background:${NAVY};padding:18px 24px;">
-          <div style="color:#ffffff;font-size:18px;font-weight:bold;">${esc(COMPANY_NAME)}</div>
+          <div style="color:#ffffff;font-size:18px;font-weight:bold;">${esc(companyName)}</div>
         </td></tr>
         <tr><td style="background:${GOLD};height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
         <tr><td style="padding:24px;">
@@ -76,6 +77,7 @@ export function loginUrl(): string {
 }
 
 export function renderEmail(template: string, subject: string, d: Record<string, unknown>): string {
+  const companyName = String(d.companyName || DEFAULT_COMPANY_NAME);
   switch (template) {
     case 'welcome':
       return layout('Your account is ready', [
@@ -85,7 +87,7 @@ export function renderEmail(template: string, subject: string, d: Record<string,
               + (d.password ? label('Temporary password', d.password) : '')
               + (d.role ? label('Role', d.role) : '')),
         d.loginUrl ? button(String(d.loginUrl), 'Sign in') : '',
-      ].join(''));
+      ].join(''), companyName);
 
     case 'client-portal-welcome':
       // Addressed to a customer rather than a colleague, so it says what the
@@ -93,7 +95,7 @@ export function renderEmail(template: string, subject: string, d: Record<string,
       return layout('Your client portal is ready', [
         p(`Dear ${esc(d.contactName ?? d.name)},`),
         p(`An account has been set up for <strong>${esc(d.clientName)}</strong> on the ` +
-          `${esc(COMPANY_NAME)} client portal. Sign in with the details below.`),
+          `${esc(companyName)} client portal. Sign in with the details below.`),
         table(label('Email', d.email) + label('Temporary password', d.password)),
         d.loginUrl ? button(String(d.loginUrl), 'Open the portal') : '',
         p('<strong style="font-size:13px;">Through the portal you can:</strong>') +
@@ -104,7 +106,7 @@ export function renderEmail(template: string, subject: string, d: Record<string,
             'See your sites and their deployments',
           ]),
         notice('Please change this password after you sign in, and keep it to yourself.'),
-      ].join(''));
+      ].join(''), companyName);
 
     case 'password-reset':
       return layout('Your password has been reset', [
@@ -112,27 +114,27 @@ export function renderEmail(template: string, subject: string, d: Record<string,
         p('An administrator has reset your password. Use the password below to sign in, then change it immediately.'),
         table(label('Email', d.email) + label('New password', d.password)),
         d.loginUrl ? button(String(d.loginUrl), 'Sign in') : '',
-      ].join(''));
+      ].join(''), companyName);
 
     case 'notification':
-      return layout(String(d.title ?? subject), p(esc(d.message)));
+      return layout(String(d.title ?? subject), p(esc(d.message)), companyName);
 
     case 'requisition-approval':
       return layout('A requisition needs your approval',
-        p('A requisition has been submitted and is waiting on your decision.') + rows(d));
+        p('A requisition has been submitted and is waiting on your decision.') + rows(d), companyName);
 
     case 'invoice':
-      return layout(subject, p('Please find your invoice details below.') + rows(d));
+      return layout(subject, p('Please find your invoice details below.') + rows(d), companyName);
 
     case 'incident-alert':
-      return layout(subject, p('An incident has been reported that needs attention.') + rows(d));
+      return layout(subject, p('An incident has been reported that needs attention.') + rows(d), companyName);
 
     case 'scheduled-report':
-      return layout(String(d.reportName ?? subject), p('Your scheduled report is ready.') + rows(d));
+      return layout(String(d.reportName ?? subject), p('Your scheduled report is ready.') + rows(d), companyName);
 
     default:
       // An unrecognised template must still deliver something readable rather
       // than dropping the message.
-      return layout(subject, rows(d));
+      return layout(subject, rows(d), companyName);
   }
 }

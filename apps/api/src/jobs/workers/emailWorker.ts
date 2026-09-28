@@ -4,6 +4,7 @@ import { sendEmail, mailerConfigured, verifyMailer } from '../../lib/mailer';
 import { renderEmail } from '../templates/emailTemplates';
 import { errorLogger } from '../../services/errorLogger';
 import type { EmailJobData } from '../QueueService';
+import { getCompanyBranding } from '../../services/companyBrandingService';
 
 /**
  * Sends the queued mail.
@@ -28,10 +29,12 @@ export const emailWorker = new Worker<EmailJobData>(
       throw new Error('SMTP is not configured — set it in Settings → Integrations');
     }
 
-    const html = renderEmail(template, subject, data ?? {});
-    const info = await sendEmail({ to, subject, html });
+    const companyName = (await getCompanyBranding()).company_name;
+    const resolvedSubject = subject.replace(/\{\{company_name\}\}/g, companyName);
+    const html = renderEmail(template, resolvedSubject, { ...(data ?? {}), companyName });
+    const info = await sendEmail({ to, subject: resolvedSubject, html });
 
-    console.log(`📧 Sent "${subject}" to ${to} (${(info as { messageId?: string }).messageId ?? 'no id'})`);
+    console.log(`📧 Sent "${resolvedSubject}" to ${to} (${(info as { messageId?: string }).messageId ?? 'no id'})`);
   },
   { connection: redisConnection },
 );

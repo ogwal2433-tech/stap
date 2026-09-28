@@ -24,8 +24,14 @@ import { runInvoiceEmailJob } from './jobs/invoiceCron';
 import { errorLogger } from './services/errorLogger';
 import { JOB_REGISTRY, JOB_TIMEZONE } from './constants/jobRegistry';
 import { runRegisteredJob, syncJobRegistry } from './lib/jobRunner';
+import { settingsService } from './services/settingsService';
+import { startReportTitleCacheSync, stopReportTitleCacheSync } from './lib/reportTitleCacheBus';
+import { startCompanyBrandingCacheSync, stopCompanyBrandingCacheSync } from './lib/companyBrandingCacheBus';
+import { clearCompanyBrandingCache } from './services/companyBrandingService';
 
 console.log(`⚙️  STAP Worker process started (PID ${process.pid})`);
+startReportTitleCacheSync(() => settingsService.clearReportTitleCache());
+startCompanyBrandingCacheSync(clearCompanyBrandingCache);
 
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];
 
@@ -62,6 +68,8 @@ async function gracefulShutdown(signal: string) {
   await Promise.all([
     ...workers.map((w) => w.close()),
     ...Object.values(queues).map((q) => q.close()),
+    stopReportTitleCacheSync(),
+    stopCompanyBrandingCacheSync(),
   ]);
 
   await redisConnection.quit();

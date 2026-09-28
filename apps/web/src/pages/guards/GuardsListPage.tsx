@@ -12,6 +12,7 @@ import PermissionGuard from '../../components/PermissionGuard';
 import StatusChangeModal from '../../components/guards/StatusChangeModal';
 import { useToast } from '../../context/ToastContext';
 import { exportGuardsList } from '../../lib/exportToExcel';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@stap/shared';
@@ -49,6 +50,7 @@ interface StatusModal {
 }
 
 export default function GuardsListPage() {
+  const { data: companyBranding } = useCompanyBranding();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { data: ranks = [] } = useGuardRanks(false);
@@ -158,7 +160,7 @@ export default function GuardsListPage() {
         showToast('There are no guards to export yet.', 'warning');
         return;
       }
-      exportGuardsList(rows, new Date(exportedAt));
+      exportGuardsList(rows, new Date(exportedAt), companyBranding.company_name);
       showToast(`Exported ${rows.length} guard${rows.length === 1 ? '' : 's'}.`, 'success');
     } catch {
       showToast('Could not export the guard list. Please try again.', 'danger');

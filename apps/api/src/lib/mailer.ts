@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
-import { COMPANY_NAME } from '../config/branding';
 import { smtpConfig } from '../services/integrationSettings';
+import { getCompanyBranding } from '../services/companyBrandingService';
 
 /**
  * Built per send from the settings resolver rather than once at import.
@@ -55,11 +55,12 @@ export async function sendEmail(opts: {
   if (!configured) {
     throw new Error('SMTP is not configured. Set it in Settings → Integrations.');
   }
+  const companyName = (await getCompanyBranding()).company_name;
   return transporter.sendMail({
     // The company, not the platform: recipients are its guards and clients, and
     // a display name that does not match the sending domain reads as spoofing
     // to both people and spam filters.
-    from:        `"${COMPANY_NAME}" <${from}>`,
+    from:        `"${companyName}" <${from}>`,
     to:          opts.to,
     subject:     opts.subject,
     html:        opts.html,

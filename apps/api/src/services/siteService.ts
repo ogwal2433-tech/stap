@@ -382,6 +382,7 @@ class SiteService {
     const site = await prisma.site.create({
       data: {
         clientId:            siteData.clientId,
+        zoneId:              siteData.zoneId ?? null,
         siteName:            siteData.siteName,
         location:            siteData.location,
         gpsLat:              siteData.gpsLat ?? null,

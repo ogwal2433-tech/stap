@@ -1,5 +1,5 @@
 import prisma from '../db/prisma';
-import { COMPANY_NAME } from '../config/branding';
+import { getCompanyBranding } from './companyBrandingService';
 import { writeAuditLog } from '../lib/auditLog';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
@@ -143,6 +143,7 @@ class ComplaintService {
     data:     CreateOutboundComplaintInput,
     sentById: string,
   ): Promise<ComplaintResponse> {
+    const companyName = (await getCompanyBranding()).company_name;
     const client = await prisma.client.findUnique({
       where:  { id: data.clientId },
       select: { id: true, clientName: true },
@@ -187,9 +188,9 @@ class ComplaintService {
         notificationService.send({
           userId:     u.id,
           type:       'SYSTEM',
-          title:      `📋 Notice from ${COMPANY_NAME}`,
+          title:      `📋 Notice from ${companyName}`,
           message:
-            `${COMPANY_NAME} has sent you a notice: "${complaint.subject}". ` +
+            `${companyName} has sent you a notice: "${complaint.subject}". ` +
             'Log in to your portal to read and acknowledge it.',
           entityType: 'complaint',
           entityId:   complaint.id,
@@ -231,6 +232,7 @@ class ComplaintService {
     clientResponse:   string | undefined,
     acknowledgedById: string,
   ): Promise<ComplaintResponse> {
+    const companyName = (await getCompanyBranding()).company_name;
     const complaint = await prisma.clientComplaint.findUnique({
       where:  { id: complaintId },
       select: { id: true, direction: true, status: true, subject: true, sentById: true },
@@ -239,7 +241,7 @@ class ComplaintService {
 
     if (complaint.direction !== 'OUTBOUND') {
       throw new AppError(
-        `Only notices sent by ${COMPANY_NAME} can be acknowledged. This is a complaint you raised with us.`,
+        `Only notices sent by ${companyName} can be acknowledged. This is a complaint you raised with us.`,
         400,
       );
     }
@@ -413,6 +415,7 @@ class ComplaintService {
     data:         UpdateComplaintStatusInput,
     actingUserId: string,
   ): Promise<ComplaintResponse> {
+    const companyName = (await getCompanyBranding()).company_name;
     const complaint = await prisma.clientComplaint.findUnique({ where: { id: complaintId } });
     if (!complaint) throw new NotFoundError('Complaint not found');
 
@@ -420,7 +423,7 @@ class ComplaintService {
     // to a staff member, so this endpoint's rules do not apply to them.
     if (complaint.direction === 'OUTBOUND') {
       throw new AppError(
-        `This is a notice ${COMPANY_NAME} sent to a client. Close it with the resolve-notice action instead.`,
+        `This is a notice ${companyName} sent to a client. Close it with the resolve-notice action instead.`,
         400,
       );
     }

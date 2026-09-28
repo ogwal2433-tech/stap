@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Badge, Breadcrumb, Button, ButtonGroup, Col, Dropdown,
@@ -323,6 +323,7 @@ function LetterCard({ letter, canReview, onReview }: {
 }
 
 export default function GuardDetailPage() {
+  const { data: companyBranding } = useCompanyBranding();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -504,7 +505,7 @@ export default function GuardDetailPage() {
           <PermissionGuard permission="guards.view">
             <Button
               variant="outline-success"
-              onClick={() => exportGuardProfile(guard)}
+              onClick={() => exportGuardProfile(guard, new Date(), companyBranding.company_name)}
             >
               📊 Export Details
             </Button>
@@ -890,7 +891,7 @@ export default function GuardDetailPage() {
                   </Col>
                 )}
               </Row>
-              <div className="fw-semibold small text-muted text-uppercase mb-2">{COMPANY_NAME} Contract</div>
+              <div className="fw-semibold small text-muted text-uppercase mb-2">{companyBranding.company_name} Contract</div>
               <Row className="g-3">
                 {([
                   ['Contract Start', new Date(guard.contractStart).toLocaleDateString()],

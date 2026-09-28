@@ -193,10 +193,57 @@ import { groupView, saveGroup, xcelConfig } from '../services/integrationSetting
 import { verifyMailer } from '../lib/mailer';
 import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
+import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey } from '@stap/shared';
+import { COMPANY_BRANDING_KEYS, type CompanyBrandingKey } from '@stap/shared';
+import { getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
 
 const router: IRouter = Router();
 
 router.use(authenticate);
+
+const reportKeyParam = (raw: string): ReportKey => {
+  if (!REPORT_KEYS.includes(raw as ReportKey)) throw new AppError(`Unknown report key "${raw}". Valid keys: ${REPORT_KEYS.join(', ')}`, 400);
+  return raw as ReportKey;
+};
+router.get('/company-branding', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await getCompanyBranding() });
+}));
+router.patch('/company-branding', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await updateCompanyBranding(req.body, req.user!.userId) });
+}));
+router.post('/company-branding/reset', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  const keys = req.body?.keys ?? COMPANY_BRANDING_KEYS;
+  if (!Array.isArray(keys) || keys.some((key) => !COMPANY_BRANDING_KEYS.includes(key as CompanyBrandingKey))) {
+    throw new AppError('keys must contain valid company branding keys.', 400);
+  }
+  res.json({ success: true, data: await resetCompanyBranding(keys as CompanyBrandingKey[], req.user!.userId) });
+}));
+router.get('/report-titles', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await settingsService.getReportTitles() });
+}));
+router.get('/report-titles/email-prefix', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await settingsService.getScheduledReportEmailPrefix() });
+}));
+router.patch('/report-titles/email-prefix', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  const prefix = z.string().trim().min(1).parse(req.body.prefix);
+  res.json({ success: true, data: await settingsService.updateScheduledReportEmailPrefix(prefix, req.user!.userId) });
+}));
+router.get('/report-titles/:key', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await settingsService.getReportTitle(reportKeyParam(req.params.key)) });
+}));
+router.patch('/report-titles/:key', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  const key = reportKeyParam(req.params.key);
+  const config = ReportTitleConfigPatchSchema.parse(req.body);
+  res.json({ success: true, data: await settingsService.updateReportTitles({ [key]: config }, req.user!.userId) });
+}));
+router.put('/report-titles', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await settingsService.updateReportTitles(req.body, req.user!.userId) });
+}));
+router.post('/report-titles/reset', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  const data = req.body?.key ? await settingsService.resetReportTitle(reportKeyParam(req.body.key), req.user!.userId)
+    : await settingsService.resetAllReportTitles(req.user!.userId);
+  res.json({ success: true, data });
+}));
 
 // ── System Settings ────────────────────────────────────────────────────────────
 

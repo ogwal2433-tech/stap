@@ -1,5 +1,4 @@
 import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
-import { COMPANY_NAME } from '../config/branding';
 import { companyProfile } from './integrationSettings';
 import { invoicePrefix } from '../lib/systemId';
 import prisma from '../db/prisma';
@@ -8,6 +7,7 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import { yoPayments } from '../lib/yoPayments';
 import { sendEmail } from '../lib/mailer';
 import { buildInvoiceEmail } from '../lib/templates/invoiceEmail';
+import { settingsService } from './settingsService';
 import { renderToPdf } from '../lib/pdfBase';
 import { buildInvoiceHtml } from '../lib/templates/invoicePdf';
 import type {
@@ -371,7 +371,7 @@ class InvoiceService {
     if (client.email) {
       await QueueService.sendEmail({
         to:       client.email,
-        subject:  `Invoice ${invoiceNumber} from ${COMPANY_NAME}`,
+        subject:  `Invoice ${invoiceNumber} from {{company_name}}`,
         template: 'invoice',
         data: {
           invoiceNumber,
@@ -645,7 +645,8 @@ class InvoiceService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice));
+    const invoiceTitle = await settingsService.getReportTitle('invoice');
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title));
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
 
@@ -708,7 +709,7 @@ class InvoiceService {
     const resp = await yoPayments.requestPayment({
       amount:            invoice.totalAmount,
       msisdn,
-      narrative:         `Invoice ${invoice.invoiceNumber} — ${COMPANY_NAME}`,
+      narrative:         `Invoice ${invoice.invoiceNumber} — ${(await companyProfile()).name}`,
       internalReference: `${prefix}-INV-${invoice.id}`,
     });
 
@@ -756,6 +757,8 @@ class InvoiceService {
           },
         ];
 
+    const invoiceTitle = await settingsService.getReportTitle('invoice');
+    const company = await companyProfile();
     const html = buildInvoiceEmail({
       clientName:    invoice.client.clientName,
       invoiceNumber: invoice.invoiceNumber,
@@ -766,12 +769,13 @@ class InvoiceService {
       tax:           invoice.taxAmount,
       totalAmount:   invoice.totalAmount,
       currency:      'UGX',
-      company:       await companyProfile(),
+      company,
+      title:         invoiceTitle.title,
     });
 
     await sendEmail({
       to:      recipientEmail,
-      subject: `Invoice ${invoice.invoiceNumber} — ${COMPANY_NAME} — Due ${new Date(invoice.dueDate).toLocaleDateString('en-GB')}`,
+      subject: `Invoice ${invoice.invoiceNumber} — ${company.name} — Due ${new Date(invoice.dueDate).toLocaleDateString('en-GB')}`,
       html,
     });
 

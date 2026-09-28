@@ -133,36 +133,7 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
   },
 
   // ── Company details ─────────────────────────────────────────────────────────
-  // How clients reach the business. Printed on invoices, letters and ID cards.
-  //
-  // The company's *name* is deliberately not here: it already lives as the
-  // `company_name` system setting that HR letter templates substitute, and
-  // falls back to the COMPANY_NAME branding variable. A third copy would be a
-  // third thing to keep in step.
-  {
-    key: 'company.email', group: 'company', label: 'Contact email',
-    description: 'Where clients are told to send queries about an invoice or a notice.',
-    inputType: 'email', isEncrypted: false, isRequired: false,
-    placeholder: 'accounts@example.com', envFallback: 'COMPANY_EMAIL',
-  },
-  {
-    key: 'company.phone', group: 'company', label: 'Contact phone',
-    description: 'Printed on the letterhead and the payment-details slip.',
-    inputType: 'text', isEncrypted: false, isRequired: false,
-    placeholder: '+256 700 000 000', envFallback: 'COMPANY_PHONE',
-  },
-  {
-    key: 'company.website', group: 'company', label: 'Website',
-    description: 'Printed on the letterhead footer.',
-    inputType: 'text', isEncrypted: false, isRequired: false,
-    placeholder: 'www.example.com', envFallback: 'COMPANY_WEBSITE',
-  },
-  {
-    key: 'company.address', group: 'company', label: 'Postal address',
-    description: 'One line, as it should read under the company name.',
-    inputType: 'text', isEncrypted: false, isRequired: false,
-    placeholder: 'Kampala, Uganda', envFallback: 'COMPANY_ADDRESS',
-  },
+  // Legacy contact rows move to the canonical company_* settings during profile resolution.
   {
     key: 'company.whatsapp', group: 'company', label: 'WhatsApp number',
     description: 'Shown beside the phone number on the letterhead. Left blank, the icon is omitted.',

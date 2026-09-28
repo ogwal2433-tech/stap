@@ -16,9 +16,35 @@ import type {
   ShiftTypeResponse,
   CreateShiftTypeInput,
   UpdateShiftTypeInput,
+  ReportKey, ReportTitleConfig, ReportTitlesMap,
+  CompanyBranding, CompanyBrandingKey,
 } from '@stap/shared';
 
 export const settingsApi = {
+  getCompanyBranding(): Promise<CompanyBranding> {
+    return api.get<{ data: CompanyBranding }>('/settings/company-branding').then(r => r.data.data);
+  },
+  updateCompanyBranding(values: Partial<CompanyBranding>): Promise<CompanyBranding> {
+    return api.patch<{ data: CompanyBranding }>('/settings/company-branding', values).then(r => r.data.data);
+  },
+  resetCompanyBranding(keys?: CompanyBrandingKey[]): Promise<CompanyBranding> {
+    return api.post<{ data: CompanyBranding }>('/settings/company-branding/reset', keys ? { keys } : {}).then(r => r.data.data);
+  },
+  getReportTitles(): Promise<ReportTitlesMap> {
+    return api.get<{ data: ReportTitlesMap }>('/settings/report-titles').then(r => r.data.data);
+  },
+  updateReportTitle(key: ReportKey, config: Partial<ReportTitleConfig>): Promise<ReportTitlesMap> {
+    return api.patch<{ data: ReportTitlesMap }>(`/settings/report-titles/${key}`, config).then(r => r.data.data);
+  },
+  resetReportTitle(key?: ReportKey): Promise<ReportTitlesMap> {
+    return api.post<{ data: ReportTitlesMap }>('/settings/report-titles/reset', key ? { key } : {}).then(r => r.data.data);
+  },
+  getReportEmailPrefix(): Promise<string> {
+    return api.get<{ data: string }>('/settings/report-titles/email-prefix').then(r => r.data.data);
+  },
+  updateReportEmailPrefix(prefix: string): Promise<string> {
+    return api.patch<{ data: string }>('/settings/report-titles/email-prefix', { prefix }).then(r => r.data.data);
+  },
   getAll(): Promise<SystemSettingResponse[]> {
     return api
       .get<{ success: boolean; data: SystemSettingResponse[] }>('/settings')

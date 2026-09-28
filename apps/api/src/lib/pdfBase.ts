@@ -29,7 +29,7 @@ async function getBrowser(): Promise<Browser> {
 
 // ── Logo loader ────────────────────────────────────────────────────────────────
 
-function getLogoBase64(): string {
+function getEmbeddedLogoBase64(): string {
   const candidates: Array<[string, string]> = [
     [path.resolve(__dirname, '../assets/logo.png'),                    'image/png'],
     [path.resolve(__dirname, '../../../../logo-removebg-preview.png'), 'image/png'],
@@ -45,6 +45,33 @@ function getLogoBase64(): string {
   }
   console.warn('[PDF] No logo file found — header will use text-only fallback');
   return '';
+}
+
+export async function resolveLogoBase64(
+  logoUrl: string,
+  fallback: () => string = getEmbeddedLogoBase64,
+): Promise<string> {
+  const url = logoUrl.trim();
+  if (!url) return fallback();
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return fallback();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(parsed, { signal: controller.signal });
+      if (!response.ok) return fallback();
+      const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+      if (!contentType || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(contentType)) return fallback();
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!bytes.length || bytes.length > 5 * 1024 * 1024) return fallback();
+      return `data:${contentType};base64,${bytes.toString('base64')}`;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    return fallback();
+  }
 }
 
 // ── Watermark loader ───────────────────────────────────────────────────────────
@@ -253,7 +280,7 @@ export function wrapContent(
 
 export async function buildPreviewHtml(contentHtml: string): Promise<string> {
   const company         = await companyProfile();
-  const logoBase64      = getLogoBase64();
+  const logoBase64      = await resolveLogoBase64(company.logoUrl);
   const watermarkBase64 = getWatermarkBase64();
   const header          = buildHeaderHtml(logoBase64, company);
   const footer          = buildFooterHtml();
@@ -332,7 +359,7 @@ export async function renderToPdf(
   opts?: PdfRenderOptions,
 ): Promise<Buffer> {
   const company    = await companyProfile();
-  const logoBase64 = getLogoBase64();
+  const logoBase64 = await resolveLogoBase64(company.logoUrl);
   const html       = wrapContent(
     contentHtml,
     buildHeaderHtml(logoBase64, company),

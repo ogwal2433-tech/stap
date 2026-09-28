@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/settingsEncryption';
 import { SETTINGS_CONFIG, definitionFor, type SettingsGroup } from '../constants/settingsConfig';
-import { COMPANY_NAME } from '../config/branding';
+import { getCompanyBranding } from './companyBrandingService';
 import { AppError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
 
@@ -75,9 +75,13 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export interface CompanyProfile {
-  /** Legal entity. Falls back to the deployment's COMPANY_NAME branding. */
+  /** Legal entity, resolved from the shared defaults and SystemSetting override. */
   name:      string;
   nameUpper: string;
+  shortName: string;
+  logoUrl: string;
+  registrationNumber: string;
+  taxId: string;
   email:     string | null;
   phone:     string | null;
   whatsapp:  string | null;
@@ -91,12 +95,8 @@ export interface CompanyProfile {
 /**
  * The company as it should appear on anything printed or posted.
  *
- * Saved in Settings → Company details, falling back to the environment and
- * finally to the branding defaults, so a deployment that has configured
- * nothing still prints a name rather than a blank letterhead.
- *
- * Contacts have no fallback on purpose: a wrong address on an invoice is worse
- * than none, so an unset one is omitted from the document instead of guessed.
+ * Each field resolves from a SystemSetting override and then the shared
+ * company defaults. Empty company names therefore never reach a document.
  */
 export async function companyProfile(): Promise<CompanyProfile> {
   const all = await resolveAll();
@@ -108,17 +108,21 @@ export async function companyProfile(): Promise<CompanyProfile> {
   // The registered name has a home already: the `company_name` system setting
   // the HR letter templates substitute. Read it here rather than keeping a
   // second copy, falling back to this deployment's branding.
-  const stored = await prisma.systemSetting.findUnique({ where: { key: 'company_name' } });
-  const name = (stored?.value?.trim() || COMPANY_NAME);
+  const branding = await getCompanyBranding();
+  const name = branding.company_name;
 
   return {
     name,
     nameUpper: name.toUpperCase(),
-    email:     val('company.email'),
-    phone:     val('company.phone'),
+    shortName: branding.company_short_name,
+    logoUrl: branding.company_logo_url,
+    registrationNumber: branding.company_registration_number,
+    taxId: branding.company_tax_id,
+    email:     branding.company_email || null,
+    phone:     branding.company_phone || null,
     whatsapp:  val('company.whatsapp'),
-    website:   val('company.website'),
-    address:   val('company.address'),
+    website:   branding.company_website || null,
+    address:   branding.company_address || null,
     facebook:  val('company.facebook'),
     instagram: val('company.instagram'),
     twitter:   val('company.twitter'),
