@@ -30,11 +30,11 @@ export function buildInvoiceHtml(invoice: any): string {
 
   const rows = (invoice.lineItems ?? []).map((li: any, i: number) => `
     <tr style="background:${i % 2 === 0 ? '#ffffff' : '#F8F9FA'}">
-      <td style="padding:7px 10px;border-bottom:1px solid #e9ecef">${esc(li.description)}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #e9ecef;text-align:center">${li.guardsCount}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #e9ecef;text-align:right">${ugx(li.ratePerGuard)}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #e9ecef;text-align:center">${li.days}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #e9ecef;text-align:right;font-weight:600">${ugx(li.amount)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e9ecef">${esc(li.description)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e9ecef;text-align:center">${li.guardsCount}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e9ecef;text-align:right">${ugx(li.ratePerGuard)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e9ecef;text-align:center">${li.days}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e9ecef;text-align:right;font-weight:600">${ugx(li.amount)}</td>
     </tr>`).join('');
 
   const paid        = invoice.paidAmount ?? 0;
@@ -42,18 +42,18 @@ export function buildInvoiceHtml(invoice: any): string {
 
   const paymentRows = (invoice.payments ?? []).map((p: any) => `
     <tr>
-      <td style="padding:5px 10px;border-bottom:1px solid #f0f0f0">${fmtDate(p.createdAt)}</td>
-      <td style="padding:5px 10px;border-bottom:1px solid #f0f0f0">${esc(p.mode)}</td>
-      <td style="padding:5px 10px;border-bottom:1px solid #f0f0f0">${esc(p.referenceNumber ?? '—')}</td>
-      <td style="padding:5px 10px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${fmtDate(p.createdAt)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(p.mode)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(p.referenceNumber ?? '—')}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
     </tr>`).join('');
 
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3">
 
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
-        <div style="font-size:17pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">INVOICE</div>
+        <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">INVOICE</div>
         <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(invoice.invoiceNumber)}</div>
       </div>
       <div style="text-align:right">
@@ -64,19 +64,19 @@ export function buildInvoiceHtml(invoice: any): string {
       </div>
     </div>
 
-    <table style="width:100%;border-collapse:collapse;background:#F2F4F7;border-left:3px solid ${AMBER};margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse;background:#F2F4F7;border-left:3px solid ${AMBER};margin-bottom:10px">
       <tr>
-        <td style="padding:10px 12px;vertical-align:top;width:40%">
+        <td style="padding:6px 10px;vertical-align:top;width:40%">
           <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px">Bill To</div>
           <div style="font-weight:700;color:${NAVY};font-size:10.5pt">${esc(invoice.client?.clientName)}</div>
           ${invoice.client?.physicalAddress ? `<div style="font-size:8.5pt;color:#4A5568">${esc(invoice.client.physicalAddress)}</div>` : ''}
           ${invoice.client?.email ? `<div style="font-size:8.5pt;color:#4A5568">${esc(invoice.client.email)}</div>` : ''}
         </td>
-        <td style="padding:10px 12px;vertical-align:top">
+        <td style="padding:6px 10px;vertical-align:top">
           <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px">Billing Period</div>
           <div style="font-weight:600">${fmtDate(invoice.periodStart)} — ${fmtDate(invoice.periodEnd)}</div>
         </td>
-        <td style="padding:10px 12px;vertical-align:top">
+        <td style="padding:6px 10px;vertical-align:top">
           <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px">Due Date</div>
           <div style="font-weight:600">${fmtDate(invoice.dueDate)}</div>
         </td>
@@ -86,11 +86,11 @@ export function buildInvoiceHtml(invoice: any): string {
     <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
       <thead>
         <tr style="background:${NAVY};color:#ffffff">
-          <th style="padding:8px 10px;text-align:left;font-size:8.5pt">Description</th>
-          <th style="padding:8px 10px;text-align:center;font-size:8.5pt;width:60px">Guards</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8.5pt;width:110px">Rate / Guard</th>
-          <th style="padding:8px 10px;text-align:center;font-size:8.5pt;width:50px">Days</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8.5pt;width:120px">Amount</th>
+          <th style="padding:5px 8px;text-align:left;font-size:8pt">Description</th>
+          <th style="padding:5px 8px;text-align:center;font-size:8pt;width:60px">Guards</th>
+          <th style="padding:5px 8px;text-align:right;font-size:8pt;width:110px">Rate / Guard</th>
+          <th style="padding:5px 8px;text-align:center;font-size:8pt;width:50px">Days</th>
+          <th style="padding:5px 8px;text-align:right;font-size:8pt;width:120px">Amount</th>
         </tr>
       </thead>
       <tbody>
@@ -98,22 +98,28 @@ export function buildInvoiceHtml(invoice: any): string {
       </tbody>
     </table>
 
-    <table style="width:100%;border-collapse:collapse;margin-top:10px">
+    <table style="width:100%;border-collapse:collapse;margin-top:8px">
       <tr>
         <td style="width:55%"></td>
-        <td style="padding:4px 10px;text-align:right;color:#6c757d">Subtotal</td>
-        <td style="padding:4px 10px;text-align:right;width:130px">${ugx(invoice.totalAmount)}</td>
+        <td style="padding:4px 8px;text-align:right;color:#6c757d">Subtotal</td>
+        <td style="padding:4px 8px;text-align:right;width:130px">${ugx(invoice.subtotal ?? invoice.totalAmount)}</td>
       </tr>
+      ${(invoice.taxAmount ?? 0) > 0 ? `
+      <tr>
+        <td></td>
+        <td style="padding:4px 8px;text-align:right;color:#6c757d">Tax</td>
+        <td style="padding:4px 8px;text-align:right">${ugx(invoice.taxAmount)}</td>
+      </tr>` : ''}
       ${paid > 0 ? `
       <tr>
         <td></td>
-        <td style="padding:4px 10px;text-align:right;color:#6c757d">Paid to date</td>
-        <td style="padding:4px 10px;text-align:right;color:#1E8449;font-weight:600">− ${ugx(paid)}</td>
+        <td style="padding:4px 8px;text-align:right;color:#6c757d">Paid to date</td>
+        <td style="padding:4px 8px;text-align:right;color:#1E8449;font-weight:600">− ${ugx(paid)}</td>
       </tr>` : ''}
       <tr style="background:${NAVY};color:#ffffff">
         <td></td>
-        <td style="padding:9px 10px;text-align:right;font-weight:700;font-size:11pt">Balance Due</td>
-        <td style="padding:9px 10px;text-align:right;font-weight:900;font-size:11pt;color:${AMBER}">${ugx(outstanding)}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:700;font-size:10.5pt">Balance Due</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:900;font-size:10.5pt;color:${AMBER}">${ugx(outstanding)}</td>
       </tr>
     </table>
 
@@ -126,24 +132,24 @@ export function buildInvoiceHtml(invoice: any): string {
     </div>` : ''}
 
     ${paymentRows ? `
-    <div style="margin-top:18px">
+    <div style="margin-top:14px;page-break-inside:avoid">
       <div style="font-size:8.5pt;font-weight:700;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">
         Payments Received
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:9pt">
         <thead>
           <tr style="background:#F2F4F7">
-            <th style="padding:5px 10px;text-align:left">Date</th>
-            <th style="padding:5px 10px;text-align:left">Method</th>
-            <th style="padding:5px 10px;text-align:left">Reference</th>
-            <th style="padding:5px 10px;text-align:right">Amount</th>
+            <th style="padding:4px 8px;text-align:left">Date</th>
+            <th style="padding:4px 8px;text-align:left">Method</th>
+            <th style="padding:4px 8px;text-align:left">Reference</th>
+            <th style="padding:4px 8px;text-align:right">Amount</th>
           </tr>
         </thead>
         <tbody>${paymentRows}</tbody>
       </table>
     </div>` : ''}
 
-    <div style="margin-top:20px;padding-top:10px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
+    <div style="margin-top:12px;padding-top:8px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
       Thank you for your business. Please quote invoice ${esc(invoice.invoiceNumber)} with your payment.
     </div>
   </div>`;

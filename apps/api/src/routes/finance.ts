@@ -154,6 +154,7 @@ import {
   HR_ROLES,
   CreateInvoiceSchema,
   GenerateInvoiceSchema,
+  UpdateInvoiceSchema,
   RecordPaymentSchema,
   AddFeeIncrementSchema,
   CreateDeductionSchema,
@@ -234,6 +235,20 @@ router.get(
   requireRole(...FINANCE_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.getById(req.params.id);
+    res.json({ success: true, data: invoice });
+  }),
+);
+
+// ── PATCH /invoices/:id — edit a still-PENDING invoice ────────────────────────
+// Dates only, or dates plus a wholesale replacement of the line items.
+// The service refuses anything past PENDING; corrections there go through
+// Add Fees or void-and-reissue instead.
+router.patch(
+  '/invoices/:id',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  validate(UpdateInvoiceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.update(req.params.id, req.body, req.user!.userId);
     res.json({ success: true, data: invoice });
   }),
 );

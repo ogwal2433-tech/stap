@@ -19,8 +19,10 @@ import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import FeeIncrementModal from '../../components/finance/FeeIncrementModal';
+import InvoiceViewModal from '../../components/finance/InvoiceViewModal';
+import InvoiceEditModal from '../../components/finance/InvoiceEditModal';
+import InvoiceActionsMenu from '../../components/finance/InvoiceActionsMenu';
 import VoidInvoiceModal from '../../components/finance/VoidInvoiceModal';
-import PermissionGuard from '../../components/PermissionGuard';
 import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
@@ -140,6 +142,8 @@ function InvoicesTab() {
   };
   const [payMoMo,       setPayMoMo]       = useState<InvoiceResponse | null>(null);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceResponse | null>(null);
+  const [viewInvoice,   setViewInvoice]   = useState<InvoiceResponse | null>(null);
+  const [editInvoice,   setEditInvoice]   = useState<InvoiceResponse | null>(null);
   const [sendingId,     setSendingId]     = useState<string | null>(null);
   const { data, isLoading }               = useInvoices();
   const { showToast }                     = useToast();
@@ -256,64 +260,22 @@ function InvoicesTab() {
                   )}
                 </td>
                 <td>
-                  <div className="d-flex gap-1 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant="outline-secondary"
-                      disabled={pdfId === inv.id}
-                      onClick={() => handleOpenPdf(inv)}
-                      title="Open a printable PDF of this invoice"
-                    >
-                      {pdfId === inv.id
-                        ? <><Spinner size="sm" animation="border" className="me-1" />Preparing…</>
-                        : '🖨️ Print / PDF'}
-                    </Button>
-                    <Button size="sm" variant="outline-secondary" onClick={() => setHistoryInvoice(inv)} title="View payment history">
-                      History
-                    </Button>
-                    <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                      <Button
-                        size="sm"
-                        variant={inv.emailSentAt ? 'outline-secondary' : 'outline-primary'}
-                        disabled={!!inv.emailSentAt || sendingId === inv.id || inv.status === 'VOID'}
-                        onClick={() => handleSendEmail(inv)}
-                        title={inv.emailSentAt ? `Sent to ${inv.emailSentTo} on ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}` : 'Send invoice by email'}
-                      >
-                        {sendingId === inv.id ? (
-                          <><Spinner size="sm" animation="border" className="me-1" />Sending…</>
-                        ) : inv.emailSentAt ? (
-                          `✅ Sent ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}`
-                        ) : (
-                          '📧 Send'
-                        )}
-                      </Button>
-                    </RoleGuard>
-                    {inv.status !== 'PAID' && inv.status !== 'VOID' && (
-                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                        <Button size="sm" variant="outline-warning" onClick={() => setIncrementInvoice(inv)} title="Charge for extra guards on this invoice">
-                          ➕ Add Fees
-                        </Button>
-                      </RoleGuard>
-                    )}
-                    {['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(inv.status) && (
-                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                        <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
-                          Record Payment
-                        </Button>
-                        <Button size="sm" variant="outline-primary" onClick={() => setPayMoMo(inv)} title="Pay via MTN/Airtel Mobile Money">
-                          💳 Mobile Money
-                        </Button>
-                      </RoleGuard>
-                    )}
-                    {/* Only while nothing has been received — the server refuses otherwise. */}
-                    {['PENDING', 'OVERDUE'].includes(inv.status) && inv.paidAmount === 0 && (
-                      <PermissionGuard permission="invoices.void">
-                        <Button size="sm" variant="outline-dark" onClick={() => setVoidTarget(inv)} title="Void — the invoice stays on file marked VOID">
-                          Void
-                        </Button>
-                      </PermissionGuard>
-                    )}
-                  </div>
+                  <InvoiceActionsMenu
+                    invoice={inv}
+                    pdfBusy={pdfId === inv.id}
+                    sendBusy={sendingId === inv.id}
+                    actions={{
+                      onView:          () => setViewInvoice(inv),
+                      onEdit:          () => setEditInvoice(inv),
+                      onPdf:           () => handleOpenPdf(inv),
+                      onHistory:       () => setHistoryInvoice(inv),
+                      onSend:          () => handleSendEmail(inv),
+                      onAddFees:       () => setIncrementInvoice(inv),
+                      onRecordPayment: () => setPayInvoice(inv),
+                      onMobileMoney:   () => setPayMoMo(inv),
+                      onVoid:          () => setVoidTarget(inv),
+                    }}
+                  />
                 </td>
               </tr>
             ))}
@@ -359,6 +321,18 @@ function InvoicesTab() {
         <InvoicePaymentHistoryModal
           invoice={historyInvoice}
           onClose={() => setHistoryInvoice(null)}
+        />
+      )}
+      {viewInvoice && (
+        <InvoiceViewModal
+          invoice={viewInvoice}
+          onClose={() => setViewInvoice(null)}
+        />
+      )}
+      {editInvoice && (
+        <InvoiceEditModal
+          invoice={editInvoice}
+          onClose={() => setEditInvoice(null)}
         />
       )}
     </>

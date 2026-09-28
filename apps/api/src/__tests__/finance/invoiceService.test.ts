@@ -25,6 +25,15 @@ vi.mock('../../lib/yoPayments', () => ({
   yoPayments: { requestPayment: vi.fn().mockResolvedValue({ success: true, transactionRef: 'YO-STUB', status: 'PENDING', message: 'ok' }) },
 }));
 
+// Puppeteer must never launch in tests — stub the letterhead renderer and keep
+// the HTML and options it was handed, so the invoice's branding choices are
+// pinned (a refactor that silently reverts to the watermarked STAP header
+// would otherwise pass unnoticed).
+const mockRenderToPdf = vi.fn().mockResolvedValue(Buffer.from('%PDF-1.4 stub'));
+vi.mock('../../lib/pdfBase', () => ({
+  renderToPdf: (html: string, opts: unknown) => mockRenderToPdf(html, opts),
+}));
+
 import prisma from '../../db/prisma';
 import { QueueService } from '../../jobs/QueueService';
 import { invoiceService } from '../../services/invoiceService';
@@ -269,5 +278,55 @@ describe('invoiceService.getARAgingReport()', () => {
     expect(mp.invoice.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'OVERDUE' } }),
     );
+  });
+});
+
+// ── buildInvoicePdf() — letterhead identity ───────────────────────────────────
+
+describe('invoiceService.buildInvoicePdf()', () => {
+  it('prints on the tiger logo band with no watermark, like the payroll schedule', async () => {
+    await invoiceService.buildInvoicePdf('inv-1');
+
+    expect(mockRenderToPdf.mock.calls[0][1]).toEqual({
+      logoFile:  'tiger_logo.jpeg',
+      watermark: false,
+      logoOnly:  true,
+    });
+  });
+
+  it('keeps the invoice title, number and subtotal in the body', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      subtotal:    2400000,
+      taxAmount:   0,
+      totalAmount: 2400000,
+      lineItems: [
+        { description: 'Unarmed Guard', guardsCount: 3, ratePerGuard: 800000, days: 1, amount: 2400000 },
+      ],
+    });
+
+    await invoiceService.buildInvoicePdf('inv-1');
+    const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+    expect(html).toContain('INVOICE');
+    expect(html).toContain('STAP/INV/2026/0001');
+    expect(html).toContain('Unarmed Guard');
+    // Subtotal reads the stored subtotal, not the invoice total.
+    expect(html).toContain('UGX 2,400,000</td>');
+  });
+
+  it('escapes client-supplied text rather than embedding it as markup', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      client:     { clientName: '<script>evil</script>' },
+      lineItems:  [{ description: 'A & B <b>cover</b>', guardsCount: 1, ratePerGuard: 1, days: 1, amount: 1 }],
+    });
+
+    await invoiceService.buildInvoicePdf('inv-1');
+    const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+    expect(html).not.toContain('<script>evil</script>');
+    expect(html).toContain('&lt;script&gt;evil&lt;/script&gt;');
+    expect(html).toContain('A &amp; B &lt;b&gt;cover&lt;/b&gt;');
   });
 });

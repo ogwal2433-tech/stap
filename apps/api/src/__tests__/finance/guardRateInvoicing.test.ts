@@ -5,8 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../db/prisma', () => ({
   default: {
     invoice:   { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    invoiceLineItem: { deleteMany: vi.fn(), createMany: vi.fn() },
+    // update() runs its edits through a transaction; tests drive it with a stub tx.
+    $transaction: vi.fn(),
     contract:  { findUnique: vi.fn() },
-    payment:   { create: vi.fn() },
+    payment:   { create: vi.fn(), aggregate: vi.fn() },
     client:    { findUnique: vi.fn() },
     invoicePayment:      { aggregate: vi.fn() },
     invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
@@ -82,6 +85,12 @@ beforeEach(() => {
   mp.invoice.count.mockResolvedValue(0);
   // No unpaid balances carried from earlier invoices unless a test says so.
   mp.invoiceCarryForward.findMany.mockResolvedValue([]);
+  // Nothing received on an invoice, so a recompute leaves it fully outstanding.
+  mp.payment.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } });
+  mp.invoicePayment.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } });
+  // Drive $transaction with a stub tx sharing the top-level write mocks.
+  mp.$transaction.mockImplementation(async (fn: (tx: any) => Promise<void>) =>
+    fn({ invoice: mp.invoice, invoiceLineItem: mp.invoiceLineItem }));
 });
 
 // ── getInvoicePreview() ────────────────────────────────────────────────────────
@@ -310,5 +319,140 @@ describe('preview totalAmount consistency', () => {
 
     const expectedTotal = preview.lineItems.reduce((s, li) => s + li.lineTotal, 0);
     expect(preview.totalAmount).toBe(expectedTotal);
+  });
+});
+
+// ── generateInvoice() without a contract ──────────────────────────────────────
+
+describe('generateInvoice() — contract-less manual lines', () => {
+  const MANUAL_BASE = {
+    billingPeriodStart: '2026-09-01T00:00:00.000Z',
+    billingPeriodEnd:   '2026-09-30T00:00:00.000Z',
+    billingDays:        30,
+  };
+
+  it('bills a client directly from manually captured lines', async () => {
+    mp.client.findUnique.mockResolvedValue({ id: 'client-1' });
+    const createdLineItems = [
+      { id: 'li-1', guardId: null, description: 'Event cover', guardsCount: 3, ratePerGuard: 20000, days: 5, amount: 300000, createdAt: new Date() },
+    ];
+    mp.invoice.create.mockResolvedValue(makeInvoice(createdLineItems));
+
+    await invoiceService.generateInvoice(
+      {
+        ...MANUAL_BASE,
+        clientId: 'client-1',
+        lineItemOverrides: [{ guardType: 'Event cover', count: 3, ratePerGuard: 20000, billingDays: 5 }],
+      },
+      'user-1',
+    );
+
+    const createCall = mp.invoice.create.mock.calls[0][0];
+    expect(createCall.data.clientId).toBe('client-1');
+    expect(createCall.data.contractId).toBeNull();
+    expect(createCall.data.lineItems.create[0].description).toBe('Event cover');
+    expect(createCall.data.totalAmount).toBe(3 * 20000 * 5);
+    // No contract anywhere on this path — not even a lookup.
+    expect(mp.contract.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the client does not exist', async () => {
+    mp.client.findUnique.mockResolvedValue(null);
+
+    await expect(
+      invoiceService.generateInvoice(
+        {
+          ...MANUAL_BASE,
+          clientId: 'ghost-client',
+          lineItemOverrides: [{ guardType: 'Event cover', count: 1, ratePerGuard: 20000, billingDays: 1 }],
+        },
+        'user-1',
+      ),
+    ).rejects.toThrow('Client not found');
+  });
+
+  it('rejects when no manual lines are provided', async () => {
+    await expect(
+      invoiceService.generateInvoice({ ...MANUAL_BASE, clientId: 'client-1' }, 'user-1'),
+    ).rejects.toThrow(/manually captured line items/);
+  });
+});
+
+// ── update() — editing a still-PENDING invoice ────────────────────────────────
+
+describe('update() — pending invoice edits', () => {
+  /** The invoice.update() call that carries the edit itself, not the recompute. */
+  const editCall = () =>
+    mp.invoice.update.mock.calls.map((c: any[]) => c[0]).find((c: any) => c.data.subtotal !== undefined);
+
+  it('replaces the line items wholesale and recomputes the totals', async () => {
+    mp.invoice.findUnique.mockResolvedValue(makeInvoice([
+      { id: 'li-old', description: 'Old line', guardsCount: 1, ratePerGuard: 1000, days: 1, amount: 1000 },
+    ]));
+
+    await invoiceService.update('inv-1', {
+      periodStart: '2026-06-01T00:00:00.000Z',
+      periodEnd:   '2026-06-30T00:00:00.000Z',
+      dueDate:     '2026-07-15T00:00:00.000Z',
+      lineItems: [
+        { description: 'Armed Guard', guardsCount: 2, ratePerGuard: 15000, days: 10 },
+        { description: 'Unarmed Guard', guardsCount: 1, ratePerGuard: 10000, days: 10 },
+      ],
+    }, 'user-1');
+
+    // Wholesale replacement: every old row goes before the new ones land.
+    expect(mp.invoiceLineItem.deleteMany).toHaveBeenCalledWith({ where: { invoiceId: 'inv-1' } });
+    const rows = mp.invoiceLineItem.createMany.mock.calls[0][0].data;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].amount).toBe(2 * 15000 * 10);
+    expect(rows[0].guardId).toBeNull();
+
+    const expectedSubtotal = (2 * 15000 * 10) + (1 * 10000 * 10);
+    const call = editCall();
+    expect(call.data.subtotal).toBe(expectedSubtotal);
+    expect(call.data.totalAmount).toBe(expectedSubtotal);
+    // PENDING means nothing received, so the whole total is still outstanding.
+    expect(call.data.outstandingBalance).toBe(expectedSubtotal);
+    expect(call.data.guardsDeployed).toBe(3);
+  });
+
+  it('leaves the line items alone when only dates are sent', async () => {
+    mp.invoice.findUnique.mockResolvedValue(makeInvoice([]));
+
+    await invoiceService.update('inv-1', { dueDate: '2026-08-01T00:00:00.000Z' }, 'user-1');
+
+    expect(mp.invoiceLineItem.deleteMany).not.toHaveBeenCalled();
+    expect(mp.invoiceLineItem.createMany).not.toHaveBeenCalled();
+    expect(mp.$transaction).toHaveBeenCalledTimes(1);
+
+    const call = mp.invoice.update.mock.calls.map((c: any[]) => c[0])
+      .find((c: any) => c.data.dueDate !== undefined && c.data.subtotal === undefined);
+    expect(call.data.dueDate).toEqual(new Date('2026-08-01T00:00:00.000Z'));
+    // Unsent dates fall back to the stored ones rather than being blanked.
+    expect(call.data.periodStart).toEqual(new Date('2026-06-01'));
+    expect(call.data.periodEnd).toEqual(new Date('2026-06-30'));
+  });
+
+  it('refuses an invoice that has already moved past PENDING', async () => {
+    mp.invoice.findUnique.mockResolvedValue({ ...makeInvoice([]), status: 'PARTIALLY_PAID' });
+
+    await expect(
+      invoiceService.update('inv-1', { dueDate: '2026-08-01T00:00:00.000Z' }, 'user-1'),
+    ).rejects.toThrow(/Only PENDING invoices can be edited/);
+
+    expect(mp.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('refuses a billing period that ends before it starts', async () => {
+    mp.invoice.findUnique.mockResolvedValue(makeInvoice([]));
+
+    await expect(
+      invoiceService.update('inv-1', {
+        periodStart: '2026-06-30T00:00:00.000Z',
+        periodEnd:   '2026-06-01T00:00:00.000Z',
+      }, 'user-1'),
+    ).rejects.toThrow(/start must be on or before its end/);
+
+    expect(mp.$transaction).not.toHaveBeenCalled();
   });
 });

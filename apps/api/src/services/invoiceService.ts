@@ -13,6 +13,7 @@ import { buildInvoiceHtml } from '../lib/templates/invoicePdf';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
+  UpdateInvoiceInput,
   RecordPaymentInput,
   AddFeeIncrementInput,
   InvoiceResponse,
@@ -229,7 +230,8 @@ class InvoiceService {
   async generateInvoice(data: GenerateInvoiceInput, generatedBy: string): Promise<InvoiceResponse> {
     const periodEnd = new Date(data.billingPeriodEnd);
     return this.generateInvoiceFromContract({
-      contractId:  data.contractId,
+      contractId:  data.contractId ?? null,
+      clientId:    data.clientId ?? null,
       periodStart: new Date(data.billingPeriodStart),
       periodEnd,
       dueDate:     periodEnd,
@@ -239,11 +241,14 @@ class InvoiceService {
     });
   }
 
-  /** Shared by the manual "Generate Invoice" flow and the billing-day cron — the
-   * contract's guard rate lines (via getInvoicePreview) are the only source of
-   * line items either way; lineItemOverrides carries the user-edited preview rows. */
+  /** Shared by the manual "Generate Invoice" flow and the billing-day cron —
+   * line items come from the caller's overrides (edited preview, or entirely
+   * manual lines for a client with no contract) or, failing that, from the
+   * contract's guard rate lines via getInvoicePreview. A contract is no longer
+   * mandatory: passing clientId with overrides bills a client directly. */
   private async generateInvoiceFromContract(params: {
-    contractId:  string;
+    contractId:  string | null;
+    clientId:    string | null;
     periodStart: Date;
     periodEnd:   Date;
     dueDate:     Date;
@@ -251,15 +256,40 @@ class InvoiceService {
     lineItemOverrides?: GenerateInvoiceInput['lineItemOverrides'];
     generatedBy: string;
   }): Promise<InvoiceResponse> {
-    const contract = await prisma.contract.findUnique({
-      where:  { id: params.contractId },
-      select: { clientId: true },
-    });
-    if (!contract) throw new NotFoundError('Contract not found');
+    // Two ways to know who is being billed: a contract names its client, or
+    // the caller bills a client directly with manually captured lines.
+    let clientId = params.clientId;
+    if (params.contractId) {
+      const contract = await prisma.contract.findUnique({
+        where:  { id: params.contractId },
+        select: { clientId: true },
+      });
+      if (!contract) throw new NotFoundError('Contract not found');
+      clientId = contract.clientId;
+    }
+    if (!clientId) throw new NotFoundError('Client not found');
 
-    const rawItems = params.lineItemOverrides?.length
-      ? params.lineItemOverrides
-      : (await this.getInvoicePreview(params.contractId, params.billingDays)).lineItems;
+    // Without a contract nothing upstream has proved the client exists, and
+    // the FK would only fail later as an opaque Prisma error.
+    if (!params.contractId) {
+      const client = await prisma.client.findUnique({
+        where:  { id: clientId },
+        select: { id: true },
+      });
+      if (!client) throw new NotFoundError('Client not found');
+    }
+
+    let rawItems: NonNullable<GenerateInvoiceInput['lineItemOverrides']>;
+    if (params.lineItemOverrides?.length) {
+      rawItems = params.lineItemOverrides;
+    } else if (params.contractId) {
+      rawItems = (await this.getInvoicePreview(params.contractId, params.billingDays)).lineItems;
+    } else {
+      throw new AppError(
+        'A contract-less invoice must carry manually captured line items.',
+        400,
+      );
+    }
 
     const lineItems = rawItems.map((li) => ({
       guardId:      null,
@@ -273,7 +303,7 @@ class InvoiceService {
     // Any balance left unpaid on an earlier invoice appears here as its own
     // line, so the client sees exactly what is being carried over.
     const carryForwards = await prisma.invoiceCarryForward.findMany({
-      where: { clientId: contract.clientId, toInvoiceId: null },
+      where: { clientId, toInvoiceId: null },
     });
 
     const allLineItems = [...lineItems];
@@ -293,7 +323,7 @@ class InvoiceService {
 
     const invoice = await prisma.invoice.create({
       data: {
-        clientId:       contract.clientId,
+        clientId,
         contractId:     params.contractId,
         invoiceNumber,
         periodStart:    params.periodStart,
@@ -433,6 +463,7 @@ class InvoiceService {
       try {
         await this.generateInvoiceFromContract({
           contractId: contract.id,
+          clientId:   contract.clientId,
           periodStart,
           periodEnd,
           dueDate,
@@ -633,6 +664,106 @@ class InvoiceService {
     return this.getById(invoiceId);
   }
 
+  /**
+   * Edits a still-PENDING invoice: period, due date and — when supplied —
+   * the full set of line items, replaced wholesale. PENDING is the only
+   * editable status by design: nothing has been paid, so the balance can be
+   * recomputed from scratch, and anything further along should be corrected
+   * with a fee increment or a void-and-reissue instead of rewriting history.
+   * A carried-over line here is just a description; the InvoiceCarryForward
+   * row that landed on this invoice keeps pointing at it either way.
+   */
+  async update(
+    id: string,
+    data: UpdateInvoiceInput,
+    editedBy: string,
+  ): Promise<InvoiceResponse> {
+    const invoice = await prisma.invoice.findUnique({
+      where:  { id },
+      select: {
+        id: true, invoiceNumber: true, status: true,
+        totalAmount: true, subtotal: true, taxAmount: true,
+        periodStart: true, periodEnd: true, dueDate: true,
+      },
+    });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    if (invoice.status !== 'PENDING') {
+      throw new AppError(
+        `Invoice ${invoice.invoiceNumber} is ${invoice.status}. Only PENDING invoices can be edited — ` +
+        'use Add Fees for extra charges, or void and reissue once a status has moved on.',
+        400,
+      );
+    }
+
+    const periodStart = data.periodStart ? new Date(data.periodStart) : invoice.periodStart;
+    const periodEnd   = data.periodEnd   ? new Date(data.periodEnd)   : invoice.periodEnd;
+    const dueDate     = data.dueDate     ? new Date(data.dueDate)     : invoice.dueDate;
+    if (periodStart > periodEnd) {
+      throw new AppError('Billing period start must be on or before its end.', 400);
+    }
+
+    const oldValue = {
+      totalAmount: invoice.totalAmount,
+      periodStart: invoice.periodStart.toISOString(),
+      periodEnd:   invoice.periodEnd.toISOString(),
+      dueDate:     invoice.dueDate.toISOString(),
+    };
+
+    await prisma.$transaction(async (tx) => {
+      if (data.lineItems) {
+        const rows = data.lineItems.map((li) => ({
+          guardId:      null,
+          description:  li.description.trim(),
+          guardType:    li.guardType?.trim() || li.description.trim(),
+          guardsCount:  li.guardsCount,
+          ratePerGuard: li.ratePerGuard,
+          days:         li.days,
+          amount:       li.guardsCount * li.ratePerGuard * li.days,
+        }));
+        await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+        if (rows.length) {
+          await tx.invoiceLineItem.createMany({ data: rows.map((r) => ({ invoiceId: id, ...r })) });
+        }
+        const subtotal    = rows.reduce((sum, r) => sum + r.amount, 0);
+        const totalAmount = subtotal + invoice.taxAmount;
+        await tx.invoice.update({
+          where: { id },
+          data: {
+            guardsDeployed:   rows.reduce((sum, r) => sum + r.guardsCount, 0),
+            ratePerGuard:     0,
+            subtotal,
+            totalAmount,
+            outstandingBalance: totalAmount, // PENDING means nothing received
+            periodStart,
+            periodEnd,
+            dueDate,
+          },
+        });
+      } else {
+        await tx.invoice.update({ where: { id }, data: { periodStart, periodEnd, dueDate } });
+      }
+    });
+
+    // Total and due date may have moved; status and balances follow from them.
+    await recomputeInvoiceBalance(id);
+
+    await QueueService.logAudit({
+      userId:   editedBy,
+      action:   'INVOICE_UPDATED',
+      entity:   'invoice',
+      entityId: id,
+      oldValue,
+      newValue: {
+        periodStart: periodStart.toISOString(),
+        periodEnd:   periodEnd.toISOString(),
+        dueDate:     dueDate.toISOString(),
+        lineItemsReplaced: data.lineItems ? data.lineItems.length : undefined,
+      },
+    }).catch(() => { /* a queue outage must not undo an applied edit */ });
+
+    return this.getById(id);
+  }
+
   /** Invoice as a printable PDF, on the shared STAP letterhead. */
   async buildInvoicePdf(invoiceId: string): Promise<{ pdf: Buffer; filename: string }> {
     const invoice = await prisma.invoice.findUnique({
@@ -645,7 +776,13 @@ class InvoiceService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice));
+    // Same print identity as the payroll schedule: the centred tiger logo band
+    // with no company-name header, and no page watermark.
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice), {
+      logoFile:  'tiger_logo.jpeg',
+      watermark: false,
+      logoOnly:  true,
+    });
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
 

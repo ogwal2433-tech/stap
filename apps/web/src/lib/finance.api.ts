@@ -12,6 +12,7 @@ import type {
   PaginatedResponse,
   CreateInvoiceInput,
   GenerateInvoiceInput,
+  UpdateInvoiceInput,
   RecordPaymentInput,
   AddFeeIncrementInput,
   CreateDeductionInput,
@@ -76,6 +77,13 @@ export const invoicesApi = {
   addFeeIncrement(invoiceId: string, data: AddFeeIncrementInput): Promise<InvoiceResponse> {
     return api
       .post<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}/increment`, data)
+      .then((r) => r.data.data);
+  },
+
+  /** Edits a still-PENDING invoice; supplied line items replace the rows wholesale. */
+  update(invoiceId: string, data: UpdateInvoiceInput): Promise<InvoiceResponse> {
+    return api
+      .patch<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}`, data)
       .then((r) => r.data.data);
   },
 

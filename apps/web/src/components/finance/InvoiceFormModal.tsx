@@ -59,6 +59,10 @@ export default function InvoiceFormModal({ onClose }: Props) {
   const [billingEnd,   setBillingEnd]   = useState('');
   const [billingDays,  setBillingDays]  = useState(30);
 
+  // Clients without a contract are billable too: lines are then captured by
+  // hand instead of loaded from a contract preview.
+  const [manualMode, setManualMode] = useState(false);
+
   const [lineItems,      setLineItems]      = useState<EditableLineItem[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError,   setPreviewError]   = useState('');
@@ -68,6 +72,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
   // Reset downstream state when client changes
   useEffect(() => {
     setContractId('');
+    setManualMode(false);
     setLineItems([]);
     setPreviewError('');
   }, [clientId]);
@@ -105,8 +110,17 @@ export default function InvoiceFormModal({ onClose }: Props) {
     setLineItems((prev) => prev.map((li) => ({ ...li, billingDays: days })));
   };
 
-  const updateLine = (idx: number, field: keyof EditableLineItem, value: number) => {
+  const updateLine = (idx: number, field: keyof EditableLineItem, value: number | string) => {
     setLineItems((prev) => prev.map((li, i) => (i === idx ? { ...li, [field]: value } : li)));
+  };
+
+  // Manual mode starts from nothing; each row is typed in by the user.
+  const addManualLine = () => {
+    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: 0, billingDays }]);
+  };
+
+  const removeLine = (idx: number) => {
+    setLineItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const lineTotal = (li: EditableLineItem) => li.count * li.ratePerGuard * li.billingDays;
@@ -115,9 +129,32 @@ export default function InvoiceFormModal({ onClose }: Props) {
 
   const selectedContract = contracts.find((c: ContractResponse) => c.id === contractId);
 
+  // Manual lines need a name on every row before the invoice makes sense.
+  const manualLinesComplete =
+    lineItems.length > 0 && lineItems.every((li) => li.guardType.trim().length > 0);
+  const canGenerate =
+    (!!clientId || !!contractId) &&
+    (!!contractId || manualMode) &&
+    (!!contractId ? lineItems.length > 0 : manualLinesComplete) &&
+    !!billingStart &&
+    !!billingEnd &&
+    !generateMutation.isPending;
+
   const handleGenerate = async () => {
-    if (!contractId || lineItems.length === 0) {
-      showToast('Select a contract with rate lines to generate an invoice.', 'warning');
+    if (!manualMode && !contractId) {
+      showToast('Select a contract, or switch on "No contract yet" to capture lines manually.', 'warning');
+      return;
+    }
+    if (manualMode && !clientId) {
+      showToast('Select the client to bill.', 'warning');
+      return;
+    }
+    if (manualMode && !manualLinesComplete) {
+      showToast('Every manual line needs a description before generating.', 'warning');
+      return;
+    }
+    if (!contractId && lineItems.length === 0) {
+      showToast('Add at least one invoice line.', 'warning');
       return;
     }
     if (!billingStart || !billingEnd) {
@@ -125,18 +162,29 @@ export default function InvoiceFormModal({ onClose }: Props) {
       return;
     }
     try {
-      await generateMutation.mutateAsync({
-        contractId,
-        billingPeriodStart: new Date(billingStart).toISOString(),
-        billingPeriodEnd:   new Date(billingEnd).toISOString(),
-        billingDays,
-        lineItemOverrides: lineItems.map((li) => ({
-          guardType:    li.guardType,
-          count:        li.count,
-          ratePerGuard: li.ratePerGuard,
-          billingDays:  li.billingDays,
-        })),
-      });
+      const lineItemOverrides = lineItems.map((li) => ({
+        guardType:    manualMode ? li.guardType.trim() : li.guardType,
+        count:        li.count,
+        ratePerGuard: li.ratePerGuard,
+        billingDays:  li.billingDays,
+      }));
+      await generateMutation.mutateAsync(
+        contractId
+          ? {
+              contractId,
+              billingPeriodStart: new Date(billingStart).toISOString(),
+              billingPeriodEnd:   new Date(billingEnd).toISOString(),
+              billingDays,
+              lineItemOverrides,
+            }
+          : {
+              clientId,
+              billingPeriodStart: new Date(billingStart).toISOString(),
+              billingPeriodEnd:   new Date(billingEnd).toISOString(),
+              billingDays,
+              lineItemOverrides,
+            },
+      );
       showToast('Invoice generated successfully', 'success');
       onClose();
     } catch (err: any) {
@@ -186,8 +234,14 @@ export default function InvoiceFormModal({ onClose }: Props) {
           </Col>
           <Col md={6}>
             <Form.Group>
-              <Form.Label className="fw-semibold small">Contract <span className="text-danger">*</span></Form.Label>
-              <Form.Select value={contractId} onChange={(e) => setContractId(e.target.value)} disabled={!clientId}>
+              <Form.Label className="fw-semibold small">
+                Contract {!manualMode && <span className="text-danger">*</span>}
+              </Form.Label>
+              <Form.Select
+                value={contractId}
+                onChange={(e) => setContractId(e.target.value)}
+                disabled={!clientId || manualMode}
+              >
                 <option value="">{clientId ? 'Select contract…' : 'Select client first'}</option>
                 {contracts.map((c: ContractResponse) => (
                   <option key={c.id} value={c.id}>
@@ -195,6 +249,21 @@ export default function InvoiceFormModal({ onClose }: Props) {
                   </option>
                 ))}
               </Form.Select>
+              <Form.Check
+                type="switch"
+                id="manual-lines-switch"
+                label="No contract yet — capture invoice lines manually"
+                checked={manualMode}
+                disabled={!clientId}
+                onChange={(e) => {
+                  setManualMode(e.target.checked);
+                  // The two sources are mutually exclusive: switching clears
+                  // the other one's lines so nothing stale is sent.
+                  if (e.target.checked) setContractId('');
+                  else setLineItems([]);
+                }}
+                className="mt-2"
+              />
             </Form.Group>
           </Col>
 
@@ -215,7 +284,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
           )}
 
           {/* ── Billing Period + Days ── */}
-          {contractId && (
+          {(contractId || manualMode) && (
             <>
               <Col md={5}>
                 <Form.Label className="fw-semibold small">Billing Period Start <span className="text-danger">*</span></Form.Label>
@@ -259,14 +328,107 @@ export default function InvoiceFormModal({ onClose }: Props) {
             </Col>
           )}
 
-          {/* ── Rate lines (auto-loaded) ── */}
+          {/* ── Rate lines (from contract preview, or captured manually) ── */}
           <Col md={12}>
-            {!contractId ? (
+            {manualMode ? (
+              <div>
+                <div className="fw-bold small text-muted mb-2">
+                  Invoice Line Items
+                  <span className="text-muted fw-normal ms-1">(captured manually — no contract)</span>
+                </div>
+                {lineItems.length === 0 ? (
+                  <Alert variant="info" className="small py-2">
+                    No lines yet — add each charge the client owes for this period.
+                  </Alert>
+                ) : (
+                  <Table size="sm" bordered className="mb-2">
+                    <thead style={{ background: '#F2F4F7' }}>
+                      <tr>
+                        <th>Description / Guard Type</th>
+                        <th style={{ width: 70 }}>Count</th>
+                        <th style={{ width: 130 }}>Rate / Guard (UGX)</th>
+                        <th style={{ width: 70 }}>Days</th>
+                        <th style={{ width: 130 }}>Line Total</th>
+                        <th style={{ width: 40 }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineItems.map((li, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <Form.Control
+                              size="sm"
+                              placeholder="e.g. Night guard, 12th–30th Sept"
+                              value={li.guardType}
+                              onChange={(e) => updateLine(idx, 'guardType', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              size="sm" type="number" min={1}
+                              value={li.count}
+                              onChange={(e) => updateLine(idx, 'count', parseInt(e.target.value, 10) || 1)}
+                              style={{ textAlign: 'center' }}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              size="sm" type="number" min={0}
+                              value={li.ratePerGuard}
+                              onChange={(e) => updateLine(idx, 'ratePerGuard', parseInt(e.target.value, 10) || 0)}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              size="sm" type="number" min={1}
+                              value={li.billingDays}
+                              onChange={(e) => updateLine(idx, 'billingDays', parseInt(e.target.value, 10) || 30)}
+                              style={{ textAlign: 'center' }}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'middle', color: NAVY, fontSize: '0.85rem' }}>
+                            UGX {lineTotal(li).toLocaleString()}
+                          </td>
+                          <td className="text-center align-middle" style={{ width: 40 }}>
+                            <button
+                              type="button"
+                              onClick={() => removeLine(idx)}
+                              style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                              title="Remove this line"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#D0EDE9' }}>
+                        <td colSpan={2} style={{ fontWeight: 600, color: '#0F7B6C', fontSize: '0.82rem' }}>
+                          Total Guards: {totalGuards}
+                        </td>
+                        <td colSpan={2} style={{ fontWeight: 600, color: '#0F7B6C', fontSize: '0.82rem' }}>
+                          Total:
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: '#0F7B6C' }}>
+                          UGX {computedTotal.toLocaleString()}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </Table>
+                )}
+                <Button size="sm" variant="outline-primary" onClick={addManualLine}>
+                  <i className="bi bi-plus-lg me-1" />Add line
+                </Button>
+              </div>
+            ) : !contractId ? (
               <div style={{
                 border: '2px dashed #ced4da', borderRadius: '0.375rem', padding: '24px',
                 textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
               }}>
                 Select a client and contract above to load the rate breakdown
+                {clientId ? ', or flip the switch below the contract field to capture lines manually' : ''}
               </div>
             ) : previewLoading ? (
               <div className="text-center py-3 text-muted">
@@ -361,7 +523,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
             </Button>
             <Button
               style={{ background: NAVY, borderColor: NAVY }}
-              disabled={!contractId || lineItems.length === 0 || !billingStart || !billingEnd || generateMutation.isPending}
+              disabled={!canGenerate}
               onClick={handleGenerate}
             >
               {generateMutation.isPending ? <><Spinner size="sm" className="me-1" />Generating…</> : 'Generate Invoice'}

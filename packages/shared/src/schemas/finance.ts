@@ -13,20 +13,32 @@ export const CreateInvoiceSchema = z.object({
   dueDate:        z.string().datetime(),
 });
 
-export const GenerateInvoiceSchema = z.object({
-  contractId:         z.string().min(1),
-  billingPeriodStart: z.string().datetime(),
-  billingPeriodEnd:   z.string().datetime(),
-  billingDays:        z.coerce.number().int().min(1).default(30),
-  // The contract's guard rate lines are the only source — these are the
-  // (possibly user-edited) lines from the preview, always sent on generate.
-  lineItemOverrides:  z.array(z.object({
-    guardType:    z.string().min(1),
-    count:        z.coerce.number().int().min(1),
-    ratePerGuard: z.coerce.number().int().min(0),
-    billingDays:  z.coerce.number().int().min(1),
-  })).optional(),
-});
+export const GenerateInvoiceSchema = z
+  .object({
+    contractId:         z.string().min(1).optional(),
+    // Required when the client has no contract yet: an invoice can be raised
+    // against the client directly with manually captured line items.
+    clientId:           z.string().min(1).optional(),
+    billingPeriodStart: z.string().datetime(),
+    billingPeriodEnd:   z.string().datetime(),
+    billingDays:        z.coerce.number().int().min(1).default(30),
+    // With a contract these are the (possibly user-edited) preview lines,
+    // always sent on generate; without one they are the only line source.
+    lineItemOverrides:  z.array(z.object({
+      guardType:    z.string().min(1),
+      count:        z.coerce.number().int().min(1),
+      ratePerGuard: z.coerce.number().int().min(0),
+      billingDays:  z.coerce.number().int().min(1),
+    })).optional(),
+  })
+  .refine((d) => !!d.contractId || !!d.clientId, {
+    message: 'Either contractId or clientId is required',
+    path:    ['contractId'],
+  })
+  .refine((d) => !!d.contractId || (d.lineItemOverrides?.length ?? 0) > 0, {
+    message: 'A contract-less invoice must carry manually captured line items',
+    path:    ['lineItemOverrides'],
+  });
 
 export const RecordPaymentSchema = z.object({
   // Supplied via the :id URL param on POST /finance/invoices/:id/pay, not the
@@ -36,6 +48,24 @@ export const RecordPaymentSchema = z.object({
   amountPaid:      z.coerce.number().int().positive(),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),
+});
+
+/**
+ * Edits an invoice that is still PENDING — the only status with no money
+ * received and nothing carried onto it. Dates are partial; line items, when
+ * sent, replace the existing rows wholesale (send none to touch only dates).
+ */
+export const UpdateInvoiceSchema = z.object({
+  periodStart: z.string().datetime().optional(),
+  periodEnd:   z.string().datetime().optional(),
+  dueDate:     z.string().datetime().optional(),
+  lineItems:   z.array(z.object({
+    description:  z.string().min(1),
+    guardType:    z.string().optional(),
+    guardsCount:  z.coerce.number().int().min(1),
+    ratePerGuard: z.coerce.number().int().min(0),
+    days:         z.coerce.number().int().min(1),
+  })).min(1).optional(),
 });
 
 export const CreateDeductionSchema = z.object({
@@ -80,6 +110,7 @@ export const HrApprovePayrollSchema = z.object({
 
 export type CreateInvoiceInput      = z.infer<typeof CreateInvoiceSchema>;
 export type GenerateInvoiceInput    = z.infer<typeof GenerateInvoiceSchema>;
+export type UpdateInvoiceInput      = z.infer<typeof UpdateInvoiceSchema>;
 export type RecordPaymentInput      = z.infer<typeof RecordPaymentSchema>;
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
