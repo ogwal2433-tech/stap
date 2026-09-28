@@ -7,12 +7,21 @@ interface SitePickerProps {
   selectedSiteIds:   string[];
   onSelectionChange: (siteIds: string[]) => void;
   maxHeight?:        string;
+  /**
+   * When set (edit mode), sites belonging to a *different* zone are hidden
+   * from the available pane — selecting one here would silently steal it from
+   * that zone. The zone's own sites arrive pre-selected, so what remains
+   * offered is exactly the unassigned pool. Leave undefined (create mode) to
+   * offer everything, with the "Zoned" badge warning where it came from.
+   */
+  zoneId?:           string;
 }
 
 export default function SitePicker({
   selectedSiteIds,
   onSelectionChange,
   maxHeight = '260px',
+  zoneId,
 }: SitePickerProps) {
   const [search, setSearch] = useState('');
   const { data: allSites = [], isLoading } = useAllSites();
@@ -21,6 +30,7 @@ export default function SitePicker({
 
   const availableSites = allSites
     .filter((s: SiteResponse) => !selectedSiteIds.includes(s.id))
+    .filter((s: SiteResponse) => !zoneId || !s.zone || s.zone.id === zoneId)
     .filter((s: SiteResponse) => {
       if (!search) return true;
       const q = search.toLowerCase();
