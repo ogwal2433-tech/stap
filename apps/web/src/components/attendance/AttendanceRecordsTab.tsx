@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Col, Form, Pagination, Row, Spinner, Table } from
 import {
   ATTENDANCE_STATUS_CONFIG, ATTENDANCE_STATUS_VALUES,
   type AttendanceStatusValue, type SiteResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useAttendance, useGuardAttendanceSummary } from '../../hooks/useAttendance';
 import { useAllSites } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';

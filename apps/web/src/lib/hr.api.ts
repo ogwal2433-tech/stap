@@ -18,7 +18,7 @@ import type {
   SaveLetterTemplateInput,
   GuardResponse,
   CreateGuardInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Recruitment ────────────────────────────────────────────────────────────────
 

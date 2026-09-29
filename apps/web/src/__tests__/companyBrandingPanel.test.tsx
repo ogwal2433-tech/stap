@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { COMPANY_BRANDING_DEFAULTS } from '@stap/shared';
+import { COMPANY_BRANDING_DEFAULTS } from '@security360/shared';
 import CompanyBrandingPanel from '../components/settings/CompanyBrandingPanel';
 
 /**

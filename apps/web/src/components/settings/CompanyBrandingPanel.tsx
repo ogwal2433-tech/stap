@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Spinner } from 'react-bootstrap';
-import type { CompanyBranding } from '@stap/shared';
+import type { CompanyBranding } from '@security360/shared';
 import { useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { COMPANY_BRANDING_DEFAULTS } from '../../lib/branding';

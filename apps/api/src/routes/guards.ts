@@ -202,7 +202,7 @@ import {
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
   GrantGuardAccessSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // Memory-based upload for Excel imports (not saved to disk)
 const importUpload = multer({
@@ -233,7 +233,7 @@ router.get(
   requireRole(...INTERNAL_ROLES, ROLES.HR),
   validateQuery(GuardListQuerySchema),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as import('@stap/shared').GuardListQuery;
+    const query = req.query as unknown as import('@security360/shared').GuardListQuery;
     const result = await guardService.list(query, req.user!.role);
     res.status(200).json({ success: true, ...result });
   }),

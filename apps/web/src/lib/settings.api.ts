@@ -18,7 +18,7 @@ import type {
   UpdateShiftTypeInput,
   ReportKey, ReportTitleConfig, ReportTitlesMap,
   CompanyBranding, CompanyBrandingKey,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const settingsApi = {
   getCompanyBranding(): Promise<CompanyBranding> {

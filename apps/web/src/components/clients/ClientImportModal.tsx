@@ -4,8 +4,8 @@ import {
   CLIENT_IMPORT_BILLING_TERMS,
   CLIENT_IMPORT_CONTACT_PLACEHOLDER,
   CLIENT_IMPORT_CONTRACT_MONTHS,
-} from '@stap/shared';
-import type { ClientImportPreview, ClientImportResult, ClientImportRow } from '@stap/shared';
+} from '@security360/shared';
+import type { ClientImportPreview, ClientImportResult, ClientImportRow } from '@security360/shared';
 import {
   useClientImportConfirm, useClientImportPreview, useClientImportTemplate,
 } from '../../hooks/useClients';

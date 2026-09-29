@@ -3,7 +3,7 @@ import type {
   DisciplinaryResponse,
   GuardDocumentResponse,
   CreateDisciplinaryInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const disciplinaryApi = {
   create(guardId: string, data: Omit<CreateDisciplinaryInput, 'guardId'>): Promise<DisciplinaryResponse> {

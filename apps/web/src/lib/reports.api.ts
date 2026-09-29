@@ -1,5 +1,5 @@
 import api from './api';
-import type { DirectorDashboardStats, ScheduledReportInput, ScheduledReportRecord } from '@stap/shared';
+import type { DirectorDashboardStats, ScheduledReportInput, ScheduledReportRecord } from '@security360/shared';
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

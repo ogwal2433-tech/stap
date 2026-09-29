@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { DEFAULT_SITE_TYPE } from '@stap/shared';
+import { DEFAULT_SITE_TYPE } from '@security360/shared';
 import type {
   CreateSiteInput,
   UpdateSiteInput,
@@ -9,7 +9,7 @@ import type {
   PaginatedResponse,
   SiteShiftResponse,
   SiteShiftSource,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const SITE_INCLUDE = {
   client:         { select: { clientName: true } },

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Modal, Spinner } from 'react-bootstrap';
 import { useMutation } from '@tanstack/react-query';
-import type { ClientContactResponse } from '@stap/shared';
+import type { ClientContactResponse } from '@security360/shared';
 import ContactFields, { emptyContact, type ContactDraft } from './ContactFields';
 import { clientsApi } from '../../lib/clients.api';
 import { useToast } from '../../context/ToastContext';

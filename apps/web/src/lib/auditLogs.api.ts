@@ -1,5 +1,5 @@
 import api from './api';
-import type { AuditLogEntry, AuditLogListResult, SecurityLogResult } from '@stap/shared';
+import type { AuditLogEntry, AuditLogListResult, SecurityLogResult } from '@security360/shared';
 
 export interface AuditLogFilters {
   action?:   string;

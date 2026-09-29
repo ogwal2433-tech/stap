@@ -1,7 +1,7 @@
 import { renderToPdf } from './pdfBase';
 import { settingsService } from '../services/settingsService';
-import { computeDuration, PRIORITY_LEVELS } from '@stap/shared';
-import type { MotorcycleReport, PendingMatter } from '@stap/shared';
+import { computeDuration, PRIORITY_LEVELS } from '@security360/shared';
+import type { MotorcycleReport, PendingMatter } from '@security360/shared';
 
 type Row = Record<string, string>;
 
@@ -128,7 +128,7 @@ function motorcycleBlock(mc: MotorcycleReport): string {
     </div>`;
 }
 
-/** Renders the handover onto the STAP letterhead, laid out as the paper form. */
+/** Renders the handover onto the Security360 letterhead, laid out as the paper form. */
 export async function renderShiftReportPdf(r: ShiftReportPdfData): Promise<Buffer> {
   const reportTitle = await settingsService.getReportTitle('shift_handover_report');
   const dateStr = new Date(r.date).toLocaleDateString('en-GB',

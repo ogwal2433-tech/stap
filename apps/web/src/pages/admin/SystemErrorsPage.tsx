@@ -6,8 +6,8 @@ import {
 import { useToast } from '../../context/ToastContext';
 import {
   SEVERITY_COLORS, CATEGORY_LABELS, ERROR_STATUS_COLORS,
-} from '@stap/shared';
-import type { SystemErrorResponse } from '@stap/shared';
+} from '@security360/shared';
+import type { SystemErrorResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

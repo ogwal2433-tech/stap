@@ -1,6 +1,6 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
-import type { CashbookEntryInput, CashbookEntryResponse, PaginatedResponse } from '@stap/shared';
+import type { CashbookEntryInput, CashbookEntryResponse, PaginatedResponse } from '@security360/shared';
 
 // ── Helper ─────────────────────────────────────────────────────────────────────
 

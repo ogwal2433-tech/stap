@@ -1,4 +1,4 @@
-import { COMPANY_BRANDING_KEYS, CompanyBrandingPatchSchema, resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@stap/shared';
+import { COMPANY_BRANDING_KEYS, CompanyBrandingPatchSchema, resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@security360/shared';
 import { COMPANY_BRANDING_DEFAULTS } from '../config/branding';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';

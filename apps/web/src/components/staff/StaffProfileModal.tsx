@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, ROLES, type StaffRole, getJobTitleLabel } from '@stap/shared';
+import { ROLE_CONFIG, ROLES, type StaffRole, getJobTitleLabel } from '@security360/shared';
 import { useStaffPositions } from '../../hooks/useSettings';
 import {
   useStaffMember,

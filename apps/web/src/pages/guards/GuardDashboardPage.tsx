@@ -6,7 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts';
-import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
+import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@security360/shared';
 import { useGuardDashboard, useRecentGuardActivity } from '../../hooks/useGuards';
 
 const NAVY = '#1B3A6B';

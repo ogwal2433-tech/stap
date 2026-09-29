@@ -157,8 +157,8 @@ export async function initiateBankPayment(req: BankPaymentRequest): Promise<Part
     account_name: req.accountName,
     dl_code:      req.dlCode,
     initiator: {
-      first_name: 'STAP',
-      last_name:  'Security',
+      first_name: 'Security360',
+      last_name:  'Ltd',
       purpose:    'Salary Payment',
     },
     receiver: {

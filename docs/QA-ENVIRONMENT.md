@@ -8,12 +8,12 @@ production data even by mistake.
 
 | | Production | QA |
 |---|---|---|
-| URL | `https://stap.stapsecurity.com` (80/443) | `http://<host>:8000` |
-| Compose project | `stap-security` | `security360-qa` |
-| Postgres volume | `postgres_data` | `security360_qa_postgres` |
-| Uploads volume | `uploads` | `security360_qa_uploads` |
-| Network | `stap-network` | `security360_qa_network` |
-| Containers | `stap-*` | `s360-*-qa` |
+| URL | `https://security360.co.ug` (80/443) | `http://<host>:8000` |
+| Compose project | `s360-prod` | `security360-qa` |
+| Postgres volume | `s360-prod_postgres_data` | `security360_qa_postgres` |
+| Uploads volume | `s360-prod_uploads` | `security360_qa_uploads` |
+| Network | `s360-prod-network` | `security360_qa_network` |
+| Containers | `s360-*-prod` | `s360-*-qa` |
 
 Both stacks build from the **same Dockerfiles**. QA's differences — seeding, the
 nginx proxy config — are applied in `docker-compose.qa.yml` as mounts and
@@ -44,7 +44,7 @@ pnpm qa:logs:api    # watch migrations and seeding
 ```
 
 Then open `http://localhost:8000` and sign in with any seeded account, e.g.
-`director@stapsecurity.co.ug` / the value of `QA_SEED_PASSWORD`.
+`director@security360.co.ug` / the value of `QA_SEED_PASSWORD`.
 
 ## Day to day
 
@@ -104,7 +104,7 @@ production is not.
 ## Deploying QA to the VPS
 
 ```bash
-cd /var/www/stap-security
+cd /var/www/security360
 git pull origin develop
 
 nano .env.qa                     # QA_HOST=<server ip>, plus the three secrets
@@ -129,7 +129,7 @@ pnpm qa:status                                  # all five up, postgres/redis he
 curl -s http://localhost:8000/api/v1/health     # API reachable through nginx
 curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"director@stapsecurity.co.ug","password":"12345678"}'
+  -d '{"email":"director@security360.co.ug","password":"12345678"}'
 ```
 
 To prove the databases are independent, compare row counts — the numbers should
@@ -137,5 +137,5 @@ move independently:
 
 ```bash
 docker exec s360-postgres-qa psql -U s360_qa -d s360_qa -c 'SELECT COUNT(*) FROM "User";'
-docker exec stap-postgres     psql -U stap_user -d stap_production -c 'SELECT COUNT(*) FROM "User";'
+docker exec s360-postgres-prod     psql -U security360_user -d security360_production -c 'SELECT COUNT(*) FROM "User";'
 ```

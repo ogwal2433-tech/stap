@@ -1,4 +1,4 @@
-import { DEPLOYABLE_STATUSES } from '@stap/shared';
+import { DEPLOYABLE_STATUSES } from '@security360/shared';
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
 import { resolveSiteShift, listActiveShiftCodes } from './siteService';
@@ -9,7 +9,7 @@ import type {
   ZoneRosterData,
   ZoneSiteOption,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 function toZoneResponse(z: Record<string, unknown>): ZoneResponse {
   const sup   = z.supervisor as { id: string; name: string; role: string } | null | undefined;

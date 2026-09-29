@@ -18,9 +18,9 @@
  * that carries its own name cannot force that churn on the others.
  */
 
-export const DEFAULT_APP_NAME     = 'STAP Security';
+export const DEFAULT_APP_NAME     = 'Security360';
 export const DEFAULT_APP_TAGLINE  = 'Guard Management Platform';
-export const DEFAULT_COMPANY_NAME = 'STAP Security Ltd';
+export const DEFAULT_COMPANY_NAME = 'Security360 Ltd';
 
 export interface Branding {
   appName:          string;

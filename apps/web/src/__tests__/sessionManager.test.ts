@@ -143,18 +143,18 @@ describe('inactivity', () => {
 
   it('throttles bursts of mousemove instead of handling every one', async () => {
     arm();
-    const armedAt = localStorage.getItem('stap:lastActivity');
+    const armedAt = localStorage.getItem('security360:lastActivity');
     expect(armedAt).toBeTruthy();
 
     // Inside the throttle window, a burst is ignored entirely — the recorded
     // timestamp does not budge.
     for (let i = 0; i < 500; i++) window.dispatchEvent(new Event('mousemove'));
-    expect(localStorage.getItem('stap:lastActivity')).toBe(armedAt);
+    expect(localStorage.getItem('security360:lastActivity')).toBe(armedAt);
 
     // Past it, one move is enough to register.
     await vi.advanceTimersByTimeAsync(300);
     window.dispatchEvent(new Event('mousemove'));
-    expect(Number(localStorage.getItem('stap:lastActivity'))).toBeGreaterThan(Number(armedAt));
+    expect(Number(localStorage.getItem('security360:lastActivity'))).toBeGreaterThan(Number(armedAt));
   });
 });
 
@@ -166,7 +166,7 @@ describe('activity shared between tabs', () => {
 
     // What a second tab's write looks like here.
     window.dispatchEvent(
-      new StorageEvent('storage', { key: 'stap:lastActivity', newValue: String(Date.now()) }),
+      new StorageEvent('storage', { key: 'security360:lastActivity', newValue: String(Date.now()) }),
     );
 
     await vi.advanceTimersByTimeAsync(10_000);
@@ -222,7 +222,7 @@ describe('idle time across a closed tab', () => {
   });
 
   it('measures how long ago the last input was', () => {
-    localStorage.setItem('stap:lastActivity', String(Date.now() - 90_000));
+    localStorage.setItem('security360:lastActivity', String(Date.now() - 90_000));
     const idle = millisecondsSinceLastActivity();
     expect(idle).toBeGreaterThanOrEqual(90_000);
     expect(idle).toBeLessThan(95_000);
@@ -230,17 +230,17 @@ describe('idle time across a closed tab', () => {
 
   it('treats a timestamp in the future as "just now" rather than very stale', () => {
     // A corrected system clock should not sign someone out.
-    localStorage.setItem('stap:lastActivity', String(Date.now() + 60_000));
+    localStorage.setItem('security360:lastActivity', String(Date.now() + 60_000));
     expect(millisecondsSinceLastActivity()).toBe(0);
   });
 
   it('ignores a corrupted value', () => {
-    localStorage.setItem('stap:lastActivity', 'not-a-number');
+    localStorage.setItem('security360:lastActivity', 'not-a-number');
     expect(millisecondsSinceLastActivity()).toBeNull();
   });
 
   it('clears the record on sign-out', () => {
-    localStorage.setItem('stap:lastActivity', String(Date.now()));
+    localStorage.setItem('security360:lastActivity', String(Date.now()));
     clearActivityRecord();
     expect(millisecondsSinceLastActivity()).toBeNull();
   });

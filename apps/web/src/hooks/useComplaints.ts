@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { complaintsApi } from '../lib/complaints.api';
-import type { AssignComplaintInput, UpdateComplaintStatusInput } from '@stap/shared';
+import type { AssignComplaintInput, UpdateComplaintStatusInput } from '@security360/shared';
 
 export function useComplaints(params?: {
   clientId?:  string;

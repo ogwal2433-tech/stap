@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
-import { REQUISITION_CATEGORY_LIST, type AccountabilityResponse } from '@stap/shared';
+import { REQUISITION_CATEGORY_LIST, type AccountabilityResponse } from '@security360/shared';
 import { useSubmitAccountability } from '../../hooks/useRequisitions';
 import { getApiErrorMessage } from '../../lib/api';
 

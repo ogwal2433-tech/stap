@@ -93,7 +93,7 @@ describe('refresh cookie flags', () => {
 
   it('is Secure when the app is served over HTTPS', async () => {
     process.env.NODE_ENV     = 'production';
-    process.env.FRONTEND_URL = 'https://stap.stapsecurity.com';
+    process.env.FRONTEND_URL = 'https://security360.co.ug';
     delete process.env.COOKIE_SECURE;
     const { __testRefreshCookieOptions } = await load();
     expect(__testRefreshCookieOptions().secure).toBe(true);

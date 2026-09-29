@@ -6,7 +6,7 @@ import prisma from '../../db/prisma';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const EMAIL = (role: string) => `dtypes.${role.toLowerCase()}@stap.test`;
+const EMAIL = (role: string) => `dtypes.${role.toLowerCase()}@security360.test`;
 
 const ROLES_UNDER_TEST = ['DIRECTOR', 'ASSISTANT_MANAGER', 'GUARD'];
 const tokens: Record<string, string> = {};
@@ -26,10 +26,10 @@ async function nukeTestData() {
   await prisma.deductionType.deleteMany({
     where: { code: { in: [TEST_TYPE_CODE, TEST_TYPE_CODE2, 'INTEGRATION_AUTO_DT', 'INTEGRATION_TEST_DT_USED'] } },
   });
-  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // Scoped to this file's own users. Deleting everything on @security360.test removed
   // the users other integration files were mid-run against — vitest runs files in
   // parallel — and their next audited write failed on AuditLog_userId_fkey.
-  await prisma.user.deleteMany({ where: { email: { startsWith: 'dtypes.', endsWith: '@stap.test' } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'dtypes.', endsWith: '@security360.test' } } });
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────────

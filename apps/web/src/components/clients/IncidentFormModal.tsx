@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Modal, Form, Button, Row, Col, Alert, Badge } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateIncidentSchema } from '@stap/shared';
+import { CreateIncidentSchema } from '@security360/shared';
 import { useCreateIncident } from '../../hooks/useClients';
 import { useToast } from '../../context/ToastContext';
-import type { GuardResponse } from '@stap/shared';
+import type { GuardResponse } from '@security360/shared';
 import { z } from 'zod';
 
 const FormSchema = CreateIncidentSchema.omit({ siteId: true });

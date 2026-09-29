@@ -1,6 +1,6 @@
 import { Button, Col, Form, Row } from 'react-bootstrap';
-import { PRIORITY_LEVELS, computeDuration } from '@stap/shared';
-import type { LongParkedPeriod, MotorcycleReport, PendingMatter, UnreachablePeriod } from '@stap/shared';
+import { PRIORITY_LEVELS, computeDuration } from '@security360/shared';
+import type { LongParkedPeriod, MotorcycleReport, PendingMatter, UnreachablePeriod } from '@security360/shared';
 
 export const NAVY = '#1B3A6B';
 export const TEAL = '#0F7B6C';

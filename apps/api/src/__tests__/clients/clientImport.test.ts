@@ -20,7 +20,7 @@ let token = '';
 /** A workbook shaped like the generated template: title row, headers, then data. */
 function workbook(rows: (string | number | null)[][]): Buffer {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['STAP Security Ltd — Client Import Template'],
+    ['Security360 Ltd — Client Import Template'],
     ['Client Name *', 'Guns Deployed', 'Location', 'Contract Status',
      'No. of Guards Deployed', 'Start Date (DD/MM/YYYY)', 'Amount — Monthly (UGX)'],
     ...rows,

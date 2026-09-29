@@ -4,7 +4,7 @@ import { useSubmitCheckin } from '../../hooks/useAttendance';
 import { useAuth } from '../../context/AuthContext';
 import { clientsApi } from '../../lib/clients.api';
 import { useQuery } from '@tanstack/react-query';
-import type { SupervisorCheckinInput } from '@stap/shared';
+import type { SupervisorCheckinInput } from '@security360/shared';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 
 interface QueuedCheckin {
@@ -12,10 +12,22 @@ interface QueuedCheckin {
   timestamp: string;
 }
 
-const QUEUE_KEY = 'stap_checkin_queue';
+const QUEUE_KEY = 'security360_checkin_queue';
+/**
+ * Where the queue lived before the rebrand. A device that was offline across
+ * the upgrade still holds check-ins here; they are folded into QUEUE_KEY once,
+ * so none are stranded.
+ */
+const LEGACY_QUEUE_KEY = 'stap_checkin_queue';
 
-function loadQueue(): QueuedCheckin[] {
+export function loadQueue(): QueuedCheckin[] {
   try {
+    const legacy = localStorage.getItem(LEGACY_QUEUE_KEY);
+    if (legacy !== null) {
+      const current = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]') as QueuedCheckin[];
+      localStorage.setItem(QUEUE_KEY, JSON.stringify([...current, ...(JSON.parse(legacy) as QueuedCheckin[])]));
+      localStorage.removeItem(LEGACY_QUEUE_KEY);
+    }
     return JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]') as QueuedCheckin[];
   } catch {
     return [];

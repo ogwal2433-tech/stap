@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { SECURITY_ACTIONS, SECURITY_ACTION_LABELS, type SecurityAction } from '@stap/shared';
+import { SECURITY_ACTIONS, SECURITY_ACTION_LABELS, type SecurityAction } from '@security360/shared';
 import { auditLogsApi, type SecurityLogFilters } from '../../lib/auditLogs.api';
 import { useRoles } from '../../hooks/useRoles';
 import { getApiErrorMessage } from '../../lib/api';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { canEditRequisition } from '@stap/shared';
+import { canEditRequisition } from '@security360/shared';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 

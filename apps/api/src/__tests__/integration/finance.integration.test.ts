@@ -8,7 +8,7 @@ let directorToken: string;
 let clientId: string;
 let invoiceId: string;
 
-const EMAIL = 'fint.director@stap.test';
+const EMAIL = 'fint.director@security360.test';
 
 beforeAll(async () => {
   const hash = await bcrypt.hash('testpass123', 10);
@@ -58,7 +58,7 @@ describe('Finance API — Invoices', () => {
         dueDate:        '2026-05-31T00:00:00.000Z',
       });
     expect(res.status).toBe(201);
-    expect(res.body.data.invoiceNumber).toMatch(/^STAP\/INV\/\d{4}\/\d{4}$/);
+    expect(res.body.data.invoiceNumber).toMatch(/^S360\/INV\/\d{4}\/\d{4}$/);
     expect(res.body.data.subtotal).toBe(2400000);   // 3 * 800000
     expect(res.body.data.totalAmount).toBe(2400000);
     invoiceId = res.body.data.id;

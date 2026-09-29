@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { BillingSummary } from '@stap/shared';
+import type { BillingSummary } from '@security360/shared';
 import BillingSummaryCard from '../components/clients/BillingSummaryCard';
 
 const q = vi.hoisted(() => ({

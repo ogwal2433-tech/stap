@@ -1,6 +1,6 @@
 import { Alert, Col, Row } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import type { DashboardData } from '@stap/shared';
+import type { DashboardData } from '@security360/shared';
 import StatCard from './StatCard';
 import FeedCard from './FeedCard';
 import { specForRole } from './roleDashboards';

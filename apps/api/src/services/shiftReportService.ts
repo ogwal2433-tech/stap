@@ -3,7 +3,7 @@ import { generateShiftReportId } from '../lib/systemId';
 import prisma from '../db/prisma';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { writeAuditLog } from '../lib/auditLog';
-import type { ShiftReportInput } from '@stap/shared';
+import type { ShiftReportInput } from '@security360/shared';
 
 /** Prisma's own JSON input type — the section arrays go in as-is. */
 type Json = Prisma.InputJsonValue;

@@ -7,7 +7,7 @@ import { PORTAL_ROLES } from '../constants/systemRoles';
 import {
   ROLE_HIERARCHY, ROLE_NAME_PATTERN, normaliseRoleName,
   type CreateRoleInput, type RoleRecord, type UpdateRoleInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Roles as data: created, relabelled, disabled and deleted from the UI.

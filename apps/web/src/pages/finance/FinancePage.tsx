@@ -26,8 +26,8 @@ import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
-import { ROLES, HR_ROLES } from '@stap/shared';
-import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@stap/shared';
+import { ROLES, HR_ROLES } from '@security360/shared';
+import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@security360/shared';
 import { invoicesApi } from '../../lib/finance.api';
 
 const NAVY = '#1B3A6B';

@@ -5,7 +5,7 @@ import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { APP_NAME } from '../config/branding';
 import { loginUrl } from '../jobs/templates/emailTemplates';
-import type { LinkedAccount } from '@stap/shared';
+import type { LinkedAccount } from '@security360/shared';
 
 /**
  * System access for people who are already on record.

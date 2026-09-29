@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 import { reportsApi } from '../lib/reports.api';
 import { dashboardApi } from '../lib/dashboard.api';
 import { useAuth } from '../context/AuthContext';

@@ -3,7 +3,7 @@ import { Modal, Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useInitiatePayment, usePaymentStatus } from '../../hooks/usePayments';
 import { useQueryClient } from '@tanstack/react-query';
-import type { InvoiceResponse } from '@stap/shared';
+import type { InvoiceResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

@@ -30,7 +30,7 @@ const MIN_SUBJECT = 3;
 const MIN_BODY    = 10;
 
 /**
- * Sends a formal notice from STAP to a client — the reverse of logging a
+ * Sends a formal notice from Security360 to a client — the reverse of logging a
  * complaint a client raised with us.
  */
 export default function SendClientNoticeModal({ show, onClose, onSuccess }: Props) {

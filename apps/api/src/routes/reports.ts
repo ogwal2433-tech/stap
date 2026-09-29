@@ -48,7 +48,7 @@ import {
   REPORT_ROLES,
   INTERNAL_ROLES,
   ScheduledReportSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const router = Router();
 

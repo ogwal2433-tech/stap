@@ -1,5 +1,5 @@
 import { Button, Form } from 'react-bootstrap';
-import { generatePassword } from '@stap/shared';
+import { generatePassword } from '@security360/shared';
 import { copyText } from '../../lib/clipboard';
 import { useToast } from '../../context/ToastContext';
 

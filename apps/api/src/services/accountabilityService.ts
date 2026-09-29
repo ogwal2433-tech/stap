@@ -2,13 +2,13 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
-import { ROLES, ACCOUNTABILITY_STAGES } from '@stap/shared';
+import { ROLES, ACCOUNTABILITY_STAGES } from '@security360/shared';
 import type {
   AccountabilityItemInput,
   ReviewAccountabilityInput,
   AccountabilityResponse,
   AccountabilityStatus,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /** Requisition states where the money has been released and can be accounted for. */
 const SPENDABLE_STATUSES = ['APPROVED', 'ASSIGNED', 'IN_PROGRESS'];

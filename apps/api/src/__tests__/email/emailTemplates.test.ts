@@ -7,7 +7,7 @@ const CREDENTIALS = {
   clientName:  'Acme Holdings',
   email:       'john@acme.com',
   password:    'Xk7mPq2rTv',
-  loginUrl:    'https://stap.example.com/login',
+  loginUrl:    'https://security360.example.com/login',
 };
 
 describe('client-portal-welcome', () => {
@@ -18,14 +18,14 @@ describe('client-portal-welcome', () => {
     expect(html).toContain('Acme Holdings');
     expect(html).toContain('john@acme.com');
     expect(html).toContain('Xk7mPq2rTv');
-    expect(html).toContain('https://stap.example.com/login');
+    expect(html).toContain('https://security360.example.com/login');
     expect(html).toContain('Open the portal');
   });
 
   it('uses a runtime company name when rendering queued email', () => {
     const html = renderEmail('client-portal-welcome', 'ignored', { ...CREDENTIALS, companyName: 'Example Security Ltd' });
     expect(html).toContain('Example Security Ltd');
-    expect(html).not.toContain('STAP Security Ltd');
+    expect(html).not.toContain('Security360 Ltd');
   });
 
   it('says what the portal is for', () => {
@@ -105,19 +105,19 @@ describe('shared layout', () => {
 
 describe('loginUrl()', () => {
   const original = process.env.FRONTEND_URL;
-  beforeEach(() => { process.env.FRONTEND_URL = 'https://stap.example.com'; });
+  beforeEach(() => { process.env.FRONTEND_URL = 'https://security360.example.com'; });
   afterEach(() => {
     if (original === undefined) delete process.env.FRONTEND_URL;
     else process.env.FRONTEND_URL = original;
   });
 
   it('appends the login path', () => {
-    expect(loginUrl()).toBe('https://stap.example.com/login');
+    expect(loginUrl()).toBe('https://security360.example.com/login');
   });
 
   it('does not double the slash on a trailing-slash base', () => {
-    process.env.FRONTEND_URL = 'https://stap.example.com/';
-    expect(loginUrl()).toBe('https://stap.example.com/login');
+    process.env.FRONTEND_URL = 'https://security360.example.com/';
+    expect(loginUrl()).toBe('https://security360.example.com/login');
   });
 
   it('returns empty rather than a dead "/login" when unset', () => {

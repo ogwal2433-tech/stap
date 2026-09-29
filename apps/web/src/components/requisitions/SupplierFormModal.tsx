@@ -1,8 +1,8 @@
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateSupplierSchema } from '@stap/shared';
-import type { CreateSupplierInput } from '@stap/shared';
+import { CreateSupplierSchema } from '@security360/shared';
+import type { CreateSupplierInput } from '@security360/shared';
 import { useCreateSupplier } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 

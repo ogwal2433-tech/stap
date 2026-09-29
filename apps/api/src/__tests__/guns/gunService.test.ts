@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GUN_STATUSES, RegisterGunSchema, WithdrawGunSchema } from '@stap/shared';
+import { GUN_STATUSES, RegisterGunSchema, WithdrawGunSchema } from '@security360/shared';
 
 vi.mock('../../db/prisma', () => ({
   default: {

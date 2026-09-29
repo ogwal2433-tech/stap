@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'rea
 import {
   BID_TYPES, BID_STATUSES, bidStatusLabel, bidStatusColour,
   type BidResponse, type BidType, type BidStatus,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useBids, useCreateBid, useUpdateBid } from '../../hooks/useMarketing';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';

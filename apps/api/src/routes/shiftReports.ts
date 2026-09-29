@@ -13,7 +13,7 @@ import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { shiftReportService } from '../services/shiftReportService';
 import { renderShiftReportPdf } from '../lib/shiftReportPdf';
-import { ShiftReportBodySchema, SHIFT_VALUES, SHIFT_REPORT_STATUSES } from '@stap/shared';
+import { ShiftReportBodySchema, SHIFT_VALUES, SHIFT_REPORT_STATUSES } from '@security360/shared';
 import { z } from 'zod';
 
 const router: IRouter = Router();

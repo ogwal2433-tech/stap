@@ -4,8 +4,8 @@ import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
 import { LetterEditor } from './LetterEditor';
-import { DISCIPLINARY_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
-import type { DisciplinaryResponse } from '@stap/shared';
+import { DISCIPLINARY_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@security360/shared';
+import type { DisciplinaryResponse } from '@security360/shared';
 
 function buildSuspensionBody(guardName: string, fromDate: string, toDate: string, reason: string): string {
   return `

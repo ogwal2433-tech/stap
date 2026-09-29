@@ -1,5 +1,5 @@
 import api from './api';
-import type { InvoiceResponse, ComplaintResponse, CreateComplaintInput, ServiceRequestResponse, CreateServiceRequestInput, PaginatedResponse } from '@stap/shared';
+import type { InvoiceResponse, ComplaintResponse, CreateComplaintInput, ServiceRequestResponse, CreateServiceRequestInput, PaginatedResponse } from '@security360/shared';
 
 export interface PortalOverview {
   client:              { id: string; clientName: string; email?: string; contactPhone: string };
@@ -57,7 +57,7 @@ export const portalApi = {
     return api.get('/portal/complaints').then(r => r.data);
   },
 
-  /** Notices STAP has sent to this client. */
+  /** Notices Security360 has sent to this client. */
   getNotices(): Promise<PaginatedResponse<ComplaintResponse>> {
     return api.get('/portal/notices').then(r => r.data);
   },

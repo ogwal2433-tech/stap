@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@stap/shared';
+import { resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@security360/shared';
 import { COMPANY_BRANDING_DEFAULTS } from '../lib/branding';
 import { settingsApi } from '../lib/settings.api';
 

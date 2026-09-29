@@ -23,7 +23,7 @@ import type {
   GuardPromotionResponse,
   GrantGuardAccessInput,
   LinkedAccount,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const guardsApi = {
   list(params?: Partial<GuardListQuery>): Promise<PaginatedResponse<GuardResponse>> {

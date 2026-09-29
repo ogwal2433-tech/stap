@@ -45,7 +45,7 @@ const ACTIVITY_EVENTS = [
  * activity in all of them — otherwise a background tab signs the whole session
  * out from under the tab actually being worked in.
  */
-const ACTIVITY_KEY = 'stap:lastActivity';
+const ACTIVITY_KEY = 'security360:lastActivity';
 
 interface SessionOptions {
   /** Called when the session should end. Must be idempotent. */

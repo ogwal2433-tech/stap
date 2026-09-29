@@ -1,4 +1,4 @@
-import { resolveBranding, resolveCompanyBrandingDefaults } from '@stap/shared';
+import { resolveBranding, resolveCompanyBrandingDefaults } from '@security360/shared';
 
 /**
  * What this build of the frontend calls itself.
@@ -8,7 +8,7 @@ import { resolveBranding, resolveCompanyBrandingDefaults } from '@stap/shared';
  * deployment therefore builds its own image with its own VITE_APP_NAME, which
  * is what lets two of them sit on one host under different names.
  *
- * Imported instead of `@stap/shared`'s raw constants anywhere the name is shown
+ * Imported instead of `@security360/shared`'s raw constants anywhere the name is shown
  * to someone. The shared module holds the defaults; this holds what this
  * deployment actually is.
  */

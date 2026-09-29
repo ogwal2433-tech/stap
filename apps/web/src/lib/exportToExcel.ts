@@ -1,9 +1,9 @@
 import * as XLSX from 'xlsx';
 import { FILE_PREFIX } from './branding';
-import { DEFAULT_COMPANY_NAME } from '@stap/shared';
+import { DEFAULT_COMPANY_NAME } from '@security360/shared';
 import type {
   DailySheetResponse, GuardAttendanceSummaryResponse, GuardExportRow, GuardResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Company constants ──────────────────────────────────────────────────────────
 

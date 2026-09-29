@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# STAP Security — QA environment
+# Security360 — QA environment
 #
 #   Web:      http://<host>:8000        (production stays on 80/443)
 #   Data:     qa_postgres_data volume   (production uses postgres_data)
-#   Network:  security360_qa_network    (production uses stap-network)
+#   Network:  security360_qa_network    (production uses security360-network)
 #
 # Nothing here is shared with production: different volumes, different network,
 # different container names. The only overlap is the host, so the two stacks

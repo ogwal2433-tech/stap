@@ -27,7 +27,7 @@ vi.mock('../../jobs/QueueService', () => ({
 }));
 
 vi.mock('../../lib/systemId', () => ({
-  generateStaffId: vi.fn().mockResolvedValue('SSLS999'),
+  generateStaffId: vi.fn().mockResolvedValue('S360S999'),
 }));
 
 vi.mock('bcryptjs', () => ({
@@ -268,7 +268,7 @@ describe('accessService.resetClientPortalPassword()', () => {
 
 describe('credential emails', () => {
   beforeEach(() => {
-    process.env.FRONTEND_URL = 'https://stap.example.com';
+    process.env.FRONTEND_URL = 'https://security360.example.com';
   });
 
   it('sends a client the portal template, naming their company', async () => {
@@ -291,7 +291,7 @@ describe('credential emails', () => {
           clientName:  'Acme Holdings',
           contactName: 'John Mugisha',
           password:    'sup3rsecret',
-          loginUrl:    'https://stap.example.com/login',
+          loginUrl:    'https://security360.example.com/login',
         }),
       }),
     );

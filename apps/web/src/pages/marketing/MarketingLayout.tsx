@@ -1,6 +1,6 @@
 import { Nav } from 'react-bootstrap';
 import { NavLink, Outlet } from 'react-router-dom';
-import { MARKETING_MANAGER_ROLES } from '@stap/shared';
+import { MARKETING_MANAGER_ROLES } from '@security360/shared';
 import { useAuth } from '../../context/AuthContext';
 
 const NAVY  = '#1B3A6B';

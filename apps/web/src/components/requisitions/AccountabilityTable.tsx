@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Form, Spinner } from 'react-bootstrap';
 import {
   ACCOUNTABILITY_STAGES, ROLES,
   type AccountabilityResponse, type AccountabilityStatus, type UserRole,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useReviewAccountability } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';

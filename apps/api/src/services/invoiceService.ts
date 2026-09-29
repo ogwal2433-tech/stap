@@ -1,4 +1,4 @@
-import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
+import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@security360/shared';
 import { companyProfile } from './integrationSettings';
 import { invoicePrefix } from '../lib/systemId';
 import prisma from '../db/prisma';
@@ -21,7 +21,7 @@ import type {
   PaymentResponse,
   ARAgingReport,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -163,7 +163,7 @@ export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
 
 class InvoiceService {
   /**
-   * STAP/INV/2026/0001, with the prefix taken from Settings.
+   * S360/INV/2026/0001, with the prefix taken from Settings.
    *
    * The invoice_prefix setting has existed since the settings table did; it was
    * simply never read, so editing it changed nothing. It is read here now.
@@ -633,7 +633,7 @@ class InvoiceService {
     return this.getById(invoiceId);
   }
 
-  /** Invoice as a printable PDF, on the shared STAP letterhead. */
+  /** Invoice as a printable PDF, on the shared Security360 letterhead. */
   async buildInvoicePdf(invoiceId: string): Promise<{ pdf: Buffer; filename: string }> {
     const invoice = await prisma.invoice.findUnique({
       where:   { id: invoiceId },
@@ -705,7 +705,7 @@ class InvoiceService {
       );
     }
 
-    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'STAP';
+    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'S360';
     const resp = await yoPayments.requestPayment({
       amount:            invoice.totalAmount,
       msisdn,

@@ -34,7 +34,7 @@ echo "✅ Templates initialised"
 #
 # This used to end `exec node apps/api/dist/index.js`, which discarded the
 # command compose passes. The worker service asks for worker.js and was silently
-# given the API instead: stap-worker came up listening on 3001, passed the HTTP
+# given the API instead: security360-worker came up listening on 3001, passed the HTTP
 # healthcheck because it really was the API, and no cron job ran anywhere —
 # they are all registered in worker.js.
 #

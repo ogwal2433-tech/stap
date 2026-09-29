@@ -21,7 +21,7 @@ import type {
   PayrollGroupResponse,
   CreatePayrollGroupInput,
   UpdatePayrollGroupInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@ import api from './api';
 import type {
   GunResponse, GunWithHistory, GunMovementResponse, GunInventoryRow,
   RegisterGunInput, UpdateGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const gunsApi = {
   list(params?: { status?: string; siteId?: string; gunType?: string }): Promise<GunResponse[]> {

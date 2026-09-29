@@ -1,4 +1,4 @@
-import { ROLE_CONFIG } from '@stap/shared';
+import { ROLE_CONFIG } from '@security360/shared';
 
 /**
  * The roles code names directly — in requireRole, in ROLES, in the default

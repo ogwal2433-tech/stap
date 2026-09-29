@@ -7,14 +7,14 @@ import { generateClientId } from '../lib/systemId';
 import {
   PROSPECT_STATUSES, PIPELINE_ORDER, OPEN_PIPELINE_STATUSES,
   prospectStatusLabel,
-} from '@stap/shared';
+} from '@security360/shared';
 import type {
   CreateProspectInput, UpdateProspectInput,
   CreateBidInput, UpdateBidInput, CreateTargetInput,
   ProspectResponse, ProspectWithHistory, ProspectStatusHistoryEntry,
   BidResponse, MarketingTargetResponse, MarketingDashboardData,
   MarketingReport, MarketingReportType, ProspectStatus, PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const DAY_MS = 86_400_000;
 

@@ -1,8 +1,8 @@
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ApproveRequisitionSchema } from '@stap/shared';
-import type { ApproveRequisitionInput, RequisitionResponse } from '@stap/shared';
+import { ApproveRequisitionSchema } from '@security360/shared';
+import type { ApproveRequisitionInput, RequisitionResponse } from '@security360/shared';
 import { useApproveRequisition } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 

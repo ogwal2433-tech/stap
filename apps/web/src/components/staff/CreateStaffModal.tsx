@@ -3,7 +3,7 @@ import { Button, Form, Modal, Row, Col, Spinner } from 'react-bootstrap';
 import {
   ROLE_CONFIG, type StaffRole,
   generatePassword,
-} from '@stap/shared';
+} from '@security360/shared';
 import TemporaryPasswordField from '../common/TemporaryPasswordField';
 import { useRoles } from '../../hooks/useRoles';
 import { useStaffPositions } from '../../hooks/useSettings';

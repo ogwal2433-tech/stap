@@ -9,6 +9,6 @@ describe('letter company branding', () => {
       companyName: 'Example Security Ltd',
     });
     expect(html).toContain('For Example Security Ltd');
-    expect(html).not.toContain('For STAP Security Ltd');
+    expect(html).not.toContain('For Security360 Ltd');
   });
 });

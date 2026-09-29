@@ -2,12 +2,12 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
-import { dispatchChannelLabel } from '@stap/shared';
+import { dispatchChannelLabel } from '@security360/shared';
 import type {
   CreateFundDispatchInput,
   FundDispatchResponse,
   DispatchStatus,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Requisition states where the money has been released and may be sent out.

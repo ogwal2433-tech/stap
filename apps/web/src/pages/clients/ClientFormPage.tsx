@@ -9,13 +9,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   ClientFormSchema, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, generatePassword,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useClient, useCreateClient, useUpdateClient } from '../../hooks/useClients';
 import ContactsEditor from '../../components/clients/ContactsEditor';
 import TemporaryPasswordField from '../../components/common/TemporaryPasswordField';
 import { emptyContact, type ContactDraft } from '../../components/clients/ContactFields';
 import { useToast } from '../../context/ToastContext';
-import type { ClientFormInput, CreateClientInput } from '@stap/shared';
+import type { ClientFormInput, CreateClientInput } from '@security360/shared';
 
 const QUICK_TERMS = [7, 14, 30, 45, 60];
 

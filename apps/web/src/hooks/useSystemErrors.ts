@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { systemErrorsApi, type SystemErrorQueryParams } from '../lib/systemErrors.api';
-import type { UpdateErrorStatusInput, BulkUpdateErrorStatusInput } from '@stap/shared';
+import type { UpdateErrorStatusInput, BulkUpdateErrorStatusInput } from '@security360/shared';
 
 export function useSystemErrors(params: SystemErrorQueryParams) {
   return useQuery({

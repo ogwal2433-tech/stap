@@ -7,7 +7,7 @@ import type {
   AssignComplaintInput,
   UpdateComplaintStatusInput,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const complaintsApi = {
   list(params?: {
@@ -22,7 +22,7 @@ export const complaintsApi = {
     return api.get('/complaints', { params }).then((r) => r.data);
   },
 
-  /** Send a formal notice from STAP to a client. */
+  /** Send a formal notice from Security360 to a client. */
   sendNotice(data: CreateOutboundComplaintInput): Promise<ComplaintResponse> {
     return api.post('/complaints/outbound', data).then((r) => r.data.data);
   },

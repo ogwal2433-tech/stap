@@ -1,5 +1,5 @@
 import type { Request, RequestHandler } from 'express';
-import { hasMinimumRole, type UserRole } from '@stap/shared';
+import { hasMinimumRole, type UserRole } from '@security360/shared';
 import { ForbiddenError, UnauthorisedError } from '../errors/AppError';
 import { logSecurityEvent, logged } from '../lib/securityLog';
 

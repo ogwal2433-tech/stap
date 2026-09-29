@@ -6,7 +6,7 @@ import prisma from '../../db/prisma';
 
 let directorToken: string;
 let guardId: string;
-const EMAIL = 'gint.director@stap.test';
+const EMAIL = 'gint.director@security360.test';
 
 beforeAll(async () => {
   const hash = await bcrypt.hash('testpass123', 10);

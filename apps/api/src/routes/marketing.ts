@@ -64,8 +64,8 @@ import {
   CreateBidSchema,
   UpdateBidSchema,
   CreateTargetSchema,
-} from '@stap/shared';
-import type { MarketingReportType } from '@stap/shared';
+} from '@security360/shared';
+import type { MarketingReportType } from '@security360/shared';
 
 const router: IRouter = Router();
 router.use(authenticate);

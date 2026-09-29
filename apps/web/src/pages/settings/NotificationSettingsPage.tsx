@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Accordion, Alert, Badge, Button, Container, Form, Spinner, Table } from 'react-bootstrap';
 import { notificationsApi } from '../../lib/notifications.api';
 import { useToast } from '../../context/ToastContext';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 
 const ALL_ROLES = Object.values(ROLES);
 

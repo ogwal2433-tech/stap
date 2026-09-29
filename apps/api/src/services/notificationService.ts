@@ -1,8 +1,8 @@
 import prisma from '../db/prisma';
 import { APP_NAME } from '../config/branding';
 import { QueueService } from '../jobs/QueueService';
-import { PaginatedResponse } from '@stap/shared';
-import type { NotificationResponse } from '@stap/shared';
+import { PaginatedResponse } from '@security360/shared';
+import type { NotificationResponse } from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

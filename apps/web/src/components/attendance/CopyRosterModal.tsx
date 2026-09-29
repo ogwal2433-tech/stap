@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { usePastRosterDates, useCopyRoster } from '../../hooks/useAttendance';
 import { attendanceApi } from '../../lib/attendance.api';
-import type { CopyRosterResult } from '@stap/shared';
+import type { CopyRosterResult } from '@security360/shared';
 
 interface Props {
   show:      boolean;

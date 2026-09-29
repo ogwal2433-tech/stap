@@ -1,4 +1,4 @@
-import { normaliseClientPhone } from '@stap/shared';
+import { normaliseClientPhone } from '@security360/shared';
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
@@ -6,7 +6,7 @@ import { loginUrl } from '../jobs/templates/emailTemplates';
 import { NotFoundError } from '../errors/AppError';
 import { generateClientId, generateStaffId } from '../lib/systemId';
 import { AppError } from '../errors/AppError';
-import { MARKETER_LEAD_SOURCE, LEAD_SOURCES } from '@stap/shared';
+import { MARKETER_LEAD_SOURCE, LEAD_SOURCES } from '@security360/shared';
 import type {
   BillingSummary,
   ClientContactInput,
@@ -17,7 +17,7 @@ import type {
   ClientResponse,
   ClientSummary,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /** How contacts are always ordered: the primary first, then oldest first. */
 const CONTACT_ORDER = [

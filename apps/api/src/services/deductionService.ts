@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError } from '../errors/AppError';
-import type { CreateDeductionInput, DeductionResponse } from '@stap/shared';
+import type { CreateDeductionInput, DeductionResponse } from '@security360/shared';
 
 // ── Helper ─────────────────────────────────────────────────────────────────────
 

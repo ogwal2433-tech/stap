@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CreateGuardSchema } from '@stap/shared';
+import { CreateGuardSchema } from '@security360/shared';
 
 /**
  * A field left blank on a form arrives as "", not as absent.

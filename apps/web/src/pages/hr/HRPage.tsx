@@ -14,10 +14,10 @@ import {
   INTERNAL_FACILITATOR, EXTERNAL_FACILITATOR, getJobTitleLabel,
   LEAVE_TYPES, LEAVE_APPLICANT_TYPES, GUARD_APPLICANT, STAFF_APPLICANT,
   leaveTypeLabel,
-} from '@stap/shared';
+} from '@security360/shared';
 import type {
   ApplicantResponse, TrainingSessionResponse, LeaveRequestResponse, LetterTemplateResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 import {
   useApplicants, useApplicant, usePipelineSummary,
   useCreateApplicant, useUpdateApplicantStage, useConvertToGuard,

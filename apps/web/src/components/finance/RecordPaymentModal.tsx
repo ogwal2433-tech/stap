@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRecordPayment } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
-import type { InvoiceResponse } from '@stap/shared';
+import type { InvoiceResponse } from '@security360/shared';
 import { getApiErrorMessage } from '../../lib/api';
 
 /**

@@ -61,8 +61,8 @@ import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { notificationService } from '../services/notificationService';
-import { NotificationPreferenceInput } from '@stap/shared';
-import { ROLES } from '@stap/shared';
+import { NotificationPreferenceInput } from '@security360/shared';
+import { ROLES } from '@security360/shared';
 import { z } from 'zod';
 
 const router = Router();

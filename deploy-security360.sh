@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Deploys the Security360 stack. Touches nothing belonging to the STAP stack:
+# Deploys the Security360 stack. Touches nothing belonging to the primary stack:
 # different compose project, containers, volumes, network and database.
 #
 #   ./deploy-security360.sh
@@ -65,6 +65,6 @@ done
 
 echo
 echo "🌐 Security360: http://localhost:${port}"
-echo "   STAP is untouched on its own ports."
+echo "   The primary stack is untouched on its own ports."
 echo
 compose ps

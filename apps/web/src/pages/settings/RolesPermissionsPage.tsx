@@ -3,7 +3,7 @@ import { Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { permissionsApi, type Permission, type RolePreset, type RoleSummary } from '../../lib/permissions.api';
 import { rolesApi } from '../../lib/roles.api';
-import { ROLE_NAME_PATTERN, normaliseRoleName } from '@stap/shared';
+import { ROLE_NAME_PATTERN, normaliseRoleName } from '@security360/shared';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { getApiErrorMessage } from '../../lib/api';

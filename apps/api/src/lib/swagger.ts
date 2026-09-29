@@ -8,9 +8,9 @@ const options: swaggerJsdoc.Options = {
       title: `${APP_NAME} Management API`,
       version: '1.0.0',
       description:
-        'REST API for STAP Security Ltd web management platform. ' +
+        'REST API for Security360 Ltd web management platform. ' +
         'Covers guards, clients, attendance, finance, HR, inventory, and notifications.',
-      contact: { name: 'STAP Security IT', email: 'it@stapsecurity.co.ug' },
+      contact: { name: 'Security360 IT', email: 'it@security360.co.ug' },
     },
     servers: [
       { url: 'http://localhost:3001', description: 'Development' },
@@ -64,7 +64,7 @@ const options: swaggerJsdoc.Options = {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            invoiceNumber: { type: 'string', example: 'STAP/INV/2026/0001' },
+            invoiceNumber: { type: 'string', example: 'S360/INV/2026/0001' },
             clientId: { type: 'string', format: 'uuid' },
             guardsDeployed: { type: 'integer' },
             ratePerGuard: { type: 'integer' },
@@ -93,7 +93,7 @@ const options: swaggerJsdoc.Options = {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            itemCode: { type: 'string', example: 'STAP-INV-0001' },
+            itemCode: { type: 'string', example: 'S360-INV-0001' },
             itemName: { type: 'string' },
             itemType: { type: 'string', enum: ['UNIFORM', 'EQUIPMENT', 'STATIONERY', 'OTHER'] },
             stockQuantity: { type: 'integer' },

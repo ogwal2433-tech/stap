@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CreateTrainingSessionSchema } from '@stap/shared';
+import { CreateTrainingSessionSchema } from '@security360/shared';
 
 vi.mock('../../db/prisma', () => ({
   default: {

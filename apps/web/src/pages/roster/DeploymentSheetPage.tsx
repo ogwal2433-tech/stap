@@ -5,7 +5,7 @@ import {
   ATTENDANCE_STATUS_CONFIG, ATTENDANCE_STATUS_VALUES, ROLES,
   type AttendanceStatusValue, type DeploymentSheetResult,
   type GuardResponse, type SiteShiftResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { guardsApi } from '../../lib/guards.api';
 import { zonesApi } from '../../lib/zones.api';

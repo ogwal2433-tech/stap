@@ -5,7 +5,7 @@ import type {
   StaffPositionResponse,
   CreateStaffPositionInput,
   UpdateStaffPositionInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

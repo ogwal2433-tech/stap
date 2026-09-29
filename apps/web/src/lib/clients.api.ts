@@ -21,7 +21,7 @@ import type {
   ClientImportPreview,
   ClientImportResult,
   ClientImportRow,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const clientsApi = {
   list(params?: Partial<ClientListQuery>): Promise<PaginatedResponse<ClientResponse>> {

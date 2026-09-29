@@ -11,7 +11,7 @@ import {
   useCreatePurchaseOrder, useAccountability,
 } from '../../hooks/useRequisitions';
 import { useAuth } from '../../context/AuthContext';
-import type { UserRole } from '@stap/shared';
+import type { UserRole } from '@security360/shared';
 import RoleGuard from '../../components/RoleGuard';
 import RequisitionFormModal from '../../components/requisitions/RequisitionFormModal';
 import ApprovalModal from '../../components/requisitions/ApprovalModal';
@@ -22,8 +22,8 @@ import AccountabilityFormModal from '../../components/requisitions/Accountabilit
 import FundDispatchSection from '../../components/requisitions/FundDispatchSection';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { useStaffUsers } from '../../hooks/useUsers';
-import { ROLES, canEditRequisition } from '@stap/shared';
-import type { RequisitionResponse } from '@stap/shared';
+import { ROLES, canEditRequisition } from '@security360/shared';
+import type { RequisitionResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

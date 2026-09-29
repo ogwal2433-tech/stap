@@ -13,12 +13,12 @@ import {
   UpdateComplaintStatusSchema,
   CreateOutboundComplaintSchema,
   COMPLAINT_DIRECTIONS,
-} from '@stap/shared';
+} from '@security360/shared';
 import { z } from 'zod';
 
 const router = Router();
 
-/** Who may send a formal notice to a client on STAP's behalf. */
+/** Who may send a formal notice to a client on Security360's behalf. */
 const NOTICE_SEND_ROLES = [
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
@@ -76,7 +76,7 @@ router.post(
   }),
 );
 
-// POST /complaints/outbound — STAP sends a formal notice to a client.
+// POST /complaints/outbound — Security360 sends a formal notice to a client.
 // Declared before /:id so "outbound" is never read as an id.
 router.post(
   '/outbound',

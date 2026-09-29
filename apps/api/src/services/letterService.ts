@@ -6,13 +6,13 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { sendEmail } from '../lib/mailer';
 import { buildLetterHtml } from '../lib/templates/letterBase';
-import { DISCIPLINARY_LETTER_TYPES, HR_LETTER_TYPES, STRUCTURED_LETTER_TYPES } from '@stap/shared';
+import { DISCIPLINARY_LETTER_TYPES, HR_LETTER_TYPES, STRUCTURED_LETTER_TYPES } from '@security360/shared';
 import type {
   GenerateLetterInput,
   ApproveLetterInput,
   GeneratedLetterResponse,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Letter record with approval workflow ────────────────────────────────────────
 // The single letter-generation system: every letter (disciplinary or HR) is a
@@ -243,7 +243,7 @@ class LetterService {
       day: 'numeric', month: 'long', year: 'numeric',
     });
     const refCode = this.REF_CODE[l.letterType] ?? 'GN';
-    const refNumber = `STAP/${l.generatedAt.getFullYear()}/${refCode}/${l.id.substring(0, 8).toUpperCase()}`;
+    const refNumber = `S360/${l.generatedAt.getFullYear()}/${refCode}/${l.id.substring(0, 8).toUpperCase()}`;
 
     return buildLetterHtml({
       refNumber,
@@ -281,7 +281,7 @@ class LetterService {
   }): Promise<void> {
     const company = await companyProfile();
     const pdfBuffer = await renderToPdf(await this.buildPdfHtml(l as any));
-    const hrEmail   = process.env.HR_EMAIL ?? 'hr@stapsecurity.co.ug';
+    const hrEmail   = process.env.HR_EMAIL ?? 'hr@security360.co.ug';
 
     await sendEmail({
       to:      hrEmail,

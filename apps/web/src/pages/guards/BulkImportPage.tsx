@@ -8,7 +8,7 @@ import {
 } from 'react-bootstrap';
 import { useDownloadTemplate, useBulkImport } from '../../hooks/useGuards';
 import { useToast } from '../../context/ToastContext';
-import type { BulkImportResult } from '@stap/shared';
+import type { BulkImportResult } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB

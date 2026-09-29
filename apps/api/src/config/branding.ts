@@ -1,4 +1,4 @@
-import { resolveBranding, resolveCompanyBrandingDefaults } from '@stap/shared';
+import { resolveBranding, resolveCompanyBrandingDefaults } from '@security360/shared';
 
 /**
  * What this deployment calls itself, read at boot.

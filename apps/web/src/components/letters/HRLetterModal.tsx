@@ -4,7 +4,7 @@ import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
 import { LetterEditor } from './LetterEditor';
-import { HR_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
+import { HR_LETTER_LABELS, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@security360/shared';
 
 function buildCommitmentAgreementBody(guardName: string, startDate: string, minimumPeriod: string, companyName: string): string {
   return `

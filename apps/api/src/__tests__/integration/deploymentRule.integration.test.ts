@@ -46,14 +46,14 @@ beforeAll(async () => {
   // Director — used for the API token
   await prisma.user.upsert({
     where:  { id: IDS.director },
-    create: { id: IDS.director, name: 'DepInt Director', email: 'depint.director@stap.test', passwordHash: hash, role: 'DIRECTOR', status: 'ACTIVE' },
+    create: { id: IDS.director, name: 'DepInt Director', email: 'depint.director@security360.test', passwordHash: hash, role: 'DIRECTOR', status: 'ACTIVE' },
     update: {},
   });
 
   // Operations supervisor — required by createRoster() role validation
   await prisma.user.upsert({
     where:  { id: IDS.supervisor },
-    create: { id: IDS.supervisor, name: 'DepInt Supervisor', email: 'depint.supervisor@stap.test', passwordHash: hash, role: 'OPERATIONS_SUPERVISOR', status: 'ACTIVE' },
+    create: { id: IDS.supervisor, name: 'DepInt Supervisor', email: 'depint.supervisor@security360.test', passwordHash: hash, role: 'OPERATIONS_SUPERVISOR', status: 'ACTIVE' },
     update: {},
   });
 
@@ -130,7 +130,7 @@ beforeAll(async () => {
   // Obtain director token
   const res = await request(app)
     .post('/api/v1/auth/login')
-    .send({ email: 'depint.director@stap.test', password: 'testpass123' });
+    .send({ email: 'depint.director@security360.test', password: 'testpass123' });
   directorToken = res.body.data?.accessToken;
 });
 

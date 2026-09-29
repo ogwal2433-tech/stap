@@ -37,7 +37,7 @@ import {
   GUARD_STATUS_CONFIG, guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus,
   type GuardDocumentResponse, type GuardTransferResponse, type GuardPromotionResponse, type GeneratedLetterResponse, type DisciplinaryResponse,
   guardIdTypeConfig,
-} from '@stap/shared';
+} from '@security360/shared';
 import { computeDisplayDuration, daysUntilExpiry } from '../../lib/dateUtils';
 
 const STATUS_BADGE: Record<string, string> = Object.fromEntries(
@@ -84,7 +84,7 @@ const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, RO
 
 interface ReinstateModalProps {
   guardId:   string;
-  guard:     import('@stap/shared').GuardResponse;
+  guard:     import('@security360/shared').GuardResponse;
   onClose:   () => void;
   onSuccess: () => void;
 }
@@ -814,7 +814,7 @@ export default function GuardDetailPage() {
                   ['Spouse Telephone', (guard as any).spouseTelephone],
                   ['Phone', guard.phone],
                   ['Preferred Payment Contact', (guard as any).preferredPaymentContact],
-                  ['Guard ID Number (SSLG)', guard.systemId],
+                  ['Guard ID Number (S360G)', guard.systemId],
                   ['Identification', guard.idSummary === 'Not provided' ? null : guard.idSummary],
                   ...(guard.idType === 'RELATIVE_ID'
                     ? [['Relative on the ID', guard.relativeIdName],

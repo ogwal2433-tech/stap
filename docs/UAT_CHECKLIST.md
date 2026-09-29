@@ -1,4 +1,4 @@
-# STAP Security — UAT Sign-Off Checklist
+# Security360 — UAT Sign-Off Checklist
 
 **Version:** 1.0  
 **Sprint:** 5 (Testing & Documentation)  
@@ -68,7 +68,7 @@ Sign off at the bottom when all items pass (or agreed deferred items are documen
 
 | # | Test Case | Expected | Result | Notes |
 |---|-----------|----------|--------|-------|
-| 5.1 | Create invoice (3 guards × UGX 800,000) | Subtotal UGX 2,400,000, invoice number STAP/INV/YYYY/XXXX | | |
+| 5.1 | Create invoice (3 guards × UGX 800,000) | Subtotal UGX 2,400,000, invoice number S360/INV/YYYY/XXXX | | |
 | 5.2 | Record full payment (BANK) | Invoice status → PAID, badge green | | |
 | 5.3 | Record partial payment | Invoice status stays PENDING | | |
 | 5.4 | AR Aging report | Invoices bucketed correctly (current / 1-30 / 31-60 / 61-90 / 90+) | | |
@@ -95,7 +95,7 @@ Sign off at the bottom when all items pass (or agreed deferred items are documen
 
 | # | Test Case | Expected | Result | Notes |
 |---|-----------|----------|--------|-------|
-| 7.1 | Create inventory item (UNIFORM) | Item code STAP-INV-XXXX generated | | |
+| 7.1 | Create inventory item (UNIFORM) | Item code S360-INV-XXXX generated | | |
 | 7.2 | Issue 2 items to a guard | Stock decremented by 2 | | |
 | 7.3 | Return item (RETURNED action) | Stock incremented, transaction recorded | | |
 | 7.4 | Mark item as LOST | Deduction created for guard, stock unchanged | | |

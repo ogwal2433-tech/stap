@@ -1,6 +1,6 @@
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
-import type { CreateSupplierInput, SupplierResponse } from '@stap/shared';
+import type { CreateSupplierInput, SupplierResponse } from '@security360/shared';
 
 function fmt(s: any): SupplierResponse {
   return {

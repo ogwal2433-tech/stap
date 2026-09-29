@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { type UserRole } from '@stap/shared';
+import { type UserRole } from '@security360/shared';
 
 interface RoleGuardProps {
   /** Roles that are allowed to see the children. */

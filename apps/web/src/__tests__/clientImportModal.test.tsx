@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { ClientImportPreview, ClientImportResult, ClientImportRow } from '@stap/shared';
+import type { ClientImportPreview, ClientImportResult, ClientImportRow } from '@security360/shared';
 import ClientImportModal from '../components/clients/ClientImportModal';
 
 /**

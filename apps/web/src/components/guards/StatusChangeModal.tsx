@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useUpdateGuardStatus } from '../../hooks/useGuards';
 import { useToast } from '../../context/ToastContext';
-import { GUARD_STATUS_CONFIG, guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus } from '@stap/shared';
+import { GUARD_STATUS_CONFIG, guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus } from '@security360/shared';
 
 interface StatusChangeModalProps {
   guardId: string;

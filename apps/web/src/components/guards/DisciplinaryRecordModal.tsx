@@ -1,10 +1,10 @@
 import { Alert, Button, Form, Modal, Row, Col } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateDisciplinarySchema } from '@stap/shared';
+import { CreateDisciplinarySchema } from '@security360/shared';
 import { useCreateDisciplinaryRecord } from '../../hooks/useDisciplinary';
 import { useToast } from '../../context/ToastContext';
-import type { DisciplinaryResponse } from '@stap/shared';
+import type { DisciplinaryResponse } from '@security360/shared';
 import { z } from 'zod';
 
 const FormSchema = CreateDisciplinarySchema.omit({ guardId: true });

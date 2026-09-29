@@ -142,7 +142,7 @@ import { invoiceService } from '../services/invoiceService';
 import { softDeleteService } from '../services/softDeleteService';
 import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
-import { VoidInvoiceSchema } from '@stap/shared';
+import { VoidInvoiceSchema } from '@security360/shared';
 import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
 import { payrollService } from '../services/payrollService';
@@ -162,7 +162,7 @@ import {
   HrApprovePayrollSchema,
   CreatePayrollGroupSchema,
   UpdatePayrollGroupSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 import { payrollGroupService } from '../services/payrollGroupService';
 
 const router: IRouter = Router();

@@ -1,9 +1,9 @@
 import prisma from '../db/prisma';
 import { guardService } from './guardService';
 import { OUTSTANDING_STATUSES } from './invoiceService';
-import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel } from '@stap/shared';
+import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel } from '@security360/shared';
 import { marketingService } from './marketingService';
-import type { DashboardData } from '@stap/shared';
+import type { DashboardData } from '@security360/shared';
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
 

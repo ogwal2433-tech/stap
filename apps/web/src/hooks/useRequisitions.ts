@@ -11,7 +11,7 @@ import type {
   CreateAccountabilityInput,
   ReviewAccountabilityInput,
   CreateFundDispatchInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useRequisitions(params?: Parameters<typeof requisitionsApi.list>[0]) {
   return useQuery({

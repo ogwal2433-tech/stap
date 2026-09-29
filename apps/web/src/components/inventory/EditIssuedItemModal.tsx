@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
-import type { InventoryTransactionResponse } from '@stap/shared';
+import type { InventoryTransactionResponse } from '@security360/shared';
 import { useUpdateIssuedTransaction } from '../../hooks/useInventory';
 import { getApiErrorMessage } from '../../lib/api';
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Col, Container, Form, Row, Spinner } from 'react-bootstrap';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import type { AuditLogEntry } from '@stap/shared';
+import type { AuditLogEntry } from '@security360/shared';
 import { auditLogsApi } from '../../lib/auditLogs.api';
 import { settingsApi } from '../../lib/settings.api';
 import AuditLogDetailModal from '../../components/system/AuditLogDetailModal';

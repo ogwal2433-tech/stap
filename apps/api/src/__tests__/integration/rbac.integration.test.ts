@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import app from '../../index';
 import prisma from '../../db/prisma';
 
-const EMAIL = (role: string) => `rbac.${role.toLowerCase()}@stap.test`;
+const EMAIL = (role: string) => `rbac.${role.toLowerCase()}@security360.test`;
 const tokens: Record<string, string> = {};
 
 const ROLES = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR', 'ACCOUNTS_OFFICER', 'GUARD', 'CLIENT'];
@@ -34,10 +34,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Scoped to this file's own users. Deleting everything on @stap.test removed
+  // Scoped to this file's own users. Deleting everything on @security360.test removed
   // the users other integration files were mid-run against — vitest runs files in
   // parallel — and their next audited write failed on AuditLog_userId_fkey.
-  await prisma.user.deleteMany({ where: { email: { startsWith: 'rbac.', endsWith: '@stap.test' } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'rbac.', endsWith: '@security360.test' } } });
 });
 
 describe('RBAC — Guards endpoints', () => {
@@ -137,9 +137,9 @@ describe('RBAC — Settings endpoints', () => {
     const res = await request(app)
       .post('/api/v1/settings/users')
       .set('Authorization', `Bearer ${tokens.DIRECTOR}`)
-      .send({ name: 'RBAC User', email: 'rbac.newuser@stap.test', password: 'Password123!', role: 'TRAINER' });
+      .send({ name: 'RBAC User', email: 'rbac.newuser@security360.test', password: 'Password123!', role: 'TRAINER' });
     expect([201, 409]).toContain(res.status);
     // Cleanup
-    await prisma.user.deleteMany({ where: { email: 'rbac.newuser@stap.test' } });
+    await prisma.user.deleteMany({ where: { email: 'rbac.newuser@security360.test' } });
   });
 });

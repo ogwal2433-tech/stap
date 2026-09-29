@@ -1,5 +1,5 @@
 import { Button } from 'react-bootstrap';
-import { contactTypeConfig } from '@stap/shared';
+import { contactTypeConfig } from '@security360/shared';
 import ContactFields, { emptyContact, type ContactDraft } from './ContactFields';
 
 interface Props {

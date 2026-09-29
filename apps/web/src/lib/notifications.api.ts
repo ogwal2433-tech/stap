@@ -1,5 +1,5 @@
 import api from './api';
-import type { NotificationResponse, NotificationPreferenceInput, PaginatedResponse } from '@stap/shared';
+import type { NotificationResponse, NotificationPreferenceInput, PaginatedResponse } from '@security360/shared';
 
 export const notificationsApi = {
   getAll(params?: { isRead?: boolean; page?: number; limit?: number }): Promise<PaginatedResponse<NotificationResponse>> {

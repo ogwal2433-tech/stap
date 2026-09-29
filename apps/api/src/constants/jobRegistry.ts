@@ -14,7 +14,7 @@
  * The services are imported inside `run` rather than at the top of the file.
  * Importing them here pulled four service modules — and everything they import —
  * into anything that merely wanted to look a key up, which was enough to load
- * guardService before @stap/shared had finished initialising and leave its
+ * guardService before @security360/shared had finished initialising and leave its
  * ROLES constant undefined. Deferring the import also keeps the routes cheap:
  * they only need the metadata.
  *

@@ -3,7 +3,7 @@ import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import {
   DISPATCH_CHANNELS, REFERENCED_CHANNELS,
   type DispatchChannel, type RequisitionResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useRecordDispatch } from '../../hooks/useRequisitions';
 import { getApiErrorMessage } from '../../lib/api';
 

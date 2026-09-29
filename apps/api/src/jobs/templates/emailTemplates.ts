@@ -1,5 +1,5 @@
 import { APP_NAME } from '../../config/branding';
-import { DEFAULT_COMPANY_NAME } from '@stap/shared';
+import { DEFAULT_COMPANY_NAME } from '@security360/shared';
 
 /**
  * Email bodies for the queued mail templates.

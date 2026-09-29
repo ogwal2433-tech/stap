@@ -37,7 +37,7 @@ const MOCK_CLIENT = {
 
 const MOCK_INVOICE = {
   id: 'inv-1', clientId: 'client-1', contractId: null,
-  invoiceNumber: 'STAP/INV/2026/0001',
+  invoiceNumber: 'S360/INV/2026/0001',
   periodStart: new Date('2026-04-01'), periodEnd: new Date('2026-04-30'),
   guardsDeployed: 3, ratePerGuard: 800000, subtotal: 2400000, taxAmount: 0, totalAmount: 2400000,
   status: 'PENDING', dueDate: new Date('2026-05-01'), paidAt: null, pdfPath: null, yoPaymentRef: null,
@@ -68,13 +68,13 @@ beforeEach(() => {
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('invoiceService.create()', () => {
-  it('generates correct invoice number (STAP/INV/YEAR/XXXX)', async () => {
+  it('generates correct invoice number (S360/INV/YEAR/XXXX)', async () => {
     const inv = await invoiceService.create(
       { clientId: 'client-1', periodStart: '2026-04-01T00:00:00.000Z', periodEnd: '2026-04-30T23:59:59.000Z',
         guardsDeployed: 3, ratePerGuard: 800000, taxAmount: 0, dueDate: '2026-05-01T00:00:00.000Z' },
       'user-1',
     );
-    expect(inv.invoiceNumber).toMatch(/^STAP\/INV\/\d{4}\/\d{4}$/);
+    expect(inv.invoiceNumber).toMatch(/^S360\/INV\/\d{4}\/\d{4}$/);
   });
 
   it('calculates subtotal and totalAmount correctly', async () => {

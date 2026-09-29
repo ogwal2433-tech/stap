@@ -10,7 +10,7 @@ import type {
   GuardAttendanceSummary,
   GuardAttendanceSummaryResponse,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 class AttendanceService {
   // ── Mark attendance ────────────────────────────────────────────────────────

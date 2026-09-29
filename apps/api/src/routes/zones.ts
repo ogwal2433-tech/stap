@@ -5,7 +5,7 @@ import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { CreateZoneSchema, UpdateZoneSchema } from '@stap/shared';
+import { CreateZoneSchema, UpdateZoneSchema } from '@security360/shared';
 import { zoneService } from '../services/zoneService';
 
 const router: IRouter = Router();

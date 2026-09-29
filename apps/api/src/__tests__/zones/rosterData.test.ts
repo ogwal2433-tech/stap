@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import prisma from '../../db/prisma';
 import { zoneService } from '../../services/zoneService';
-import { DEPLOYABLE_STATUSES } from '@stap/shared';
+import { DEPLOYABLE_STATUSES } from '@security360/shared';
 
 /**
  * The guard list behind the roster builder.

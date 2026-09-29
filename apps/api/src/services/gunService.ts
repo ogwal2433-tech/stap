@@ -2,7 +2,7 @@ import prisma from '../db/prisma';
 import { generateGunId } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { AppError, NotFoundError } from '../errors/AppError';
-import { GUN_STATUSES, GUN_MOVEMENT_TYPES, ARMOURY_LABEL } from '@stap/shared';
+import { GUN_STATUSES, GUN_MOVEMENT_TYPES, ARMOURY_LABEL } from '@security360/shared';
 import type {
   RegisterGunInput,
   DeployGunInput,
@@ -14,8 +14,8 @@ import type {
   GunInventoryRow,
   GunMovementType,
   UpdateGunInput,
-} from '@stap/shared';
-import { gunTypeLabel, ownershipConfig } from '@stap/shared';
+} from '@security360/shared';
+import { gunTypeLabel, ownershipConfig } from '@security360/shared';
 
 const GUN_INCLUDE = {
   registeredByUser: { select: { id: true, name: true } },

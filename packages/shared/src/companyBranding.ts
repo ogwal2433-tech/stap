@@ -3,11 +3,11 @@ import { DEFAULT_COMPANY_NAME } from './constants/app';
 
 export const COMPANY_BRANDING_DEFAULTS = {
   company_name: DEFAULT_COMPANY_NAME,
-  company_short_name: 'STAP',
+  company_short_name: 'Security360',
   company_address: 'Kampala, Uganda',
-  company_email: 'info@stapsecurity.co.ug',
+  company_email: 'info@security360.co.ug',
   company_phone: '+256 414 000 000',
-  company_website: 'www.stapsecurity.co.ug',
+  company_website: 'www.security360.co.ug',
   company_logo_url: '',
   company_registration_number: '',
   company_tax_id: '',

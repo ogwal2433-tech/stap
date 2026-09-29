@@ -11,7 +11,7 @@ import PermissionGuard, { PermissionDenied } from '@/components/PermissionGuard'
 import PageSpinner from '@/components/ui/PageSpinner';
 import LoginPage from '@/pages/LoginPage';
 import UnauthorisedPage from '@/pages/UnauthorisedPage';
-import { ROLES, INTERNAL_ROLES, REPORT_ROLES, FINANCE_ROLES, DEPLOYMENT_VIEW_ROLES, type UserRole } from '@stap/shared';
+import { ROLES, INTERNAL_ROLES, REPORT_ROLES, FINANCE_ROLES, DEPLOYMENT_VIEW_ROLES, type UserRole } from '@security360/shared';
 
 // Code-split all page-level components
 const DashboardPage                = lazyWithReload(() => import('@/pages/DashboardPage'), 'DashboardPage');

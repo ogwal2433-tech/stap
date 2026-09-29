@@ -8,7 +8,7 @@ import {
   prospectStatusLabel, prospectStatusColour,
   type ProspectResponse, type ProspectStatus,
   MARKETING_MANAGER_ROLES,
-} from '@stap/shared';
+} from '@security360/shared';
 import {
   useProspects, useProspect, useCreateProspect, useUpdateProspect, useConvertProspect,
 } from '../../hooks/useMarketing';

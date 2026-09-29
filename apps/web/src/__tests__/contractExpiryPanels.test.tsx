@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import type { ContractResponse } from '@stap/shared';
+import type { ContractResponse } from '@security360/shared';
 import ContractExpiryPanels from '../components/clients/ContractExpiryPanels';
 
 const alerts = vi.hoisted(() => ({ value: { expiring: [] as ContractResponse[], expired: [] as ContractResponse[] }, loading: false }));

@@ -1,8 +1,8 @@
 # Security360 — a second branded deployment
 
-Security360 is the same software as STAP Security, deployed a second time under
-a different name, with its own database. Both run on one host at the same time
-and share nothing but the machine.
+This stack is a second deployment of the same software, alongside the primary
+stack (`docker-compose.yml`), with its own database. Both run on one host at the
+same time and share nothing but the machine.
 
 The brand is configuration, not a fork. There is one codebase, one set of
 Dockerfiles, and one `develop` branch; what differs is a handful of environment
@@ -13,7 +13,7 @@ one server.
 
 ## Ports
 
-| Service    | STAP (existing) | QA        | Security360 |
+| Service    | Primary (existing) | QA        | Security360 |
 |------------|-----------------|-----------|-------------|
 | Web        | 80, 443         | 8000      | **8080**    |
 | API        | internal only   | internal  | internal    |
@@ -31,13 +31,13 @@ docker exec -it security360-redis redis-cli
 
 ## What is isolated
 
-|            | STAP                    | Security360               |
+|            | Primary                 | Security360               |
 |------------|-------------------------|---------------------------|
-| Project    | *(directory name)*      | `security360`             |
-| Containers | `stap-*`                | `security360-*`           |
-| Volumes    | `postgres_data`, …      | `security360_postgres`, … |
-| Network    | `stap-network`          | `security360_network`      |
-| Database   | `stap_production`       | `security360`             |
+| Project    | `s360-prod`             | `security360`             |
+| Containers | `s360-*-prod`            | `security360-*`           |
+| Volumes    | `s360-prod_postgres_data`, … | `security360_postgres`, … |
+| Network    | `s360-prod-network`            | `security360_network`      |
+| Database   | `security360_production` | `security360`             |
 
 `apps/api/src/__tests__/infra/stackIsolation.test.ts` asserts that no container
 name, volume, network or published port is shared between the three stacks. A
@@ -67,11 +67,11 @@ Two different mechanisms, because the two halves are built differently:
   only a restart.
 - **Frontend** — a static bundle behind nginx, with no server to ask at page
   load. `VITE_APP_NAME` is a **build argument**, so each branded stack builds its
-  own image. An unset argument silently produces STAP branding, which is exactly
-  what the STAP stack wants.
+  own image. An unset argument silently produces Security360 branding, which is exactly
+  what the primary stack wants.
 
 Both resolve through `resolveBranding()` in `packages/shared/src/constants/app.ts`.
-Unset, everything falls back to `STAP Security` — so this whole mechanism existing
+Unset, everything falls back to `Security360` — so this whole mechanism existing
 does not change the original deployment.
 
 ### The product name and the company name are separate
@@ -81,13 +81,12 @@ APP_NAME      the software      tab, sidebar, login screen, API docs, email subj
 COMPANY_NAME  the legal entity  invoices, contracts, letters, ID cards, client notices
 ```
 
-`S360_COMPANY_NAME` is **blank by default**, which keeps `STAP Security Ltd`.
-
-That is correct if Security360 is the same business under a new product name,
-and wrong if it is a different company. Set it only when this deployment bills
-its own clients under its own name — a client who signed with STAP Security Ltd
-and receives an invoice from someone else has no idea who is asking for money.
-`branding.test.ts` pins this split.
+`S360_COMPANY_NAME` defaults to `Security360 Ltd`, and the other company
+details to the Security360 values in `docker-compose.security360.yml`. Anything
+saved in Settings > Company Branding takes precedence. Set these only when this
+deployment bills its own clients under a different legal name — a client who
+receives an invoice from an entity they never signed with has no idea who is
+asking for money. `branding.test.ts` pins this split.
 
 ## Everyday commands
 
@@ -102,16 +101,16 @@ $S360 down              # stop, keep the data
 $S360 down -v           # stop and DELETE ALL DATA
 ```
 
-`down -v` destroys the `security360_*` volumes. It cannot touch STAP's, because
+`down -v` destroys the `security360_*` volumes. It cannot touch the primary stack's, because
 they are different volumes — that is the point of the isolation test.
 
 ## Checking both are up
 
 ```bash
-docker ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'stap|security360'
+docker ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 's360|security360'
 
 curl -s http://localhost:8080/api/v1/health   # {"status":"ok","app":"Security360",…}
-curl -s http://localhost/api/v1/health        # {"status":"ok","app":"STAP Security",…}
+curl -s http://localhost/api/v1/health        # {"status":"ok","app":"Security360",…}
 ```
 
 The health endpoint reports `app`, so it is possible to tell which deployment
@@ -125,14 +124,17 @@ boot, and compose gates it on the database healthcheck — so there is nothing t
 run by hand. Set `S360_SEED_PASSWORD` if this deployment needs seeded accounts to
 sign in with; leave it blank in production.
 
-## Deliberately not renamed
+## What the Security360 rebrand kept
 
-Following the reasoning recorded in `15c1158`:
+The codebase was rebranded from STAP to Security360 (migration
+`20260929000001_security360_rebrand_defaults`). New records use the new
+prefixes; what was already issued keeps the value it was issued with:
 
-- The `@stap/shared` package name, the `stap-security` repository, and existing
-  infrastructure identifiers. These are not display text, and renaming a volume
-  orphans the data in it rather than moving it.
-- The `@stapsecurity.co.ug` mail domain and the seed logins on it.
-- Inventory SKUs (`STAP-UNI-*`) and the payroll narration (`STAP-SAL-*`), which
-  appear on bank statements and in stock records that already exist.
-- Anything a guard or client reads, which names the company, not the product.
+- Guard, client and staff IDs (`SSLG…`, `SSLC…`, `SSLS…`), which are printed on
+  ID cards. New ones are `S360G…`, `S360C…`, `S360S…`.
+- Invoice numbers (`STAP/INV/…`), letter references, inventory item codes and
+  payment references, which appear on client statements, bank statements and
+  stock records that already exist. New ones use `S360`.
+- Login emails of accounts that already exist, which are people's usernames.
+- The repository name and this stack's volumes. Renaming a volume orphans the
+  data in it rather than moving it.

@@ -21,13 +21,13 @@ import type {
   StockConditionBreakdown,
   ItemCondition,
   AdjustConditionInput,
-} from '@stap/shared';
+} from '@security360/shared';
 import {
   ITEM_CONDITIONS,
   ITEM_CONDITION_COLORS,
   ITEM_CONDITION_BG,
   guardStatusLabel,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 

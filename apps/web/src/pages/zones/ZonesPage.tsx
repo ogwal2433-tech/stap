@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usersApi } from '../../lib/users.api';
 import { clientsApi } from '../../lib/clients.api';
 import SitePicker from '../../components/zones/SitePicker';
-import type { ZoneResponse } from '@stap/shared';
+import type { ZoneResponse } from '@security360/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

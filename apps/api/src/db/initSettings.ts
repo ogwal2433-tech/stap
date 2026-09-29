@@ -48,16 +48,16 @@ const DEFAULT_SETTINGS: Array<{
 
   // ── BILLING ──────────────────────────────────────────────────────────
   { key: 'default_billing_terms', value: '30',       label: 'Default Billing Terms (days)', group: 'BILLING', dataType: 'number' },
-  { key: 'invoice_prefix',        value: 'STAP/INV', label: 'Invoice Prefix',               group: 'BILLING' },
+  { key: 'invoice_prefix',        value: 'S360/INV', label: 'Invoice Prefix',               group: 'BILLING' },
   { key: 'tax_rate',              value: '0',        label: 'Tax Rate (%)',                  group: 'BILLING', dataType: 'number' },
   { key: 'yo_payment_enabled',    value: 'false',    label: 'Yo! Payments Enabled',          group: 'BILLING', dataType: 'boolean' },
 
   // ── ID FORMATS ───────────────────────────────────────────────────────
   // Prefixes for generated system IDs. Changing one affects records created
   // afterwards; nothing already issued is renamed.
-  { key: 'guard_id_prefix',    value: 'SSLG', label: 'Guard ID Prefix',           group: 'ID_FORMAT' },
-  { key: 'client_id_prefix',   value: 'SSLC', label: 'Client ID Prefix',          group: 'ID_FORMAT' },
-  { key: 'staff_id_prefix',    value: 'SSLS', label: 'Staff ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'guard_id_prefix',    value: 'S360G', label: 'Guard ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'client_id_prefix',   value: 'S360C', label: 'Client ID Prefix',          group: 'ID_FORMAT' },
+  { key: 'staff_id_prefix',    value: 'S360S', label: 'Staff ID Prefix',           group: 'ID_FORMAT' },
   { key: 'gun_id_prefix',      value: 'GUN',  label: 'Gun ID Prefix',             group: 'ID_FORMAT' },
   { key: 'shift_report_prefix',value: 'SHR',  label: 'Shift Report ID Prefix',    group: 'ID_FORMAT' },
   { key: 'id_padding',         value: '3',    label: 'ID Number Padding (digits)', group: 'ID_FORMAT', dataType: 'number' },

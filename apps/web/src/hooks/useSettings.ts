@@ -10,7 +10,7 @@ import type {
   UpdateDeductionTypeInput,
   CreateShiftTypeInput,
   UpdateShiftTypeInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useSystemSettings() {
   return useQuery({

@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts';
-import { TARGET_PERIOD_TYPES, type TargetPeriodType, MARKETING_MANAGER_ROLES } from '@stap/shared';
+import { TARGET_PERIOD_TYPES, type TargetPeriodType, MARKETING_MANAGER_ROLES } from '@security360/shared';
 import { useTargets, useCreateTarget, useMarketingDashboard } from '../../hooks/useMarketing';
 import { marketingApi } from '../../lib/marketing.api';
 import { useAuth } from '../../context/AuthContext';

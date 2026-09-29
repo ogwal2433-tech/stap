@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   GUN_TYPES, GUN_OWNERSHIP, GUN_CONDITIONS, GUN_STATUSES, GUN_MOVEMENT_LABELS, ARMOURY_LABEL,
   type GunResponse, type GunCondition,
-} from '@stap/shared';
+} from '@security360/shared';
 import {
   useGuns, useGunInventory, useGun, useGunMovements,
   useRegisterGun, useUpdateGun, useDeleteGun, useDeployGun, useWithdrawGun, useTransferGun,

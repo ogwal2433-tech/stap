@@ -6,7 +6,7 @@ import { useCreateSite, useUpdateSite } from '../../hooks/useClients';
 import { useShiftTypes } from '../../hooks/useSettings';
 import { useZones } from '../../hooks/useZones';
 import { useToast } from '../../context/ToastContext';
-import { DEFAULT_SITE_TYPE, type SiteResponse } from '@stap/shared';
+import { DEFAULT_SITE_TYPE, type SiteResponse } from '@security360/shared';
 import { z } from 'zod';
 import DateRangePicker from '../common/DateRangePicker';
 

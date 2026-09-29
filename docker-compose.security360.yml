@@ -1,15 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Security360 — a second, separately-branded deployment
 #
-#   Web:      http://<host>:8080        (STAP stays on 80/443)
-#   Data:     security360_postgres      (STAP uses postgres_data)
-#   Network:  security360_network       (STAP uses stap-network)
+#   Web:      http://<host>:8080        (the primary stack stays on 80/443)
+#   Data:     security360_postgres      (primary uses s360-prod_postgres_data)
+#   Network:  security360_network       (primary uses s360-prod-network)
 #
-# Nothing is shared with the STAP stack: different volumes, network, container
+# Nothing is shared with the primary stack: different volumes, network, container
 # names, database and Redis. The only overlap is the host, so neither can reach
 # the other's data even by accident.
 #
-# Built from the SAME Dockerfiles the STAP stack uses. The brand is a build
+# Built from the SAME Dockerfiles the primary stack uses. The brand is a build
 # argument, not a fork — a parallel set of Dockerfiles would drift, and this
 # deployment would stop being the same software.
 #
@@ -32,7 +32,7 @@ services:
     volumes:
       - s360_postgres_data:/var/lib/postgresql/data
     networks: [s360-network]
-    # Deliberately not published to the host. The STAP stack keeps its database
+    # Deliberately not published to the host. The primary stack keeps its database
     # internal too; a second Postgres on a host port is an exposure with no
     # purpose, since psql is one `docker exec` away.
     healthcheck:
@@ -212,7 +212,7 @@ services:
     image: security360-web:latest
     container_name: security360-web
     restart: unless-stopped
-    # The STAP stack splits static-serving and the API proxy across two
+    # The primary stack splits static-serving and the API proxy across two
     # containers because it terminates TLS. There is no certificate here, so
     # this one does both — the mounted config adds the /api and /uploads rules.
     volumes:

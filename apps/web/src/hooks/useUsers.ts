@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { usersApi } from '../lib/users.api';
-import { INTERNAL_ROLES } from '@stap/shared';
+import { INTERNAL_ROLES } from '@security360/shared';
 
 // Lightweight staff list for assignment dropdowns — internal roles only
 // (excludes CLIENT/GUARD), rarely changes so cached for 5 minutes.

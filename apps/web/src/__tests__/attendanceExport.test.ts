@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as XLSX from 'xlsx';
 import { exportAttendanceSummary } from '../lib/exportToExcel';
-import type { GuardAttendanceSummaryResponse } from '@stap/shared';
+import type { GuardAttendanceSummaryResponse } from '@security360/shared';
 
 /**
  * The export is the deliverable for "report under export excel", so these
@@ -17,12 +17,12 @@ const data: GuardAttendanceSummaryResponse = {
   guardCount: 2,
   summary: [
     {
-      guardId: 'a', guardName: 'Alice Nakato', systemId: 'SSLG001', rank: 'GUARD',
+      guardId: 'a', guardName: 'Alice Nakato', systemId: 'S360G001', rank: 'GUARD',
       presentDays: 2, lateDays: 1, sickDays: 1, onLeaveDays: 0, absentDays: 1, awolDays: 0,
       totalRecords: 5, attendanceRate: 60, sites: 'KCCA City Hall',
     },
     {
-      guardId: 'b', guardName: 'Bob Okello', systemId: 'SSLG002', rank: 'SENIOR_GUARD',
+      guardId: 'b', guardName: 'Bob Okello', systemId: 'S360G002', rank: 'SENIOR_GUARD',
       presentDays: 2, lateDays: 0, sickDays: 0, onLeaveDays: 1, absentDays: 0, awolDays: 0,
       totalRecords: 3, attendanceRate: 67, sites: 'URA Nakawa',
     },
@@ -57,7 +57,7 @@ describe('exportAttendanceSummary', () => {
     exportAttendanceSummary(data);
     const rows = sheetRows();
 
-    expect(rows[0][0]).toBe('STAP SECURITY LTD');
+    expect(rows[0][0]).toBe('SECURITY360 LTD');
     expect(rows[1][0]).toBe('ATTENDANCE SUMMARY REPORT');
 
     const headerIdx = rows.findIndex(r => r[0] === '#' && r[1] === 'Guard Name');

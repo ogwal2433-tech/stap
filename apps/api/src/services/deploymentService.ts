@@ -2,8 +2,8 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
-import { DEPLOYABLE_STATUSES, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
-import { ROLES } from '@stap/shared';
+import { DEPLOYABLE_STATUSES, guardStatusLabel, type GuardEmploymentStatus } from '@security360/shared';
+import { ROLES } from '@security360/shared';
 import type {
   CreateRosterInput,
   CopyRosterInput,
@@ -22,8 +22,8 @@ import type {
   DeploymentSheetRow,
   DeploymentSheetResult,
   UserRole,
-} from '@stap/shared';
-import { REPLACEMENT_REASONS, type ReplacementReason } from '@stap/shared';
+} from '@security360/shared';
+import { REPLACEMENT_REASONS, type ReplacementReason } from '@security360/shared';
 
 const SUPERVISOR_ROLES = [ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR];
 
@@ -480,7 +480,7 @@ class DeploymentService {
 
   // ── Attendance dashboard ───────────────────────────────────────────────────
 
-  async getAttendanceDashboard(): Promise<import('@stap/shared').AttendanceDashboardData> {
+  async getAttendanceDashboard(): Promise<import('@security360/shared').AttendanceDashboardData> {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
     const tomorrow = new Date(today);

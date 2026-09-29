@@ -125,7 +125,7 @@ describe('complaintService.createOutbound()', () => {
   });
 
   it('still sends when the client has no portal user yet', async () => {
-    // The notice is a record of what STAP sent; it must not depend on the
+    // The notice is a record of what Security360 sent; it must not depend on the
     // client having been given a login.
     mp.user.findMany.mockResolvedValue([]);
 
@@ -179,7 +179,7 @@ describe('complaintService.acknowledgeNotice()', () => {
     mp.clientComplaint.findUnique.mockResolvedValue(notice({ direction: 'INBOUND', status: 'OPEN' }));
 
     await expect(complaintService.acknowledgeNotice('notice-1', undefined, 'client-user-1'))
-      .rejects.toThrow(/Only notices sent by STAP/i);
+      .rejects.toThrow(/Only notices sent by Security360/i);
   });
 
   it('refuses a second acknowledgement', async () => {

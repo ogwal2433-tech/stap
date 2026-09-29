@@ -7,8 +7,8 @@ import { errorLogger } from './errorLogger';
 import { isValidBcryptHash } from '../lib/passwordHash';
 import { AccountLockedError, UnauthorisedError, AppError } from '../errors/AppError';
 import { REFRESH_TOKEN_TTL_SECONDS } from '../config/session';
-import type { LoginResponse } from '@stap/shared';
-import type { UserRole } from '@stap/shared';
+import type { LoginResponse } from '@security360/shared';
+import type { UserRole } from '@security360/shared';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILED_ATTEMPT_TTL = 30 * 60; // 30 minutes in seconds

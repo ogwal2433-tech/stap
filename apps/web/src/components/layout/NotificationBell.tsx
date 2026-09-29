@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Badge, ListGroup, Overlay, Popover } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useUnreadCount, useNotifications, useMarkAsRead, useMarkAllAsRead } from '../../hooks/useNotifications';
-import type { NotificationResponse } from '@stap/shared';
+import type { NotificationResponse } from '@security360/shared';
 
 const TYPE_ICON: Record<string, string> = {
   ATTENDANCE_ALERT:  '🚨',

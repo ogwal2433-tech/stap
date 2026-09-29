@@ -1,10 +1,10 @@
 {
-  "name": "stap-security",
+  "name": "security360",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter @stap/shared build && pnpm --filter api build && pnpm --filter web build",
-    "dev": "pnpm --filter @stap/shared build && concurrently \"pnpm --filter api dev\" \"pnpm --filter api dev:worker\" \"pnpm --filter web dev\"",
+    "build": "pnpm --filter @security360/shared build && pnpm --filter api build && pnpm --filter web build",
+    "dev": "pnpm --filter @security360/shared build && concurrently \"pnpm --filter api dev\" \"pnpm --filter api dev:worker\" \"pnpm --filter web dev\"",
     "lint": "pnpm -r lint",
     "type-check": "pnpm -r type-check",
     "qa:up": "docker compose -f docker-compose.qa.yml --env-file .env.qa up -d --build",

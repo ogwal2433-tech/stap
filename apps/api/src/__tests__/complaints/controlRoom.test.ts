@@ -3,7 +3,7 @@ import {
   ROLES, INTERNAL_ROLES, COMPLAINT_RECEIVER_ROLES, FINANCE_ROLES,
   GUARD_WRITE_ROLES, DEPLOYMENT_ROLES, DEPLOYMENT_VIEW_ROLES, HR_ROLES,
   UpdateComplaintStatusSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 vi.mock('../../db/prisma', () => ({
   default: {

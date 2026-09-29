@@ -14,10 +14,10 @@ import {
   useDeleteDeductionType, useReorderDeductionTypes,
   useAllShiftTypes, useDeactivateShiftType, useActivateShiftType, useDeleteShiftType, useReorderShiftTypes,
 } from '../../hooks/useSettings';
-import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@stap/shared';
+import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@security360/shared';
 import { useRunSalaryIncrements } from '../../hooks/useGuards';
 import { useRoles } from '../../hooks/useRoles';
-import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse, StaffPositionResponse } from '@stap/shared';
+import type { SystemSettingResponse, UserResponse, GuardRankResponse, DeductionTypeResponse, ShiftTypeResponse, StaffPositionResponse } from '@security360/shared';
 import { clientsApi } from '../../lib/clients.api';
 import { getApiErrorMessage } from '../../lib/api';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
@@ -55,7 +55,7 @@ const GROUP_ICONS: Record<string, string> = {
 };
 
 /**
- * Mirrors StrongPasswordSchema in @stap/shared so the admin sees what's wrong
+ * Mirrors StrongPasswordSchema in @security360/shared so the admin sees what's wrong
  * before submitting, instead of a round-trip "Validation failed" toast.
  * Returns null when the password is acceptable.
  */

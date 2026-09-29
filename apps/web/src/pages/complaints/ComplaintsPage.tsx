@@ -9,7 +9,7 @@ import SendClientNoticeModal from '../../components/complaints/SendClientNoticeM
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
-import type { ComplaintResponse } from '@stap/shared';
+import type { ComplaintResponse } from '@security360/shared';
 
 // ── Badge helpers ──────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ export default function ComplaintsPage() {
   const [selected,   setSelected]   = useState<ComplaintResponse | null>(null);
   const [filters,    setFilters]    = useState({ status: '', category: '', page: 1 });
 
-  // ── Inbound: complaints clients raised with STAP ────────────────────────────
+  // ── Inbound: complaints clients raised with Security360 ────────────────────────────
   const { data: inboundData, isLoading: inboundLoading } = useQuery({
     queryKey: ['complaints', 'INBOUND', filters],
     queryFn:  () => complaintsApi.list({ ...filters, direction: 'INBOUND', limit: 20 }),
@@ -66,7 +66,7 @@ export default function ComplaintsPage() {
   const pagination = inboundData?.pagination;
   const openCount  = complaints.filter(c => c.status === 'OPEN').length;
 
-  // ── Outbound: notices STAP sent to clients ──────────────────────────────────
+  // ── Outbound: notices Security360 sent to clients ──────────────────────────────────
   const { data: outboundData, isLoading: outboundLoading } = useQuery({
     queryKey: ['complaints', 'OUTBOUND'],
     queryFn:  () => complaintsApi.list({ direction: 'OUTBOUND', limit: 100 }),

@@ -10,7 +10,7 @@ import {
   InputGroup,
   Spinner,
 } from 'react-bootstrap';
-import { LoginSchema, ROLES, type LoginInput } from '@stap/shared';
+import { LoginSchema, ROLES, type LoginInput } from '@security360/shared';
 import { APP_NAME, APP_TAGLINE } from '../lib/branding';
 import { useAuth } from '../context/AuthContext';
 import type { AxiosError } from 'axios';

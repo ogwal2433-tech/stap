@@ -6,7 +6,7 @@ dotenv.config();
  * Worker-only entry point.
  * Starts all BullMQ workers and the scheduled cron jobs, without starting the
  * Express HTTP server. This process is managed separately by PM2 (see
- * ecosystem.config.js) and — unlike stap-api — always runs as a single
+ * ecosystem.config.js) and — unlike security360-api — always runs as a single
  * instance, so cron jobs registered here fire exactly once per schedule.
  */
 import './bootstrap';
@@ -29,14 +29,14 @@ import { startReportTitleCacheSync, stopReportTitleCacheSync } from './lib/repor
 import { startCompanyBrandingCacheSync, stopCompanyBrandingCacheSync } from './lib/companyBrandingCacheBus';
 import { clearCompanyBrandingCache } from './services/companyBrandingService';
 
-console.log(`⚙️  STAP Worker process started (PID ${process.pid})`);
+console.log(`⚙️  Security360 Worker process started (PID ${process.pid})`);
 startReportTitleCacheSync(() => settingsService.clearReportTitleCache());
 startCompanyBrandingCacheSync(clearCompanyBrandingCache);
 
 const workers = [auditWorker, emailWorker, smsWorker, invoiceWorker, payslipWorker, disburseWorker];
 
 // ── Scheduled jobs ─────────────────────────────────────────────────────────────
-// Runs only here (a single PM2 instance), not in stap-api (which runs 2
+// Runs only here (a single PM2 instance), not in security360-api (which runs 2
 // cluster instances) — otherwise every job below would fire twice daily.
 
 // Registered from JOB_REGISTRY rather than written out one by one. The

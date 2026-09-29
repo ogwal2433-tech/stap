@@ -5,7 +5,7 @@ import { PERMISSIONS } from '../constants/permissions';
 import { validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { auditLogService } from '../services/auditLogService';
-import { AuditLogQuerySchema, SecurityLogQuerySchema } from '@stap/shared';
+import { AuditLogQuerySchema, SecurityLogQuerySchema } from '@security360/shared';
 
 /**
  * Read-only view of the audit trail.

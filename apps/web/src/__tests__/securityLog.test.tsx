@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { SecurityLogResult } from '@stap/shared';
+import type { SecurityLogResult } from '@security360/shared';
 import SecurityLogPage from '../pages/admin/SecurityLogPage';
 
 const h = vi.hoisted(() => ({ calls: [] as Record<string, unknown>[] }));

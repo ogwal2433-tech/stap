@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { staffApi, type StaffListParams } from '../lib/staff.api';
-import type { CreateStaffInput, UpdateStaffInput } from '@stap/shared';
+import type { CreateStaffInput, UpdateStaffInput } from '@security360/shared';
 
 /**
  * Every mutation invalidates the whole `staff` tree rather than a single key —

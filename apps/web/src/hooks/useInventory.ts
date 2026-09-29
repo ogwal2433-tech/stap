@@ -10,7 +10,7 @@ import type {
   AdjustConditionInput,
   BatchIssueInput,
   InventoryItemResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useInventoryItems(params?: Parameters<typeof inventoryApi.listItems>[0]) {
   return useQuery({

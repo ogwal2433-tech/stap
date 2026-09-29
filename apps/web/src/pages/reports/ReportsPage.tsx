@@ -6,8 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { reportsApi } from '../../lib/reports.api';
 import { useToast } from '../../context/ToastContext';
 import RoleGuard from '../../components/RoleGuard';
-import { ROLES } from '@stap/shared';
-import type { ScheduledReportInput } from '@stap/shared';
+import { ROLES } from '@security360/shared';
+import type { ScheduledReportInput } from '@security360/shared';
 import { useReportTitle } from '../../hooks/useReportTitles';
 
 // ── Scheduled report form modal ────────────────────────────────────────────────

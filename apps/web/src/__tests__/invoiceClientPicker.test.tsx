@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { ClientResponse } from '@stap/shared';
+import type { ClientResponse } from '@security360/shared';
 import InvoiceFormModal from '../components/finance/InvoiceFormModal';
 
 /**
@@ -16,7 +16,7 @@ const h = vi.hoisted(() => ({
 }));
 
 const client = (id: string, clientName: string) =>
-  ({ id, clientName, systemId: `SSLC-${id}` }) as unknown as ClientResponse;
+  ({ id, clientName, systemId: `S360C-${id}` }) as unknown as ClientResponse;
 
 // The first page by name, and a client that is only ever reachable by search.
 const FIRST_PAGE = [client('1', 'Acacia Mall'), client('2', 'Bugolobi Flats')];

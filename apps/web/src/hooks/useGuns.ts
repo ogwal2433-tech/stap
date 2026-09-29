@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UpdateGunInput } from '@stap/shared';
+import type { UpdateGunInput } from '@security360/shared';
 import { gunsApi } from '../lib/guns.api';
 import type {
   RegisterGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useGuns(params?: { status?: string; siteId?: string; gunType?: string }) {
   return useQuery({

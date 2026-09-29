@@ -1,5 +1,5 @@
 import { Col, Form, Row } from 'react-bootstrap';
-import { CONTACT_TYPES, contactTypeConfig, type ContactType } from '@stap/shared';
+import { CONTACT_TYPES, contactTypeConfig, type ContactType } from '@security360/shared';
 
 export interface ContactDraft {
   contactType: ContactType;

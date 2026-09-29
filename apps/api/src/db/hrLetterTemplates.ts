@@ -1,5 +1,5 @@
 /**
- * The HR letter templates STAP issues on paper, as editable HTML.
+ * The HR letter templates Security360 issues on paper, as editable HTML.
  *
  * Wording follows the company's own documents. Only {guard_name}, {date} and
  * {company_name} are substituted when a template is loaded into the letter
@@ -92,7 +92,7 @@ ${CLEARANCE_BLOCK}`),
   {
     letterType: 'CLEARANCE_FORM',
     name:       'Guard / Staff Clearance Form',
-    content: wrap('STAP SECURITY LTD GUARD/STAFF CLEARANCE FORM', `
+    content: wrap('SECURITY360 LTD GUARD/STAFF CLEARANCE FORM', `
 <p><strong>1. EMPLOYEE INFORMATION</strong></p>
 <ul>
   <li>Full Name: <strong>{guard_name}</strong></li>

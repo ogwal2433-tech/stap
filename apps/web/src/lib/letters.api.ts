@@ -4,7 +4,7 @@ import type {
   ApproveLetterInput,
   GeneratedLetterResponse,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const lettersApi = {
   generate(data: GenerateLetterInput): Promise<GeneratedLetterResponse> {
