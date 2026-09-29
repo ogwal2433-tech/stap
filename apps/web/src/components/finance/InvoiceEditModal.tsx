@@ -3,11 +3,10 @@ import { Alert, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-boot
 import { useInvoice, useUpdateInvoice } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
+import { formatUgx as fmtUGX, isTwoDpOrWhole, roundMoney } from '@stap/shared';
 import type { InvoiceResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
-
-const fmtUGX = (n: number) => `UGX ${n.toLocaleString()}`;
 
 /** YYYY-MM-DD for a <input type="date">, read in UTC because the API stores UTC midnights. */
 const toDateInput = (iso: string) => new Date(iso).toISOString().slice(0, 10);
@@ -15,9 +14,18 @@ const toDateInput = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 /** datetime() in the shared schema, so send full ISO strings. */
 const toIso = (day: string) => new Date(day).toISOString();
 
-type Line = { description: string; guardsCount: number; ratePerGuard: number; days: number };
+/**
+ * `ratePerGuard` holds the text as typed, not a parsed number: a rate may carry
+ * cents (a contract's monthly rate ÷ 30 rarely is whole), and a controlled number
+ * input bound to a parsed value eats the decimal separator — "16666." snaps back to
+ * "16666" while typing, so the next digits land as "1666667". Parse with Number()
+ * where used, as InvoiceFormModal does.
+ */
+type Line = { description: string; guardsCount: number; ratePerGuard: string; days: number };
 
-const lineAmount = (l: Line) => l.guardsCount * l.ratePerGuard * l.days;
+const rateOf = (l: Line) => Number(l.ratePerGuard) || 0;
+
+const lineAmount = (l: Line) => roundMoney(l.guardsCount * rateOf(l) * l.days);
 
 /** An emptied number field parses to NaN; keep it at 0 so totals stay readable. */
 const toNum = (v: string) => {
@@ -56,7 +64,7 @@ export default function InvoiceEditModal({
     setLines(full.lineItems.map((li) => ({
       description:  li.description,
       guardsCount:  li.quantity,
-      ratePerGuard: li.ratePerDay,
+      ratePerGuard: String(li.ratePerDay),
       days:         li.days,
     })));
   }, [full?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,22 +72,23 @@ export default function InvoiceEditModal({
   const updateLine = (idx: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   const addLine = () =>
-    setLines((prev) => [...prev, { description: '', guardsCount: 1, ratePerGuard: 0, days: 30 }]);
+    setLines((prev) => [...prev, { description: '', guardsCount: 1, ratePerGuard: '', days: 30 }]);
   const removeLine = (idx: number) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
-  const numeric = (v: number) => Number.isFinite(v) && v >= 0;
+  const ratesWithinTwoDecimals = lines.every((l) => isTwoDpOrWhole(rateOf(l)));
   const linesValid = lines.length > 0
+    && ratesWithinTwoDecimals
     && lines.every((l) => l.description.trim().length > 0
       && Number.isInteger(l.guardsCount) && l.guardsCount >= 1
-      && numeric(l.ratePerGuard)
+      && Number.isFinite(rateOf(l)) && rateOf(l) >= 0
       && Number.isInteger(l.days) && l.days >= 1);
   const datesValid = !!periodStart && !!periodEnd && !!dueDate && periodStart <= periodEnd;
   const canSave = !isLoading && linesValid && datesValid && !updateMutation.isPending;
 
-  const subtotal = lines.reduce((sum, l) => sum + lineAmount(l), 0);
+  const subtotal = roundMoney(lines.reduce((sum, l) => sum + lineAmount(l), 0));
   // Tax is not editable here — it is set when the invoice is raised, and the
   // service adds it back to whatever lines are stored.
-  const total = subtotal + (full?.taxAmount ?? invoice.taxAmount);
+  const total = roundMoney(subtotal + (full?.taxAmount ?? invoice.taxAmount));
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -94,7 +103,7 @@ export default function InvoiceEditModal({
             description:  l.description.trim(),
             guardType:    l.description.trim(),
             guardsCount:  l.guardsCount,
-            ratePerGuard: l.ratePerGuard,
+            ratePerGuard: rateOf(l),
             days:         l.days,
           })),
         },
@@ -139,6 +148,12 @@ export default function InvoiceEditModal({
               </Alert>
             )}
 
+            {!ratesWithinTwoDecimals && (
+              <Alert variant="warning" className="small py-2">
+                A rate / day can carry at most two decimal places — e.g. 16666.67.
+              </Alert>
+            )}
+
             <div className="d-flex align-items-center justify-content-between mb-2">
               <span className="fw-semibold small text-uppercase text-muted">Invoice lines</span>
               <Button size="sm" variant="outline-primary" onClick={addLine}>+ Add line</Button>
@@ -177,9 +192,9 @@ export default function InvoiceEditModal({
                     </td>
                     <td>
                       <Form.Control
-                        size="sm" type="number" min={0} step={1000} className="text-end"
+                        size="sm" type="number" min={0} step="0.01" className="text-end"
                         value={l.ratePerGuard}
-                        onChange={(e) => updateLine(idx, { ratePerGuard: toNum(e.target.value) })}
+                        onChange={(e) => updateLine(idx, { ratePerGuard: e.target.value })}
                       />
                     </td>
                     <td>

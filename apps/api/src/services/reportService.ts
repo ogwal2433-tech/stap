@@ -4,7 +4,7 @@ import cron from 'node-cron';
 import prisma from '../db/prisma';
 import { OUTSTANDING_STATUSES } from './invoiceService';
 import { QueueService } from '../jobs/QueueService';
-import { REPORT_TITLE_DEFAULTS, type DirectorDashboardStats, type ScheduledReportInput } from '@stap/shared';
+import { REPORT_TITLE_DEFAULTS, roundMoney as round2, type DirectorDashboardStats, type ScheduledReportInput } from '@stap/shared';
 import { settingsService } from './settingsService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -164,8 +164,10 @@ class ReportService {
         pendingApprovals,
       },
       finance: {
-        monthlyRevenue:       monthlyRevenueAgg._sum.totalAmount ?? 0,
-        outstandingAR:        outstandingARAgg._sum.outstandingBalance ?? 0,
+        // Invoice amounts are double precision now, so a summed figure can carry
+        // binary dust (2,500,000.4999999). Snap it back before it reaches a cell.
+        monthlyRevenue:       round2(monthlyRevenueAgg._sum.totalAmount ?? 0),
+        outstandingAR:        round2(outstandingARAgg._sum.outstandingBalance ?? 0),
         payrollCostThisMonth: payrollCostAgg._sum.totalNet       ?? 0,
         overdueInvoices,
       },
@@ -175,7 +177,7 @@ class ReportService {
         expiringContracts,
         openDisciplinary,
       },
-      revenueVsPayroll: months.map(m => ({ month: m.label, revenue: m.revenue, payroll: m.payroll })),
+      revenueVsPayroll: months.map(m => ({ month: m.label, revenue: round2(m.revenue), payroll: m.payroll })),
       attendanceTrend:  [...trendMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
     };
   }
@@ -284,7 +286,10 @@ class ReportService {
     const bucket = (inv: any) => {
       const days = Math.floor((now - new Date(inv.dueDate).getTime()) / 86_400_000);
       const paid = inv.payments.reduce((s: number, p: any) => s + p.amountPaid, 0);
-      const bal  = inv.totalAmount - paid;
+      // Balances are written straight into Excel cells, and invoice amounts are
+      // double precision, so the subtraction needs snapping to the shilling's
+      // two decimals or a figure like 2,500,000.4999999 lands in the workbook.
+      const bal  = round2(inv.totalAmount - paid);
       if (days <= 0)  return { label: 'current',  days, balance: bal };
       if (days <= 30) return { label: 'days1_30',  days, balance: bal };
       if (days <= 60) return { label: 'days31_60', days, balance: bal };
@@ -299,7 +304,7 @@ class ReportService {
     const totals: Record<string, number> = { current: 0, days1_30: 0, days31_60: 0, days61_90: 0, over90: 0 };
     for (const inv of invoices) { const b = bucket(inv); totals[b.label] += b.balance; }
     [['Current (0-30)', totals.days1_30 + totals.current], ['31-60 days', totals.days31_60], ['61-90 days', totals.days61_90], ['Over 90 days', totals.over90]]
-      .forEach(([k, v], i) => { const r = summary.addRow([k, v]); styleRow(r, i); });
+      .forEach(([k, v], i) => { const r = summary.addRow([k, round2(v as number)]); styleRow(r, i); });
     [30, 20].forEach((w, i) => { summary.getColumn(i + 1).width = w; });
 
     const detail = wb.addWorksheet('Invoice Detail');

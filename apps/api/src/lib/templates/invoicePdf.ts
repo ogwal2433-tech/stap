@@ -5,10 +5,12 @@
  * so the company details and footer are not repeated here.
  */
 
+// formatUgx prints cents only when the figure has them, which a line rate
+// derived from a monthly contract rate (÷30) usually does.
+import { formatUgx as ugx } from '@stap/shared';
+
 const NAVY  = '#1B3A6B';
 const AMBER = '#F2AA20';
-
-const ugx = (n: number) => `UGX ${(n ?? 0).toLocaleString()}`;
 
 const fmtDate = (d: Date | string | null | undefined): string =>
   d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -53,7 +55,7 @@ export function buildInvoiceHtml(invoice: any, title: string): string {
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
-        <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">INVOICE</div>
+        <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">${title === 'Invoice' ? 'INVOICE' : esc(title)}</div>
         <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(invoice.invoiceNumber)}</div>
       </div>
       <div style="text-align:right">

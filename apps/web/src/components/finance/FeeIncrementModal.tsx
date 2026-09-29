@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import type { InvoiceResponse } from '@stap/shared';
+import { formatUgx, isTwoDpOrWhole, roundMoney } from '@stap/shared';
 import { useAddFeeIncrement } from '../../hooks/useFinance';
 import { getApiErrorMessage } from '../../lib/api';
 
@@ -18,21 +19,28 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
   const [description, setDescription] = useState('');
   const [guardType, setGuardType]     = useState('');
   const [guardCount, setGuardCount]   = useState<number | ''>(1);
-  const [rate, setRate]               = useState<number | ''>('');
+  /**
+   * Rate stays the raw text: it may carry cents (a monthly contract rate ÷ 30
+   * rarely is whole), and re-rendering a parsed number eats the decimal separator
+   * mid-typing — "16666." comes back as "16666", so the next digits land as
+   * "1666667". Counts and days are whole numbers and keep parsing to a number.
+   */
+  const [rate, setRate]               = useState('');
   const [days, setDays]               = useState<number | ''>(30);
   const [reason, setReason]           = useState('');
   const [error, setError]             = useState('');
 
   const increment = useAddFeeIncrement();
 
-  const lineTotal = (Number(guardCount) || 0) * (Number(rate) || 0) * (Number(days) || 0);
-  const newTotal  = invoice.totalAmount + lineTotal;
-  const newDue    = invoice.outstandingBalance + lineTotal;
+  const lineTotal = roundMoney((Number(guardCount) || 0) * (Number(rate) || 0) * (Number(days) || 0));
+  const newTotal  = roundMoney(invoice.totalAmount + lineTotal);
+  const newDue    = roundMoney(invoice.outstandingBalance + lineTotal);
 
   const submit = () => {
     if (description.trim().length < 3) { setError('Describe what the extra charge is for.'); return; }
     if (!guardCount || Number(guardCount) < 1) { setError('Enter how many extra guards.'); return; }
     if (rate === '' || Number(rate) < 0) { setError('Enter the rate per guard.'); return; }
+    if (!isTwoDpOrWhole(Number(rate))) { setError('The rate per guard can carry at most two decimal places — e.g. 16666.67.'); return; }
     if (!days || Number(days) < 1) { setError('Enter the number of days.'); return; }
     setError('');
 
@@ -64,7 +72,7 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
         <div style={{ background: '#F2F4F7', borderRadius: '0.5rem', padding: '10px 14px', marginBottom: '16px' }}>
           <div className="fw-bold" style={{ color: '#1B3A6B' }}>{invoice.invoiceNumber}</div>
           <div className="small text-muted">
-            {invoice.clientName} · currently UGX {invoice.totalAmount.toLocaleString()}
+            {invoice.clientName} · currently {formatUgx(invoice.totalAmount)}
           </div>
         </div>
 
@@ -101,8 +109,8 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
           <Col sm={6}>
             <Form.Label className="fw-bold small">Rate per guard (UGX) <span className="text-danger">*</span></Form.Label>
             <Form.Control
-              type="number" min={0} value={rate} placeholder="e.g. 600000"
-              onChange={e => { setRate(e.target.value === '' ? '' : Number(e.target.value)); setError(''); }}
+              type="number" min={0} step="0.01" value={rate} placeholder="e.g. 600000 or 16666.67"
+              onChange={e => { setRate(e.target.value); setError(''); }}
             />
           </Col>
           <Col sm={6}>
@@ -128,15 +136,15 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
         <div className="p-3" style={{ background: '#EBF5FB', borderRadius: '0.5rem', borderLeft: '4px solid #1B3A6B' }}>
           <div className="d-flex justify-content-between small">
             <span className="text-muted">This charge</span>
-            <strong>UGX {lineTotal.toLocaleString()}</strong>
+            <strong>{formatUgx(lineTotal)}</strong>
           </div>
           <div className="d-flex justify-content-between small mt-1">
             <span className="text-muted">New invoice total</span>
-            <strong>UGX {newTotal.toLocaleString()}</strong>
+            <strong>{formatUgx(newTotal)}</strong>
           </div>
           <div className="d-flex justify-content-between mt-2 pt-2" style={{ borderTop: '1px solid #cfe2f3', fontWeight: 700, color: '#C0392B' }}>
             <span>New balance due</span>
-            <span>UGX {newDue.toLocaleString()}</span>
+            <span>{formatUgx(newDue)}</span>
           </div>
         </div>
       </Modal.Body>

@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { guardService } from './guardService';
 import { OUTSTANDING_STATUSES } from './invoiceService';
-import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel } from '@stap/shared';
+import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel, formatUgx, roundMoney as round2 } from '@stap/shared';
 import { marketingService } from './marketingService';
 import type { DashboardData } from '@stap/shared';
 
@@ -136,7 +136,7 @@ class DashboardService {
         pendingInvoices,
         pendingServiceRequests,
         activeStaff,
-        monthlyRevenue: revenueAgg._sum.totalAmount ?? 0,
+        monthlyRevenue: round2(revenueAgg._sum.totalAmount ?? 0),
         failedJobs,
       },
       feeds: {
@@ -149,7 +149,7 @@ class DashboardService {
         recentInvoices: recentInvoices.map(i => ({
           id:        i.id,
           primary:   i.client.clientName,
-          secondary: `UGX ${i.totalAmount.toLocaleString()}`,
+          secondary: formatUgx(i.totalAmount),
           badge:     i.status,
         })),
         guardsNeedingAttention: guardsNeedingAttention.map(g => ({
@@ -583,8 +583,8 @@ class DashboardService {
       role:  'ACCOUNTS_OFFICER',
       stats: {
         unpaidInvoices,
-        totalOutstanding: outstandingAgg._sum.outstandingBalance ?? 0,
-        paidThisMonth:    paidAgg._sum.totalAmount ?? 0,
+        totalOutstanding: round2(outstandingAgg._sum.outstandingBalance ?? 0),
+        paidThisMonth:    round2(paidAgg._sum.totalAmount ?? 0),
         overdueInvoices:  overdueCount,
         pendingRequisitions,
         payrollRunsPending,
@@ -593,13 +593,13 @@ class DashboardService {
         overdueInvoices: overdueInvoices.map(i => ({
           id:        i.id,
           primary:   i.client.clientName,
-          secondary: `UGX ${i.totalAmount.toLocaleString()} · due ${new Date(i.dueDate).toLocaleDateString('en-GB')}`,
+          secondary: `${formatUgx(i.totalAmount)} · due ${new Date(i.dueDate).toLocaleDateString('en-GB')}`,
           badge:     i.status,
         })),
         recentInvoices: recentInvoices.map(i => ({
           id:        i.id,
           primary:   i.client.clientName,
-          secondary: `UGX ${i.totalAmount.toLocaleString()}`,
+          secondary: formatUgx(i.totalAmount),
           badge:     i.status,
         })),
       },
@@ -681,7 +681,7 @@ class DashboardService {
         recentInvoices: recentInvoices.map(i => ({
           id:        i.id,
           primary:   i.invoiceNumber,
-          secondary: `UGX ${i.totalAmount.toLocaleString()}`,
+          secondary: formatUgx(i.totalAmount),
           badge:     i.status,
         })),
         recentComplaints: recentComplaints.map(c => ({

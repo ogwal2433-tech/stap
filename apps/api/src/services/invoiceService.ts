@@ -1,4 +1,4 @@
-import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@stap/shared';
+import { CLIENT_PHONE_PATTERN, normaliseClientPhone, formatUgx, roundMoney as round2 } from '@stap/shared';
 import { companyProfile } from './integrationSettings';
 import { invoicePrefix } from '../lib/systemId';
 import prisma from '../db/prisma';
@@ -25,6 +25,12 @@ import type {
 } from '@stap/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+// round2 (imported above as an alias of @stap/shared roundMoney) is applied to
+// every derived money figure: rates arriving here are already whole-or-2dp, but
+// count × rate × days is exact in decimal and not in binary, and a subtotal sums
+// several such products. Without the snap an invoice would store
+// 4,999,999.9999999996 and every later balance comparison would inherit the dust.
 
 function formatLineItem(li: any): InvoiceLineItemResponse {
   return {
@@ -125,8 +131,8 @@ export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
     prisma.invoicePayment.aggregate({ where: { invoiceId, status: 'SUCCESS' }, _sum: { amountPaid: true } }),
   ]);
 
-  const paidAmount = (manual._sum.amountPaid ?? 0) + (momo._sum.amountPaid ?? 0);
-  const outstandingBalance = Math.max(0, invoice.totalAmount - paidAmount);
+  const paidAmount = round2((manual._sum.amountPaid ?? 0) + (momo._sum.amountPaid ?? 0));
+  const outstandingBalance = round2(Math.max(0, invoice.totalAmount - paidAmount));
 
   const status =
     outstandingBalance === 0 ? 'PAID'
@@ -146,7 +152,7 @@ export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
 
   if (outstandingBalance > 0 && paidAmount > 0) {
     const note =
-      `Unpaid balance of UGX ${outstandingBalance.toLocaleString()} from invoice ${invoice.invoiceNumber}`;
+      `Unpaid balance of ${formatUgx(outstandingBalance)} from invoice ${invoice.invoiceNumber}`;
     await prisma.invoiceCarryForward.upsert({
       where:  { fromInvoiceId: invoiceId },
       create: { fromInvoiceId: invoiceId, clientId: invoice.clientId, carryAmount: outstandingBalance, note },
@@ -184,6 +190,10 @@ class InvoiceService {
    * on ContractGuardRate is a MONTHLY figure — convert to a daily rate here so
    * lineTotal = count * ratePerGuard * billingDays gives the correct amount
    * for the actual billing period instead of inflating it ~30x.
+   *
+   * The daily rate keeps two decimals. Rounding it to a whole shilling (as this
+   * file used to) silently rewrites the contract: 500,000/30 became 16,667 and
+   * billed 2,500,050 for a 2,500,000 month.
    */
   async getInvoicePreview(contractId: string, billingDays: number = 30): Promise<InvoicePreviewResponse> {
     const contract = await prisma.contract.findUnique({
@@ -204,17 +214,17 @@ class InvoiceService {
     }
 
     const lineItems = contract.guardRates.map((r) => {
-      const ratePerDay = Math.round(r.ratePerGuard / 30);
+      const ratePerDay = round2(r.ratePerGuard / 30);
       return {
         guardType:    r.guardType,
         count:        r.guardsCount,
         ratePerGuard: ratePerDay,
         billingDays,
-        lineTotal:    r.guardsCount * ratePerDay * billingDays,
+        lineTotal:    round2(r.guardsCount * ratePerDay * billingDays),
       };
     });
 
-    const totalAmount    = lineItems.reduce((sum, li) => sum + li.lineTotal, 0);
+    const totalAmount    = round2(lineItems.reduce((sum, li) => sum + li.lineTotal, 0));
     const guardsRequired = lineItems.reduce((sum, li) => sum + li.count, 0);
 
     return {
@@ -297,7 +307,7 @@ class InvoiceService {
       guardsCount:  li.count,
       ratePerGuard: li.ratePerGuard,
       days:         li.billingDays,
-      amount:       li.count * li.ratePerGuard * li.billingDays,
+      amount:       round2(li.count * li.ratePerGuard * li.billingDays),
     }));
 
     // Any balance left unpaid on an earlier invoice appears here as its own
@@ -318,7 +328,7 @@ class InvoiceService {
       });
     }
 
-    const totalAmount  = allLineItems.reduce((sum, li) => sum + li.amount, 0);
+    const totalAmount  = round2(allLineItems.reduce((sum, li) => sum + li.amount, 0));
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = await prisma.invoice.create({
@@ -369,8 +379,8 @@ class InvoiceService {
     const client = await prisma.client.findUnique({ where: { id: data.clientId } });
     if (!client) throw new NotFoundError('Client not found');
 
-    const subtotal     = data.guardsDeployed * data.ratePerGuard;
-    const totalAmount  = subtotal + (data.taxAmount ?? 0);
+    const subtotal     = round2(data.guardsDeployed * data.ratePerGuard);
+    const totalAmount  = round2(subtotal + (data.taxAmount ?? 0));
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = await prisma.invoice.create({
@@ -559,8 +569,8 @@ class InvoiceService {
     // without a trace instead of failing or being recorded as a credit.
     if (data.amountPaid > invoice.outstandingBalance) {
       throw new AppError(
-        `Payment of UGX ${data.amountPaid.toLocaleString()} exceeds the outstanding balance ` +
-        `of UGX ${invoice.outstandingBalance.toLocaleString()} on ${invoice.invoiceNumber}.`,
+        `Payment of ${formatUgx(data.amountPaid)} exceeds the outstanding balance ` +
+        `of ${formatUgx(invoice.outstandingBalance)} on ${invoice.invoiceNumber}.`,
         400,
       );
     }
@@ -620,7 +630,7 @@ class InvoiceService {
       );
     }
 
-    const amount = data.guardCount * data.ratePerGuard * data.days;
+    const amount = round2(data.guardCount * data.ratePerGuard * data.days);
 
     await prisma.$transaction(async (tx) => {
       await tx.invoiceLineItem.create({
@@ -635,7 +645,7 @@ class InvoiceService {
         },
       });
 
-      const newTotal = invoice.totalAmount + amount;
+      const newTotal = round2(invoice.totalAmount + amount);
       await tx.invoice.update({
         where: { id: invoiceId },
         data:  { totalAmount: newTotal, subtotal: newTotal },
@@ -657,7 +667,7 @@ class InvoiceService {
         days:        data.days,
         amount,
         reason:      data.reason ?? null,
-        newTotal:    invoice.totalAmount + amount,
+        newTotal:    round2(invoice.totalAmount + amount),
       },
     }).catch(() => { /* a queue outage must not undo a charge already applied */ });
 
@@ -718,14 +728,14 @@ class InvoiceService {
           guardsCount:  li.guardsCount,
           ratePerGuard: li.ratePerGuard,
           days:         li.days,
-          amount:       li.guardsCount * li.ratePerGuard * li.days,
+          amount:       round2(li.guardsCount * li.ratePerGuard * li.days),
         }));
         await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
         if (rows.length) {
           await tx.invoiceLineItem.createMany({ data: rows.map((r) => ({ invoiceId: id, ...r })) });
         }
-        const subtotal    = rows.reduce((sum, r) => sum + r.amount, 0);
-        const totalAmount = subtotal + invoice.taxAmount;
+        const subtotal    = round2(rows.reduce((sum, r) => sum + r.amount, 0));
+        const totalAmount = round2(subtotal + invoice.taxAmount);
         await tx.invoice.update({
           where: { id },
           data: {
@@ -777,8 +787,10 @@ class InvoiceService {
     if (!invoice) throw new NotFoundError('Invoice not found');
 
     // Same print identity as the payroll schedule: the centred tiger logo band
-    // with no company-name header, and no page watermark.
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice), {
+    // with no company-name header, and no page watermark. The heading itself
+    // still follows the configured report title.
+    const invoiceTitle = await settingsService.getReportTitle('invoice');
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title), {
       logoFile:  'tiger_logo.jpeg',
       watermark: false,
       logoOnly:  true,
@@ -814,6 +826,12 @@ class InvoiceService {
       else if (daysOverdue <= 60) buckets.days31_60 += owed;
       else if (daysOverdue <= 90) buckets.days61_90 += owed;
       else                         buckets.over90    += owed;
+    }
+
+    // Adding a column of two-decimal floats leaves binary dust behind, and these
+    // buckets go straight into the finance page's tiles.
+    for (const key of Object.keys(buckets) as (keyof typeof buckets)[]) {
+      buckets[key] = round2(buckets[key]);
     }
 
     return { invoices: invoices.map((i) => formatInvoice(i)), buckets };
@@ -886,7 +904,7 @@ class InvoiceService {
         }))
       : [
           {
-            description: `Security Services — ${invoice.guardsDeployed} guard${invoice.guardsDeployed !== 1 ? 's' : ''} × UGX ${invoice.ratePerGuard.toLocaleString()}/month`,
+            description: `Security Services — ${invoice.guardsDeployed} guard${invoice.guardsDeployed !== 1 ? 's' : ''} × ${formatUgx(invoice.ratePerGuard)}/month`,
             qty:         invoice.guardsDeployed,
             unitPrice:   invoice.ratePerGuard,
             total:       invoice.subtotal,
@@ -937,7 +955,9 @@ class InvoiceService {
       await this.recordManualPayment(
         {
           invoiceId,
-          amountPaid:      Number(payload.Amount ?? invoice.totalAmount),
+          // The gateway reports its own figure; snap it to the invoice's two
+          // decimals so a returned 100.499999999 cannot become the payment.
+          amountPaid:      round2(Number(payload.Amount ?? invoice.totalAmount)),
           mode:            'MOBILE_MONEY',
           referenceNumber: payload.TransactionReference,
         },

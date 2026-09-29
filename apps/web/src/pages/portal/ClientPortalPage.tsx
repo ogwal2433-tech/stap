@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@stap/shared';
+import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS, formatUgx } from '@stap/shared';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { dashboardApi } from '../../lib/dashboard.api';
@@ -215,7 +215,7 @@ export default function ClientPortalPage() {
                 {invoices.slice(0, 5).map((inv: any) => (
                   <tr key={inv.id}>
                     <td>{inv.invoiceNumber}</td>
-                    <td>UGX {inv.totalAmount.toLocaleString()}</td>
+                    <td>{formatUgx(inv.totalAmount)}</td>
                     <td>{new Date(inv.dueDate).toLocaleDateString('en-UG')}</td>
                     <td><Badge bg={STA_BADGE[inv.status] ?? 'secondary'}>{inv.status}</Badge></td>
                   </tr>
@@ -245,10 +245,10 @@ export default function ClientPortalPage() {
                         {new Date(inv.periodStart).toLocaleDateString('en-UG')} — {new Date(inv.periodEnd).toLocaleDateString('en-UG')}
                       </td>
                       <td>
-                        UGX {inv.totalAmount.toLocaleString()}
+                        {formatUgx(inv.totalAmount)}
                         {inv.paidAmount > 0 && (
                           <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                            UGX {inv.outstandingBalance.toLocaleString()} outstanding
+                            {formatUgx(inv.outstandingBalance)} outstanding
                           </div>
                         )}
                       </td>

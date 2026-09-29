@@ -28,7 +28,9 @@ import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
-import { ROLES, HR_ROLES } from '@stap/shared';
+// Invoice amounts may carry cents now (a monthly contract rate ÷ 30 rarely lands
+// on a whole shilling); payroll figures are whole and print unchanged.
+import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@stap/shared';
 import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@stap/shared';
 import { invoicesApi, payrollApi } from '../../lib/finance.api';
 import { FILE_PREFIX } from '../../lib/branding';
@@ -49,10 +51,6 @@ function statusBadge(status: string) {
       {status}
     </Badge>
   );
-}
-
-function fmtUGX(n: number) {
-  return `UGX ${n.toLocaleString()}`;
 }
 
 function fmtPeriod(start: string, end: string) {
@@ -106,7 +104,7 @@ function InvoicePaymentHistoryModal({ invoice, onClose }: { invoice: InvoiceResp
                   <td className="small">{new Date(p.initiatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                   <td className="small">{p.phone}</td>
                   <td><Badge bg={p.network === 'MTN' ? 'warning' : 'danger'} text={p.network === 'MTN' ? 'dark' : 'white'}>{p.network}</Badge></td>
-                  <td className="small fw-semibold">UGX {p.amountPaid.toLocaleString()}</td>
+                  <td className="small fw-semibold">{fmtUGX(p.amountPaid)}</td>
                   <td><Badge bg={statusColor[p.status] ?? 'secondary'}>{p.status}</Badge></td>
                   <td className="small text-muted" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.extReference}</td>
                 </tr>

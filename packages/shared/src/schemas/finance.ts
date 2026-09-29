@@ -1,4 +1,23 @@
 import { z } from 'zod';
+import { isTwoDpOrWhole } from '../utils/money';
+
+// ── Money ──────────────────────────────────────────────────────────────────────
+
+/**
+ * UGX money on an invoice: whole shillings, or up to two decimal places.
+ *
+ * A line's rate is a daily figure, and the one that matters — a contract's
+ * monthly rate divided by 30 — is rarely a whole number. Integers only could
+ * not bill a contract accurately: 500,000/30 rounded up to 16,667 overcharges
+ * each guard by 50 UGX a month.
+ *
+ * The granularity itself is checked by isTwoDpOrWhole (@stap/shared), which the
+ * web forms reuse so a value accepted on screen is accepted by the API too.
+ * Finer than a cent is rejected rather than silently rounded, so what the user
+ * typed is what the invoice stores.
+ */
+const money = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.refine(isTwoDpOrWhole, { message: 'Use at most two decimal places' });
 
 // ── Input schemas ──────────────────────────────────────────────────────────────
 
@@ -8,8 +27,8 @@ export const CreateInvoiceSchema = z.object({
   periodStart:    z.string().datetime(),
   periodEnd:      z.string().datetime(),
   guardsDeployed: z.number().int().min(1),
-  ratePerGuard:   z.number().int().positive(),
-  taxAmount:      z.number().int().min(0).default(0),
+  ratePerGuard:   money(z.number().positive()),
+  taxAmount:      money(z.number().min(0).default(0)),
   dueDate:        z.string().datetime(),
 });
 
@@ -27,7 +46,7 @@ export const GenerateInvoiceSchema = z
     lineItemOverrides:  z.array(z.object({
       guardType:    z.string().min(1),
       count:        z.coerce.number().int().min(1),
-      ratePerGuard: z.coerce.number().int().min(0),
+      ratePerGuard: money(z.coerce.number().min(0)),
       billingDays:  z.coerce.number().int().min(1),
     })).optional(),
   })
@@ -45,7 +64,7 @@ export const RecordPaymentSchema = z.object({
   // request body — optional here so body validation doesn't reject requests
   // before the route handler merges it in from req.params.
   invoiceId:       z.string().min(1).optional(),
-  amountPaid:      z.coerce.number().int().positive(),
+  amountPaid:      money(z.coerce.number().positive()),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),
 });
@@ -63,7 +82,7 @@ export const UpdateInvoiceSchema = z.object({
     description:  z.string().min(1),
     guardType:    z.string().optional(),
     guardsCount:  z.coerce.number().int().min(1),
-    ratePerGuard: z.coerce.number().int().min(0),
+    ratePerGuard: money(z.coerce.number().min(0)),
     days:         z.coerce.number().int().min(1),
   })).min(1).optional(),
 });
@@ -309,7 +328,7 @@ export const AddFeeIncrementSchema = z.object({
   description:  z.string().min(3, 'Describe what the extra charge is for').max(300),
   guardType:    z.string().max(100).optional().nullable(),
   guardCount:   z.coerce.number().int().min(1, 'At least one guard'),
-  ratePerGuard: z.coerce.number().int().min(0),
+  ratePerGuard: money(z.coerce.number().min(0)),
   days:         z.coerce.number().int().min(1).default(30),
   reason:       z.string().max(500).optional().nullable(),
 });

@@ -1,4 +1,4 @@
-import { normaliseClientPhone } from '@stap/shared';
+import { normaliseClientPhone, roundMoney as round2 } from '@stap/shared';
 import bcrypt from 'bcryptjs';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
@@ -742,7 +742,7 @@ class ClientService {
     const balanceOf = (inv: { outstandingBalance: number; totalAmount: number; paidAmount: number }) =>
       inv.outstandingBalance || Math.max(0, inv.totalAmount - inv.paidAmount);
 
-    const totalOutstanding = openInvoices.reduce((sum, inv) => sum + balanceOf(inv), 0);
+    const totalOutstanding = round2(openInvoices.reduce((sum, inv) => sum + balanceOf(inv), 0));
 
     // Overdue by the date as well as the status: status is only refreshed when
     // an invoice is touched, so one that fell due this morning may still read
@@ -750,7 +750,7 @@ class ClientService {
     const overdue = openInvoices.filter(
       (inv) => inv.status === 'OVERDUE' || inv.dueDate < now,
     );
-    const totalOverdue = overdue.reduce((sum, inv) => sum + balanceOf(inv), 0);
+    const totalOverdue = round2(overdue.reduce((sum, inv) => sum + balanceOf(inv), 0));
 
     // Whichever of the two kinds of payment landed most recently.
     const momoAt = momoPayment ? (momoPayment.resolvedAt ?? momoPayment.initiatedAt) : null;

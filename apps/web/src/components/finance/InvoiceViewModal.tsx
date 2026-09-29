@@ -4,10 +4,12 @@ import { useInvoice } from '../../hooks/useFinance';
 import { invoicesApi } from '../../lib/finance.api';
 import { useToast } from '../../context/ToastContext';
 import type { InvoiceResponse } from '@stap/shared';
+// Invoice lines may now carry cents (a monthly contract rate ÷ 30 rarely is
+// whole), so amounts print with two decimals when they have them.
+import { formatUgx as fmtUGX } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
 
-const fmtUGX = (n: number) => `UGX ${n.toLocaleString()}`;
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB');
 
 const STATUS_BG: Record<string, string> = {

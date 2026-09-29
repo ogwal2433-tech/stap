@@ -7,6 +7,7 @@ import { useClientContracts } from '../../hooks/useContracts';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { useGenerateInvoice } from '../../hooks/useFinance';
 import { invoicesApi } from '../../lib/finance.api';
+import { formatUgx, roundMoney } from '@stap/shared';
 import type { ClientResponse, ContractResponse } from '@stap/shared';
 
 const NAVY = '#1B3A6B';
@@ -22,7 +23,13 @@ interface Props {
 interface EditableLineItem {
   guardType:    string;
   count:        number;
-  ratePerGuard: number;
+  /**
+   * The text as typed, not a parsed number: a rate may carry cents (a contract's
+   * monthly rate ÷ 30 rarely is whole), and a controlled number input bound to a
+   * parsed value eats the decimal separator — "16666." snaps back to "16666" while
+   * typing, so the next digits land as "1666667". Parse with Number() where used.
+   */
+  ratePerGuard: string;
   billingDays:  number;
 }
 
@@ -93,7 +100,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
         setLineItems(preview.lineItems.map((li) => ({
           guardType:    li.guardType,
           count:        li.count,
-          ratePerGuard: li.ratePerGuard,
+          ratePerGuard: String(li.ratePerGuard),
           billingDays:  li.billingDays,
         })));
       })
@@ -116,15 +123,16 @@ export default function InvoiceFormModal({ onClose }: Props) {
 
   // Manual mode starts from nothing; each row is typed in by the user.
   const addManualLine = () => {
-    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: 0, billingDays }]);
+    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: '', billingDays }]);
   };
 
   const removeLine = (idx: number) => {
     setLineItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const lineTotal = (li: EditableLineItem) => li.count * li.ratePerGuard * li.billingDays;
-  const computedTotal = lineItems.reduce((sum, li) => sum + lineTotal(li), 0);
+  const lineTotal = (li: EditableLineItem) =>
+    roundMoney(li.count * (Number(li.ratePerGuard) || 0) * li.billingDays);
+  const computedTotal = roundMoney(lineItems.reduce((sum, li) => sum + lineTotal(li), 0));
   const totalGuards   = lineItems.reduce((sum, li) => sum + li.count, 0);
 
   const selectedContract = contracts.find((c: ContractResponse) => c.id === contractId);
@@ -165,7 +173,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
       const lineItemOverrides = lineItems.map((li) => ({
         guardType:    manualMode ? li.guardType.trim() : li.guardType,
         count:        li.count,
-        ratePerGuard: li.ratePerGuard,
+        ratePerGuard: Number(li.ratePerGuard) || 0,
         billingDays:  li.billingDays,
       }));
       await generateMutation.mutateAsync(
@@ -373,9 +381,9 @@ export default function InvoiceFormModal({ onClose }: Props) {
                           </td>
                           <td>
                             <Form.Control
-                              size="sm" type="number" min={0}
+                              size="sm" type="number" min={0} step="0.01" placeholder="e.g. 16666.67"
                               value={li.ratePerGuard}
-                              onChange={(e) => updateLine(idx, 'ratePerGuard', parseInt(e.target.value, 10) || 0)}
+                              onChange={(e) => updateLine(idx, 'ratePerGuard', e.target.value)}
                             />
                           </td>
                           <td>
@@ -387,7 +395,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
                             />
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'middle', color: NAVY, fontSize: '0.85rem' }}>
-                            UGX {lineTotal(li).toLocaleString()}
+                            {formatUgx(lineTotal(li))}
                           </td>
                           <td className="text-center align-middle" style={{ width: 40 }}>
                             <button
@@ -411,7 +419,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
                           Total:
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: '#0F7B6C' }}>
-                          UGX {computedTotal.toLocaleString()}
+                          {formatUgx(computedTotal)}
                         </td>
                         <td />
                       </tr>
@@ -472,9 +480,9 @@ export default function InvoiceFormModal({ onClose }: Props) {
                         </td>
                         <td>
                           <Form.Control
-                            size="sm" type="number" min={0}
+                            size="sm" type="number" min={0} step="0.01" placeholder="e.g. 16666.67"
                             value={li.ratePerGuard}
-                            onChange={(e) => updateLine(idx, 'ratePerGuard', parseInt(e.target.value, 10) || 0)}
+                            onChange={(e) => updateLine(idx, 'ratePerGuard', e.target.value)}
                           />
                         </td>
                         <td>
@@ -486,7 +494,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
                           />
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'middle', color: NAVY, fontSize: '0.85rem' }}>
-                          UGX {lineTotal(li).toLocaleString()}
+                          {formatUgx(lineTotal(li))}
                         </td>
                       </tr>
                     ))}
@@ -500,7 +508,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
                         Total:
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: '#0F7B6C' }}>
-                        UGX {computedTotal.toLocaleString()}
+                        {formatUgx(computedTotal)}
                       </td>
                     </tr>
                   </tfoot>
@@ -514,7 +522,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
         <div className="d-flex align-items-center justify-content-between w-100">
           <div style={{ fontSize: '0.82rem', color: '#6c757d' }}>
             {lineItems.length > 0 && (
-              <>{totalGuards} guard(s) · <strong>UGX {computedTotal.toLocaleString()}</strong> total</>
+              <>{totalGuards} guard(s) · <strong>{formatUgx(computedTotal)}</strong> total</>
             )}
           </div>
           <div className="d-flex gap-2">

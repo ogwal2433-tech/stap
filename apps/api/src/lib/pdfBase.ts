@@ -57,7 +57,8 @@ function getLogoBase64(preferredFile?: string): string {
 
 export async function resolveLogoBase64(
   logoUrl: string,
-  fallback: () => string = getEmbeddedLogoBase64,
+  // getLogoBase64 takes an optional argument, so it is a valid zero-arg fallback.
+  fallback: () => string = getLogoBase64,
 ): Promise<string> {
   const url = logoUrl.trim();
   if (!url) return fallback();
@@ -392,7 +393,13 @@ export async function renderToPdf(
   opts?: PdfRenderOptions,
 ): Promise<Buffer> {
   const company    = await companyProfile();
-  const logoBase64 = getLogoBase64();
+  // A render that names a bundled asset wins over the branding logo stored in
+  // settings: the payroll schedule and the invoice both ship the tiger logo and
+  // must keep it whatever the company profile says. Everything else follows the
+  // configured URL and falls back to the embedded file (see resolveLogoBase64).
+  const logoBase64 = opts?.logoFile
+    ? getLogoBase64(opts.logoFile)
+    : await resolveLogoBase64(company.logoUrl);
   const html       = wrapContent(
     contentHtml,
     buildHeaderHtml(logoBase64, company, opts?.logoOnly),

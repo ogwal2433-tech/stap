@@ -9,6 +9,9 @@ vi.mock('../../db/prisma', () => ({
     client:   { findUnique: vi.fn() },
     contract: { findMany: vi.fn(), findUnique: vi.fn() },
     invoicePayment:      { aggregate: vi.fn() },
+    // The invoice PDF heading reads the configured report title, which lives in
+    // SystemSetting under 'report_titles'.
+    systemSetting:       { findUnique: vi.fn() },
     invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
@@ -37,6 +40,7 @@ vi.mock('../../lib/pdfBase', () => ({
 import prisma from '../../db/prisma';
 import { QueueService } from '../../jobs/QueueService';
 import { invoiceService } from '../../services/invoiceService';
+import { settingsService } from '../../services/settingsService';
 
 const mp = prisma as any;
 
@@ -72,6 +76,8 @@ beforeEach(() => {
   mp.invoice.update.mockResolvedValue({ ...MOCK_INVOICE, status: 'PAID', paidAt: new Date() });
   mp.invoice.updateMany.mockResolvedValue({ count: 0 });
   mp.contract.findMany.mockResolvedValue([]);
+  // No report-title overrides stored, so the invoice heading is the default.
+  mp.systemSetting.findUnique.mockResolvedValue(null);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -213,6 +219,60 @@ describe('invoiceService.recordManualPayment()', () => {
       }),
     );
   });
+
+  it('settles an invoice whose total carries cents, to the cent', async () => {
+    // A 500,000/month contract for 5 guards is 2,500,000.50 a month. Payment had
+    // to stop being an integer column or that last half shilling could never be
+    // paid, leaving the invoice PARTIALLY_PAID for ever.
+    const CENTS_INVOICE = {
+      ...MOCK_INVOICE,
+      subtotal: 2500000.5, totalAmount: 2500000.5, outstandingBalance: 2500000.5,
+    };
+    mp.invoice.findUnique.mockResolvedValue({ ...CENTS_INVOICE, payments: [] });
+    mockPaidTotals(2500000.5);
+
+    await invoiceService.recordManualPayment(
+      { invoiceId: 'inv-1', amountPaid: 2500000.5, mode: 'BANK' },
+      'user-1',
+    );
+
+    expect(mp.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'PAID', paidAmount: 2500000.5, outstandingBalance: 0 }),
+      }),
+    );
+    expect(mp.invoiceCarryForward.upsert).not.toHaveBeenCalled();
+  });
+
+  it('carries the two-decimal remainder when a cents invoice is paid short', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      subtotal: 2500000.5, totalAmount: 2500000.5, outstandingBalance: 2500000.5,
+      payments: [],
+    });
+    mockPaidTotals(2500000);
+
+    await invoiceService.recordManualPayment(
+      { invoiceId: 'inv-1', amountPaid: 2500000, mode: 'CASH' },
+      'user-1',
+    );
+
+    // 0.5 left owing, with no float dust after it.
+    expect(mp.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status:             'PARTIALLY_PAID',
+          paidAmount:         2500000,
+          outstandingBalance: 0.5,
+        }),
+      }),
+    );
+    expect(mp.invoiceCarryForward.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ carryAmount: 0.5 }),
+      }),
+    );
+  });
 });
 
 describe('invoiceService.getARAgingReport()', () => {
@@ -328,5 +388,25 @@ describe('invoiceService.buildInvoicePdf()', () => {
     expect(html).not.toContain('<script>evil</script>');
     expect(html).toContain('&lt;script&gt;evil&lt;/script&gt;');
     expect(html).toContain('A &amp; B &lt;b&gt;cover&lt;/b&gt;');
+  });
+
+  it('prints the configured report title, not a hard-coded INVOICE', async () => {
+    // The invoice heading is configurable from Settings. A merge once kept the
+    // title parameter and dropped its use, which compiled cleanly and printed
+    // INVOICE regardless — so the renamed case is pinned here.
+    settingsService.clearReportTitleCache();
+    mp.systemSetting.findUnique.mockResolvedValue({
+      value: JSON.stringify({ invoice: { title: 'Tax Invoice' } }),
+    });
+
+    try {
+      await invoiceService.buildInvoicePdf('inv-1');
+      const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+      expect(html).toContain('>Tax Invoice</div>');
+      expect(html).not.toContain('>INVOICE</div>');
+    } finally {
+      settingsService.clearReportTitleCache();
+    }
   });
 });

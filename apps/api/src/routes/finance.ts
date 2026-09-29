@@ -30,8 +30,8 @@
  *               periodStart: { type: string, format: date-time }
  *               periodEnd: { type: string, format: date-time }
  *               guardsDeployed: { type: integer }
- *               ratePerGuard: { type: integer }
- *               taxAmount: { type: integer, default: 0 }
+ *               ratePerGuard: { type: number, description: 'UGX — whole or up to two decimals' }
+ *               taxAmount: { type: number, default: 0 }
  *               dueDate: { type: string, format: date-time }
  *     responses:
  *       201:
@@ -68,7 +68,7 @@
  *             type: object
  *             required: [amountPaid, mode]
  *             properties:
- *               amountPaid: { type: integer }
+ *               amountPaid: { type: number, description: 'UGX — whole or up to two decimals' }
  *               mode: { type: string, enum: [CASH, BANK, MOBILE_MONEY, CHEQUE] }
  *               referenceNumber: { type: string }
  *     responses:
