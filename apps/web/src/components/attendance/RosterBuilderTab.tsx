@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '../../lib/api';
 import type { ConflictDetail, ZoneSite, ZoneRosterGuard } from '@stap/shared';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import { exportRosterDraft } from '../../lib/exportToExcel';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ const emptyRoster = (date: string): SiteRoster => ({
  * next unrostered site, which is what makes a whole zone workable in one pass.
  */
 export default function RosterBuilderTab() {
+  const { data: companyBranding } = useCompanyBranding();
   const { showToast } = useToast();
   const { user } = useAuth();
   const createRoster = useCreateRoster();
@@ -298,7 +300,7 @@ export default function RosterBuilderTab() {
       supervisorName: selectedZone?.supervisor?.name ?? user?.name ?? 'N/A',
       guardsRequired: site.guardsRequired,
       guards:         entry.guards,
-    });
+    }, companyBranding.company_name);
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────

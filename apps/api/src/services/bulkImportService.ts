@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { COMPANY_NAME } from '../config/branding';
+import { companyProfile } from './integrationSettings';
 import path from 'path';
 import fs from 'fs';
 import prisma from '../db/prisma';
@@ -114,6 +114,7 @@ function boldCell(value: string, fill: string, fontColor = WHITE): XLSX.CellObje
 
 class BulkImportService {
   async generateTemplate(): Promise<Buffer> {
+    const companyName = (await companyProfile()).name;
     const wb = XLSX.utils.book_new();
 
     // ── Sheet 1: Template ──────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ class BulkImportService {
 
     // Row 1: Title (merged A1 to last column)
     ws['A1'] = {
-      v: `${COMPANY_NAME} — Guard Import Template`, t: 's',
+      v: `${companyName} — Guard Import Template`, t: 's',
       s: {
         font:      { bold: true, color: { rgb: WHITE }, sz: 13 },
         fill:      { fgColor: { rgb: NAVY } },
@@ -170,7 +171,7 @@ class BulkImportService {
 
     // ── Sheet 2: Instructions ──────────────────────────────────────────────────
     const instructions = [
-      [`${COMPANY_NAME} — Guard Import Instructions`],
+      [`${companyName} — Guard Import Instructions`],
       [''],
       ['HOW TO USE THIS TEMPLATE'],
       ['1. Do not change column headers or their order.'],

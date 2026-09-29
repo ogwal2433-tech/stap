@@ -1,5 +1,5 @@
 import type { DashboardData, DashboardFeedItem, DashboardRole } from '@stap/shared';
-import { COMPANY_NAME } from '../../lib/branding';
+import { DEFAULT_COMPANY_NAME } from '@stap/shared';
 import type { StatColour } from './StatCard';
 
 /**
@@ -227,7 +227,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
   },
 
   CLIENT: {
-    caption: `Your account with ${COMPANY_NAME}`,
+    caption: `Your account with ${DEFAULT_COMPANY_NAME}`,
     stats: [
       { key: 'activeSites',         label: 'Your Sites',        icon: '🏭', colour: 'navy',  linkTo: '/portal' },
       { key: 'activeContracts',     label: 'Active Contracts',  icon: '📝', colour: 'teal',  linkTo: '/portal' },
@@ -242,6 +242,7 @@ export const ROLE_DASHBOARDS: Record<DashboardRole, RoleDashboardSpec> = {
   },
 };
 
-export function specForRole(data: DashboardData): RoleDashboardSpec {
-  return ROLE_DASHBOARDS[data.role] ?? ROLE_DASHBOARDS.HR;
+export function specForRole(data: DashboardData, companyName = DEFAULT_COMPANY_NAME): RoleDashboardSpec {
+  const spec = ROLE_DASHBOARDS[data.role] ?? ROLE_DASHBOARDS.HR;
+  return data.role === 'CLIENT' ? { ...spec, caption: `Your account with ${companyName}` } : spec;
 }

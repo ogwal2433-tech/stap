@@ -4,6 +4,7 @@ import type { DashboardData } from '@stap/shared';
 import StatCard from './StatCard';
 import FeedCard from './FeedCard';
 import { specForRole } from './roleDashboards';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 
 /**
  * Renders whichever set of cards and feeds the signed-in user's role is
@@ -11,7 +12,8 @@ import { specForRole } from './roleDashboards';
  * rendered as zero, so a role never shows a figure the API didn't send.
  */
 export default function RoleDashboard({ data }: { data: DashboardData }) {
-  const spec = specForRole(data);
+  const { data: companyBranding } = useCompanyBranding();
+  const spec = specForRole(data, companyBranding.company_name);
 
   const stats = spec.stats.filter(s => data.stats[s.key] !== undefined);
 

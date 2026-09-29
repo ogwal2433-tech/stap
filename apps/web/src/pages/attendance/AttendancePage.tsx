@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import {
   Alert, Badge, Button, Card, Col, Form, Row, Spinner, Tab, Tabs, Table,
 } from 'react-bootstrap';
@@ -73,6 +73,7 @@ function todayStr() {
 }
 
 export default function AttendancePage() {
+  const { data: companyBranding } = useCompanyBranding();
   const { showToast } = useToast();
   const navigate      = useNavigate();
   const queryClient   = useQueryClient();
@@ -438,7 +439,7 @@ export default function AttendancePage() {
                 variant="outline-success"
                 size="sm"
                 disabled={!sheet || sheet.zones.length === 0}
-                onClick={() => sheet && exportAttendanceSheet(sheet, selectedDate)}
+                onClick={() => sheet && exportAttendanceSheet(sheet, selectedDate, companyBranding.company_name)}
               >
                 <i className="bi bi-file-earmark-excel me-1" />Export Excel
               </Button>
@@ -457,7 +458,7 @@ export default function AttendancePage() {
 
       {/* Print header */}
       <div className="d-none d-print-block mb-3">
-        <h5 className="fw-bold">{COMPANY_NAME} — Daily Deployment Sheet</h5>
+        <h5 className="fw-bold">{companyBranding.company_name} — Daily Deployment Sheet</h5>
         <div className="small">Date: {selectedDate}</div>
       </div>
 

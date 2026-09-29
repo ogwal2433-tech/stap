@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@stap/shared';
@@ -25,9 +25,6 @@ function is403(err: unknown): boolean {
   return (err as any)?.response?.status === 403;
 }
 
-const NOT_LINKED_MSG =
-  `Your account is not yet linked to a client record. Please contact ${COMPANY_NAME} to activate your portal access.`;
-
 function TabSpinner() {
   return (
     <div className="text-center py-5">
@@ -36,15 +33,18 @@ function TabSpinner() {
   );
 }
 
-function TabError({ err }: { err: unknown }) {
+function TabError({ err, companyName }: { err: unknown; companyName: string }) {
   return (
     <Alert variant="warning" className="mt-3">
-      {is403(err) ? NOT_LINKED_MSG : 'Failed to load data. Please try again later.'}
+      {is403(err) ? `Your account is not yet linked to a client record. Please contact ${companyName} to activate your portal access.` : 'Failed to load data. Please try again later.'}
     </Alert>
   );
 }
 
 export default function ClientPortalPage() {
+  const { data: companyBranding } = useCompanyBranding();
+  const companyName = companyBranding.company_name;
+  const notLinkedMessage = `Your account is not yet linked to a client record. Please contact ${companyName} to activate your portal access.`;
   const { showToast } = useToast();
 
   const { data: overview, isLoading: loadOverview, isError: overviewIsError, error: overviewErr } = useQuery({
@@ -118,7 +118,7 @@ export default function ClientPortalPage() {
     },
     onError: (err: unknown) => {
       if (is403(err)) {
-        setSrError(NOT_LINKED_MSG);
+        setSrError(notLinkedMessage);
       } else {
         showToast('Failed to submit service request', 'danger');
       }
@@ -148,7 +148,7 @@ export default function ClientPortalPage() {
     },
     onError: (err: unknown) => {
       if (is403(err)) {
-        setCompError(NOT_LINKED_MSG);
+        setCompError(notLinkedMessage);
       } else {
         showToast('Failed to submit complaint', 'danger');
       }
@@ -168,7 +168,7 @@ export default function ClientPortalPage() {
       <Container className="py-5">
         <Alert variant="warning">
           <Alert.Heading>Portal Access Unavailable</Alert.Heading>
-          {is403(overviewErr) ? NOT_LINKED_MSG : 'Failed to load portal. Please try again later.'}
+          {is403(overviewErr) ? notLinkedMessage : 'Failed to load portal. Please try again later.'}
         </Alert>
       </Container>
     );
@@ -208,7 +208,7 @@ export default function ClientPortalPage() {
             </Col>
           </Row>
           <h6 className="fw-semibold mb-2 small text-uppercase text-muted">Recent Invoices</h6>
-          {loadInvoices ? <TabSpinner /> : invoicesIsError ? <TabError err={invoicesErr} /> : (
+          {loadInvoices ? <TabSpinner /> : invoicesIsError ? <TabError err={invoicesErr} companyName={companyName} /> : (
             <Table size="sm" hover responsive className="small border-0 shadow-sm">
               <thead className="table-light"><tr><th>Invoice #</th><th>Amount</th><th>Due</th><th>Status</th></tr></thead>
               <tbody>
@@ -228,7 +228,7 @@ export default function ClientPortalPage() {
 
         {/* TAB 2: Invoices */}
         <Tab eventKey="invoices" title="Invoices">
-          {loadInvoices ? <TabSpinner /> : invoicesIsError ? <TabError err={invoicesErr} /> : (
+          {loadInvoices ? <TabSpinner /> : invoicesIsError ? <TabError err={invoicesErr} companyName={companyName} /> : (
             <>
               <Alert variant="info" className="small py-2 mb-3">
                 Pay invoices securely via MTN Mobile Money or Airtel Money.
@@ -272,7 +272,7 @@ export default function ClientPortalPage() {
 
         {/* TAB 3: Deployed Guards */}
         <Tab eventKey="guards" title="Deployed Guards">
-          {loadGuards ? <TabSpinner /> : guardsIsError ? <TabError err={guardsErr} /> : (
+          {loadGuards ? <TabSpinner /> : guardsIsError ? <TabError err={guardsErr} companyName={companyName} /> : (
             <>
               <Alert variant="info" className="small py-2 mb-3">
                 This shows guards currently deployed to your sites. Contact information and personal details are not shown.
@@ -316,7 +316,7 @@ export default function ClientPortalPage() {
           <div className="mb-4">
             <div className="d-flex align-items-center gap-2 mb-3">
               <h6 className="fw-semibold mb-0" style={{ color: '#1B3A6B' }}>
-                📤 Notices from {COMPANY_NAME}
+                📤 Notices from {companyName}
               </h6>
               {unreadNotices > 0 && (
                 <Badge bg="danger" style={{ fontSize: '0.7rem' }}>{unreadNotices} unread</Badge>
@@ -332,7 +332,7 @@ export default function ClientPortalPage() {
                   padding: '20px', textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
                 }}
               >
-                No notices from {COMPANY_NAME}
+                No notices from {companyName}
               </div>
             ) : (
               notices.map(n => (
@@ -366,7 +366,7 @@ export default function ClientPortalPage() {
                       <div className="fw-bold" style={{ fontSize: '0.92rem' }}>{n.subject}</div>
 
                       <div className="text-muted small mt-1">
-                        From {COMPANY_NAME} ·{' '}
+                        From {companyName} ·{' '}
                         {new Date(n.sentAt ?? n.createdAt).toLocaleDateString('en-GB', {
                           day: 'numeric', month: 'long', year: 'numeric',
                         })}
@@ -429,7 +429,7 @@ export default function ClientPortalPage() {
           <hr className="my-4" />
 
           <h6 className="fw-semibold mb-3" style={{ color: '#1B3A6B' }}>
-            📥 My Complaints to {COMPANY_NAME}
+            📥 My Complaints to {companyName}
           </h6>
 
           <Row>
@@ -498,7 +498,7 @@ export default function ClientPortalPage() {
             </Col>
             <Col md={6}>
               <h6 className="fw-semibold mb-3">My Complaints</h6>
-              {loadComplaints ? <TabSpinner /> : complaintsIsError ? <TabError err={complaintsErr} /> : (
+              {loadComplaints ? <TabSpinner /> : complaintsIsError ? <TabError err={complaintsErr} companyName={companyName} /> : (
                 <div className="d-flex flex-column gap-2">
                   {complaints.map(c => (
                     <Card key={c.id} className="border-0 shadow-sm">
@@ -528,7 +528,7 @@ export default function ClientPortalPage() {
                 <Alert variant="success">
                   <strong>Request submitted!</strong><br />
                   Reference: <code>#{srSubmitted.slice(-8).toUpperCase()}</code><br />
-                  <small className="text-muted">{COMPANY_NAME} has been notified and will contact you directly.</small>
+                  <small className="text-muted">{companyName} has been notified and will contact you directly.</small>
                   <div className="mt-2">
                     <Button size="sm" variant="outline-success" onClick={() => setSrSubmitted(null)}>Submit Another</Button>
                   </div>
@@ -585,7 +585,7 @@ export default function ClientPortalPage() {
             </Col>
             <Col md={6}>
               <h6 className="fw-semibold mb-3">My Service Requests</h6>
-              {loadSR ? <TabSpinner /> : srIsError ? <TabError err={srErr} /> : (
+              {loadSR ? <TabSpinner /> : srIsError ? <TabError err={srErr} companyName={companyName} /> : (
                 <div className="d-flex flex-column gap-2">
                   {serviceRequests.map(sr => (
                     <Card key={sr.id} className="border-0 shadow-sm">
@@ -614,7 +614,7 @@ export default function ClientPortalPage() {
                               marginTop:    '8px',
                             }}
                           >
-                            <div className="fw-bold small text-success mb-1">✅ {COMPANY_NAME} response</div>
+                            <div className="fw-bold small text-success mb-1">✅ {companyName} response</div>
                             <div style={{
                               fontSize: '0.85rem', color: '#2C3E50',
                               whiteSpace: 'pre-wrap', lineHeight: 1.6,

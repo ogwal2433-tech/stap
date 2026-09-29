@@ -24,7 +24,7 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-export function buildInvoiceHtml(invoice: any): string {
+export function buildInvoiceHtml(invoice: any, title: string): string {
   const status = invoice.status as string;
   const badge  = STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
 

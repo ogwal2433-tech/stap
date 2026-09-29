@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { COMPANY_NAME } from '../../lib/branding';
+import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useGenerateLetterRecord } from '../../hooks/useLetters';
 import { useLetterTemplates, usePreviewTemplate } from '../../hooks/useHR';
@@ -47,6 +47,7 @@ interface Props {
 export default function DisciplinaryLetterModal({
   guardId, guardName, disciplinaryRecord, show, onClose, onSuccess,
 }: Props) {
+  const { data: companyBranding } = useCompanyBranding();
   const mutation = useGenerateLetterRecord();
   const { data: templates = [] } = useLetterTemplates();
   const previewTemplate = usePreviewTemplate();
@@ -76,7 +77,7 @@ export default function DisciplinaryLetterModal({
         date:          fmt,
         reason:        disciplinaryRecord.reason,
         outcome:       disciplinaryRecord.outcome,
-        company_name:  COMPANY_NAME,
+        company_name:  companyBranding.company_name,
       },
     });
     setBody(html);

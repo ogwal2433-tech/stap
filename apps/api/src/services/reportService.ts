@@ -4,7 +4,8 @@ import cron from 'node-cron';
 import prisma from '../db/prisma';
 import { OUTSTANDING_STATUSES } from './invoiceService';
 import { QueueService } from '../jobs/QueueService';
-import type { DirectorDashboardStats, ScheduledReportInput } from '@stap/shared';
+import { REPORT_TITLE_DEFAULTS, type DirectorDashboardStats, type ScheduledReportInput } from '@stap/shared';
+import { settingsService } from './settingsService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -207,10 +208,15 @@ class ReportService {
 
     const wb = new ExcelJS.Workbook();
     wb.creator = APP_NAME;
+    const reportTitle = await settingsService.getReportTitle('daily_operations_report');
 
     // Sheet 1: Summary
     const summary = wb.addWorksheet('Summary');
-    summary.addRow(['STAP Security — Daily Operations Report']);
+    const excelTitle = reportTitle.shortTitle && reportTitle.shortTitle !== REPORT_TITLE_DEFAULTS.daily_operations_report.shortTitle
+      ? reportTitle.shortTitle
+      : reportTitle.title === REPORT_TITLE_DEFAULTS.daily_operations_report.title
+        ? (reportTitle.shortTitle ?? reportTitle.title) : reportTitle.title;
+    summary.addRow([excelTitle]);
     summary.getRow(1).font = { bold: true, size: 14 };
     summary.addRow([`Date: ${targetDate.toLocaleDateString('en-UG')}`]);
     summary.addRow([]);
@@ -327,8 +333,13 @@ class ReportService {
     });
 
     const wb = new ExcelJS.Workbook();
+    const reportTitle = await settingsService.getReportTitle('monthly_payroll_report');
     const summary = wb.addWorksheet('Summary');
-    summary.addRow([`STAP Security — Payroll Report ${month}/${year}`]);
+    const payrollHeading = reportTitle.shortTitle && reportTitle.shortTitle !== REPORT_TITLE_DEFAULTS.monthly_payroll_report.shortTitle
+      ? reportTitle.shortTitle
+      : reportTitle.title === REPORT_TITLE_DEFAULTS.monthly_payroll_report.title
+        ? (reportTitle.shortTitle ?? reportTitle.title) : reportTitle.title;
+    summary.addRow([`${payrollHeading} ${month}/${year}`]);
     summary.getRow(1).font = { bold: true, size: 14 };
     summary.addRow([]);
     if (run) {
@@ -410,11 +421,12 @@ class ReportService {
         buffer = await this.generateDailyOpsReport(now.toISOString().split('T')[0]);
     }
 
+    const emailPrefix = await settingsService.getScheduledReportEmailPrefix();
     await Promise.all(
       report.recipients.map(to =>
         QueueService.sendEmail({
           to,
-          subject:  `STAP Report: ${report.name}`,
+          subject:  `${emailPrefix}: ${report.name}`,
           template: 'scheduled-report',
           data:     { reportName: report.name, generatedAt: now },
         }),

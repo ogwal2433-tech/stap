@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { companyProfile } from './integrationSettings';
 import prisma from '../db/prisma';
 import { clientService } from './clientService';
 import { contractService } from './contractService';
@@ -219,11 +220,12 @@ const EXAMPLE_ROWS: (string | number)[][] = [
 
 class ClientImportService {
   async generateTemplate(): Promise<Buffer> {
+    const companyName = (await companyProfile()).name;
     const wb = XLSX.utils.book_new();
     const ws: XLSX.WorkSheet = {};
 
     ws['A1'] = {
-      v: 'STAP Security Ltd — Client Import Template', t: 's',
+      v: `${companyName} — Client Import Template`, t: 's',
       s: {
         font:      { bold: true, color: { rgb: WHITE }, sz: 13 },
         fill:      { fgColor: { rgb: NAVY } },
@@ -268,7 +270,7 @@ class ClientImportService {
     XLSX.utils.book_append_sheet(wb, ws, 'Clients Import Template');
 
     const instructions = [
-      ['STAP Security Ltd — Client Import Instructions'],
+      [`${companyName} — Client Import Instructions`],
       [''],
       ['HOW TO USE THIS TEMPLATE'],
       ['1. Do not change the column headers or their order.'],
