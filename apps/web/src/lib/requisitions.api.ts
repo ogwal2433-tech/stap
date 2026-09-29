@@ -16,7 +16,7 @@ import type {
   ReviewAccountabilityInput,
   FundDispatchResponse,
   CreateFundDispatchInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const requisitionsApi = {
   list(params?: {

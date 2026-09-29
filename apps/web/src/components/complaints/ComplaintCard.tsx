@@ -1,6 +1,6 @@
 import { Badge, Button } from 'react-bootstrap';
-import type { ComplaintResponse } from '@stap/shared';
-import { COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS } from '@stap/shared';
+import type { ComplaintResponse } from '@security360/shared';
+import { COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS } from '@security360/shared';
 
 const BORDER_COLORS: Record<string, string> = {
   OPEN:                '#6c757d',

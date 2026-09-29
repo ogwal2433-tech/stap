@@ -187,15 +187,15 @@ import {
   CreateUserSchema,
   UpdateUserSchema,
   ResetPasswordSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 import { SETTINGS_GROUPS, type SettingsGroup } from '../constants/settingsConfig';
 import { groupView, saveGroup, xcelConfig } from '../services/integrationSettings';
 import { verifyMailer } from '../lib/mailer';
 import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
-import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey } from '@stap/shared';
-import { COMPANY_BRANDING_KEYS, type CompanyBrandingKey } from '@stap/shared';
-import { getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
+import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey } from '@security360/shared';
+import { COMPANY_BRANDING_KEYS, type CompanyBrandingKey } from '@security360/shared';
+import { companyBrandingDefaults, getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
 
 const router: IRouter = Router();
 
@@ -207,6 +207,9 @@ const reportKeyParam = (raw: string): ReportKey => {
 };
 router.get('/company-branding', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
   res.json({ success: true, data: await getCompanyBranding() });
+}));
+router.get('/company-branding/defaults', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: companyBrandingDefaults });
 }));
 router.patch('/company-branding', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await updateCompanyBranding(req.body, req.user!.userId) });

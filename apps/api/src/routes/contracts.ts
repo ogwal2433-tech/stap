@@ -75,7 +75,7 @@ import {
   CreateContractSchema,
   UpdateContractSchema,
   AmendContractSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const router: IRouter = Router();
 

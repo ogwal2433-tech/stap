@@ -12,7 +12,7 @@ import type {
   FlagPayslipInput,
   CreatePayrollGroupInput,
   UpdatePayrollGroupInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Invoice hooks ──────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, Spinner } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { contactTypeConfig, type ClientContactResponse } from '@stap/shared';
+import { contactTypeConfig, type ClientContactResponse } from '@security360/shared';
 import ContactFormModal from './ContactFormModal';
 import { clientsApi } from '../../lib/clients.api';
 import { useToast } from '../../context/ToastContext';

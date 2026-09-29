@@ -144,7 +144,7 @@ export const LETTER_TYPES = [
   'CONTRACT_EXTENSION',
   'CONFIRMATION_OF_EMPLOYMENT',
   'SALARY_REVIEW',
-  // The exit and leave paperwork STAP issues on headed paper.
+  // The exit and leave paperwork Security360 issues on headed paper.
   'DESERTION_NOTICE',
   'RESIGNATION_ACCEPTANCE',
   'SICK_LEAVE_APPROVAL',

@@ -4,7 +4,7 @@ import { writeAuditLog } from '../lib/auditLog';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { AppError, NotFoundError } from '../errors/AppError';
-import { ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH } from '@stap/shared';
+import { ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH } from '@security360/shared';
 import type {
   CreateComplaintInput,
   CreateOutboundComplaintInput,
@@ -13,7 +13,7 @@ import type {
   ComplaintResponse,
   ComplaintDashboard,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -130,10 +130,10 @@ class ComplaintService {
     return sanitiseComplaint(complaint);
   }
 
-  // ── Outbound notices (STAP → client) ─────────────────────────────────────────
+  // ── Outbound notices (Security360 → client) ─────────────────────────────────────────
 
   /**
-   * Sends a formal notice from STAP to a client.
+   * Sends a formal notice from Security360 to a client.
    *
    * The mirror image of create(): the complaint is raised by staff against the
    * client, so it starts at SENT rather than OPEN and waits on the client to
@@ -348,7 +348,7 @@ class ComplaintService {
     if (!complaint) throw new NotFoundError('Complaint not found');
 
     // Assignment routes a client's complaint to whoever will handle it. A notice
-    // STAP sent has no such owner — it is waiting on the client, not on us.
+    // Security360 sent has no such owner — it is waiting on the client, not on us.
     if (complaint.direction === 'OUTBOUND') {
       throw new AppError('A notice sent to a client cannot be assigned to a staff member.', 400);
     }
@@ -541,8 +541,8 @@ class ComplaintService {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    // This dashboard measures how STAP handles client grievances — resolution
-    // times, open volume by category. Notices STAP sends out are a different
+    // This dashboard measures how Security360 handles client grievances — resolution
+    // times, open volume by category. Notices Security360 sends out are a different
     // thing entirely and would quietly distort every figure here, so they are
     // excluded rather than filtered at the edges.
     const inbound = { direction: 'INBOUND' } as const;

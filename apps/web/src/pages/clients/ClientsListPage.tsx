@@ -12,7 +12,7 @@ import PermissionGuard from '../../components/PermissionGuard';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, type ClientResponse, type UserRole,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const CONTRACT_BADGE: Record<string, string> = {
   ACTIVE: 'success',
@@ -200,7 +200,7 @@ export default function ClientsListPage() {
               <InputGroup size="sm">
                 <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
                 <Form.Control
-                  placeholder="Company name, contact, or SSLC number…"
+                  placeholder="Company name, contact, or S360C number…"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />

@@ -3,11 +3,11 @@ import { DEFAULT_COMPANY_NAME } from './constants/app';
 
 export const COMPANY_BRANDING_DEFAULTS = {
   company_name: DEFAULT_COMPANY_NAME,
-  company_short_name: 'STAP',
+  company_short_name: 'Security360',
   company_address: 'Kampala, Uganda',
-  company_email: 'info@stapsecurity.co.ug',
+  company_email: 'info@security360.co.ug',
   company_phone: '+256 414 000 000',
-  company_website: 'www.stapsecurity.co.ug',
+  company_website: 'www.security360.co.ug',
   company_logo_url: '',
   company_registration_number: '',
   company_tax_id: '',
@@ -20,9 +20,29 @@ export const CompanyBrandingPatchSchema = z.object(
   Object.fromEntries(COMPANY_BRANDING_KEYS.map((key) => [key, z.string().trim().max(500)])) as Record<CompanyBrandingKey, z.ZodString>,
 ).partial().strict();
 
-export function resolveCompanyBranding(overrides?: Partial<CompanyBranding> | null): CompanyBranding {
+/**
+ * The branding this deployment falls back to when nothing is saved in settings.
+ *
+ * COMPANY_BRANDING_DEFAULTS is the original deployment's identity. Another
+ * deployment overrides any field from the environment, named after its key in
+ * capitals (company_short_name -> COMPANY_SHORT_NAME), so one server can run
+ * more than one brand without either renaming the other. `VITE_` keys win, as
+ * in resolveBranding(), since those are all a browser bundle can see.
+ */
+export function resolveCompanyBrandingDefaults(env: Record<string, string | undefined> = {}): CompanyBranding {
+  return Object.fromEntries(COMPANY_BRANDING_KEYS.map((key) => {
+    const name = key.toUpperCase();
+    const value = (env[`VITE_${name}`] ?? env[name])?.trim();
+    return [key, value || COMPANY_BRANDING_DEFAULTS[key]];
+  })) as CompanyBranding;
+}
+
+export function resolveCompanyBranding(
+  overrides?: Partial<CompanyBranding> | null,
+  defaults: CompanyBranding = COMPANY_BRANDING_DEFAULTS,
+): CompanyBranding {
   return Object.fromEntries(COMPANY_BRANDING_KEYS.map((key) => {
     const candidate = overrides?.[key]?.trim();
-    return [key, candidate || COMPANY_BRANDING_DEFAULTS[key]];
+    return [key, candidate || defaults[key]];
   })) as CompanyBranding;
 }

@@ -6,7 +6,7 @@ import type {
   SystemErrorStats,
   SystemErrorQuery,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 function fmt(e: any): SystemErrorResponse {
   return {

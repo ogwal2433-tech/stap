@@ -75,7 +75,7 @@ export interface ServiceRequestResponse {
   quantity:    number | null;
   status:      string;
   priority:    string;
-  /** STAP's reply to the client. */
+  /** Security360's reply to the client. */
   staffResponse: string | null;
   /**
    * Internal notes. Present only on staff responses — the portal strips this

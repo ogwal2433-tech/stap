@@ -4,7 +4,7 @@ import app from '../../index';
 import prisma from '../../db/prisma';
 import { signAccessToken } from '../../lib/jwt';
 import { clearPermissionCache } from '../../middleware/permissions';
-import { UpdateStaffSchema } from '@stap/shared';
+import { UpdateStaffSchema } from '@security360/shared';
 
 /**
  * Staff positions are configured in Settings rather than compiled in.

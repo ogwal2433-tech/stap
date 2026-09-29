@@ -15,9 +15,9 @@ import { exportGuardsList } from '../../lib/exportToExcel';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
-} from '@stap/shared';
-import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@stap/shared';
-import type { GuardResponse } from '@stap/shared';
+} from '@security360/shared';
+import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@security360/shared';
+import type { GuardResponse } from '@security360/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
 
 const STATUS_BADGE: Record<string, string> = Object.fromEntries(
@@ -266,7 +266,7 @@ export default function GuardsListPage() {
       <Row className="g-2 mb-2">
         <Col md={5}>
           <Form.Control
-            placeholder="Search by name, NIN, phone, or SSLG number…"
+            placeholder="Search by name, NIN, phone, or S360G number…"
             value={search}
             onChange={handleSearchChange}
           />

@@ -1,4 +1,4 @@
-import type { BillingSummary } from '@stap/shared';
+import type { BillingSummary } from '@security360/shared';
 import { useClientBillingSummary } from '../../hooks/useClients';
 
 /**

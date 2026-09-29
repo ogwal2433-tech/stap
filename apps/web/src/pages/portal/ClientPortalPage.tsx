@@ -2,18 +2,18 @@ import { useState } from 'react';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS, formatUgx } from '@stap/shared';
+import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@security360/shared';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { dashboardApi } from '../../lib/dashboard.api';
 import RoleDashboard from '../dashboard/RoleDashboard';
 import AcknowledgeNoticeModal from '../../components/portal/AcknowledgeNoticeModal';
 import PayInvoiceModal from '../../components/portal/PayInvoiceModal';
-import type { ComplaintResponse, InvoiceResponse } from '@stap/shared';
+import type { ComplaintResponse, InvoiceResponse } from '@security360/shared';
 
 const STA_BADGE: Record<string, string> = {
   PENDING: 'warning', OVERDUE: 'danger', PAID: 'success', PARTIALLY_PAID: 'info',
-  // Voided by STAP: kept on the client's statement, owes nothing.
+  // Voided by Security360: kept on the client's statement, owes nothing.
   VOID: 'secondary',
 };
 
@@ -74,7 +74,7 @@ export default function ClientPortalPage() {
     queryFn:  portalApi.getComplaints,
   });
 
-  // Notices STAP has sent to this client. Polled so a notice sent while the
+  // Notices Security360 has sent to this client. Polled so a notice sent while the
   // portal is open still surfaces without a manual refresh.
   const { data: noticesRes, isLoading: loadNotices, refetch: refetchNotices } = useQuery({
     queryKey:        ['portal-notices'],
@@ -312,7 +312,7 @@ export default function ClientPortalPage() {
             </>
           }
         >
-          {/* ── Notices from STAP — shown first: these need the client to act ── */}
+          {/* ── Notices from the company — shown first: these need the client to act ── */}
           <div className="mb-4">
             <div className="d-flex align-items-center gap-2 mb-3">
               <h6 className="fw-semibold mb-0" style={{ color: '#1B3A6B' }}>

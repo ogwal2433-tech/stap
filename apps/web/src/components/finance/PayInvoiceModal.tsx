@@ -3,10 +3,7 @@ import { Modal, Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useInitiatePayment, usePaymentStatus } from '../../hooks/usePayments';
 import { useQueryClient } from '@tanstack/react-query';
-import type { InvoiceResponse } from '@stap/shared';
-// The amount collected is the balance owed, which can carry cents once a line
-// rate comes from a monthly contract rate ÷ 30.
-import { formatUgx } from '@stap/shared';
+import type { InvoiceResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

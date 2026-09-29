@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 import { QueueService } from '../../jobs/QueueService';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────

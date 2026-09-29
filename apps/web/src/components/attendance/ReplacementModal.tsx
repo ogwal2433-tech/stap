@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useAvailableReplacements, useAssignReplacement } from '../../hooks/useAttendance';
 import InitialsAvatar from '../ui/InitialsAvatar';
-import { REPLACEMENT_REASONS, type ReplacementReason, type ReplacementResult } from '@stap/shared';
+import { REPLACEMENT_REASONS, type ReplacementReason, type ReplacementResult } from '@security360/shared';
 
 interface AbsentInfo {
   id:         string;

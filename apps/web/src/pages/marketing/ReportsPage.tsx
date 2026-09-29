@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
-import { MARKETING_REPORT_TYPES, type MarketingReportType } from '@stap/shared';
+import { MARKETING_REPORT_TYPES, type MarketingReportType } from '@security360/shared';
 import { useMarketingReport } from '../../hooks/useMarketing';
 import { marketingApi } from '../../lib/marketing.api';
 import { useToast } from '../../context/ToastContext';

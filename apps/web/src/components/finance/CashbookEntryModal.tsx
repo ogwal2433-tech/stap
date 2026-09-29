@@ -1,8 +1,8 @@
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CashbookEntrySchema } from '@stap/shared';
-import type { CashbookEntryInput } from '@stap/shared';
+import { CashbookEntrySchema } from '@security360/shared';
+import type { CashbookEntryInput } from '@security360/shared';
 import { useAddCashbookEntry } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
 

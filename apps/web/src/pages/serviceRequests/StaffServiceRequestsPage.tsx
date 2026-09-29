@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   SR_STATUSES, SERVICE_REQUEST_TYPES, SERVICE_REQUEST_PRIORITY_COLORS,
   type ServiceRequestResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import { useClientList as useClients } from '../../hooks/useClients';
 import ServiceRequestDetailModal from '../../components/serviceRequests/ServiceRequestDetailModal';
@@ -27,7 +27,7 @@ const SUMMARY_CARDS = [
 /**
  * Every client's service requests in one queue.
  *
- * The counterpart to the client portal's submit form — this is where STAP
+ * The counterpart to the client portal's submit form — this is where Security360
  * actually reads and answers what clients ask for.
  */
 export default function StaffServiceRequestsPage() {

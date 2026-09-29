@@ -10,7 +10,7 @@ vi.mock('../../lib/redis', () => ({ default: { del: vi.fn().mockResolvedValue(un
 vi.mock('bcryptjs', () => ({ default: { hash: vi.fn() } }));
 
 import prisma from '../../db/prisma';
-import { REPORT_TITLE_DEFAULTS, resolveReportTitle } from '@stap/shared';
+import { REPORT_TITLE_DEFAULTS, resolveReportTitle } from '@security360/shared';
 import { settingsService } from '../../services/settingsService';
 const db = prisma as any;
 

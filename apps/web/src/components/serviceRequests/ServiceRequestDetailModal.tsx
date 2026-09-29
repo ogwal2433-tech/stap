@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SR_STATUSES, SR_TERMINAL_STATUSES, SERVICE_REQUEST_TYPES, SERVICE_REQUEST_PRIORITY_COLORS,
   type ServiceRequestResponse, type ServiceRequestStatus,
-} from '@stap/shared';
+} from '@security360/shared';
 import { serviceRequestsApi } from '../../lib/serviceRequests.api';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';

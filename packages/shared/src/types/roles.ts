@@ -1,5 +1,5 @@
 /**
- * Role constants, hierarchy, and permission groupings for STAP Security.
+ * Role constants, hierarchy, and permission groupings for Security360.
  *
  * Permission matrix (summary):
  *

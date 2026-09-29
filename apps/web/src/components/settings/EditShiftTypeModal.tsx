@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useUpdateShiftType } from '../../hooks/useSettings';
 import { useToast } from '../../context/ToastContext';
-import type { ShiftTypeResponse } from '@stap/shared';
+import type { ShiftTypeResponse } from '@security360/shared';
 
 interface Props {
   shift: ShiftTypeResponse | null;

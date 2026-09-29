@@ -1,9 +1,9 @@
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
 import { dateRangeFilter } from '../lib/dateUtils';
-import type { AuditLogQuery, AuditLogEntry, AuditLogListResult } from '@stap/shared';
-import { SECURITY_ACTIONS } from '@stap/shared';
-import type { SecurityLogQuery, SecurityLogResult } from '@stap/shared';
+import type { AuditLogQuery, AuditLogEntry, AuditLogListResult } from '@security360/shared';
+import { SECURITY_ACTIONS } from '@security360/shared';
+import type { SecurityLogQuery, SecurityLogResult } from '@security360/shared';
 
 /** How far back the Security Log's summary cards look. */
 const SUMMARY_DAYS = 7;

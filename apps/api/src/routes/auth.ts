@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import rateLimit from 'express-rate-limit';
-import { LoginSchema, ROLES } from '@stap/shared';
+import { LoginSchema, ROLES } from '@security360/shared';
 import { authService, loginFailureMessage } from '../services/authService';
 import { permissionsFor } from '../middleware/permissions';
 import { validate } from '../middleware/validate';
@@ -88,7 +88,7 @@ const loginRateLimiter = rateLimit({
  *               email:
  *                 type: string
  *                 format: email
- *                 example: director@stapsecurity.co.ug
+ *                 example: director@security360.co.ug
  *               password:
  *                 type: string
  *                 example: "12345678"

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lettersApi } from '../lib/letters.api';
 import { useToast } from '../context/ToastContext';
-import type { GenerateLetterInput, ApproveLetterInput } from '@stap/shared';
+import type { GenerateLetterInput, ApproveLetterInput } from '@security360/shared';
 
 export function useLetters(params?: Parameters<typeof lettersApi.list>[0]) {
   return useQuery({

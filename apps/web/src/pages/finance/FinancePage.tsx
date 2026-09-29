@@ -28,12 +28,9 @@ import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
-// Invoice amounts may carry cents now (a monthly contract rate ÷ 30 rarely lands
-// on a whole shilling); payroll figures are whole and print unchanged.
-import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@stap/shared';
-import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@stap/shared';
-import { invoicesApi, payrollApi } from '../../lib/finance.api';
-import { FILE_PREFIX } from '../../lib/branding';
+import { ROLES, HR_ROLES } from '@security360/shared';
+import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@security360/shared';
+import { invoicesApi } from '../../lib/finance.api';
 
 const NAVY = '#1B3A6B';
 

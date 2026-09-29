@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesApi } from '../lib/zones.api';
 import { clientsApi } from '../lib/clients.api';
-import type { CreateZoneInput, UpdateZoneInput } from '@stap/shared';
+import type { CreateZoneInput, UpdateZoneInput } from '@security360/shared';
 
 export function useZones(params?: { page?: number; limit?: number; isActive?: boolean; search?: string }) {
   return useQuery({

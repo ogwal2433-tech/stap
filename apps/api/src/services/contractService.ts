@@ -10,7 +10,7 @@ import type {
   ShiftPattern,
   AmendContractInput,
   ContractAmendmentResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const CONTRACT_INCLUDE = {
   client:     { select: { id: true, clientName: true } },

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useCreateStaffPosition, useUpdateStaffPosition } from '../../hooks/useSettings';
-import type { StaffPositionResponse } from '@stap/shared';
+import type { StaffPositionResponse } from '@security360/shared';
 
 interface Props {
   show: boolean;

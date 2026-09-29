@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Form, InputGroup, Modal, Spinner } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useUpdateDeductionType } from '../../hooks/useSettings';
-import type { DeductionTypeResponse } from '@stap/shared';
+import type { DeductionTypeResponse } from '@security360/shared';
 
 interface Props {
   show: boolean;

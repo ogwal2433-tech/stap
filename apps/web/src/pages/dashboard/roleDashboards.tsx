@@ -1,5 +1,5 @@
-import type { DashboardData, DashboardFeedItem, DashboardRole } from '@stap/shared';
-import { DEFAULT_COMPANY_NAME } from '@stap/shared';
+import type { DashboardData, DashboardFeedItem, DashboardRole } from '@security360/shared';
+import { DEFAULT_COMPANY_NAME } from '@security360/shared';
 import type { StatColour } from './StatCard';
 
 /**

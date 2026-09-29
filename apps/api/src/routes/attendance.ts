@@ -90,7 +90,7 @@ import {
   AttendanceQuerySchema,
   RequestReplacementSchema,
   DeploymentSheetBatchSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const router: IRouter = Router();
 
@@ -146,7 +146,7 @@ router.get(
   requireRole(...DEPLOYMENT_VIEW_ROLES),
   validateQuery(DeploymentListQuerySchema),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as import('@stap/shared').DeploymentListQuery;
+    const query = req.query as unknown as import('@security360/shared').DeploymentListQuery;
     const result = await deploymentService.getTodaysDeployments(query);
     res.status(200).json({ success: true, ...result });
   }),
@@ -212,7 +212,7 @@ router.get(
   ),
   validateQuery(AttendanceQuerySchema),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as import('@stap/shared').AttendanceQuery;
+    const query = req.query as unknown as import('@security360/shared').AttendanceQuery;
     const result = await attendanceService.getAttendanceByDate(query);
     res.status(200).json({ success: true, ...result });
   }),
@@ -260,7 +260,7 @@ router.post(
   guardDocumentUpload.single('photo'),
   asyncHandler(async (req, res) => {
     // Parse body (may come as JSON or multipart)
-    let body = req.body as import('@stap/shared').SupervisorCheckinInput;
+    let body = req.body as import('@security360/shared').SupervisorCheckinInput;
 
     // Validate with Zod manually (multer processes body separately)
     const parsed = SupervisorCheckinSchema.safeParse(req.body);

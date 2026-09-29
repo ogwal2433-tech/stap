@@ -6,7 +6,7 @@ import {
   DeactivateStaffSchema,
   StaffListQuerySchema,
   type StaffListQuery,
-} from '@stap/shared';
+} from '@security360/shared';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate, validateQuery } from '../middleware/validate';

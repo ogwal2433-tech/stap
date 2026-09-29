@@ -3,8 +3,8 @@ import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useApproveLetter, useSaveLetterEdits } from '../../hooks/useLetters';
 import { LetterEditor } from './LetterEditor';
 import LetterStatusBadge from './LetterStatusBadge';
-import { DISCIPLINARY_LETTER_LABELS, HR_LETTER_LABELS, STRUCTURED_LETTER_TYPES } from '@stap/shared';
-import type { GeneratedLetterResponse } from '@stap/shared';
+import { DISCIPLINARY_LETTER_LABELS, HR_LETTER_LABELS, STRUCTURED_LETTER_TYPES } from '@security360/shared';
+import type { GeneratedLetterResponse } from '@security360/shared';
 
 interface Props {
   letter:  GeneratedLetterResponse;

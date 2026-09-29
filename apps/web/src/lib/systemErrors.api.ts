@@ -5,7 +5,7 @@ import type {
   UpdateErrorStatusInput,
   BulkUpdateErrorStatusInput,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export interface SystemErrorQueryParams {
   status?:   string;

@@ -3,7 +3,7 @@ import { clientsApi } from '../lib/clients.api';
 import type {
   ClientListQuery, CreateClientInput, UpdateClientInput, CreateSiteInput,
   UpdateSiteInput, CreateIncidentInput, GrantClientPortalInput, ClientImportRow,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useClientList(params?: Partial<ClientListQuery>) {
   return useQuery({

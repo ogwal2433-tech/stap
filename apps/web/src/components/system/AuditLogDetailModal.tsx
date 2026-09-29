@@ -1,5 +1,5 @@
 import { Badge, Button, Col, Modal, Row } from 'react-bootstrap';
-import type { AuditLogEntry } from '@stap/shared';
+import type { AuditLogEntry } from '@security360/shared';
 
 interface Props {
   log:     AuditLogEntry;

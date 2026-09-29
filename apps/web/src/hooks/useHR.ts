@@ -11,7 +11,7 @@ import type {
   ApproveLeaveInput,
   SaveLetterTemplateInput,
   CreateGuardInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Recruitment ────────────────────────────────────────────────────────────────
 

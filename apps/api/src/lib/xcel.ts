@@ -19,7 +19,7 @@ export function detectNetwork(normalisedPhone: string): 'MTN' | 'AIRTEL' {
 }
 
 export function generateExtReference(): string {
-  return `STAP-${Date.now()}-${randomBytes(4).toString('hex').toUpperCase()}`;
+  return `S360-${Date.now()}-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
 /**
@@ -128,5 +128,5 @@ export async function checkPaymentStatus(extReference: string): Promise<StatusRe
 // xcelPartner.ts (different auth model, different DL-code/payment flow).
 
 export function generateDisbursementRef(guardId: string, period: string): string {
-  return `STAP-SAL-${guardId.slice(0, 6).toUpperCase()}-${period.replace('-', '')}-${Date.now()}`;
+  return `S360-SAL-${guardId.slice(0, 6).toUpperCase()}-${period.replace('-', '')}-${Date.now()}`;
 }

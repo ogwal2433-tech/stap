@@ -25,7 +25,7 @@ import ComplaintCard from '../../components/complaints/ComplaintCard';
 import ClientComplaintDetailModal from '../../components/complaints/ClientComplaintDetailModal';
 import ComplaintFormModal from '../../components/complaints/ComplaintFormModal';
 import { useToast } from '../../context/ToastContext';
-import { ROLES, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@stap/shared';
+import { ROLES, LEAD_SOURCES, LEAD_STATUSES, MARKETER_LEAD_SOURCE, SHIFT_PATTERNS, DEFAULT_SITE_TYPE, type UserRole, type SiteResponse, type ContractResponse, type ComplaintResponse } from '@security360/shared';
 import { computeDisplayDuration } from '../../lib/dateUtils';
 import { useHasPermission } from '../../context/AuthContext';
 

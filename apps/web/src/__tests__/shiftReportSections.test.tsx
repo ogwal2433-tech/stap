@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { computeDuration } from '@stap/shared';
-import type { MotorcycleReport, PendingMatter } from '@stap/shared';
+import { computeDuration } from '@security360/shared';
+import type { MotorcycleReport, PendingMatter } from '@security360/shared';
 import { PendingMattersSection, MotorcycleSection } from '../pages/controlRoom/shiftReportParts';
 
 /** Both sections are controlled, so the test owns the state the form owns. */

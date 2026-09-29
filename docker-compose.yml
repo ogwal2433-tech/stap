@@ -1,20 +1,26 @@
+# Pinned rather than taken from the checkout directory: the deploy path is
+# /var/www/security360, which would otherwise name this project "security360"
+# and merge it with docker-compose.security360.yml. Volumes become
+# s360-prod_postgres_data and so on.
+name: s360-prod
+
 services:
 
   # ── PostgreSQL Database ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: stap-postgres
+    container_name: s360-postgres-prod
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-stap_user}
+      POSTGRES_USER: ${POSTGRES_USER:-security360_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-stap_production}
+      POSTGRES_DB: ${POSTGRES_DB:-security360_production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - stap-network
+      - s360-prod-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stap_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-security360_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,12 +28,12 @@ services:
   # ── Redis ───────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: stap-redis
+    container_name: s360-redis-prod
     restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
-      - stap-network
+      - s360-prod-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -39,13 +45,13 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: stap-api:latest
-    container_name: stap-api
+    image: s360-api-prod:latest
+    container_name: s360-api-prod
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://${POSTGRES_USER:-stap_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stap_production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-security360_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-security360_production}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
@@ -78,7 +84,7 @@ services:
     volumes:
       - uploads:/app/public/uploads
     networks:
-      - stap-network
+      - s360-prod-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,8 +93,8 @@ services:
 
   # ── Worker (BullMQ) — shares the same image as api ──────────────────
   worker:
-    image: stap-api:latest
-    container_name: stap-worker
+    image: s360-api-prod:latest
+    container_name: s360-worker-prod
     restart: unless-stopped
     command: ["node", "apps/api/dist/worker.js"]
     # The image's healthcheck asks an HTTP endpoint whether it is alive. A
@@ -102,7 +108,7 @@ services:
       retries: 3
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-stap_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stap_production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-security360_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-security360_production}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
@@ -119,7 +125,7 @@ services:
     volumes:
       - uploads:/app/public/uploads
     networks:
-      - stap-network
+      - s360-prod-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,18 +137,18 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    image: stap-web:latest
-    container_name: stap-web
+    image: s360-web-prod:latest
+    container_name: s360-web-prod
     restart: unless-stopped
     networks:
-      - stap-network
+      - s360-prod-network
     depends_on:
       - api
 
   # ── Nginx Reverse Proxy ─────────────────────────────────────────────
   nginx:
     image: nginx:alpine
-    container_name: stap-nginx
+    container_name: s360-nginx-prod
     restart: unless-stopped
     ports:
       - "80:80"
@@ -152,7 +158,7 @@ services:
       - uploads:/var/www/uploads:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
-      - stap-network
+      - s360-prod-network
     depends_on:
       - api
       - web
@@ -163,5 +169,5 @@ volumes:
   uploads:
 
 networks:
-  stap-network:
+  s360-prod-network:
     driver: bridge

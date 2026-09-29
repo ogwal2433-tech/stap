@@ -9,7 +9,7 @@ import {
   getInvoicePayments,
 } from '../services/paymentService';
 import { payrollService } from '../services/payrollService';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 
 const router: IRouter = Router();
 

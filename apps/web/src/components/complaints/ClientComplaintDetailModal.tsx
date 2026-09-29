@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import type { ComplaintResponse } from '@stap/shared';
+import type { ComplaintResponse } from '@security360/shared';
 import {
   COMPLAINT_SEVERITY_COLORS, COMPLAINT_STATUS_COLORS,
   COMPLAINT_ASSIGN_ROLES, COMPLAINT_RECEIVER_ROLES, MIN_ACTION_TAKEN_LENGTH, ROLES,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useAssignComplaint, useUpdateComplaintStatus } from '../../hooks/useComplaints';

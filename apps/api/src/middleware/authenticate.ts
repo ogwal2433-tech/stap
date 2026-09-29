@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import { verifyAccessToken } from '../lib/jwt';
 import { UnauthorisedError } from '../errors/AppError';
 import { logSecurityEvent, logged } from '../lib/securityLog';
-import type { UserRole } from '@stap/shared';
+import type { UserRole } from '@security360/shared';
 
 export const authenticate: RequestHandler = (req, _res, next) => {
   const authHeader = req.headers.authorization;

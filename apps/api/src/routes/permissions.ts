@@ -9,7 +9,7 @@ import { QueueService } from '../jobs/QueueService';
 import { PERMISSIONS } from '../constants/permissions';
 import { DEFAULT_ROLE_PERMISSIONS } from '../constants/defaultPermissions';
 import { PORTAL_ROLES } from '../constants/systemRoles';
-import { ROLE_HIERARCHY } from '@stap/shared';
+import { ROLE_HIERARCHY } from '@security360/shared';
 
 const router = Router();
 

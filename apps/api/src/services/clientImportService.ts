@@ -11,13 +11,13 @@ import {
   CLIENT_IMPORT_CONTACT_PLACEHOLDER,
   CLIENT_IMPORT_CONTRACT_MONTHS,
   CLIENT_IMPORT_HEADERS,
-} from '@stap/shared';
+} from '@security360/shared';
 import type {
   ClientImportPreview,
   ClientImportResult,
   ClientImportResultRow,
   ClientImportRow,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Bulk client import from the spreadsheet the company already keeps.

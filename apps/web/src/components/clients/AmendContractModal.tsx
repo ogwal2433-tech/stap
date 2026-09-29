@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useMutation } from '@tanstack/react-query';
-import { AMENDMENT_TYPES, type ContractResponse } from '@stap/shared';
+import { AMENDMENT_TYPES, type ContractResponse } from '@security360/shared';
 import { contractsApi } from '../../lib/contracts.api';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';

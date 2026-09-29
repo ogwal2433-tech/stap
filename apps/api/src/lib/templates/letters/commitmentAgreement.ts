@@ -1,4 +1,4 @@
-import { DEFAULT_COMPANY_NAME } from '@stap/shared';
+import { DEFAULT_COMPANY_NAME } from '@security360/shared';
 
 export interface CommitmentAgreementData {
   guardName:     string;

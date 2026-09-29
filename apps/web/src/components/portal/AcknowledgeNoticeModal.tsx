@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
-import type { ComplaintResponse } from '@stap/shared';
+import type { ComplaintResponse } from '@security360/shared';
 
 interface Props {
   notice:     ComplaintResponse;
@@ -17,7 +17,7 @@ interface Props {
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 
-/** Confirms receipt of a notice from STAP, with an optional reply. */
+/** Confirms receipt of a notice from Security360, with an optional reply. */
 export default function AcknowledgeNoticeModal({ notice, show, onClose, onSuccess }: Props) {
   const { data: companyBranding } = useCompanyBranding();
   const { showToast } = useToast();

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
-import { generatePassword } from '@stap/shared';
-import type { LinkedAccount } from '@stap/shared';
+import { generatePassword } from '@security360/shared';
+import type { LinkedAccount } from '@security360/shared';
 import PermissionGuard from '../PermissionGuard';
 import TemporaryPasswordField from '../common/TemporaryPasswordField';
 import {

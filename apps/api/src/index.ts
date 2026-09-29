@@ -134,7 +134,7 @@ const server = app.listen(PORT, () => {
 
 // Note: scheduled cron jobs (auto-invoicing, contract refresh, probation
 // checks, etc.) run in the separate worker process (worker.ts), not here —
-// stap-api runs as multiple PM2 cluster instances, so cron jobs registered
+// security360-api runs as multiple PM2 cluster instances, so cron jobs registered
 // in this file would fire once per instance.
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CreateLeaveRequestSchema } from '@stap/shared';
+import { CreateLeaveRequestSchema } from '@security360/shared';
 
 vi.mock('../../db/prisma', () => ({
   default: {

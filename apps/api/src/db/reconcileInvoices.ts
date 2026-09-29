@@ -5,7 +5,7 @@
  * Usage:
  *   node apps/api/dist/db/reconcileInvoices.js --audit            report only
  *   node apps/api/dist/db/reconcileInvoices.js --fix [--by <id>]  repair
- *   node apps/api/dist/db/reconcileInvoices.js --audit STAP/INV/2026/0001
+ *   node apps/api/dist/db/reconcileInvoices.js --audit S360/INV/2026/0001
  *
  * paidAmount and outstandingBalance are stored on the invoice and recomputed on
  * every payment, so they are normally correct. They can still drift: a payment
@@ -112,7 +112,8 @@ async function main(): Promise<void> {
   const fix = args.includes('--fix');
   const byIdx = args.indexOf('--by');
   const actor = byIdx >= 0 ? args[byIdx + 1] : null;
-  const invoiceNumber = args.find((a) => a.startsWith('STAP/'));
+  // Any prefix: invoices issued before the rebrand keep their STAP/INV numbers.
+  const invoiceNumber = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--by');
 
   const total = await prisma.invoice.count({
     where: invoiceNumber ? { invoiceNumber } : undefined,

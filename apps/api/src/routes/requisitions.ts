@@ -74,7 +74,7 @@ import {
   CreateAccountabilitySchema,
   ReviewAccountabilitySchema,
   CreateFundDispatchSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 import { accountabilityService } from '../services/accountabilityService';
 import { fundDispatchService } from '../services/fundDispatchService';
 

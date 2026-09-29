@@ -20,7 +20,7 @@ export const options = {
 export function setup() {
   const res = http.post(
     `${BASE_URL}/api/v1/auth/login`,
-    JSON.stringify({ email: 'director@stapsecurity.co.ug', password: '12345678' }),
+    JSON.stringify({ email: 'director@security360.co.ug', password: '12345678' }),
     { headers: { 'Content-Type': 'application/json' } },
   );
   const token = res.json('data.accessToken');

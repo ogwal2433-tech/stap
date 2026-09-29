@@ -19,7 +19,7 @@ import type {
   AttendanceQuery,
   SupervisorCheckinInput,
   MarkAttendanceInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const attendanceApi = {
   createRoster(data: CreateRosterInput): Promise<{ created: number; conflicts: ConflictDetail[] }> {

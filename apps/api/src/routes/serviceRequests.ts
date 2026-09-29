@@ -6,7 +6,7 @@ import { PERMISSIONS } from '../constants/permissions';
 import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { serviceRequestService } from '../services/serviceRequestService';
-import { UpdateServiceRequestSchema, SR_STATUS_VALUES } from '@stap/shared';
+import { UpdateServiceRequestSchema, SR_STATUS_VALUES } from '@security360/shared';
 import { z } from 'zod';
 
 /**

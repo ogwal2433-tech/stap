@@ -6,7 +6,7 @@ import type {
   PaginatedResponse,
   AmendContractInput,
   ContractAmendmentResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const contractsApi = {
   amend(id: string, body: AmendContractInput): Promise<ContractAmendmentResponse> {

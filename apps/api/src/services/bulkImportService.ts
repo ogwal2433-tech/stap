@@ -5,8 +5,8 @@ import fs from 'fs';
 import prisma from '../db/prisma';
 import { generateGuardIds } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
-import { BulkImportRowSchema } from '@stap/shared';
-import type { BulkImportResult, BulkImportResultRow, BulkImportRow } from '@stap/shared';
+import { BulkImportRowSchema } from '@security360/shared';
+import type { BulkImportResult, BulkImportResultRow, BulkImportRow } from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

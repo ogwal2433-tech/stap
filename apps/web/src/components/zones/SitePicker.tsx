@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { useAllSites } from '../../hooks/useClients';
-import type { SiteResponse } from '@stap/shared';
+import type { SiteResponse } from '@security360/shared';
 
 interface SitePickerProps {
   selectedSiteIds:   string[];

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import app from '../../index';
 import { signAccessToken } from '../../lib/jwt';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, type UserRole } from '@security360/shared';
 
 // Generate a test token for any role without hitting the DB
 function makeToken(role: UserRole, userId = 'test-user-id', name = 'Test User', email = `${role.toLowerCase()}@test.com`) {

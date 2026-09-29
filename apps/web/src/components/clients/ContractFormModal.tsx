@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Alert, Button, Form, InputGroup, Modal, Spinner, Table } from 'react-bootstrap';
 import ContractDurationPicker from '../common/ContractDurationPicker';
 import { useCreateContract, useUpdateContract } from '../../hooks/useContracts';
-import { SHIFT_PATTERNS } from '@stap/shared';
-import type { ContractResponse, ShiftPattern } from '@stap/shared';
+import { SHIFT_PATTERNS } from '@security360/shared';
+import type { ContractResponse, ShiftPattern } from '@security360/shared';
 
 interface ContractFormModalProps {
   clientId: string;

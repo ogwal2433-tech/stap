@@ -1,5 +1,5 @@
 import api from './api';
-import type { ShiftReportInput, ShiftReportResponse } from '@stap/shared';
+import type { ShiftReportInput, ShiftReportResponse } from '@security360/shared';
 
 export interface ShiftReportListResult {
   data:  ShiftReportResponse[];

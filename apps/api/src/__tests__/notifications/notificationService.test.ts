@@ -28,7 +28,7 @@ const mq = QueueService as any;
 const MOCK_USER = {
   id:    'user-1',
   name:  'Alice Nakato',
-  email: 'alice@stap.ug',
+  email: 'alice@security360.ug',
   role:  'DIRECTOR',
   phone: '+256700000001',
 };

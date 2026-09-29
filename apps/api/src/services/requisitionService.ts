@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { canEditRequisition } from '@stap/shared';
+import { canEditRequisition } from '@security360/shared';
 import type {
   CreateRequisitionInput,
   UpdateRequisitionInput,
@@ -13,7 +13,7 @@ import type {
   CategoryItemResponse,
   PurchaseOrderResponse,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

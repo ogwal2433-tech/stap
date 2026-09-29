@@ -27,7 +27,7 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 
 # Build shared package first
-RUN pnpm --filter @stap/shared build
+RUN pnpm --filter @security360/shared build
 
 # Generate Prisma client for Alpine (linux-musl)
 RUN cd apps/api && pnpm exec prisma generate

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useUsers } from '../../hooks/useSettings';
-import type { CreateZoneInput, ZoneResponse } from '@stap/shared';
+import type { CreateZoneInput, ZoneResponse } from '@security360/shared';
 
 interface Props {
   show:     boolean;

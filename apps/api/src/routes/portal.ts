@@ -54,7 +54,7 @@ import { serviceRequestService } from '../services/serviceRequestService';
 import { notificationService } from '../services/notificationService';
 import { AppError } from '../errors/AppError';
 import { ROLES, CreateComplaintSchema, CreateServiceRequestSchema, AcknowledgeNoticeSchema,
-         InitiatePortalPaymentSchema, type InitiatePortalPaymentInput } from '@stap/shared';
+         InitiatePortalPaymentSchema, type InitiatePortalPaymentInput } from '@security360/shared';
 import { initiateInvoicePayment } from '../services/paymentService';
 import prisma from '../db/prisma';
 
@@ -243,8 +243,8 @@ router.post(
   }),
 );
 
-// GET /portal/complaints — what this client raised with STAP.
-// Scoped to INBOUND so notices STAP sent them stay under /portal/notices and
+// GET /portal/complaints — what this client raised with Security360.
+// Scoped to INBOUND so notices Security360 sent them stay under /portal/notices and
 // do not appear in the client's own "My Complaints" list.
 router.get(
   '/complaints',
@@ -255,7 +255,7 @@ router.get(
   }),
 );
 
-// ── Notices from STAP (outbound complaints) ───────────────────────────────────
+// ── Notices from Security360 (outbound complaints) ───────────────────────────────────
 // clientPortalGuard has already pinned clientId to the JWT, so a client can only
 // ever read or acknowledge their own company's notices.
 
@@ -311,7 +311,7 @@ router.patch(
 //
 // These two routes are scoped to the caller's own company by clientPortalGuard.
 // Staff read and answer the same requests through /service-requests, which is
-// closed to the CLIENT role. Requests are addressed to STAP by the client, so
+// closed to the CLIENT role. Requests are addressed to Security360 by the client, so
 // staff seeing them is the point; what staff must not expose back is
 // `staffNotes`, and the portal's formatter omits it.
 

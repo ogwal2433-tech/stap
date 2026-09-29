@@ -1,4 +1,4 @@
-import { guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus } from '@stap/shared';
+import { guardStatusLabel, EXITED_STATUSES, type GuardEmploymentStatus } from '@security360/shared';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
@@ -19,7 +19,7 @@ import type {
   ItemCondition,
   UpdateIssuedTransactionInput,
   OutstandingHolder,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // Map ItemCondition enum → Prisma field name
 const CONDITION_FIELD: Record<ItemCondition, 'quantityNew' | 'quantityGood' | 'quantityFair' | 'quantityDamaged'> = {
@@ -83,7 +83,7 @@ const TXN_INCLUDE = {
 class InventoryService {
   private async generateItemCode(): Promise<string> {
     const count = await prisma.inventoryItem.count();
-    return `STAP-INV-${String(count + 1).padStart(4, '0')}`;
+    return `S360-INV-${String(count + 1).padStart(4, '0')}`;
   }
 
   async createItem(data: CreateInventoryItemInput, createdBy: string): Promise<InventoryItemResponse> {

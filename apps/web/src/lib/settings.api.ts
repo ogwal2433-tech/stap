@@ -18,11 +18,14 @@ import type {
   UpdateShiftTypeInput,
   ReportKey, ReportTitleConfig, ReportTitlesMap,
   CompanyBranding, CompanyBrandingKey,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const settingsApi = {
   getCompanyBranding(): Promise<CompanyBranding> {
     return api.get<{ data: CompanyBranding }>('/settings/company-branding').then(r => r.data.data);
+  },
+  getCompanyBrandingDefaults(): Promise<CompanyBranding> {
+    return api.get<{ data: CompanyBranding }>('/settings/company-branding/defaults').then(r => r.data.data);
   },
   updateCompanyBranding(values: Partial<CompanyBranding>): Promise<CompanyBranding> {
     return api.patch<{ data: CompanyBranding }>('/settings/company-branding', values).then(r => r.data.data);

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { REPORT_TITLE_DEFAULTS, resolveReportTitle, type ReportKey, type ReportTitleConfig } from '@stap/shared';
+import { REPORT_TITLE_DEFAULTS, resolveReportTitle, type ReportKey, type ReportTitleConfig } from '@security360/shared';
 import { settingsApi } from '../lib/settings.api';
 
 const TITLES_KEY = ['report-titles'];
@@ -40,7 +40,7 @@ export function useResetReportTitle() {
 }
 export function useReportEmailPrefix() {
   return useQuery({ queryKey: ['report-email-prefix'], queryFn: settingsApi.getReportEmailPrefix,
-    initialData: 'STAP Report', staleTime: 0, refetchOnWindowFocus: true });
+    initialData: 'Security360 Report', staleTime: 0, refetchOnWindowFocus: true });
 }
 export function useSaveReportEmailPrefix() {
   const qc = useQueryClient();

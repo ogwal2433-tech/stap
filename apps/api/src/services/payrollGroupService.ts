@@ -6,7 +6,7 @@ import type {
   PayrollGroupMember,
   CreatePayrollGroupInput,
   UpdatePayrollGroupInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, Col, Container, Row, Spinner } from 'react-bootstrap';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '../../hooks/useNotifications';
-import type { NotificationResponse } from '@stap/shared';
+import type { NotificationResponse } from '@security360/shared';
 
 const TYPE_ICON: Record<string, string> = {
   ATTENDANCE_ALERT:  '🚨',

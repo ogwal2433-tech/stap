@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { GuardResponse } from '@stap/shared';
+import type { GuardResponse } from '@security360/shared';
 import { IssueItemModal, ReturnItemModal } from '../pages/inventory/InventoryPage';
 
 /**
@@ -18,7 +18,7 @@ const h = vi.hoisted(() => ({
 }));
 
 const guard = (id: string, firstName: string, lastName: string) =>
-  ({ id, firstName, lastName, systemId: `SSLG${id}`, rank: 'Guard' }) as unknown as GuardResponse;
+  ({ id, firstName, lastName, systemId: `S360G${id}`, rank: 'Guard' }) as unknown as GuardResponse;
 
 // The first page by name, and a guard only ever reachable by search.
 const FIRST_PAGE = [guard('001', 'Aaron', 'Abaho'), guard('002', 'Betty', 'Birungi')];
@@ -98,7 +98,7 @@ describe('issue items — guard picker', () => {
   it('finds a guard by system ID', async () => {
     drawIssue();
     fireEvent.click(guardField());
-    search('SSLG437');
+    search('S360G437');
 
     expect(await screen.findByRole('option', { name: /Zachary Zziwa/ })).toBeInTheDocument();
   });

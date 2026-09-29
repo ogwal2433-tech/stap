@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ROLES, ROLE_NAME_PATTERN, normaliseRoleName } from '@stap/shared';
+import { ROLES, ROLE_NAME_PATTERN, normaliseRoleName } from '@security360/shared';
 import { SYSTEM_ROLES, PORTAL_ROLES } from '../../constants/systemRoles';
 
 const MIGRATION = resolve(

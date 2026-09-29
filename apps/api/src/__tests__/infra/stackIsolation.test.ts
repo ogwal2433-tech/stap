@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * One host runs several stacks of this code at once: STAP on 80/443, QA on
+ * One host runs several stacks of this code at once: Security360 on 80/443, QA on
  * 8000, Security360 on 8080. They share nothing but the machine.
  *
  * These pin that. A container name, volume, network or published port reused
@@ -20,7 +20,7 @@ const ROOT = resolve(__dirname, '../../../../..');
 const read = (f: string) => readFileSync(resolve(ROOT, f), 'utf8');
 
 const STACKS = {
-  stap:        'docker-compose.yml',
+  primary:     'docker-compose.yml',
   qa:          'docker-compose.qa.yml',
   security360: 'docker-compose.security360.yml',
 } as const;
@@ -35,7 +35,7 @@ const containerNames = (s: string) => all<string>(/^\s*container_name:\s*(\S+)/g
  *
  * An entry may pin an explicit `name:`, which is what Docker uses verbatim, or
  * omit it and be prefixed with the compose project name. Both forms are in use
- * here — the STAP stack predates the explicit naming — so the effective
+ * here — the primary stack's volumes predate the explicit naming — so the effective
  * identifier is the declared name where there is one and the key otherwise.
  */
 function blockEntries(src: string, heading: 'volumes' | 'networks'): string[] {
@@ -99,10 +99,12 @@ describe('the three stacks share no identifiers', () => {
     }
   });
 
-  it('every stack pins its own compose project name, except the original', () => {
+  it('every stack pins its own compose project name', () => {
     // Without `name:` the project is named after the directory, so two stacks
-    // in one checkout would collide. The STAP stack predates this and keeps the
-    // derived name, which is why the other two must declare theirs.
+    // in one checkout would collide. The primary stack deploys to
+    // /var/www/security360, which would derive "security360" — the name the
+    // second stack pins — so it declares its own too.
+    expect(files.primary).toMatch(/^name:\s*s360-prod$/m);
     expect(files.qa).toMatch(/^name:\s*security360-qa$/m);
     expect(files.security360).toMatch(/^name:\s*security360$/m);
     expect(files.security360).not.toMatch(/^name:\s*security360-qa$/m);
@@ -123,7 +125,7 @@ describe('the three stacks share no identifiers', () => {
   });
 
   it('Security360 builds the frontend with its own brand', () => {
-    // The bundle is static, so an unset build arg silently ships STAP branding.
+    // The bundle is static, so an unset build arg silently ships Security360 branding.
     expect(files.security360).toMatch(/VITE_APP_NAME:\s*\$\{S360_APP_NAME/);
   });
 

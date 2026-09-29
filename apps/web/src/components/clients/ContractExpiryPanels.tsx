@@ -1,6 +1,6 @@
 import { Badge, Col, Row, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import type { ContractResponse } from '@stap/shared';
+import type { ContractResponse } from '@security360/shared';
 import { useContractExpiryAlerts } from '../../hooks/useContracts';
 
 /**

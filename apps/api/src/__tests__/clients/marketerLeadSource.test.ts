@@ -5,7 +5,7 @@ import {
   ClientFormSchema,
   LEAD_SOURCES,
   MARKETER_LEAD_SOURCE,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const base = {
   clientName:      'Acme Holdings',

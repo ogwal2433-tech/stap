@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useCreatePurchaseOrder, useSuppliers } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
-import type { RequisitionResponse } from '@stap/shared';
+import type { RequisitionResponse } from '@security360/shared';
 
 const Schema = z.object({
   supplierId:       z.string().optional(),

@@ -38,13 +38,13 @@ export const UpdateComplaintStatusSchema = z.object({
 );
 export type UpdateComplaintStatusInput = z.infer<typeof UpdateComplaintStatusSchema>;
 
-// ── Outbound notices (STAP → client) ───────────────────────────────────────────
+// ── Outbound notices (Security360 → client) ───────────────────────────────────────────
 
 export const COMPLAINT_DIRECTIONS = ['INBOUND', 'OUTBOUND'] as const;
 export type ComplaintDirection = (typeof COMPLAINT_DIRECTIONS)[number];
 
 /**
- * A formal notice from STAP to a client.
+ * A formal notice from Security360 to a client.
  *
  * `priority` is stored on the existing `severity` column — the two share the
  * same LOW/MEDIUM/HIGH scale, and a second column would only ever disagree with
@@ -101,7 +101,7 @@ export interface ComplaintResponse {
   daysOpen:    number;
 
   // ── Direction ────────────────────────────────────────────────────────────────
-  /** INBOUND = client → STAP. OUTBOUND = STAP → client. */
+  /** INBOUND = client → Security360. OUTBOUND = Security360 → client. */
   direction:   ComplaintDirection;
   /** Outbound only — who sent the notice, and when. */
   sentBy:      { id: string; name: string } | null;

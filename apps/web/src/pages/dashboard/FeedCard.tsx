@@ -1,6 +1,6 @@
 import { Badge } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import type { DashboardFeedItem } from '@stap/shared';
+import type { DashboardFeedItem } from '@security360/shared';
 
 interface FeedCardProps {
   title:     string;

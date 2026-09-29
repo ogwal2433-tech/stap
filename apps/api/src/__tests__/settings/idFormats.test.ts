@@ -50,19 +50,19 @@ afterAll(() => clearIdFormatCache());
 
 describe('system ID formats', () => {
   it('issues the configured prefix', async () => {
-    expect(await generateGuardId()).toMatch(/^SSLG\d+$/);
-    expect(await generateClientId()).toMatch(/^SSLC\d+$/);
-    expect(await generateStaffId()).toMatch(/^SSLS\d+$/);
+    expect(await generateGuardId()).toMatch(/^S360G\d+$/);
+    expect(await generateClientId()).toMatch(/^S360C\d+$/);
+    expect(await generateStaffId()).toMatch(/^S360S\d+$/);
   });
 
   it('follows a changed prefix without touching what is already issued', async () => {
-    const before = await prisma.guard.count({ where: { systemId: { startsWith: 'SSLG' } } });
+    const before = await prisma.guard.count({ where: { systemId: { startsWith: 'S360G' } } });
 
     await setFormat('guard_id_prefix', 'ZZQ');
     expect(await generateGuardId()).toBe('ZZQ001');
 
-    // The existing SSLG guards are untouched — only new IDs change.
-    expect(await prisma.guard.count({ where: { systemId: { startsWith: 'SSLG' } } })).toBe(before);
+    // The existing S360G guards are untouched — only new IDs change.
+    expect(await prisma.guard.count({ where: { systemId: { startsWith: 'S360G' } } })).toBe(before);
   });
 
   it('reads the sequence correctly when the prefix contains a digit', async () => {
@@ -74,15 +74,15 @@ describe('system ID formats', () => {
 
   it('carries on from the highest number already under that prefix', async () => {
     const existing = await prisma.guard.findFirst({
-      where:   { systemId: { startsWith: 'SSLG' } },
+      where:   { systemId: { startsWith: 'S360G' } },
       orderBy: { systemId: 'desc' },
       select:  { systemId: true },
     });
     if (!existing?.systemId) return;
 
-    const highest = Number(existing.systemId.replace(/^SSLG/, ''));
+    const highest = Number(existing.systemId.replace(/^S360G/, ''));
     const next = await generateGuardId();
-    expect(Number(next.replace(/^SSLG/, ''))).toBeGreaterThan(highest - 1);
+    expect(Number(next.replace(/^S360G/, ''))).toBeGreaterThan(highest - 1);
   });
 
   it('widens the number when the padding is raised', async () => {
@@ -103,7 +103,7 @@ describe('system ID formats', () => {
 
   it('falls back to the shipped prefix when the setting is blank', async () => {
     await setFormat('guard_id_prefix', '   ');
-    expect(await generateGuardId()).toMatch(/^SSLG\d+$/);
+    expect(await generateGuardId()).toMatch(/^S360G\d+$/);
   });
 
   it('keeps the gun and shift report shapes when their prefixes change', async () => {

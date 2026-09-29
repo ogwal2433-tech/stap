@@ -1,5 +1,5 @@
 /**
- * The positions STAP Security actually holds.
+ * The positions Security360 actually holds.
  *
  * A job title is a label, not a permission. The system role beside it decides
  * what someone can reach; two people can share the title "Zone 1 Supervisor"

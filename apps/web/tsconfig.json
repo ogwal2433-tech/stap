@@ -8,7 +8,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
-      "@stap/shared": ["../../packages/shared/dist/index.d.ts"]
+      "@security360/shared": ["../../packages/shared/dist/index.d.ts"]
     },
     "noEmit": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"]

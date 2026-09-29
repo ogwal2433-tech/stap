@@ -26,8 +26,8 @@ const config = (title: string, shortTitle?: string): ReportTitleConfig => ({
   title, shortTitle: shortTitle ?? title, subtitle: '', footerText: '', logoUrl: '', enabled: true,
 });
 export const REPORT_TITLE_DEFAULTS: ReportTitlesMap = {
-  daily_operations_report: config('Daily Operations Report', 'STAP Security — Daily Operations Report'),
-  monthly_payroll_report: config('Monthly Payroll Report', 'STAP Security — Payroll Report'),
+  daily_operations_report: config('Daily Operations Report', 'Security360 — Daily Operations Report'),
+  monthly_payroll_report: config('Monthly Payroll Report', 'Security360 — Payroll Report'),
   pipeline_report: config('Pipeline Report'), prospects_report: config('Prospects Report'),
   closed_business_report: config('Closed Business Report'), bid_performance_report: config('Bid Performance Report'),
   marketing_performance_report: config('Marketing Performance Report'),

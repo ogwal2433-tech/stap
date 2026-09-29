@@ -46,7 +46,7 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
     key: 'smtp.user', group: 'smtp', label: 'SMTP username',
     description: 'The mailbox that authenticates to the server.',
     inputType: 'email', isEncrypted: false, isRequired: true,
-    placeholder: 'noreply@stapsecurity.co.ug', envFallback: 'SMTP_USER',
+    placeholder: 'noreply@security360.co.ug', envFallback: 'SMTP_USER',
   },
   {
     key: 'smtp.password', group: 'smtp', label: 'SMTP password',
@@ -58,7 +58,7 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
     key: 'smtp.from', group: 'smtp', label: 'From address',
     description: 'Must be the SMTP username or an alias of it — providers reject a From on a domain the session has not authenticated for.',
     inputType: 'email', isEncrypted: false, isRequired: false,
-    placeholder: 'noreply@stapsecurity.co.ug', envFallback: 'SMTP_FROM',
+    placeholder: 'noreply@security360.co.ug', envFallback: 'SMTP_FROM',
   },
 
   // ── XCEL payment gateway ────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
     key: 'xcel.webhookUrl', group: 'xcel', label: 'Webhook URL',
     description: 'Where the gateway posts payment results. Must be reachable from the internet.',
     inputType: 'url', isEncrypted: false, isRequired: false,
-    placeholder: 'https://stap.stapsecurity.com/api/v1/finance/webhooks/yo-payments',
+    placeholder: 'https://security360.co.ug/api/v1/finance/webhooks/yo-payments',
     envFallback: 'XCEL_WEBHOOK_URL',
   },
   {

@@ -190,7 +190,7 @@ import {
   ApproveLeaveSchema,
   SaveLetterTemplateSchema,
   CreateGuardSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const router: IRouter = Router();
 

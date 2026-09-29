@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CreateClientSchema, UpdateClientSchema, ClientFormSchema, ClientContactSchema } from '@stap/shared';
+import { CreateClientSchema, UpdateClientSchema, ClientFormSchema, ClientContactSchema } from '@security360/shared';
 
 /**
  * A client may have no email address, and saying so must not block the form.

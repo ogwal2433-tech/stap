@@ -1,7 +1,7 @@
 /**
  * Invoice body for the printable PDF.
  *
- * Only the inner content — renderToPdf() wraps this in the STAP letterhead,
+ * Only the inner content — renderToPdf() wraps this in the Security360 letterhead,
  * so the company details and footer are not repeated here.
  */
 

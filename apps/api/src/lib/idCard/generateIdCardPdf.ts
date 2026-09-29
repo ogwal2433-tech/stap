@@ -3,6 +3,7 @@ import path from 'path';
 import { renderRawPdf } from '../pdfBase';
 import { buildFrontCard } from './frontCard';
 import { buildBackCard }  from './backCard';
+import { companyProfile } from '../../services/integrationSettings';
 
 function toBase64(filePath: string): string {
   if (!fs.existsSync(filePath)) return '';
@@ -37,7 +38,7 @@ export async function generateIdCardPdf(data: IdCardData): Promise<Buffer> {
     expiryDate:  expiry,
   });
 
-  const backHtml = buildBackCard({ logoBase64 });
+  const backHtml = buildBackCard({ logoBase64, company: await companyProfile() });
 
   const pageHtml = `<!DOCTYPE html>
 <html>

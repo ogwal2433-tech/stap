@@ -3,14 +3,14 @@ import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { dateRangeFilter } from '../lib/dateUtils';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { ROLES, SR_TERMINAL_STATUSES } from '@stap/shared';
+import { ROLES, SR_TERMINAL_STATUSES } from '@security360/shared';
 import type {
   CreateServiceRequestInput,
   UpdateServiceRequestInput,
   ServiceRequestResponse,
   ServiceRequestSummary,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Shapes a request for the API.
@@ -57,7 +57,7 @@ const INCLUDE = {
 } as const;
 
 /**
- * Service requests a client raises with STAP.
+ * Service requests a client raises with Security360.
  *
  * Staff read and answer them through the staff routes; clients see only their
  * own company's, and never the internal notes.

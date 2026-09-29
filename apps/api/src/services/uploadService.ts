@@ -3,7 +3,7 @@ import path from 'path';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { AppError } from '../errors/AppError';
-import type { GuardDocumentResponse } from '@stap/shared';
+import type { GuardDocumentResponse } from '@security360/shared';
 
 class UploadService {
   /**

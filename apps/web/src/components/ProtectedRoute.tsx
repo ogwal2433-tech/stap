@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
-import { type UserRole } from '@stap/shared';
+import { type UserRole } from '@security360/shared';
 
 interface ProtectedRouteProps {
   /** When provided, only users with one of these roles can access the route. */

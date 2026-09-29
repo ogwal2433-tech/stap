@@ -19,7 +19,7 @@ vi.mock('../../jobs/QueueService', () => ({
 
 import prisma from '../../db/prisma';
 import { requisitionService } from '../../services/requisitionService';
-import { CreateRequisitionSchema } from '@stap/shared';
+import { CreateRequisitionSchema } from '@security360/shared';
 
 const mp = prisma as any;
 

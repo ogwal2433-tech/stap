@@ -1,10 +1,11 @@
 import api from './api';
+import { FILE_PREFIX } from './branding';
 import type {
   ProspectResponse, ProspectWithHistory, BidResponse, MarketingTargetResponse,
   MarketingDashboardData, MarketingReport, MarketingReportType,
   CreateProspectInput, UpdateProspectInput, CreateBidInput, UpdateBidInput,
   CreateTargetInput, PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 type Page<T> = { success: boolean } & PaginatedResponse<T>;
 
@@ -86,7 +87,7 @@ export const marketingApi = {
     const url = URL.createObjectURL(res.data as Blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `STAP_${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `${FILE_PREFIX}_${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();

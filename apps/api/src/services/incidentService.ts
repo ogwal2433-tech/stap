@@ -6,7 +6,7 @@ import type {
   CreateIncidentInput,
   IncidentResponse,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 function toIncidentResponse(incident: Record<string, unknown>): IncidentResponse {
   const site = incident.site as { id: string; siteName: string; client?: { id: string; clientName: string } };

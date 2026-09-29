@@ -1,18 +1,28 @@
+import type { CompanyProfile } from '../../services/integrationSettings';
+
 export interface BackCardData {
   logoBase64: string;
+  company:    CompanyProfile;
 }
 
 const AMBER = '#f2aa20';
 const NAVY  = '#1b3a6b';
 
-function contact(icon: string, iconColor: string, text: string): string {
+const esc = (v: unknown): string =>
+  String(v ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+/** One contact line, or nothing when the company has not set that detail. */
+function contact(icon: string, iconColor: string, text: string | null): string {
+  if (!text) return '';
   return `<div style="display:flex;align-items:center;gap:1.4mm;line-height:1.2;">
     <span style="color:${iconColor};font-size:6.5pt;width:3mm;flex-shrink:0;text-align:center;">${icon}</span>
-    <span style="font-size:6.2pt;color:#111;">${text}</span>
+    <span style="font-size:6.2pt;color:#111;">${esc(text)}</span>
   </div>`;
 }
 
 export function buildBackCard(data: BackCardData): string {
+  const { company } = data;
   const logoContent = data.logoBase64
     ? `<img src="${data.logoBase64}" style="width:22mm;height:16mm;object-fit:contain"/>`
     : '';
@@ -32,7 +42,7 @@ export function buildBackCard(data: BackCardData): string {
     <!-- LEFT: Logo block -->
     <div style="width:24mm;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.8mm;">
       ${logoContent}
-      <div style="font-size:7pt;font-weight:bold;color:${NAVY};text-align:center;line-height:1.1;">Stap Security Ltd</div>
+      <div style="font-size:7pt;font-weight:bold;color:${NAVY};text-align:center;line-height:1.1;">${esc(company.name)}</div>
       <div style="font-family:Georgia,serif;font-style:italic;font-size:5.6pt;color:#666;text-align:center;line-height:1.2;">
         Secure Your Future<br/>24/7 Protection Guarantee
       </div>
@@ -40,13 +50,13 @@ export function buildBackCard(data: BackCardData): string {
 
     <!-- RIGHT: Contact details -->
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-evenly;">
-      ${contact('&#9993;', '#e63946', 'staps218@gmail.com')}
-      ${contact('f', '#1877f2', 'stap security ltd')}
-      ${contact('&#9679;', '#e1306c', 'stapsecurity')}
-      ${contact('&#9650;', '#1da1f2', '@stapsecurity2')}
-      ${contact('&#9990;', '#0f9d58', '+256 (0) 700 467 551')}
-      ${contact('&#9679;', '#25D366', '+256 (0) 787 417 404')}
-      ${contact('&#9679;', '#e63946', 'P.O Box 111518 Kampala (U)')}
+      ${contact('&#9993;', '#e63946', company.email)}
+      ${contact('f', '#1877f2', company.facebook)}
+      ${contact('&#9679;', '#e1306c', company.instagram)}
+      ${contact('&#9650;', '#1da1f2', company.twitter)}
+      ${contact('&#9990;', '#0f9d58', company.phone)}
+      ${contact('&#9679;', '#25D366', company.whatsapp)}
+      ${contact('&#9679;', '#e63946', company.address)}
     </div>
   </div>
 

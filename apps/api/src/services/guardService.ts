@@ -10,7 +10,7 @@ import { settingsService } from './settingsService';
 import { siteService } from './siteService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { ROLES, guardStatusLabel, EXITED_STATUSES, hasUsableId, idSummary,
-  type UserRole, type GuardEmploymentStatus } from '@stap/shared';
+  type UserRole, type GuardEmploymentStatus } from '@security360/shared';
 import { generateGuardId } from '../lib/systemId';
 import type {
   CreateGuardInput,
@@ -29,7 +29,7 @@ import type {
   PromoteGuardInput,
   GuardPromotionResponse,
   GuardExportRow,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // Roles allowed to see the accountNumber field
 const ACCOUNT_VISIBLE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];

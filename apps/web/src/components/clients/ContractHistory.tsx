@@ -1,6 +1,6 @@
 import { Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
-import { amendmentTypeConfig } from '@stap/shared';
+import { amendmentTypeConfig } from '@security360/shared';
 import { contractsApi } from '../../lib/contracts.api';
 
 const ugx = (n: unknown) =>

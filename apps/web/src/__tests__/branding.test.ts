@@ -8,7 +8,8 @@ import {
   DEFAULT_APP_TAGLINE,
   COMPANY_BRANDING_DEFAULTS,
   resolveCompanyBranding,
-} from '@stap/shared';
+  resolveCompanyBrandingDefaults,
+} from '@security360/shared';
 import { APP_NAME, APP_TAGLINE, COMPANY_NAME, FILE_PREFIX } from '../lib/branding';
 
 /**
@@ -27,8 +28,8 @@ const root = (p: string) => readFileSync(resolve(__dirname, '../..', p), 'utf8')
 
 describe('brand constants', () => {
   it('names the product and the company separately', () => {
-    expect(DEFAULT_APP_NAME).toBe('STAP Security');
-    expect(DEFAULT_COMPANY_NAME).toBe('STAP Security Ltd');
+    expect(DEFAULT_APP_NAME).toBe('Security360');
+    expect(DEFAULT_COMPANY_NAME).toBe('Security360 Ltd');
     expect(DEFAULT_APP_NAME).not.toBe(DEFAULT_COMPANY_NAME);
     expect(DEFAULT_APP_TAGLINE.length).toBeGreaterThan(0);
   });
@@ -82,6 +83,27 @@ describe('resolveBranding()', () => {
     expect(resolveCompanyBranding({ company_name: '   ' }).company_name).toBe(COMPANY_BRANDING_DEFAULTS.company_name);
     expect(resolveCompanyBranding({ company_name: ' Example Ltd ' }).company_name).toBe('Example Ltd');
   });
+
+  it('company branding defaults are the original brand when unconfigured', () => {
+    expect(resolveCompanyBrandingDefaults()).toEqual(COMPANY_BRANDING_DEFAULTS);
+    expect(resolveCompanyBrandingDefaults({ COMPANY_EMAIL: '  ' }).company_email).toBe(COMPANY_BRANDING_DEFAULTS.company_email);
+  });
+
+  it('company branding defaults follow the deployment environment', () => {
+    const defaults = resolveCompanyBrandingDefaults({
+      COMPANY_NAME: 'Security360 Ltd', COMPANY_SHORT_NAME: 'Security360',
+      COMPANY_EMAIL: 'info@security360.co.ug', VITE_COMPANY_WEBSITE: ' www.security360.co.ug ',
+    });
+    expect(defaults).toMatchObject({
+      company_name: 'Security360 Ltd', company_short_name: 'Security360',
+      company_email: 'info@security360.co.ug', company_website: 'www.security360.co.ug',
+      company_address: COMPANY_BRANDING_DEFAULTS.company_address, company_tax_id: '',
+    });
+    // A field with nothing saved falls back to the deployment, not the original brand.
+    expect(resolveCompanyBranding({ company_phone: '+256 700 000 000' }, defaults)).toMatchObject({
+      company_name: 'Security360 Ltd', company_phone: '+256 700 000 000',
+    });
+  });
 });
 
 describe('download filenames follow the deployment', () => {
@@ -90,13 +112,16 @@ describe('download filenames follow the deployment', () => {
     expect(FILE_PREFIX).not.toMatch(/[^A-Za-z0-9_]/);
   });
 
-  it('is derived, so a rebrand renames the downloads with it', () => {
-    // Pinning a literal here would let the files keep the old brand after a
-    // rename — which is how they came to say STAP on a Security360 stack.
-    const s = src('lib/exportToExcel.ts');
-    expect(s).toContain('FILE_PREFIX');
-    expect(s).not.toMatch(/`STAP_/);
-  });
+  it.each([['lib/exportToExcel.ts'], ['lib/marketing.api.ts']])(
+    '%s derives download names, so a rebrand renames them too',
+    (file) => {
+      // A literal brand prefix (`Acme_${type}`) outlives a rename — which is how
+      // downloads came to carry the old brand after the last one.
+      const s = src(file);
+      expect(s).toContain('FILE_PREFIX');
+      expect(s).not.toMatch(/`[A-Za-z0-9]+_\$\{/);
+    },
+  );
 
   it('the login card no longer carries a copyright line', () => {
     // Removed on request: the card names the product, and the legal entity
@@ -114,16 +139,16 @@ describe('staff-facing chrome names the product', () => {
   ])('%s uses APP_NAME and no hardcoded product name', (file) => {
     const s = src(file);
     expect(s).toContain('APP_NAME');
-    expect(s).not.toMatch(/>STAP Security</);
+    expect(s).not.toMatch(/>Security360</);
     // Read from the per-deployment resolver, not the shared defaults — via
-    // @stap/shared the name would be frozen at whatever this repo ships.
+    // @security360/shared the name would be frozen at whatever this repo ships.
     expect(s).toMatch(/from '(\.\.\/)+lib\/branding'/);
   });
 
   it('the browser tab is templated, not a literal', () => {
     const html = root('index.html');
     expect(html).toContain('<title>%APP_NAME%</title>');
-    expect(html).not.toContain('<title>STAP Security</title>');
+    expect(html).not.toContain('<title>Security360</title>');
   });
 
   it('the build substitutes the placeholder', () => {
@@ -147,7 +172,7 @@ describe('client- and guard-facing surfaces name the company', () => {
     // than written into the page, so what is pinned is that it is the company.
     const s = src('pages/portal/ClientPortalPage.tsx');
     expect(s).toMatch(/Notices from \{companyName\}/);
-    expect(s).not.toContain('Notices from STAP Security');
+    expect(s).not.toContain('Notices from Security360');
   });
 
   it('letter content keeps the legal entity', () => {
@@ -156,6 +181,6 @@ describe('client- and guard-facing surfaces name the company', () => {
     const s = src('components/letters/HRLetterModal.tsx');
     expect(s).toContain('useCompanyBranding');
     expect(s).toContain('company_name: companyBranding.company_name');
-    expect(s).not.toContain('STAP Security Ltd');
+    expect(s).not.toContain('Security360 Ltd');
   });
 });

@@ -10,9 +10,9 @@ import { SearchableSelect, type SearchableSelectOption } from '../components/ui/
  */
 
 const OPTIONS: SearchableSelectOption[] = [
-  { value: 'a', label: 'Acacia Mall',    sublabel: 'SSLC001' },
-  { value: 'b', label: 'Bugolobi Flats', sublabel: 'SSLC002' },
-  { value: 'c', label: 'Centenary Bank', sublabel: 'SSLC003' },
+  { value: 'a', label: 'Acacia Mall',    sublabel: 'S360C001' },
+  { value: 'b', label: 'Bugolobi Flats', sublabel: 'S360C002' },
+  { value: 'c', label: 'Centenary Bank', sublabel: 'S360C003' },
 ];
 
 function Harness({
@@ -42,9 +42,9 @@ describe('local filtering — the existing behaviour', () => {
     render(<Harness />);
     open();
     typeIn('bug');
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Bugolobi FlatsSSLC002']);
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Bugolobi FlatsS360C002']);
 
-    typeIn('sslc003');
+    typeIn('s360c003');
     expect(screen.getAllByRole('option')).toHaveLength(1);
     expect(screen.getByText('Centenary Bank')).toBeInTheDocument();
   });

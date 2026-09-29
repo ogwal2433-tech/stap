@@ -1,4 +1,5 @@
-import { COMPANY_BRANDING_DEFAULTS, COMPANY_BRANDING_KEYS, CompanyBrandingPatchSchema, resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@stap/shared';
+import { COMPANY_BRANDING_KEYS, CompanyBrandingPatchSchema, resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@security360/shared';
+import { COMPANY_BRANDING_DEFAULTS } from '../config/branding';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { publishCompanyBrandingChange } from '../lib/companyBrandingCacheBus';
@@ -45,7 +46,7 @@ export async function getCompanyBranding(): Promise<CompanyBranding> {
     where: { key: { in: COMPANY_BRANDING_KEYS } }, select: { key: true, value: true },
   });
   const values = Object.fromEntries(rows.map(({ key, value }) => [key, value]));
-  const result = resolveCompanyBranding(values as Partial<CompanyBranding>);
+  const result = resolveCompanyBranding(values as Partial<CompanyBranding>, COMPANY_BRANDING_DEFAULTS);
   companyBrandingCache.set(CACHE_KEY, { value: result, expiresAt: Date.now() + 60_000 });
   return result;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
-import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, type ReportKey, type ReportTitleConfig } from '@stap/shared';
+import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, type ReportKey, type ReportTitleConfig } from '@security360/shared';
 import { useToast } from '../../context/ToastContext';
 import { useHasPermission } from '../../context/AuthContext';
 import { useReportEmailPrefix, useReportTitles, useResetReportTitle, useSaveReportEmailPrefix, useSaveReportTitle } from '../../hooks/useReportTitles';
@@ -10,7 +10,7 @@ export default function ReportTitlesPanel() {
   const { showToast } = useToast();
   const canEdit = useHasPermission('settings.edit');
   const { data: titles = REPORT_TITLE_DEFAULTS, isLoading } = useReportTitles();
-  const { data: prefix = 'STAP Report' } = useReportEmailPrefix();
+  const { data: prefix = 'Security360 Report' } = useReportEmailPrefix();
   const save = useSaveReportTitle(); const reset = useResetReportTitle(); const savePrefix = useSaveReportEmailPrefix();
   const [drafts, setDrafts] = useState<Record<string, ReportTitleConfig>>({});
   const [prefixDraft, setPrefixDraft] = useState(prefix);

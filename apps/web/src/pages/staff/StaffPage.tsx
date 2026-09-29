@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Badge, Button, Form, Spinner } from 'react-bootstrap';
-import { ROLE_CONFIG, ROLES , getJobTitleLabel } from '@stap/shared';
+import { ROLE_CONFIG, ROLES , getJobTitleLabel } from '@security360/shared';
 import { useStaffList } from '../../hooks/useStaff';
 import { useRoles } from '../../hooks/useRoles';
 import { useAuth } from '../../context/AuthContext';

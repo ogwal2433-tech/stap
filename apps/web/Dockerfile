@@ -20,7 +20,7 @@ COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 
 # Build shared first
-RUN pnpm --filter @stap/shared build
+RUN pnpm --filter @security360/shared build
 
 # ── Branding ──────────────────────────────────────────────────────────
 # The frontend is static files behind nginx, so there is no server to ask at
@@ -28,7 +28,7 @@ RUN pnpm --filter @stap/shared build
 # each branded stack builds its own image.
 #
 # Left unset these are empty, resolveBranding() falls back to the defaults in
-# @stap/shared, and the image is the original STAP Security build — so the
+# @security360/shared, and the image is the original Security360 build — so the
 # existing deployment is unaffected by this argument existing.
 ARG VITE_APP_NAME=""
 ARG VITE_APP_TAGLINE=""

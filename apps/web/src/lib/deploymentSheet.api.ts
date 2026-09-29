@@ -1,5 +1,5 @@
 import api from './api';
-import type { DeploymentSheetRow, DeploymentSheetResult } from '@stap/shared';
+import type { DeploymentSheetRow, DeploymentSheetResult } from '@security360/shared';
 
 export const deploymentSheetApi = {
   save(rows: DeploymentSheetRow[]): Promise<DeploymentSheetResult> {

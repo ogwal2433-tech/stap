@@ -24,11 +24,11 @@ beforeAll(async () => {
 
   await prisma.user.createMany({
     data: [
-      { id: 'iso-client-user-a', name: 'Client User A', email: 'iso.client.a@stap.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE', clientId: CLIENT_A_ID },
-      { id: 'iso-client-user-b', name: 'Client User B', email: 'iso.client.b@stap.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE', clientId: CLIENT_B_ID },
-      { id: 'iso-client-unlinked', name: 'Unlinked Client', email: 'iso.client.unlinked@stap.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE' },
-      { id: 'iso-director', name: 'Iso Director', email: 'iso.director@stap.test', passwordHash: hash, role: 'DIRECTOR', status: 'ACTIVE' },
-      { id: 'iso-opsupervisor', name: 'Iso Ops', email: 'iso.ops@stap.test', passwordHash: hash, role: 'OPERATIONS_SUPERVISOR', status: 'ACTIVE' },
+      { id: 'iso-client-user-a', name: 'Client User A', email: 'iso.client.a@security360.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE', clientId: CLIENT_A_ID },
+      { id: 'iso-client-user-b', name: 'Client User B', email: 'iso.client.b@security360.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE', clientId: CLIENT_B_ID },
+      { id: 'iso-client-unlinked', name: 'Unlinked Client', email: 'iso.client.unlinked@security360.test', passwordHash: hash, role: 'CLIENT', status: 'ACTIVE' },
+      { id: 'iso-director', name: 'Iso Director', email: 'iso.director@security360.test', passwordHash: hash, role: 'DIRECTOR', status: 'ACTIVE' },
+      { id: 'iso-opsupervisor', name: 'Iso Ops', email: 'iso.ops@security360.test', passwordHash: hash, role: 'OPERATIONS_SUPERVISOR', status: 'ACTIVE' },
     ],
     skipDuplicates: true,
   });
@@ -58,11 +58,11 @@ beforeAll(async () => {
   });
 
   for (const [key, email] of Object.entries({
-    A: 'iso.client.a@stap.test',
-    B: 'iso.client.b@stap.test',
-    UNLINKED: 'iso.client.unlinked@stap.test',
-    DIRECTOR: 'iso.director@stap.test',
-    OPS: 'iso.ops@stap.test',
+    A: 'iso.client.a@security360.test',
+    B: 'iso.client.b@security360.test',
+    UNLINKED: 'iso.client.unlinked@security360.test',
+    DIRECTOR: 'iso.director@security360.test',
+    OPS: 'iso.ops@security360.test',
   })) {
     const res = await request(app).post('/api/v1/auth/login').send({ email, password: PASSWORD });
     tokens[key] = res.body.data?.accessToken;
@@ -73,7 +73,7 @@ afterAll(async () => {
   await prisma.serviceRequest.deleteMany({ where: { clientId: { in: [CLIENT_A_ID, CLIENT_B_ID] } } });
   await prisma.clientComplaint.deleteMany({ where: { clientId: { in: [CLIENT_A_ID, CLIENT_B_ID] } } });
   await prisma.invoice.deleteMany({ where: { clientId: { in: [CLIENT_A_ID, CLIENT_B_ID] } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@stap.test' }, id: { startsWith: 'iso-' } } });
+  await prisma.user.deleteMany({ where: { email: { endsWith: '@security360.test' }, id: { startsWith: 'iso-' } } });
   await prisma.client.deleteMany({ where: { id: { in: [CLIENT_A_ID, CLIENT_B_ID] } } });
 });
 

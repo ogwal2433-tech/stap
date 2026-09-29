@@ -10,11 +10,11 @@ import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
 import { APP_NAME } from '../config/branding';
-import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, ReportTitleConfigPatchSchema, resolveReportTitle, type ReportKey, type ReportTitleConfig, type ReportTitlesMap } from '@stap/shared';
+import { REPORT_KEYS, REPORT_TITLE_DEFAULTS, ReportTitleConfigPatchSchema, resolveReportTitle, type ReportKey, type ReportTitleConfig, type ReportTitlesMap } from '@security360/shared';
 import { publishReportTitleChange } from '../lib/reportTitleCacheBus';
 import { clearCompanyBrandingCache } from './companyBrandingService';
 import { publishCompanyBrandingChange } from '../lib/companyBrandingCacheBus';
-import { COMPANY_BRANDING_KEYS } from '@stap/shared';
+import { COMPANY_BRANDING_KEYS } from '@security360/shared';
 import type {
   SystemSettingResponse,
   UserResponse,
@@ -23,7 +23,7 @@ import type {
   DeductionTypeResponse,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ class SettingsService {
   async getScheduledReportEmailPrefix(): Promise<string> {
     if (this.emailPrefixCache && this.emailPrefixCache.expiresAt > Date.now()) return this.emailPrefixCache.value;
     const row = await prisma.systemSetting.findUnique({ where: { key: 'scheduled_report_email_prefix' } });
-    const value = row?.value?.trim() || 'STAP Report';
+    const value = row?.value?.trim() || 'Security360 Report';
     this.emailPrefixCache = { value, expiresAt: Date.now() + 5 * 60_000 };
     return value;
   }

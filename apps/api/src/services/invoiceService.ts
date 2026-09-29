@@ -1,4 +1,4 @@
-import { CLIENT_PHONE_PATTERN, normaliseClientPhone, formatUgx, roundMoney as round2 } from '@stap/shared';
+import { CLIENT_PHONE_PATTERN, normaliseClientPhone } from '@security360/shared';
 import { companyProfile } from './integrationSettings';
 import { invoicePrefix } from '../lib/systemId';
 import prisma from '../db/prisma';
@@ -22,7 +22,7 @@ import type {
   PaymentResponse,
   ARAgingReport,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ export async function recomputeInvoiceBalance(invoiceId: string): Promise<{
 
 class InvoiceService {
   /**
-   * STAP/INV/2026/0001, with the prefix taken from Settings.
+   * S360/INV/2026/0001, with the prefix taken from Settings.
    *
    * The invoice_prefix setting has existed since the settings table did; it was
    * simply never read, so editing it changed nothing. It is read here now.
@@ -674,107 +674,7 @@ class InvoiceService {
     return this.getById(invoiceId);
   }
 
-  /**
-   * Edits a still-PENDING invoice: period, due date and — when supplied —
-   * the full set of line items, replaced wholesale. PENDING is the only
-   * editable status by design: nothing has been paid, so the balance can be
-   * recomputed from scratch, and anything further along should be corrected
-   * with a fee increment or a void-and-reissue instead of rewriting history.
-   * A carried-over line here is just a description; the InvoiceCarryForward
-   * row that landed on this invoice keeps pointing at it either way.
-   */
-  async update(
-    id: string,
-    data: UpdateInvoiceInput,
-    editedBy: string,
-  ): Promise<InvoiceResponse> {
-    const invoice = await prisma.invoice.findUnique({
-      where:  { id },
-      select: {
-        id: true, invoiceNumber: true, status: true,
-        totalAmount: true, subtotal: true, taxAmount: true,
-        periodStart: true, periodEnd: true, dueDate: true,
-      },
-    });
-    if (!invoice) throw new NotFoundError('Invoice not found');
-    if (invoice.status !== 'PENDING') {
-      throw new AppError(
-        `Invoice ${invoice.invoiceNumber} is ${invoice.status}. Only PENDING invoices can be edited — ` +
-        'use Add Fees for extra charges, or void and reissue once a status has moved on.',
-        400,
-      );
-    }
-
-    const periodStart = data.periodStart ? new Date(data.periodStart) : invoice.periodStart;
-    const periodEnd   = data.periodEnd   ? new Date(data.periodEnd)   : invoice.periodEnd;
-    const dueDate     = data.dueDate     ? new Date(data.dueDate)     : invoice.dueDate;
-    if (periodStart > periodEnd) {
-      throw new AppError('Billing period start must be on or before its end.', 400);
-    }
-
-    const oldValue = {
-      totalAmount: invoice.totalAmount,
-      periodStart: invoice.periodStart.toISOString(),
-      periodEnd:   invoice.periodEnd.toISOString(),
-      dueDate:     invoice.dueDate.toISOString(),
-    };
-
-    await prisma.$transaction(async (tx) => {
-      if (data.lineItems) {
-        const rows = data.lineItems.map((li) => ({
-          guardId:      null,
-          description:  li.description.trim(),
-          guardType:    li.guardType?.trim() || li.description.trim(),
-          guardsCount:  li.guardsCount,
-          ratePerGuard: li.ratePerGuard,
-          days:         li.days,
-          amount:       round2(li.guardsCount * li.ratePerGuard * li.days),
-        }));
-        await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
-        if (rows.length) {
-          await tx.invoiceLineItem.createMany({ data: rows.map((r) => ({ invoiceId: id, ...r })) });
-        }
-        const subtotal    = round2(rows.reduce((sum, r) => sum + r.amount, 0));
-        const totalAmount = round2(subtotal + invoice.taxAmount);
-        await tx.invoice.update({
-          where: { id },
-          data: {
-            guardsDeployed:   rows.reduce((sum, r) => sum + r.guardsCount, 0),
-            ratePerGuard:     0,
-            subtotal,
-            totalAmount,
-            outstandingBalance: totalAmount, // PENDING means nothing received
-            periodStart,
-            periodEnd,
-            dueDate,
-          },
-        });
-      } else {
-        await tx.invoice.update({ where: { id }, data: { periodStart, periodEnd, dueDate } });
-      }
-    });
-
-    // Total and due date may have moved; status and balances follow from them.
-    await recomputeInvoiceBalance(id);
-
-    await QueueService.logAudit({
-      userId:   editedBy,
-      action:   'INVOICE_UPDATED',
-      entity:   'invoice',
-      entityId: id,
-      oldValue,
-      newValue: {
-        periodStart: periodStart.toISOString(),
-        periodEnd:   periodEnd.toISOString(),
-        dueDate:     dueDate.toISOString(),
-        lineItemsReplaced: data.lineItems ? data.lineItems.length : undefined,
-      },
-    }).catch(() => { /* a queue outage must not undo an applied edit */ });
-
-    return this.getById(id);
-  }
-
-  /** Invoice as a printable PDF, on the shared STAP letterhead. */
+  /** Invoice as a printable PDF, on the shared Security360 letterhead. */
   async buildInvoicePdf(invoiceId: string): Promise<{ pdf: Buffer; filename: string }> {
     const invoice = await prisma.invoice.findUnique({
       where:   { id: invoiceId },
@@ -859,7 +759,7 @@ class InvoiceService {
       );
     }
 
-    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'STAP';
+    const prefix = process.env.YO_INTERNAL_REFERENCE_PREFIX ?? 'S360';
     const resp = await yoPayments.requestPayment({
       amount:            invoice.totalAmount,
       msisdn,

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { GuardResponse } from '@stap/shared';
+import type { GuardResponse } from '@security360/shared';
 
 const CELL_INPUT: React.CSSProperties = {
   width:        '100%',

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { UserRole } from '@stap/shared';
+import type { UserRole } from '@security360/shared';
 import { ACCESS_TOKEN_EXPIRES_IN, REFRESH_TOKEN_EXPIRES_IN } from '../config/session';
 
 const ACCESS_SECRET  = process.env.JWT_SECRET!;

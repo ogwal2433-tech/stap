@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
-import type { CreateShiftTypeInput, UpdateShiftTypeInput, ShiftTypeResponse } from '@stap/shared';
+import type { CreateShiftTypeInput, UpdateShiftTypeInput, ShiftTypeResponse } from '@security360/shared';
 
 class ShiftTypeService {
   private format(s: {

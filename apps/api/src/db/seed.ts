@@ -69,15 +69,15 @@ async function backfillSystemIds() {
   const select = { id: true, systemId: true } as const;
 
   await backfill(
-    await prisma.guard.findMany({ select, ...order }), 'SSLG',
+    await prisma.guard.findMany({ select, ...order }), 'S360G',
     (id, systemId) => prisma.guard.update({ where: { id }, data: { systemId } }), 'guard IDs',
   );
   await backfill(
-    await prisma.client.findMany({ select, ...order }), 'SSLC',
+    await prisma.client.findMany({ select, ...order }), 'S360C',
     (id, systemId) => prisma.client.update({ where: { id }, data: { systemId } }), 'client IDs',
   );
   await backfill(
-    await prisma.user.findMany({ select, ...order }), 'SSLS',
+    await prisma.user.findMany({ select, ...order }), 'S360S',
     (id, systemId) => prisma.user.update({ where: { id }, data: { systemId } }), 'user IDs',
   );
 }
@@ -110,19 +110,19 @@ async function main() {
   // ── Users (one per role) ────────────────────────────────────────────────────
 
   const userSeeds: Array<{ name: string; email: string; role: string; status: UserStatus }> = [
-    { name: 'Joshua Ssewakiryanga',  email: 'director@stapsecurity.co.ug',     role: 'DIRECTOR',             status: UserStatus.ACTIVE },
-    { name: 'Grace Namutebi',        email: 'asstmanager@stapsecurity.co.ug',  role: 'ASSISTANT_MANAGER',    status: UserStatus.ACTIVE },
-    { name: 'Ronald Byaruhanga',     email: 'admin@stapsecurity.co.ug',        role: 'ADMINISTRATOR',        status: UserStatus.ACTIVE },
-    { name: 'Patricia Namukasa',     email: 'opsupervisor@stapsecurity.co.ug', role: 'OPERATIONS_SUPERVISOR', status: UserStatus.ACTIVE },
-    { name: 'Emmanuel Okello',       email: 'fieldsupervisor@stapsecurity.co.ug', role: 'FIELD_SUPERVISOR',  status: UserStatus.ACTIVE },
-    { name: 'Immaculate Nalubega',   email: 'trainer@stapsecurity.co.ug',      role: 'TRAINER',              status: UserStatus.ACTIVE },
-    { name: 'Charles Mwesigwa',      email: 'accounts@stapsecurity.co.ug',     role: 'ACCOUNTS_OFFICER',     status: UserStatus.ACTIVE },
-    { name: 'Betty Nakiwala',        email: 'controlroom@stapsecurity.co.ug',  role: 'CONTROL_ROOM',         status: UserStatus.ACTIVE },
-    { name: 'Sylvia Akello',         email: 'marketing@stapsecurity.co.ug',    role: 'MARKETING_HEAD',       status: UserStatus.ACTIVE },
-    { name: 'Brian Kigongo',         email: 'sales@stapsecurity.co.ug',        role: 'SALES',                status: UserStatus.ACTIVE },
-    { name: 'Rebecca Atim',          email: 'hr@stapsecurity.co.ug',           role: 'HR',                   status: UserStatus.ACTIVE },
-    { name: 'David Wasswa',          email: 'guard.wasswa@stapsecurity.co.ug', role: 'GUARD',                status: UserStatus.ACTIVE },
-    { name: 'Michael Kakooza',       email: 'client.kakooza@stapsecurity.co.ug', role: 'CLIENT',             status: UserStatus.ACTIVE },
+    { name: 'Joshua Ssewakiryanga',  email: 'director@security360.co.ug',     role: 'DIRECTOR',             status: UserStatus.ACTIVE },
+    { name: 'Grace Namutebi',        email: 'asstmanager@security360.co.ug',  role: 'ASSISTANT_MANAGER',    status: UserStatus.ACTIVE },
+    { name: 'Ronald Byaruhanga',     email: 'admin@security360.co.ug',        role: 'ADMINISTRATOR',        status: UserStatus.ACTIVE },
+    { name: 'Patricia Namukasa',     email: 'opsupervisor@security360.co.ug', role: 'OPERATIONS_SUPERVISOR', status: UserStatus.ACTIVE },
+    { name: 'Emmanuel Okello',       email: 'fieldsupervisor@security360.co.ug', role: 'FIELD_SUPERVISOR',  status: UserStatus.ACTIVE },
+    { name: 'Immaculate Nalubega',   email: 'trainer@security360.co.ug',      role: 'TRAINER',              status: UserStatus.ACTIVE },
+    { name: 'Charles Mwesigwa',      email: 'accounts@security360.co.ug',     role: 'ACCOUNTS_OFFICER',     status: UserStatus.ACTIVE },
+    { name: 'Betty Nakiwala',        email: 'controlroom@security360.co.ug',  role: 'CONTROL_ROOM',         status: UserStatus.ACTIVE },
+    { name: 'Sylvia Akello',         email: 'marketing@security360.co.ug',    role: 'MARKETING_HEAD',       status: UserStatus.ACTIVE },
+    { name: 'Brian Kigongo',         email: 'sales@security360.co.ug',        role: 'SALES',                status: UserStatus.ACTIVE },
+    { name: 'Rebecca Atim',          email: 'hr@security360.co.ug',           role: 'HR',                   status: UserStatus.ACTIVE },
+    { name: 'David Wasswa',          email: 'guard.wasswa@security360.co.ug', role: 'GUARD',                status: UserStatus.ACTIVE },
+    { name: 'Michael Kakooza',       email: 'client.kakooza@security360.co.ug', role: 'CLIENT',             status: UserStatus.ACTIVE },
   ];
 
   const users: Record<string, Awaited<ReturnType<typeof prisma.user.upsert>>> = {};
@@ -238,11 +238,9 @@ async function main() {
 
   const settingSeeds: Array<{ key: string; value: string; label: string; group: string; dataType?: string }> = [
     // GENERAL
-    { key: 'company_name',         value: 'STAP Security Ltd',           label: 'Company Name',           group: 'GENERAL' },
-    { key: 'company_address',      value: 'Kampala, Uganda',             label: 'Company Address',         group: 'GENERAL' },
-    { key: 'company_phone',        value: '+256 414 000 000',            label: 'Company Phone',           group: 'GENERAL' },
-    { key: 'company_email',        value: 'info@stapsecurity.co.ug',     label: 'Company Email',           group: 'GENERAL' },
-    { key: 'company_website',      value: 'www.stapsecurity.co.ug',      label: 'Company Website',         group: 'GENERAL' },
+    // company_name/address/phone/email/website are not seeded: an absent row
+    // resolves to this deployment's defaults (config/branding.ts). Seeding
+    // them would pin the original brand onto every other deployment.
     { key: 'director_name',        value: 'Taraka Joel',                 label: 'Director Name',           group: 'GENERAL' },
     { key: 'financial_year_start', value: '01/07',                       label: 'Financial Year Start (DD/MM)', group: 'GENERAL' },
     // PAYROLL
@@ -252,7 +250,7 @@ async function main() {
     { key: 'nssf_enabled',         value: 'false', label: 'NSSF Deductions Enabled', group: 'PAYROLL', dataType: 'boolean' },
     // BILLING
     { key: 'default_billing_terms', value: '30',       label: 'Default Billing Terms (days)', group: 'BILLING', dataType: 'number' },
-    { key: 'invoice_prefix',        value: 'STAP/INV', label: 'Invoice Prefix',               group: 'BILLING' },
+    { key: 'invoice_prefix',        value: 'S360/INV', label: 'Invoice Prefix',               group: 'BILLING' },
     { key: 'tax_rate',              value: '0',        label: 'Tax Rate (%)',                  group: 'BILLING', dataType: 'number' },
     { key: 'yo_payment_enabled',    value: 'false',    label: 'Yo! Payments Enabled',          group: 'BILLING', dataType: 'boolean' },
     // SECURITY
@@ -437,7 +435,7 @@ async function main() {
 
   const uniformItems = [
     {
-      itemCode:         'STAP-UNI-SHIRT',
+      itemCode:         'S360-UNI-SHIRT',
       itemName:         'Guard Shirt',
       itemType:         'UNIFORM',
       unitCost:         30000,
@@ -448,7 +446,7 @@ async function main() {
       isShoeItem:       false,
     },
     {
-      itemCode:         'STAP-UNI-TROUSER',
+      itemCode:         'S360-UNI-TROUSER',
       itemName:         'Guard Trouser',
       itemType:         'UNIFORM',
       unitCost:         30000,
@@ -459,7 +457,7 @@ async function main() {
       isShoeItem:       false,
     },
     {
-      itemCode:         'STAP-UNI-CAP',
+      itemCode:         'S360-UNI-CAP',
       itemName:         'Guard Cap',
       itemType:         'UNIFORM',
       unitCost:         15000,
@@ -470,7 +468,7 @@ async function main() {
       isShoeItem:       false,
     },
     {
-      itemCode:         'STAP-UNI-BELT',
+      itemCode:         'S360-UNI-BELT',
       itemName:         'Guard Belt',
       itemType:         'UNIFORM',
       unitCost:         15000,
@@ -481,7 +479,7 @@ async function main() {
       isShoeItem:       false,
     },
     {
-      itemCode:         'STAP-UNI-SHOES',
+      itemCode:         'S360-UNI-SHOES',
       itemName:         'Guard Shoes',
       itemType:         'UNIFORM',
       unitCost:         30000,

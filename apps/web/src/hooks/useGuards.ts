@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 import type {
   CreateGuardInput, GuardListQuery, GuardRelativeInput, GuardAssociateInput,
   CreateGuardTransferInput, PromoteGuardInput, GrantGuardAccessInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useGuardList(params?: Partial<GuardListQuery>) {
   return useQuery({

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../db/prisma';
 
 /**
- * System IDs — SSLG001, SSLC004, GUN-002, SHR-2026-007.
+ * System IDs — S360G001, S360C004, GUN-002, SHR-2026-007.
  *
  * The prefixes and the number width are configured in Settings → ID Formats
  * rather than compiled in, because a deployment under another brand wants its
@@ -36,12 +36,12 @@ const SETTING_KEYS = {
 } as const;
 
 const FALLBACKS: Record<string, string> = {
-  [SETTING_KEYS.guard]:       'SSLG',
-  [SETTING_KEYS.client]:      'SSLC',
-  [SETTING_KEYS.staff]:       'SSLS',
+  [SETTING_KEYS.guard]:       'S360G',
+  [SETTING_KEYS.client]:      'S360C',
+  [SETTING_KEYS.staff]:       'S360S',
   [SETTING_KEYS.gun]:         'GUN',
   [SETTING_KEYS.shiftReport]: 'SHR',
-  [SETTING_KEYS.invoice]:     'STAP/INV',
+  [SETTING_KEYS.invoice]:     'S360/INV',
   [SETTING_KEYS.padding]:     '3',
 };
 
@@ -162,5 +162,5 @@ export const generateGunId = (): Promise<string> => nextId('Gun', SETTING_KEYS.g
 export const generateShiftReportId = (year = new Date().getFullYear()): Promise<string> =>
   nextId('ShiftHandoverReport', SETTING_KEYS.shiftReport, `-${year}-`);
 
-/** The configured invoice prefix, e.g. "STAP/INV". */
+/** The configured invoice prefix, e.g. "S360/INV". */
 export const invoicePrefix = (): Promise<string> => prefixFor(SETTING_KEYS.invoice);

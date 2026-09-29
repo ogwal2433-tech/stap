@@ -10,7 +10,7 @@
     "declarationMap": false,
     "sourceMap": true,
     "paths": {
-      "@stap/shared": ["../../packages/shared/dist/index.d.ts"]
+      "@security360/shared": ["../../packages/shared/dist/index.d.ts"]
     }
   },
   "include": ["src"],

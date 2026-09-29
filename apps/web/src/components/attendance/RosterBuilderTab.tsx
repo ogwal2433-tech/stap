@@ -7,7 +7,7 @@ import { clientsApi } from '../../lib/clients.api';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { getApiErrorMessage } from '../../lib/api';
-import type { ConflictDetail, ZoneSite, ZoneRosterGuard } from '@stap/shared';
+import type { ConflictDetail, ZoneSite, ZoneRosterGuard } from '@security360/shared';
 import InitialsAvatar from '../ui/InitialsAvatar';
 import { exportRosterDraft } from '../../lib/exportToExcel';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';

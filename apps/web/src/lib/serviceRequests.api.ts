@@ -4,7 +4,7 @@ import type {
   ServiceRequestSummary,
   UpdateServiceRequestInput,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export interface ServiceRequestFilters {
   status?:   string;

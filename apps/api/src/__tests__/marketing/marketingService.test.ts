@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   CreateProspectSchema, UpdateProspectSchema, CreateBidSchema,
   PIPELINE_ORDER, OPEN_PIPELINE_STATUSES,
-} from '@stap/shared';
+} from '@security360/shared';
 
 vi.mock('../../db/prisma', () => ({
   default: {

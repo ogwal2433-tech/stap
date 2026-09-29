@@ -13,7 +13,7 @@ export const options = {
 export function setup() {
   const res = http.post(
     `${__ENV.BASE_URL || 'http://localhost:3001'}/api/v1/auth/login`,
-    JSON.stringify({ email: 'director@stapsecurity.co.ug', password: '12345678' }),
+    JSON.stringify({ email: 'director@security360.co.ug', password: '12345678' }),
     { headers: { 'Content-Type': 'application/json' } },
   );
   return { token: res.json('data.accessToken') };

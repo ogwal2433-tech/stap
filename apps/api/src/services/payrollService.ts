@@ -1,4 +1,4 @@
-import { PAID_STATUSES } from '@stap/shared';
+import { PAID_STATUSES } from '@security360/shared';
 import { companyProfile } from './integrationSettings';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
@@ -12,7 +12,7 @@ import type {
   PayslipResponse,
   PayrollSummary,
   PaginatedResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 

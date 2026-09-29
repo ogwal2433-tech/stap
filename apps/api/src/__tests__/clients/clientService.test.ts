@@ -23,7 +23,7 @@ vi.mock('../../db/prisma', () => ({
       updateMany: vi.fn(),
       delete:     vi.fn(),
     },
-    // generateClientId() reads the highest existing SSLC number through raw SQL.
+    // generateClientId() reads the highest existing S360C number through raw SQL.
     $queryRaw:    vi.fn(),
     $transaction: vi.fn(),
   },

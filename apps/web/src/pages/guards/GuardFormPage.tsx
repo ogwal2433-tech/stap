@@ -14,7 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import PermissionGuard from '../../components/PermissionGuard';
 import InitialsAvatar from '../../components/ui/InitialsAvatar';
 import { useToast } from '../../context/ToastContext';
-import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_ID_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@stap/shared';
+import { CreateGuardSchema, GUARD_CONTRACT_TYPES, GUARD_ID_TYPES, GUARD_WRITE_ROLES, type CreateGuardInput, type UserRole } from '@security360/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
 import ContractDurationPicker from '../../components/common/ContractDurationPicker';
 

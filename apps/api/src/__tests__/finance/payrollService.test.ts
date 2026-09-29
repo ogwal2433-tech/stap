@@ -23,7 +23,7 @@ vi.mock('../../jobs/QueueService', () => ({
 vi.mock('../../lib/xcel', () => ({
   normalisePhone:  vi.fn((p: string) => p.replace(/\D/g, '').replace(/^0/, '256')),
   detectNetwork:   vi.fn(() => 'MTN'),
-  generateDisbursementRef: vi.fn((guardId: string, period: string) => `STAP-SAL-${guardId}-${period}`),
+  generateDisbursementRef: vi.fn((guardId: string, period: string) => `S360-SAL-${guardId}-${period}`),
 }));
 
 vi.mock('../../lib/xcelPartner', () => ({

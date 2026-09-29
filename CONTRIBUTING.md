@@ -1,4 +1,4 @@
-# Contributing to STAP Security
+# Contributing to Security360
 
 ## 1. Branch Naming
 
@@ -118,7 +118,7 @@ pnpm --filter api test:watch
 pnpm --filter api test:coverage
 
 # Run shared package unit tests (roles utility etc.)
-pnpm --filter @stap/shared test
+pnpm --filter @security360/shared test
 ```
 
 CI runs tests against a real PostgreSQL and Redis instance (see `.github/workflows/ci.yml`).  
@@ -150,7 +150,7 @@ Use the middleware from `apps/api/src/middleware/rbac.ts`:
 ```typescript
 import { authenticate } from '../middleware/authenticate';
 import { requireRole, requireMinimumRole } from '../middleware/rbac';
-import { ROLES, FINANCE_ROLES } from '@stap/shared';
+import { ROLES, FINANCE_ROLES } from '@security360/shared';
 
 // Exact role list
 router.get('/payroll', authenticate, requireRole(...FINANCE_ROLES), handler);
@@ -165,7 +165,7 @@ Use `RoleGuard` for conditional UI rendering:
 
 ```tsx
 import RoleGuard from '@/components/RoleGuard';
-import { ROLES, FINANCE_ROLES } from '@stap/shared';
+import { ROLES, FINANCE_ROLES } from '@security360/shared';
 
 <RoleGuard allowedRoles={FINANCE_ROLES}>
   <PayrollButton />

@@ -8,7 +8,7 @@ import type {
   AttendanceQuery,
   MarkAttendanceInput,
   SupervisorCheckinInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useTodaysDeployments(params?: Partial<DeploymentListQuery>) {
   return useQuery({

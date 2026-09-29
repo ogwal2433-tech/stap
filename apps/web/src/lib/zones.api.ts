@@ -2,7 +2,7 @@ import api from './api';
 import type {
   ZoneResponse, ZoneRosterData, ZoneSiteOption,
   PaginatedResponse, CreateZoneInput, UpdateZoneInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const zonesApi = {
   list(params?: { page?: number; limit?: number; isActive?: boolean; search?: string }): Promise<PaginatedResponse<ZoneResponse>> {

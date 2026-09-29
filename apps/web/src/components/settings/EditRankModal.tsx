@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useToast } from '../../context/ToastContext';
 import { useUpdateRank, useBulkUpdateRankSalary } from '../../hooks/useSettings';
-import type { GuardRankResponse } from '@stap/shared';
+import type { GuardRankResponse } from '@security360/shared';
 
 interface Props {
   show: boolean;

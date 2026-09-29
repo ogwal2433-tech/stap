@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractsApi } from '../lib/contracts.api';
-import type { CreateContractInput, UpdateContractInput } from '@stap/shared';
+import type { CreateContractInput, UpdateContractInput } from '@security360/shared';
 
 /**
  * `enabled` also takes the caller's permission, because hiding the Contracts tab

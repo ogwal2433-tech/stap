@@ -19,7 +19,7 @@ import {
   DEPLOYMENT_VIEW_ROLES,
   REPORT_ROLES,
   type UserRole,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const ADMIN_ONLY       = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
 // Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.

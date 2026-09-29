@@ -3,7 +3,7 @@ import { Badge, Button, Spinner } from 'react-bootstrap';
 import {
   ROLES, dispatchChannelLabel,
   type RequisitionResponse, type UserRole,
-} from '@stap/shared';
+} from '@security360/shared';
 import { useFundDispatches } from '../../hooks/useRequisitions';
 import RecordDispatchModal from './RecordDispatchModal';
 

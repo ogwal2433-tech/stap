@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { DeductionTypeResponse } from '@stap/shared';
+import type { DeductionTypeResponse } from '@security360/shared';
 import DeductionFormModal from '../components/finance/DeductionFormModal';
 
 /**

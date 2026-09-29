@@ -1,5 +1,5 @@
 import api from './api';
-import type { CreateRoleInput, RoleRecord, UpdateRoleInput } from '@stap/shared';
+import type { CreateRoleInput, RoleRecord, UpdateRoleInput } from '@security360/shared';
 
 /** Which roles exist. What each may do is permissions.api. */
 export const rolesApi = {

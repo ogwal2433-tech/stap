@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ROLES, INTERNAL_ROLES, HR_ROLES, GenerateLetterSchema, ApproveLetterSchema, UpdateLetterBodySchema } from '@stap/shared';
+import { ROLES, INTERNAL_ROLES, HR_ROLES, GenerateLetterSchema, ApproveLetterSchema, UpdateLetterBodySchema } from '@security360/shared';
 
 const router: IRouter = Router();
 

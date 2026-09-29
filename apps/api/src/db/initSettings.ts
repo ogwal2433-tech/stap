@@ -19,11 +19,9 @@ const DEFAULT_SETTINGS: Array<{
   dataType?: string;
 }> = [
   // ── GENERAL ─────────────────────────────────────────────────────────
-  { key: 'company_name',         value: 'STAP Security Ltd',       label: 'Company Name',                   group: 'GENERAL' },
-  { key: 'company_address',      value: 'Kampala, Uganda',         label: 'Company Address',                group: 'GENERAL' },
-  { key: 'company_phone',        value: '+256 414 000 000',        label: 'Company Phone',                  group: 'GENERAL' },
-  { key: 'company_email',        value: 'info@stapsecurity.co.ug', label: 'Company Email',                  group: 'GENERAL' },
-  { key: 'company_website',      value: 'www.stapsecurity.co.ug',  label: 'Company Website',                group: 'GENERAL' },
+  // company_name/address/phone/email/website are not seeded: an absent row
+  // resolves to this deployment's defaults (config/branding.ts). Seeding
+  // them would pin the original brand onto every other deployment.
   { key: 'director_name',        value: '',                        label: 'Director Name',                  group: 'GENERAL' },
   { key: 'financial_year_start', value: '01/07',                   label: 'Financial Year Start (DD/MM)',   group: 'GENERAL' },
 
@@ -50,16 +48,16 @@ const DEFAULT_SETTINGS: Array<{
 
   // ── BILLING ──────────────────────────────────────────────────────────
   { key: 'default_billing_terms', value: '30',       label: 'Default Billing Terms (days)', group: 'BILLING', dataType: 'number' },
-  { key: 'invoice_prefix',        value: 'STAP/INV', label: 'Invoice Prefix',               group: 'BILLING' },
+  { key: 'invoice_prefix',        value: 'S360/INV', label: 'Invoice Prefix',               group: 'BILLING' },
   { key: 'tax_rate',              value: '0',        label: 'Tax Rate (%)',                  group: 'BILLING', dataType: 'number' },
   { key: 'yo_payment_enabled',    value: 'false',    label: 'Yo! Payments Enabled',          group: 'BILLING', dataType: 'boolean' },
 
   // ── ID FORMATS ───────────────────────────────────────────────────────
   // Prefixes for generated system IDs. Changing one affects records created
   // afterwards; nothing already issued is renamed.
-  { key: 'guard_id_prefix',    value: 'SSLG', label: 'Guard ID Prefix',           group: 'ID_FORMAT' },
-  { key: 'client_id_prefix',   value: 'SSLC', label: 'Client ID Prefix',          group: 'ID_FORMAT' },
-  { key: 'staff_id_prefix',    value: 'SSLS', label: 'Staff ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'guard_id_prefix',    value: 'S360G', label: 'Guard ID Prefix',           group: 'ID_FORMAT' },
+  { key: 'client_id_prefix',   value: 'S360C', label: 'Client ID Prefix',          group: 'ID_FORMAT' },
+  { key: 'staff_id_prefix',    value: 'S360S', label: 'Staff ID Prefix',           group: 'ID_FORMAT' },
   { key: 'gun_id_prefix',      value: 'GUN',  label: 'Gun ID Prefix',             group: 'ID_FORMAT' },
   { key: 'shift_report_prefix',value: 'SHR',  label: 'Shift Report ID Prefix',    group: 'ID_FORMAT' },
   { key: 'id_padding',         value: '3',    label: 'ID Number Padding (digits)', group: 'ID_FORMAT', dataType: 'number' },

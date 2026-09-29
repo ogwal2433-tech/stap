@@ -4,10 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { portalApi, type PortalPaymentResult } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
-import type { InvoiceResponse } from '@stap/shared';
-// One money formatter for the whole app: an invoice balance can carry cents once
-// a line rate comes from a monthly contract rate ÷ 30.
-import { formatUgx as ugx } from '@stap/shared';
+import type { InvoiceResponse } from '@security360/shared';
 
 interface Props {
   invoice:    InvoiceResponse;

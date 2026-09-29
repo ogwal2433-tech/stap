@@ -4,7 +4,7 @@ import type {
   StaffListResponse,
   CreateStaffInput,
   UpdateStaffInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export interface StaffListParams {
   role?:     string;

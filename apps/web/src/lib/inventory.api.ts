@@ -14,7 +14,7 @@ import type {
   AdjustConditionInput,
   BatchIssueInput,
   BatchIssueResult,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export const inventoryApi = {
   listItems(params?: {

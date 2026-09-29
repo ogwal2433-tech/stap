@@ -1,5 +1,5 @@
 import { Router, type IRouter } from 'express';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
 import { asyncHandler } from '../utils/asyncHandler';

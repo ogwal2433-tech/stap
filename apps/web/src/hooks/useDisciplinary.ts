@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { disciplinaryApi } from '../lib/disciplinary.api';
-import type { CreateDisciplinaryInput } from '@stap/shared';
+import type { CreateDisciplinaryInput } from '@security360/shared';
 
 export function useDisciplinaryRecords(guardId: string) {
   return useQuery({

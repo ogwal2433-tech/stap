@@ -75,7 +75,7 @@ enum ComplaintStatus {
   IN_PROGRESS
   UNDER_INVESTIGATION
   RESOLVED
-  // Outbound only — a notice STAP sent to a client, and the client's receipt of
+  // Outbound only — a notice Security360 sent to a client, and the client's receipt of
   // it. Inbound complaints never take these, and outbound ones never take
   // OPEN/IN_PROGRESS/UNDER_INVESTIGATION; both end at RESOLVED.
   SENT
@@ -970,9 +970,9 @@ model ClientComplaint {
 
   /// Who raised this with whom.
   ///
-  /// INBOUND  = the client complained to STAP (the original flow, and the
+  /// INBOUND  = the client complained to Security360 (the original flow, and the
   ///            default, so every existing row keeps its meaning).
-  /// OUTBOUND = STAP sent the client a formal notice. Same table because both
+  /// OUTBOUND = Security360 sent the client a formal notice. Same table because both
   ///            are a grievance about the same contract between the same two
   ///            parties — splitting them would duplicate category, severity,
   ///            resolution and the whole action-taken trail.
@@ -1959,12 +1959,12 @@ model ServiceRequest {
   description String
   quantity    Int?
   /// PENDING | IN_PROGRESS | COMPLETED | REJECTED.
-  /// REJECTED means STAP declined the request — distinct from the client
+  /// REJECTED means Security360 declined the request — distinct from the client
   /// withdrawing it, which nothing can currently do.
   status      String  @default("PENDING")
   priority    String  @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
 
-  /// What STAP told the client. Shown in their portal, and required before a
+  /// What Security360 told the client. Shown in their portal, and required before a
   /// request can be completed or rejected so no request closes unexplained.
   staffResponse String? @db.Text
   /// Staff-only working notes. Never leaves the internal API.

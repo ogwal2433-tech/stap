@@ -5,7 +5,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { PERMISSIONS } from '../constants/permissions';
 import { roleService } from '../services/roleService';
-import { CreateRoleSchema, UpdateRoleSchema } from '@stap/shared';
+import { CreateRoleSchema, UpdateRoleSchema } from '@security360/shared';
 
 /**
  * /roles — which roles exist and what they are called.

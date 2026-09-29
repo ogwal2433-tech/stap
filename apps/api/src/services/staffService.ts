@@ -7,7 +7,7 @@ import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
 import { redisConnection } from '../lib/redis';
 import { NotFoundError, AppError } from '../errors/AppError';
-import { ROLE_CONFIG, ROLES } from '@stap/shared';
+import { ROLE_CONFIG, ROLES } from '@security360/shared';
 import { APP_NAME } from '../config/branding';
 import type {
   CreateStaffInput,
@@ -15,7 +15,7 @@ import type {
   StaffResponse,
   StaffListResponse,
   StaffRole,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Staff directory.

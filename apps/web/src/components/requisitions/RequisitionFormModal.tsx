@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Modal, Form, Button, Row, Col, Badge, InputGroup, Alert,
 } from 'react-bootstrap';
-import type { RequisitionResponse } from '@stap/shared';
+import type { RequisitionResponse } from '@security360/shared';
 import { useCreateRequisition, useUpdateRequisition } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';

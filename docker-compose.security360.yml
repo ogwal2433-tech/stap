@@ -1,15 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Security360 — a second, separately-branded deployment
 #
-#   Web:      http://<host>:8080        (STAP stays on 80/443)
-#   Data:     security360_postgres      (STAP uses postgres_data)
-#   Network:  security360_network       (STAP uses stap-network)
+#   Web:      http://<host>:8080        (the primary stack stays on 80/443)
+#   Data:     security360_postgres      (primary uses s360-prod_postgres_data)
+#   Network:  security360_network       (primary uses s360-prod-network)
 #
-# Nothing is shared with the STAP stack: different volumes, network, container
+# Nothing is shared with the primary stack: different volumes, network, container
 # names, database and Redis. The only overlap is the host, so neither can reach
 # the other's data even by accident.
 #
-# Built from the SAME Dockerfiles the STAP stack uses. The brand is a build
+# Built from the SAME Dockerfiles the primary stack uses. The brand is a build
 # argument, not a fork — a parallel set of Dockerfiles would drift, and this
 # deployment would stop being the same software.
 #
@@ -32,7 +32,7 @@ services:
     volumes:
       - s360_postgres_data:/var/lib/postgresql/data
     networks: [s360-network]
-    # Deliberately not published to the host. The STAP stack keeps its database
+    # Deliberately not published to the host. The primary stack keeps its database
     # internal too; a second Postgres on a host port is an exposure with no
     # purpose, since psql is one `docker exec` away.
     healthcheck:
@@ -76,21 +76,24 @@ services:
       # restart — unlike the frontend, which bakes it in at build time below.
       APP_NAME:     ${S360_APP_NAME:-Security360}
       APP_TAGLINE:  ${S360_APP_TAGLINE:-}
-      # The legal entity on invoices, contracts and letters. Separate from the
-      # product name on purpose: leaving it unset keeps STAP Security Ltd, which
-      # is correct if this deployment is the same business under a new product
-      # name, and wrong if it is not. Set it when it is not.
-      COMPANY_NAME: ${S360_COMPANY_NAME:-}
-      COMPANY_EMAIL:     ${S360_COMPANY_EMAIL:-}
+      # The legal entity on invoices, contracts and letters, and the defaults
+      # behind Settings > Company Branding. Separate from the product name on
+      # purpose. Values saved in that settings page take precedence over these.
+      COMPANY_NAME:       ${S360_COMPANY_NAME:-Security360 Ltd}
+      COMPANY_SHORT_NAME: ${S360_COMPANY_SHORT_NAME:-Security360}
+      COMPANY_EMAIL:     ${S360_COMPANY_EMAIL:-info@security360.co.ug}
       COMPANY_PHONE:     ${S360_COMPANY_PHONE:-}
       COMPANY_WHATSAPP:  ${S360_COMPANY_WHATSAPP:-}
-      COMPANY_WEBSITE:   ${S360_COMPANY_WEBSITE:-}
+      COMPANY_WEBSITE:   ${S360_COMPANY_WEBSITE:-www.security360.co.ug}
       COMPANY_ADDRESS:   ${S360_COMPANY_ADDRESS:-}
       COMPANY_FACEBOOK:  ${S360_COMPANY_FACEBOOK:-}
       COMPANY_INSTAGRAM: ${S360_COMPANY_INSTAGRAM:-}
       COMPANY_TWITTER:   ${S360_COMPANY_TWITTER:-}
+      COMPANY_LOGO_URL:            ${S360_COMPANY_LOGO_URL:-}
+      COMPANY_REGISTRATION_NUMBER: ${S360_COMPANY_REGISTRATION_NUMBER:-}
+      COMPANY_TAX_ID:              ${S360_COMPANY_TAX_ID:-}
 
-      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD}@postgres:5432/${S360_POSTGRES_DB:-security360}
+      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD_ENCODED}@postgres:5432/${S360_POSTGRES_DB:-security360}
       REDIS_URL:    redis://redis:6379
 
       JWT_SECRET:         ${S360_JWT_SECRET:?S360_JWT_SECRET is required and must be at least 32 characters}
@@ -163,16 +166,20 @@ services:
     environment:
       NODE_ENV:     production
       APP_NAME:     ${S360_APP_NAME:-Security360}
-      COMPANY_NAME: ${S360_COMPANY_NAME:-}
-      COMPANY_EMAIL:     ${S360_COMPANY_EMAIL:-}
+      COMPANY_NAME:       ${S360_COMPANY_NAME:-Security360 Ltd}
+      COMPANY_SHORT_NAME: ${S360_COMPANY_SHORT_NAME:-Security360}
+      COMPANY_EMAIL:     ${S360_COMPANY_EMAIL:-info@security360.co.ug}
       COMPANY_PHONE:     ${S360_COMPANY_PHONE:-}
       COMPANY_WHATSAPP:  ${S360_COMPANY_WHATSAPP:-}
-      COMPANY_WEBSITE:   ${S360_COMPANY_WEBSITE:-}
+      COMPANY_WEBSITE:   ${S360_COMPANY_WEBSITE:-www.security360.co.ug}
       COMPANY_ADDRESS:   ${S360_COMPANY_ADDRESS:-}
       COMPANY_FACEBOOK:  ${S360_COMPANY_FACEBOOK:-}
       COMPANY_INSTAGRAM: ${S360_COMPANY_INSTAGRAM:-}
       COMPANY_TWITTER:   ${S360_COMPANY_TWITTER:-}
-      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD}@postgres:5432/${S360_POSTGRES_DB:-security360}
+      COMPANY_LOGO_URL:            ${S360_COMPANY_LOGO_URL:-}
+      COMPANY_REGISTRATION_NUMBER: ${S360_COMPANY_REGISTRATION_NUMBER:-}
+      COMPANY_TAX_ID:              ${S360_COMPANY_TAX_ID:-}
+      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD_ENCODED}@postgres:5432/${S360_POSTGRES_DB:-security360}
       REDIS_URL:    redis://redis:6379
       JWT_SECRET:         ${S360_JWT_SECRET}
       JWT_REFRESH_SECRET: ${S360_JWT_REFRESH_SECRET}
@@ -201,11 +208,11 @@ services:
         # Baked into the bundle: static files cannot ask a server what they are.
         VITE_APP_NAME:     ${S360_APP_NAME:-Security360}
         VITE_APP_TAGLINE:  ${S360_APP_TAGLINE:-}
-        VITE_COMPANY_NAME: ${S360_COMPANY_NAME:-}
+        VITE_COMPANY_NAME: ${S360_COMPANY_NAME:-Security360 Ltd}
     image: security360-web:latest
     container_name: security360-web
     restart: unless-stopped
-    # The STAP stack splits static-serving and the API proxy across two
+    # The primary stack splits static-serving and the API proxy across two
     # containers because it terminates TLS. There is no certificate here, so
     # this one does both — the mounted config adds the /api and /uploads rules.
     volumes:

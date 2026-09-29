@@ -3,7 +3,7 @@ import request from 'supertest';
 import app from '../../index';
 import prisma from '../../db/prisma';
 import { signAccessToken } from '../../lib/jwt';
-import { ROLES } from '@stap/shared';
+import { ROLES } from '@security360/shared';
 
 /**
  * The issue-items form picks a guard by searching the server. What it needs is

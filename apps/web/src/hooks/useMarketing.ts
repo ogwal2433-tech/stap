@@ -3,7 +3,7 @@ import { marketingApi } from '../lib/marketing.api';
 import type {
   CreateProspectInput, UpdateProspectInput, CreateBidInput, UpdateBidInput,
   CreateTargetInput, MarketingReportType,
-} from '@stap/shared';
+} from '@security360/shared';
 
 export function useProspects(params?: {
   status?: string; search?: string; limit?: number; assignedToId?: string;

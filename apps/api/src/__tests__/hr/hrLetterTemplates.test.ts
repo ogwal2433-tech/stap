@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HR_LETTER_TEMPLATES } from '../../db/hrLetterTemplates';
-import { LETTER_TYPES, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@stap/shared';
+import { LETTER_TYPES, TEMPLATE_TYPES_BY_LETTER_TYPE } from '@security360/shared';
 
 const byType = (t: string) => HR_LETTER_TEMPLATES.find(x => x.letterType === t)!;
 const text   = (t: string) => byType(t).content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');

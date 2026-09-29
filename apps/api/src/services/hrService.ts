@@ -4,7 +4,7 @@ import { NotFoundError, AppError } from '../errors/AppError';
 import {
   GUARDS_TARGET_GROUP, STAFF_TARGET_GROUP, INTERNAL_FACILITATOR,
   GUARD_APPLICANT, STAFF_APPLICANT,
-} from '@stap/shared';
+} from '@security360/shared';
 import { notificationService } from './notificationService';
 import { guardService } from './guardService';
 import type {
@@ -26,7 +26,7 @@ import type {
   PaginatedResponse,
   CreateGuardInput,
   GuardResponse,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

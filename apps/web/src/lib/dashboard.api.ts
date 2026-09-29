@@ -1,5 +1,5 @@
 import api from './api';
-import type { DashboardData } from '@stap/shared';
+import type { DashboardData } from '@security360/shared';
 
 export const dashboardApi = {
   getStats(): Promise<DashboardData> {

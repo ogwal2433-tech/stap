@@ -59,7 +59,7 @@ function makeInvoice(lineItems: any[] = []) {
     id:             'inv-1',
     clientId:       'client-1',
     contractId:     'contract-1',
-    invoiceNumber:  'STAP/INV/2026/0001',
+    invoiceNumber:  'S360/INV/2026/0001',
     periodStart:    new Date('2026-06-01'),
     periodEnd:      new Date('2026-06-30'),
     guardsDeployed: lineItems.reduce((s, l) => s + l.guardsCount, 0),
@@ -194,7 +194,7 @@ describe('generateInvoice() — line item handling', () => {
   it('carries an unpaid balance from a previous invoice onto the new one', async () => {
     mp.contract.findUnique.mockResolvedValue({ id: 'contract-1', clientId: 'client-1' });
     mp.invoiceCarryForward.findMany.mockResolvedValue([
-      { id: 'cf-1', clientId: 'client-1', carryAmount: 350010, note: 'Unpaid balance of UGX 350,010 from invoice STAP/INV/2026/0001', toInvoiceId: null },
+      { id: 'cf-1', clientId: 'client-1', carryAmount: 350010, note: 'Unpaid balance of UGX 350,010 from invoice S360/INV/2026/0001', toInvoiceId: null },
     ]);
     mp.invoice.create.mockResolvedValue(makeInvoice([]));
 

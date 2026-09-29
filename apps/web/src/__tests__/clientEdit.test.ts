@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   ClientFormSchema, UpdateClientSchema, normaliseClientPhone, CLIENT_PHONE_PATTERN,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * Two ways client edit failed, both silent.

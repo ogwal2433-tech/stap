@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'stap-api-dev',
+      name: 'security360-api-dev',
       script: './apps/api/dist/index.js',
       instances: 1,
       exec_mode: 'fork',
@@ -11,7 +11,7 @@ module.exports = {
         NODE_ENV: 'development',
         PORT: 3001,
         REDIS_URL: 'redis://localhost:6379',
-        DATABASE_URL: 'postgresql://stap_user:STRONG_DB_PASSWORD@localhost:5432/stap_production',
+        DATABASE_URL: 'postgresql://security360_user:STRONG_DB_PASSWORD@localhost:5432/security360_production',
         JWT_SECRET: 'dev-jwt-secret',
         JWT_REFRESH_SECRET: 'dev-jwt-refresh-secret',
         COOKIE_SECRET: 'dev-cookie-secret',
@@ -34,7 +34,7 @@ module.exports = {
       combine_logs: true,
     },
     {
-      name: 'stap-worker-dev',
+      name: 'security360-worker-dev',
       script: './apps/api/dist/worker.js',
       instances: 1,
       exec_mode: 'fork',
@@ -43,7 +43,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         REDIS_URL: 'redis://localhost:6379',
-        DATABASE_URL: 'postgresql://stap_user:STRONG_DB_PASSWORD@localhost:5432/stap_production',
+        DATABASE_URL: 'postgresql://security360_user:STRONG_DB_PASSWORD@localhost:5432/security360_production',
         JWT_SECRET: 'dev-jwt-secret',
         JWT_REFRESH_SECRET: 'dev-jwt-refresh-secret',
       },

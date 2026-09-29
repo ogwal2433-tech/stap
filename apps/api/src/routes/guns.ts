@@ -63,7 +63,7 @@ import {
   DeployGunSchema,
   WithdrawGunSchema,
   TransferGunSchema,
-} from '@stap/shared';
+} from '@security360/shared';
 
 const router: IRouter = Router();
 router.use(authenticate);

@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { resolveBranding } from '@stap/shared';
+import { resolveBranding } from '@security360/shared';
 
 /**
  * Substitutes the brand into index.html at build time.

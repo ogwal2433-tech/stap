@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as XLSX from 'xlsx';
-import type { GuardExportRow } from '@stap/shared';
+import type { GuardExportRow } from '@security360/shared';
 import { exportGuardsList } from '../lib/exportToExcel';
 import { FILE_PREFIX } from '../lib/branding';
 
@@ -11,7 +11,7 @@ import { FILE_PREFIX } from '../lib/branding';
  */
 
 const guard = (over: Partial<GuardExportRow> = {}): GuardExportRow => ({
-  systemId:         'SSLG0001',
+  systemId:         'S360G0001',
   firstName:        'John',
   lastName:         'Okello',
   otherNames:       null,
@@ -95,7 +95,7 @@ describe('guard list Excel export', () => {
   });
 
   it('carries one row per guard with the details filled in', () => {
-    exportGuardsList([guard(), guard({ systemId: 'SSLG0002', fullName: 'Ann Aciro' })]);
+    exportGuardsList([guard(), guard({ systemId: 'S360G0002', fullName: 'Ann Aciro' })]);
     const rows = sheet('All Guards');
 
     expect(rows).toHaveLength(2);
@@ -148,7 +148,7 @@ describe('guard list Excel export', () => {
 
     // A one-cell row is padded to the sheet width, so the blanks come off first.
     const flat = aoa('Summary').map((r) => r.filter((c) => c !== null && c !== '').join('|'));
-    expect(flat).toContain('STAP SECURITY LTD');
+    expect(flat).toContain('SECURITY360 LTD');
     expect(flat).toContain('Total guards|3');
     expect(flat).toContain('Deployed|1');
     expect(flat).toContain('Unassigned|2');
@@ -161,6 +161,6 @@ describe('guard list Excel export', () => {
     exportGuardsList([guard()], new Date('2026-09-20T09:00:00Z'), 'Example Security Ltd');
     const flat = aoa('Summary').map((r) => r.filter((c) => c !== null && c !== '').join('|'));
     expect(flat).toContain('EXAMPLE SECURITY LTD');
-    expect(flat).not.toContain('STAP SECURITY LTD');
+    expect(flat).not.toContain('SECURITY360 LTD');
   });
 });

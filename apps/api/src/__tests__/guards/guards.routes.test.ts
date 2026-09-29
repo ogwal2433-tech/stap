@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import app from '../../index';
 import { signAccessToken } from '../../lib/jwt';
-import { ROLES, type UserRole } from '@stap/shared';
+import { ROLES, type UserRole } from '@security360/shared';
 
 function token(role: UserRole, userId = `ci-${role}`) {
   return signAccessToken({

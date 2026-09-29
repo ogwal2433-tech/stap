@@ -120,8 +120,8 @@ import {
   GrantClientPortalSchema,
   ResetPortalPasswordSchema,
   ClientImportConfirmSchema,
-} from '@stap/shared';
-import type { UserRole } from '@stap/shared';
+} from '@security360/shared';
+import type { UserRole } from '@security360/shared';
 
 const router: IRouter = Router();
 
@@ -332,7 +332,7 @@ router.get(
   requirePermission(PERMISSIONS.CLIENTS_VIEW),
   validateQuery(ClientListQuerySchema),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as import('@stap/shared').ClientListQuery;
+    const query = req.query as unknown as import('@security360/shared').ClientListQuery;
     const result = await clientService.list(query);
     res.status(200).json({ success: true, ...result });
   }),

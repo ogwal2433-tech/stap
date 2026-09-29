@@ -5,7 +5,7 @@ import type {
   GuardRankResponse,
   CreateGuardRankInput,
   UpdateGuardRankInput,
-} from '@stap/shared';
+} from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

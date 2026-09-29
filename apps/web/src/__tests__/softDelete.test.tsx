@@ -59,7 +59,7 @@ describe('DeleteConfirmModal', () => {
 
 describe('VoidInvoiceModal', () => {
   const draw = (onConfirm = vi.fn(() => Promise.resolve())) => {
-    render(<VoidInvoiceModal show onHide={() => {}} onConfirm={onConfirm} invoiceNumber="STAP/2026/0042" totalAmount={4_800_000} />);
+    render(<VoidInvoiceModal show onHide={() => {}} onConfirm={onConfirm} invoiceNumber="S360/2026/0042" totalAmount={4_800_000} />);
     return onConfirm;
   };
   const button = () => screen.getByRole('button', { name: 'Void invoice' });
@@ -81,7 +81,7 @@ describe('VoidInvoiceModal', () => {
   });
 
   it('shows the server\'s refusal', async () => {
-    draw(vi.fn(() => Promise.reject(refusal('STAP/2026/0042 has payments recorded against it and cannot be voided.'))));
+    draw(vi.fn(() => Promise.reject(refusal('S360/2026/0042 has payments recorded against it and cannot be voided.'))));
     fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: 'Wrong contract' } });
     fireEvent.click(button());
     expect(await screen.findByText(/has payments recorded against it/)).toBeInTheDocument();
