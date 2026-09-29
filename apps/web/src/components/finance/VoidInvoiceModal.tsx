@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
+import { formatUgx } from '@stap/shared';
 import { getApiErrorMessage } from '../../lib/api';
 
 /**
@@ -48,7 +49,7 @@ export default function VoidInvoiceModal({
         <p className="small text-muted mb-3">
           The invoice stays on file marked <strong>VOID</strong> and drops out of balances,
           AR and revenue. It is not deleted, and voiding cannot be undone.
-          Total as issued: <strong>UGX {totalAmount.toLocaleString()}</strong>.
+          Total as issued: <strong>{formatUgx(totalAmount)}</strong>.
         </p>
         {error && <Alert variant="danger" className="small py-2">{error}</Alert>}
         <Form.Group>

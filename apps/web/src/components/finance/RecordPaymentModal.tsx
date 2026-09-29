@@ -11,21 +11,26 @@ import { getApiErrorMessage } from '../../lib/api';
  * Built per invoice so the cap is the balance actually owed. The API rejects an
  * overpayment too — this only saves the round trip and names the limit while
  * the number is being typed.
+ *
+ * An amount is not forced to a whole shilling: an invoice whose lines carry cents
+ * (a monthly rate ÷ 30 rarely is whole) can only be settled by paying to the cent,
+ * so the same two-decimal rule as the shared RecordPaymentSchema applies here.
  */
 const makeSchema = (outstanding: number) =>
   z.object({
     amountPaid: z.coerce
       .number()
-      .int()
       .positive('Amount must be positive')
-      .max(outstanding, `Cannot exceed the outstanding balance of UGX ${outstanding.toLocaleString()}`),
+      .max(outstanding, `Cannot exceed the outstanding balance of ${formatUgx(outstanding)}`)
+      // refine last: in zod 3 it returns a wrapper that no longer exposes .max/.int
+      .refine(isTwoDpOrWhole, 'Use at most two decimal places'),
     mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
     referenceNumber: z.string().optional(),
   });
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 
-const ugx = (n: number) => `UGX ${n.toLocaleString()}`;
+const ugx = formatUgx;
 
 interface Props {
   invoice: InvoiceResponse;
@@ -53,7 +58,7 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
 
   // What the invoice will owe once this payment lands, updated as it is typed.
   const entered = Number(useWatch({ control, name: 'amountPaid' })) || 0;
-  const remaining = Math.max(0, outstanding - entered);
+  const remaining = roundMoney(Math.max(0, outstanding - entered));
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -104,7 +109,9 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
                   // No `max` attribute: it makes the browser block submission
                   // with its own tooltip, which suppresses the message below
                   // naming the actual balance. Zod enforces the same limit.
-                  type="number" min={1}
+                  // step 0.01 because an invoice with cents in its lines can only be
+                  // settled to the cent; the default step of 1 rejects such a payment.
+                  type="number" min={1} step="0.01"
                   {...register('amountPaid', { valueAsNumber: true })}
                   isInvalid={!!errors.amountPaid}
                 />

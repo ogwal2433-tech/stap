@@ -111,6 +111,22 @@ export function useClientSites(clientId: string) {
   });
 }
 
+/**
+ * Guards deployed across a client's sites. `status: 'CURRENT'` narrows to the
+ * stints still open; the tab's filter changes page, so the query key carries it.
+ */
+export function useClientDeployments(
+  clientId: string,
+  page = 1,
+  status: 'ALL' | 'CURRENT' = 'ALL',
+) {
+  return useQuery({
+    queryKey: ['client-deployments', clientId, page, status],
+    queryFn: () => clientsApi.getDeployments(clientId, { page, status }),
+    enabled: Boolean(clientId),
+  });
+}
+
 export function useCreateSite() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,4 +1,23 @@
 import { z } from 'zod';
+import { isTwoDpOrWhole } from '../utils/money';
+
+// ── Money ──────────────────────────────────────────────────────────────────────
+
+/**
+ * UGX money on an invoice: whole shillings, or up to two decimal places.
+ *
+ * A line's rate is a daily figure, and the one that matters — a contract's
+ * monthly rate divided by 30 — is rarely a whole number. Integers only could
+ * not bill a contract accurately: 500,000/30 rounded up to 16,667 overcharges
+ * each guard by 50 UGX a month.
+ *
+ * The granularity itself is checked by isTwoDpOrWhole (@stap/shared), which the
+ * web forms reuse so a value accepted on screen is accepted by the API too.
+ * Finer than a cent is rejected rather than silently rounded, so what the user
+ * typed is what the invoice stores.
+ */
+const money = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.refine(isTwoDpOrWhole, { message: 'Use at most two decimal places' });
 
 // ── Input schemas ──────────────────────────────────────────────────────────────
 
@@ -8,34 +27,64 @@ export const CreateInvoiceSchema = z.object({
   periodStart:    z.string().datetime(),
   periodEnd:      z.string().datetime(),
   guardsDeployed: z.number().int().min(1),
-  ratePerGuard:   z.number().int().positive(),
-  taxAmount:      z.number().int().min(0).default(0),
+  ratePerGuard:   money(z.number().positive()),
+  taxAmount:      money(z.number().min(0).default(0)),
   dueDate:        z.string().datetime(),
 });
 
-export const GenerateInvoiceSchema = z.object({
-  contractId:         z.string().min(1),
-  billingPeriodStart: z.string().datetime(),
-  billingPeriodEnd:   z.string().datetime(),
-  billingDays:        z.coerce.number().int().min(1).default(30),
-  // The contract's guard rate lines are the only source — these are the
-  // (possibly user-edited) lines from the preview, always sent on generate.
-  lineItemOverrides:  z.array(z.object({
-    guardType:    z.string().min(1),
-    count:        z.coerce.number().int().min(1),
-    ratePerGuard: z.coerce.number().int().min(0),
-    billingDays:  z.coerce.number().int().min(1),
-  })).optional(),
-});
+export const GenerateInvoiceSchema = z
+  .object({
+    contractId:         z.string().min(1).optional(),
+    // Required when the client has no contract yet: an invoice can be raised
+    // against the client directly with manually captured line items.
+    clientId:           z.string().min(1).optional(),
+    billingPeriodStart: z.string().datetime(),
+    billingPeriodEnd:   z.string().datetime(),
+    billingDays:        z.coerce.number().int().min(1).default(30),
+    // With a contract these are the (possibly user-edited) preview lines,
+    // always sent on generate; without one they are the only line source.
+    lineItemOverrides:  z.array(z.object({
+      guardType:    z.string().min(1),
+      count:        z.coerce.number().int().min(1),
+      ratePerGuard: money(z.coerce.number().min(0)),
+      billingDays:  z.coerce.number().int().min(1),
+    })).optional(),
+  })
+  .refine((d) => !!d.contractId || !!d.clientId, {
+    message: 'Either contractId or clientId is required',
+    path:    ['contractId'],
+  })
+  .refine((d) => !!d.contractId || (d.lineItemOverrides?.length ?? 0) > 0, {
+    message: 'A contract-less invoice must carry manually captured line items',
+    path:    ['lineItemOverrides'],
+  });
 
 export const RecordPaymentSchema = z.object({
   // Supplied via the :id URL param on POST /finance/invoices/:id/pay, not the
   // request body — optional here so body validation doesn't reject requests
   // before the route handler merges it in from req.params.
   invoiceId:       z.string().min(1).optional(),
-  amountPaid:      z.coerce.number().int().positive(),
+  amountPaid:      money(z.coerce.number().positive()),
   mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
   referenceNumber: z.string().optional(),
+});
+
+/**
+ * Edits an invoice that is still PENDING — the only status with no money
+ * received and nothing carried onto it. Dates are partial; line items, when
+ * sent, replace the existing rows wholesale (send none to touch only dates).
+ */
+export const UpdateInvoiceSchema = z.object({
+  periodStart: z.string().datetime().optional(),
+  periodEnd:   z.string().datetime().optional(),
+  dueDate:     z.string().datetime().optional(),
+  lineItems:   z.array(z.object({
+    description:  z.string().min(1),
+    guardType:    z.string().optional(),
+    guardsCount:  z.coerce.number().int().min(1),
+    ratePerGuard: money(z.coerce.number().min(0)),
+    days:         z.coerce.number().int().min(1),
+  })).min(1).optional(),
 });
 
 export const CreateDeductionSchema = z.object({
@@ -80,6 +129,7 @@ export const HrApprovePayrollSchema = z.object({
 
 export type CreateInvoiceInput      = z.infer<typeof CreateInvoiceSchema>;
 export type GenerateInvoiceInput    = z.infer<typeof GenerateInvoiceSchema>;
+export type UpdateInvoiceInput      = z.infer<typeof UpdateInvoiceSchema>;
 export type RecordPaymentInput      = z.infer<typeof RecordPaymentSchema>;
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
@@ -278,7 +328,7 @@ export const AddFeeIncrementSchema = z.object({
   description:  z.string().min(3, 'Describe what the extra charge is for').max(300),
   guardType:    z.string().max(100).optional().nullable(),
   guardCount:   z.coerce.number().int().min(1, 'At least one guard'),
-  ratePerGuard: z.coerce.number().int().min(0),
+  ratePerGuard: money(z.coerce.number().min(0)),
   days:         z.coerce.number().int().min(1).default(30),
   reason:       z.string().max(500).optional().nullable(),
 });

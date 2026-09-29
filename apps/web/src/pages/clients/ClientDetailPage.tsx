@@ -15,6 +15,7 @@ import AmendContractModal from '../../components/clients/AmendContractModal';
 import ContractHistory from '../../components/clients/ContractHistory';
 import ClientContacts from '../../components/clients/ClientContacts';
 import ClientPortalAccess from '../../components/clients/ClientPortalAccess';
+import ClientDeployments from '../../components/clients/ClientDeployments';
 import BillingSummaryCard from '../../components/clients/BillingSummaryCard';
 import PermissionGuard from '../../components/PermissionGuard';
 import DeleteConfirmModal from '../../components/shared/DeleteConfirmModal';
@@ -544,7 +545,14 @@ export default function ClientDetailPage() {
           )}
         </Tab>
 
-        {/* Tab 3 — Contracts. Hidden without contracts.view: this tab carries the
+        {/* Tab 3 — Deployments. Guards posted at this client's sites, current
+            first. Reads deployment history rather than today's roster, so a
+            stint shows the day it started even if the guard has moved since. */}
+        <Tab eventKey="deployments" title="Deployments">
+          <ClientDeployments clientId={id!} />
+        </Tab>
+
+        {/* Tab 4 — Contracts. Hidden without contracts.view: this tab carries the
             per-guard rates and the monthly value, which the Control Room must
             not see even though it works the same client's sites daily. */}
         {canSeeContracts && (
@@ -715,7 +723,7 @@ export default function ClientDetailPage() {
         </Tab>
         )}
 
-        {/* Tab 4 — Complaints */}
+        {/* Tab 5 — Complaints */}
         <Tab eventKey="complaints" title={`Complaints (${complaintsLoading ? '…' : complaints.length})`}>
           {/* Header row */}
           <div className="d-flex align-items-center justify-content-between mb-3">
@@ -800,7 +808,7 @@ export default function ClientDetailPage() {
           )}
         </Tab>
 
-        {/* Tab 5 — Incidents */}
+        {/* Tab 6 — Incidents */}
         <Tab eventKey="incidents" title="Incidents">
           {!incidents || incidents.data.length === 0 ? (
             <Alert variant="light">No incidents recorded.</Alert>

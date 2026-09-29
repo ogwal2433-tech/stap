@@ -14,6 +14,10 @@
  * source of truth and reports the difference before changing anything.
  */
 import prisma from './prisma';
+// The same two-decimal snap invoiceService applies when it writes paidAmount and
+// outstandingBalance. Summing payment rows in binary float would otherwise
+// produce dust the stored column never had, and every invoice would read as drift.
+import { roundMoney as round2 } from '@stap/shared';
 
 const STATUSES = ['PENDING', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'] as const;
 
@@ -58,8 +62,8 @@ async function collect(invoiceNumber?: string): Promise<Drift[]> {
         where: { invoiceId: inv.id, status: 'SUCCESS' }, _sum: { amountPaid: true },
       }),
     ]);
-    const actualPaid = (manual._sum.amountPaid ?? 0) + (momo._sum.amountPaid ?? 0);
-    const actualOutstanding = Math.max(0, inv.totalAmount - actualPaid);
+    const actualPaid = round2((manual._sum.amountPaid ?? 0) + (momo._sum.amountPaid ?? 0));
+    const actualOutstanding = round2(Math.max(0, inv.totalAmount - actualPaid));
     const actualStatus = expectedStatus(inv.totalAmount, actualPaid, inv.dueDate, inv.status);
 
     const drifted =
@@ -74,7 +78,7 @@ async function collect(invoiceNumber?: string): Promise<Drift[]> {
         storedStatus: inv.status, actualPaid, actualOutstanding, actualStatus,
         // Payments beyond the invoice total. The balance floors at zero, so an
         // overpayment is otherwise invisible.
-        overpaid: Math.max(0, actualPaid - inv.totalAmount),
+        overpaid: round2(Math.max(0, actualPaid - inv.totalAmount)),
       });
     }
   }
