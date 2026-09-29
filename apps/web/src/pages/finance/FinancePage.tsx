@@ -10,7 +10,9 @@ import {
   useRunPayroll, useApprovePayroll, useDisbursePayroll,
   useHrApprovePayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
+  usePayrollGroups, useCreatePayrollGroup, useUpdatePayrollGroup, useDeletePayrollGroup,
 } from '../../hooks/useFinance';
+import { useGuardList } from '../../hooks/useGuards';
 import { useToast } from '../../context/ToastContext';
 import { useReportTitle } from '../../hooks/useReportTitles';
 import { useAuth } from '../../context/AuthContext';
@@ -25,7 +27,7 @@ import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
 import { useInvoicePayments } from '../../hooks/usePayments';
 import { ROLES, HR_ROLES } from '@stap/shared';
-import type { InvoiceResponse, PayslipResponse } from '@stap/shared';
+import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@stap/shared';
 import { invoicesApi } from '../../lib/finance.api';
 
 const NAVY = '#1B3A6B';
@@ -480,6 +482,14 @@ function PayrollTab() {
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
 
+  // Payroll is run per group: only ACTIVE groups are selectable, and the
+  // chosen group scopes both the calculate action and the card below.
+  const { data: allGroups } = usePayrollGroups();
+  const activeGroups = (allGroups ?? []).filter((g) => g.isActive);
+  const [groupId, setGroupId] = useState('');
+  const selectedGroupId = activeGroups.some((g) => g.id === groupId) ? groupId : (activeGroups[0]?.id ?? '');
+  const selectedGroup = activeGroups.find((g) => g.id === selectedGroupId);
+
   const { data, isLoading }   = usePayrollRuns();
   const runPayroll             = useRunPayroll();
   const approvePayroll         = useApprovePayroll();
@@ -490,7 +500,7 @@ function PayrollTab() {
   const { user }               = useAuth();
 
   const runs    = data?.data ?? [];
-  const thisRun = runs.find((r) => r.month === month && r.year === year);
+  const thisRun = runs.find((r) => r.month === month && r.year === year && r.payrollGroupId === selectedGroupId);
 
   const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
   const payslips = runDetail?.payslips ?? [];
@@ -499,7 +509,7 @@ function PayrollTab() {
 
   const handleCalculate = async () => {
     try {
-      await runPayroll.mutateAsync({ month, year });
+      await runPayroll.mutateAsync({ month, year, payrollGroupId: selectedGroupId });
       showToast('Payroll calculated', 'success');
       setConfirming(false);
     } catch (err: any) {
@@ -532,8 +542,14 @@ function PayrollTab() {
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
+        <Form.Select size="sm" style={{ width: 260 }} value={selectedGroupId} onChange={(e) => setGroupId(e.target.value)}>
+          {activeGroups.length === 0 && <option value="">— No active payroll groups —</option>}
+          {activeGroups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name} ({g.memberCount} members)</option>
+          ))}
+        </Form.Select>
         <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
-          {!thisRun && (
+          {!thisRun && selectedGroup && (
             <Button
               size="sm"
               style={{ background: NAVY, borderColor: NAVY }}
@@ -549,7 +565,9 @@ function PayrollTab() {
       {confirming && (
         <Card className="border-warning mb-3">
           <Card.Body className="small">
-            <strong>Confirm:</strong> Calculate payroll for {MONTHS[month - 1]} {year} for all active guards?
+            <strong>Confirm:</strong> Calculate payroll for {MONTHS[month - 1]} {year} — group{' '}
+            <strong>{selectedGroup?.name}</strong> ({selectedGroup?.memberCount ?? 0} members)? Only this
+            group's guards are included.
             <div className="mt-2 d-flex gap-2">
               <Button size="sm" variant="primary" onClick={handleCalculate} disabled={runPayroll.isPending}>
                 {runPayroll.isPending ? 'Calculating…' : 'Proceed'}
@@ -576,6 +594,9 @@ function PayrollTab() {
                       </Badge>
                     );
                   })()}
+                  <div className="small fw-semibold" style={{ color: NAVY }}>
+                    {thisRun.payrollGroupName ?? 'Ungrouped (historical run)'}
+                  </div>
                   <div className="small">
                     <strong>{thisRun.totalGuards}</strong> guards &nbsp;|&nbsp;
                     Gross: <strong>{fmtUGX(thisRun.totalGross)}</strong> &nbsp;|&nbsp;
@@ -746,7 +767,9 @@ function PayrollTab() {
         </>
       ) : (
         <div className="text-muted small text-center py-4">
-          No payroll run for {MONTHS[month - 1]} {year}. Use "Calculate Payroll" to generate one.
+          {selectedGroup
+            ? <>No payroll run for {MONTHS[month - 1]} {year} in group <strong>{selectedGroup.name}</strong>. Use "Calculate Payroll" to generate one.</>
+            : 'No active payroll groups — create and activate one in the Payroll Groups tab before running payroll.'}
         </div>
       )}
 
@@ -772,7 +795,7 @@ function PayrollTab() {
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
           <thead className="table-light">
-            <tr><th>Period</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
+            <tr><th>Period</th><th>Group</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
           </thead>
           <tbody>
             {runs.map((r) => {
@@ -780,6 +803,7 @@ function PayrollTab() {
               return (
                 <tr key={r.id}>
                   <td>{MONTHS[r.month - 1]} {r.year}</td>
+                  <td>{r.payrollGroupName ?? '—'}</td>
                   <td>{r.totalGuards}</td>
                   <td>{fmtUGX(r.totalGross)}</td>
                   <td>{fmtUGX(r.totalNet)}</td>
@@ -1012,6 +1036,278 @@ function ARAgingTab() {
   );
 }
 
+// ── Payroll groups tab ─────────────────────────────────────────────────────────────
+
+const GROUP_WRITE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const GROUP_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+
+function PayrollGroupFormModal({
+  group,
+  onClose,
+}: {
+  group: PayrollGroupResponse | 'new';
+  onClose: () => void;
+}) {
+  const { showToast } = useToast();
+  const createGroup = useCreatePayrollGroup();
+  const updateGroup = useUpdatePayrollGroup();
+  const isNew = group === 'new';
+
+  const [name, setName] = useState(isNew ? '' : group.name);
+  const [description, setDescription] = useState(isNew ? '' : group.description ?? '');
+  const [isActive, setIsActive] = useState(isNew ? true : group.isActive);
+  const [guardIds, setGuardIds] = useState<Set<string>>(
+    new Set(isNew ? [] : (group.members ?? []).map((m) => m.id)),
+  );
+  const [memberSearch, setMemberSearch] = useState('');
+
+  // One fetch of the active roll; filtering is local so picking members does
+  // not requery the server on every keystroke.
+  const { data: guardPage, isLoading: guardsLoading } = useGuardList({ page: 1, limit: 500, status: 'ACTIVE' });
+  const guards = guardPage?.data ?? [];
+
+  // A guard belongs to only one group, so offer everyone except guards already
+  // grouped elsewhere. The groups query is cached from the tab — no extra fetch.
+  const { data: allGroups } = usePayrollGroups();
+  const takenGuardIds = new Set(
+    (allGroups ?? [])
+      .filter((grp) => isNew || grp.id !== group.id)
+      .flatMap((grp) => (grp.members ?? []).map((m) => m.id)),
+  );
+
+  const q = memberSearch.trim().toLowerCase();
+  const selectableGuards = guards.filter((g) => !takenGuardIds.has(g.id) || guardIds.has(g.id));
+  const visibleGuards = q
+    ? selectableGuards.filter((g) => g.fullName.toLowerCase().includes(q) || (g.systemId ?? '').toLowerCase().includes(q))
+    : selectableGuards;
+  const selectedCount = guardIds.size;
+
+  const toggleGuard = (id: string) => {
+    setGuardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    const payload = {
+      name: name.trim(),
+      description: description.trim() || null,
+      isActive,
+      // Always sent: save replaces the membership with exactly what is on screen.
+      guardIds: [...guardIds],
+    };
+    try {
+      if (isNew) await createGroup.mutateAsync(payload);
+      else await updateGroup.mutateAsync({ id: group.id, data: payload });
+      showToast(`Payroll group ${isNew ? 'created' : 'updated'}.`, 'success');
+      onClose();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not save the group.'), 'danger');
+    }
+  };
+
+  return (
+    <Modal show onHide={onClose} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="small fw-bold">
+          {isNew ? 'Add Payroll Group' : `Edit — ${group.name}`}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="small fw-semibold">Name</Form.Label>
+            <Form.Control
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Night Shift — Industrial Area"
+              maxLength={80}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="small fw-semibold">Description</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional — what this group is for"
+              maxLength={300}
+            />
+          </Form.Group>
+          <Form.Check
+            type="switch"
+            id="group-active"
+            label={<span className="small">Active</span>}
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+          />
+
+          <div>
+            <div className="d-flex align-items-center justify-content-between mb-1">
+              <Form.Label className="small fw-semibold mb-0">Members</Form.Label>
+              <Badge bg={selectedCount ? 'primary' : 'secondary'}>{selectedCount} selected</Badge>
+            </div>
+            <Form.Control
+              size="sm"
+              placeholder="Search active guards by name or system ID…"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              className="mb-2"
+            />
+            <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.375rem' }}>
+              {guardsLoading ? (
+                <div className="text-center py-3"><Spinner size="sm" animation="border" /></div>
+              ) : visibleGuards.length === 0 ? (
+                <div className="text-muted small text-center py-3">No available guards match the search.</div>
+              ) : (
+                visibleGuards.map((g) => (
+                  <div key={g.id} className="d-flex align-items-center gap-2" style={{ padding: '6px 10px', borderBottom: '1px solid #f0f0f0' }}>
+                    <Form.Check
+                      id={`member-${g.id}`}
+                      checked={guardIds.has(g.id)}
+                      onChange={() => toggleGuard(g.id)}
+                    />
+                    <label htmlFor={`member-${g.id}`} className="mb-0 small flex-grow-1" style={{ cursor: 'pointer' }}>
+                      <span className="fw-semibold">{g.fullName}</span>
+                      <span className="text-muted ms-2">{g.rank}</span>
+                    </label>
+                    {g.systemId && <span className="text-muted" style={{ fontSize: '0.72rem', fontFamily: 'monospace' }}>{g.systemId}</span>}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
+              Each guard can only be in one payroll group, so guards already grouped elsewhere are not listed.
+              Only active guards are offered; existing members who have since left stay in the group until you
+              remove them here.
+            </div>
+          </div>
+        </Form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+        <Button
+          size="sm"
+          style={{ backgroundColor: NAVY, borderColor: NAVY }}
+          onClick={handleSave}
+          disabled={createGroup.isPending || updateGroup.isPending || name.trim().length < 2}
+        >
+          {createGroup.isPending || updateGroup.isPending ? 'Saving…' : 'Save'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+function PayrollGroupsTab() {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const { data: groups, isLoading, isError } = usePayrollGroups();
+  const deleteGroup = useDeletePayrollGroup();
+  const [editing, setEditing] = useState<PayrollGroupResponse | 'new' | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const canManage = !!user && GROUP_WRITE_ROLES.includes(user.role as typeof GROUP_WRITE_ROLES[number]);
+  const canDelete = !!user && GROUP_DELETE_ROLES.includes(user.role as typeof GROUP_DELETE_ROLES[number]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteGroup.mutateAsync(id);
+      showToast('Payroll group deleted.', 'success');
+    } catch {
+      showToast('Could not delete the group.', 'danger');
+    } finally {
+      setConfirmDeleteId(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <div className="text-muted small">
+          Named groupings of guards for payroll organisation — teams, sites or pay batches.
+        </div>
+        {canManage && (
+          <Button size="sm" style={{ backgroundColor: NAVY, borderColor: NAVY }} onClick={() => setEditing('new')}>
+            + Add Group
+          </Button>
+        )}
+      </div>
+
+      {isLoading && <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>}
+      {isError && <Alert variant="danger" className="small">Could not load payroll groups.</Alert>}
+      {!isLoading && (groups?.length ?? 0) === 0 && (
+        <Alert variant="info" className="small">
+          No payroll groups yet. {canManage ? "Click '+ Add Group' to create one." : 'Ask Finance or the Director to create one.'}
+        </Alert>
+      )}
+      {!isLoading && (groups?.length ?? 0) > 0 && (
+        <Table striped hover responsive size="sm" className="align-middle">
+          <thead className="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th className="text-center">Members</th>
+              <th>Status</th>
+              <th>Updated</th>
+              {(canManage || canDelete) && <th className="text-end">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {groups!.map((g) => (
+              <tr key={g.id}>
+                <td className="fw-semibold">{g.name}</td>
+                <td className="small text-muted">{g.description ?? '—'}</td>
+                <td className="text-center">
+                  <Badge bg="secondary">{g.memberCount}</Badge>
+                </td>
+                <td>
+                  <Badge bg={g.isActive ? 'success' : 'secondary'}>{g.isActive ? 'Active' : 'Inactive'}</Badge>
+                </td>
+                <td className="small text-muted">{new Date(g.updatedAt).toLocaleDateString('en-GB')}</td>
+                {(canManage || canDelete) && (
+                  <td className="text-end">
+                    {canManage && (
+                      <Button variant="outline-secondary" size="sm" className="me-1" onClick={() => setEditing(g)}>
+                        Edit
+                      </Button>
+                    )}
+                    {canDelete && (confirmDeleteId === g.id ? (
+                      <>
+                        <Button variant="danger" size="sm" className="me-1" onClick={() => handleDelete(g.id)}>
+                          Confirm
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteId(g.id)}
+                      >
+                        Delete
+                      </Button>
+                    ))}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+
+      {editing && (
+        <PayrollGroupFormModal group={editing} onClose={() => setEditing(null)} />
+      )}
+    </>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 import { Form } from 'react-bootstrap';
@@ -1037,6 +1333,9 @@ export default function FinancePage() {
             </Tab>
             <Tab eventKey="payroll" title="Payroll">
               <PayrollTab />
+            </Tab>
+            <Tab eventKey="groups" title="Payroll Groups">
+              <PayrollGroupsTab />
             </Tab>
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />
