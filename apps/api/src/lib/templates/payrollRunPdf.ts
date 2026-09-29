@@ -1,7 +1,7 @@
 /**
  * Payroll schedule body for the printable PDF export of a payroll run.
  *
- * Only the inner content — renderToPdf() wraps this in the STAP letterhead,
+ * Only the inner content — renderToPdf() wraps this in the Security360 letterhead,
  * so the company details and footer are not repeated here. The header block
  * carries the fields a printed payroll must be identified by: month, year,
  * payroll group, print date and who generated the export.

@@ -1,6 +1,6 @@
 import { Dropdown, Spinner } from 'react-bootstrap';
-import { ROLES } from '@stap/shared';
-import type { InvoiceResponse } from '@stap/shared';
+import { ROLES } from '@security360/shared';
+import type { InvoiceResponse } from '@security360/shared';
 import RoleGuard from '../RoleGuard';
 import PermissionGuard from '../PermissionGuard';
 

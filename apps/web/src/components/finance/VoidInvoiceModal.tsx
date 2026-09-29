@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
-import { formatUgx } from '@stap/shared';
+import { formatUgx } from '@security360/shared';
 import { getApiErrorMessage } from '../../lib/api';
 
 /**

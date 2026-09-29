@@ -27,12 +27,12 @@ const MOCK_EXPORT_RUN = {
   payrollGroup: { id: 'group-1', name: 'Kampala Team' },
   payslips: [
     {
-      guard: { systemId: 'SSLG0001', firstName: 'David', lastName: 'Ochieng' },
+      guard: { systemId: 'S360G0001', firstName: 'David', lastName: 'Ochieng' },
       daysWorked: 26, totalDays: 26, grossSalary: 480000,
       totalDeductions: 48000, netSalary: 432000, disbursementStatus: 'PENDING',
     },
     {
-      guard: { systemId: 'SSLG0002', firstName: 'Amina', lastName: 'Nakato' },
+      guard: { systemId: 'S360G0002', firstName: 'Amina', lastName: 'Nakato' },
       daysWorked: 20, totalDays: 26, grossSalary: 400000,
       totalDeductions: 0, netSalary: 400000, disbursementStatus: 'SUCCESS',
     },

@@ -30,7 +30,7 @@ vi.mock('../../lib/yoPayments', () => ({
 
 // Puppeteer must never launch in tests — stub the letterhead renderer and keep
 // the HTML and options it was handed, so the invoice's branding choices are
-// pinned (a refactor that silently reverts to the watermarked STAP header
+// pinned (a refactor that silently reverts to the watermarked Security360 header
 // would otherwise pass unnoticed).
 const mockRenderToPdf = vi.fn().mockResolvedValue(Buffer.from('%PDF-1.4 stub'));
 vi.mock('../../lib/pdfBase', () => ({
@@ -369,7 +369,7 @@ describe('invoiceService.buildInvoicePdf()', () => {
     const html = mockRenderToPdf.mock.calls[0][0] as string;
 
     expect(html).toContain('INVOICE');
-    expect(html).toContain('STAP/INV/2026/0001');
+    expect(html).toContain('S360/INV/2026/0001');
     expect(html).toContain('Unarmed Guard');
     // Subtotal reads the stored subtotal, not the invoice total.
     expect(html).toContain('UGX 2,400,000</td>');

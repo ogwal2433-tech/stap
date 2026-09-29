@@ -3,8 +3,8 @@ import { Alert, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-boot
 import { useInvoice, useUpdateInvoice } from '../../hooks/useFinance';
 import { useToast } from '../../context/ToastContext';
 import { getApiErrorMessage } from '../../lib/api';
-import { formatUgx as fmtUGX, isTwoDpOrWhole, roundMoney } from '@stap/shared';
-import type { InvoiceResponse } from '@stap/shared';
+import { formatUgx as fmtUGX, isTwoDpOrWhole, roundMoney } from '@security360/shared';
+import type { InvoiceResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

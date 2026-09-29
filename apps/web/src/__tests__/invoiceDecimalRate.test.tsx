@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { ClientResponse } from '@stap/shared';
+import type { ClientResponse } from '@security360/shared';
 import InvoiceFormModal from '../components/finance/InvoiceFormModal';
 
 /**
@@ -13,7 +13,7 @@ import InvoiceFormModal from '../components/finance/InvoiceFormModal';
 
 const h = vi.hoisted(() => ({ generate: vi.fn(() => Promise.resolve({ id: 'inv-1' })) }));
 
-const CLIENT = { id: '1', clientName: 'Acacia Mall', systemId: 'SSLC-1' } as unknown as ClientResponse;
+const CLIENT = { id: '1', clientName: 'Acacia Mall', systemId: 'S360C-1' } as unknown as ClientResponse;
 
 vi.mock('../hooks/useClients', () => ({
   useClientList: () => ({ data: { data: [CLIENT], pagination: { hasNext: false } }, isLoading: false }),

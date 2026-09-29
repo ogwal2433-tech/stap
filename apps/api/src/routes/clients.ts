@@ -488,7 +488,7 @@ router.get(
   requirePermission(PERMISSIONS.CLIENTS_VIEW),
   validateQuery(ClientDeploymentsQuerySchema),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as import('@stap/shared').ClientDeploymentsQuery;
+    const query = req.query as unknown as import('@security360/shared').ClientDeploymentsQuery;
     const result = await deploymentService.listByClient(req.params.clientId, query);
     res.status(200).json({ success: true, ...result });
   }),

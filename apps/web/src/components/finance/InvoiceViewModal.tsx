@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { useInvoice } from '../../hooks/useFinance';
 import { invoicesApi } from '../../lib/finance.api';
 import { useToast } from '../../context/ToastContext';
-import type { InvoiceResponse } from '@stap/shared';
+import type { InvoiceResponse } from '@security360/shared';
 // Invoice lines may now carry cents (a monthly contract rate ÷ 30 rarely is
 // whole), so amounts print with two decimals when they have them.
-import { formatUgx as fmtUGX } from '@stap/shared';
+import { formatUgx as fmtUGX } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
 

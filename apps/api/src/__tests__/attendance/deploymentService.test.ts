@@ -373,7 +373,7 @@ const historyStint = (over: Record<string, unknown> = {}) => ({
   shiftType: 'DAY',
   startDate: new Date('2026-03-01'),
   endDate:   null,
-  guard:      { id: 'g1', firstName: 'John', otherNames: null, lastName: 'Doe', systemId: 'SSLG0001', rank: 'GUARD' },
+  guard:      { id: 'g1', firstName: 'John', otherNames: null, lastName: 'Doe', systemId: 'S360G0001', rank: 'GUARD' },
   site:       { id: 's1', siteName: 'Fort Bet Warehouse' },
   supervisor: { id: 'u1', name: 'Supervisor One' },
   ...over,
@@ -393,7 +393,7 @@ describe('deploymentService.listByClient()', () => {
 
     expect(result.data[0]).toEqual({
       id:        'dh1',
-      guard:     { id: 'g1', fullName: 'John Doe', systemId: 'SSLG0001', rank: 'GUARD' },
+      guard:     { id: 'g1', fullName: 'John Doe', systemId: 'S360G0001', rank: 'GUARD' },
       site:      { id: 's1', siteName: 'Fort Bet Warehouse' },
       shiftType: 'DAY',
       startDate: '2026-03-01T00:00:00.000Z',

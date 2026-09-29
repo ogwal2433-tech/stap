@@ -7,6 +7,7 @@ import { useClientContracts } from '../../hooks/useContracts';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { useGenerateInvoice } from '../../hooks/useFinance';
 import { invoicesApi } from '../../lib/finance.api';
+import { formatUgx, roundMoney } from '@security360/shared';
 import type { ClientResponse, ContractResponse } from '@security360/shared';
 
 const NAVY = '#1B3A6B';
