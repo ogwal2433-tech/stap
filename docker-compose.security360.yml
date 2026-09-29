@@ -93,7 +93,7 @@ services:
       COMPANY_REGISTRATION_NUMBER: ${S360_COMPANY_REGISTRATION_NUMBER:-}
       COMPANY_TAX_ID:              ${S360_COMPANY_TAX_ID:-}
 
-      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD}@postgres:5432/${S360_POSTGRES_DB:-security360}
+      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD_ENCODED}@postgres:5432/${S360_POSTGRES_DB:-security360}
       REDIS_URL:    redis://redis:6379
 
       JWT_SECRET:         ${S360_JWT_SECRET:?S360_JWT_SECRET is required and must be at least 32 characters}
@@ -179,7 +179,7 @@ services:
       COMPANY_LOGO_URL:            ${S360_COMPANY_LOGO_URL:-}
       COMPANY_REGISTRATION_NUMBER: ${S360_COMPANY_REGISTRATION_NUMBER:-}
       COMPANY_TAX_ID:              ${S360_COMPANY_TAX_ID:-}
-      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD}@postgres:5432/${S360_POSTGRES_DB:-security360}
+      DATABASE_URL: postgresql://${S360_POSTGRES_USER:-security360}:${S360_POSTGRES_PASSWORD_ENCODED}@postgres:5432/${S360_POSTGRES_DB:-security360}
       REDIS_URL:    redis://redis:6379
       JWT_SECRET:         ${S360_JWT_SECRET}
       JWT_REFRESH_SECRET: ${S360_JWT_REFRESH_SECRET}
