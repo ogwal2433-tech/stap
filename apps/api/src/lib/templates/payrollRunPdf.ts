@@ -1,0 +1,158 @@
+/**
+ * Payroll schedule body for the printable PDF export of a payroll run.
+ *
+ * Only the inner content — renderToPdf() wraps this in the STAP letterhead,
+ * so the company details and footer are not repeated here. The header block
+ * carries the fields a printed payroll must be identified by: month, year,
+ * payroll group, print date and who generated the export.
+ */
+
+const NAVY  = '#1B3A6B';
+const AMBER = '#F2AA20';
+
+const ugx = (n: number) => `UGX ${(n ?? 0).toLocaleString()}`;
+
+const esc = (v: unknown): string =>
+  String(v ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+export interface PayrollExportRow {
+  index:          number;
+  systemId:       string;
+  guardName:      string;
+  daysWorked:     number;
+  totalDays:      number;
+  gross:          number;
+  deductions:     number;
+  net:            number;
+  paymentStatus:  string;
+}
+
+export interface PayrollRunPdfData {
+  monthName:       string;
+  year:            number;
+  groupName:       string;
+  printDate:       string;
+  generatedBy:     string;
+  status:          string;
+  guardCount:      number;
+  totalGross:      number;
+  totalDeductions: number;
+  totalNet:        number;
+  rows:            PayrollExportRow[];
+}
+
+const STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
+  DRAFT:         { bg: '#fff3cd', fg: '#856404' },
+  APPROVED:      { bg: '#e9ecef', fg: '#495057' },
+  HR_APPROVED:   { bg: '#e2e3f5', fg: '#2b2d77' },
+  DISBURSING:    { bg: '#cff4fc', fg: '#055160' },
+  DISBURSED:     { bg: '#d5f5e3', fg: '#1E8449' },
+};
+
+const PAY_STATUS_COLOR: Record<string, string> = {
+  PENDING: '#6c757d',
+  SENT:    '#055160',
+  SUCCESS: '#1E8449',
+  FAILED:  '#C0392B',
+};
+
+function metaCell(label: string, value: string): string {
+  return `
+    <td style="padding:5px 10px;vertical-align:top">
+      <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px">${esc(label)}</div>
+      <div style="font-weight:700;color:${NAVY};font-size:9.5pt">${esc(value)}</div>
+    </td>`;
+}
+
+function signatureBlock(role: string): string {
+  return `
+    <div style="flex:1">
+      <div style="border-bottom:1px solid #4A5568;height:24px;margin-bottom:3px"></div>
+      <div style="font-size:8pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px">${esc(role)}</div>
+      <div style="font-size:8pt;color:#adb5bd">Name / Date / Signature</div>
+    </div>`;
+}
+
+export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
+  const badge = STATUS_STYLE[data.status] ?? STATUS_STYLE.APPROVED;
+
+  const rows = data.rows.map((r, i) => `
+    <tr style="background:${i % 2 === 0 ? '#ffffff' : '#F8F9FA'}">
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:center">${r.index}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef">${esc(r.systemId || '—')}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;font-weight:600">${esc(r.guardName)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:center">${r.daysWorked}/${r.totalDays}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right">${ugx(r.gross)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right;color:${r.deductions > 0 ? '#C0392B' : '#6c757d'}">${ugx(r.deductions)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right;font-weight:700">${ugx(r.net)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:center;font-size:8.5pt;font-weight:700;color:${PAY_STATUS_COLOR[r.paymentStatus] ?? '#6c757d'}">${esc(r.paymentStatus)}</td>
+    </tr>`).join('');
+
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3">
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div>
+        <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">PAYROLL SCHEDULE</div>
+        <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(data.groupName)} — ${esc(data.monthName)} ${data.year}</div>
+      </div>
+      <div style="text-align:right">
+        <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:9pt;
+                     font-weight:700;letter-spacing:0.4px;background:${badge.bg};color:${badge.fg}">
+          ${esc(data.status.replace(/_/g, ' '))}
+        </span>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;background:#F2F4F7;border-left:3px solid ${AMBER};margin-bottom:10px">
+      <tr>
+        ${metaCell('Payroll Month', data.monthName)}
+        ${metaCell('Year', String(data.year))}
+        ${metaCell('Payroll Group', data.groupName)}
+      </tr>
+      <tr>
+        ${metaCell('Print Date', data.printDate)}
+        ${metaCell('Generated By', data.generatedBy)}
+        ${metaCell('Guards on This Run', String(data.guardCount))}
+      </tr>
+    </table>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
+      <thead>
+        <tr style="background:${NAVY};color:#ffffff">
+          <th style="padding:5px 8px;text-align:center;font-size:8pt;width:28px">#</th>
+          <th style="padding:5px 8px;text-align:left;font-size:8pt;width:70px">Sys ID</th>
+          <th style="padding:5px 8px;text-align:left;font-size:8pt">Guard Name</th>
+          <th style="padding:5px 8px;text-align:center;font-size:8pt;width:60px">Days</th>
+          <th style="padding:5px 8px;text-align:right;font-size:8pt;width:95px">Gross (UGX)</th>
+          <th style="padding:5px 8px;text-align:right;font-size:8pt;width:105px">Deductions</th>
+          <th style="padding:5px 8px;text-align:right;font-size:8pt;width:105px">Net (UGX)</th>
+          <th style="padding:5px 8px;text-align:center;font-size:8pt;width:70px">Payment</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6c757d">No payslips on this run.</td></tr>'}
+      </tbody>
+      <tfoot>
+        <tr style="background:${NAVY};color:#ffffff;font-weight:900">
+          <td colspan="4" style="padding:6px 8px;text-align:right;font-size:10pt">TOTALS</td>
+          <td style="padding:6px 8px;text-align:right">${ugx(data.totalGross)}</td>
+          <td style="padding:6px 8px;text-align:right">${ugx(data.totalDeductions)}</td>
+          <td style="padding:6px 8px;text-align:right;color:${AMBER}">${ugx(data.totalNet)}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div style="margin-top:16px;display:flex;gap:28px;page-break-inside:avoid">
+      ${signatureBlock('Compiled By')}
+      ${signatureBlock('Reviewed By')}
+      ${signatureBlock('Approved By')}
+    </div>
+
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
+      Generated by ${esc(data.generatedBy)} on ${esc(data.printDate)}. Amounts in Uganda Shillings (UGX).
+    </div>
+  </div>`;
+}

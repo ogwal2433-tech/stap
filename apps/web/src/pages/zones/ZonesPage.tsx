@@ -84,13 +84,18 @@ export default function ZonesPage() {
       alternateId:  zone.alternateId  ?? '',
       isActive:     zone.isActive,
     });
-    setSelectedSiteIds((zone.sites ?? []).map(s => s.id));
+    // The list endpoint returns only a site count, not the sites themselves —
+    // read current membership off the site records instead.
+    setSelectedSiteIds(allSites.filter((s) => s.zone?.id === zone.id).map((s) => s.id));
     setEditTarget(zone);
   }
 
   function openSites(zone: ZoneResponse) {
+    // A site's zone arrives as the `zone` object on the site record — there is
+    // no zoneId field on SiteResponse, and comparing one left every attached
+    // site unticked.
     const currentSiteIds = new Set(
-      allSites.filter((s) => (s as any).zoneId === zone.id).map((s) => s.id),
+      allSites.filter((s) => s.zone?.id === zone.id).map((s) => s.id),
     );
     setCheckedSiteIds(currentSiteIds);
     setSiteSearch('');
@@ -108,8 +113,11 @@ export default function ZonesPage() {
     try {
       if (editTarget) {
         await updateZone.mutateAsync({ id: editTarget.id, data: { ...basePayload, isActive: form.isActive } });
-        // Sync site assignments: compute add/remove diff
-        const currentSiteIds = new Set((editTarget.sites ?? []).map(s => s.id));
+        // Sync site assignments: compute add/remove diff against the zone's
+        // actual current members (the list row carries no site objects).
+        const currentSiteIds = new Set(
+          allSites.filter((s) => s.zone?.id === editTarget.id).map((s) => s.id),
+        );
         const addSiteIds    = selectedSiteIds.filter(id => !currentSiteIds.has(id));
         const removeSiteIds = [...currentSiteIds].filter(id => !selectedSiteIds.includes(id));
         if (addSiteIds.length > 0 || removeSiteIds.length > 0) {
@@ -133,7 +141,7 @@ export default function ZonesPage() {
     if (!sitesTarget) return;
 
     const currentIds = new Set(
-      allSites.filter((s) => (s as any).zoneId === sitesTarget.id).map((s) => s.id),
+      allSites.filter((s) => s.zone?.id === sitesTarget.id).map((s) => s.id),
     );
 
     const addSiteIds    = [...checkedSiteIds].filter((id) => !currentIds.has(id));
@@ -154,14 +162,32 @@ export default function ZonesPage() {
   }
 
   // ── Filtered sites for assignment modal ────────────────────────────────────
+  // The Manage Sites modal offers only what it can act on: sites already in
+  // this zone (pre-ticked) and sites no zone claims. Sites belonging to another
+  // zone stay out of the list — moving those is done from that zone. Soft-
+  // deleted sites are already absent: /clients/sites/all skips them.
+  // Zone members are listed first, then the unassigned sites, each group in
+  // alphabetical order. The grouping keys off actual membership rather than
+  // the live tick state, so toggling a row never makes it jump elsewhere.
   const filteredSites = useMemo(
-    () =>
-      allSites.filter((s) =>
+    () => {
+      const scoped = sitesTarget
+        ? allSites.filter((s) => !s.zone || s.zone.id === sitesTarget.id)
+        : allSites;
+      const list = scoped.filter((s) =>
         !siteSearch ||
         s.siteName.toLowerCase().includes(siteSearch.toLowerCase()) ||
         s.clientName.toLowerCase().includes(siteSearch.toLowerCase()),
-      ),
-    [allSites, siteSearch],
+      );
+      if (sitesTarget) {
+        list.sort(
+          (a, b) =>
+            Number(b.zone?.id === sitesTarget.id) - Number(a.zone?.id === sitesTarget.id),
+        );
+      }
+      return list;
+    },
+    [allSites, sitesTarget, siteSearch],
   );
 
   const isSaving = createZone.isPending || updateZone.isPending;
@@ -393,6 +419,7 @@ export default function ZonesPage() {
               selectedSiteIds={selectedSiteIds}
               onSelectionChange={setSelectedSiteIds}
               maxHeight="220px"
+              zoneId={editTarget?.id}
             />
           </div>
         </Modal.Body>
@@ -447,8 +474,8 @@ export default function ZonesPage() {
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted small mb-3">
-            Check the sites that belong to this zone. Unchecking a site removes it from the zone
-            (it remains unassigned, not deleted).
+            Sites in this zone are ticked, followed by sites not yet assigned to any zone.
+            Unchecking a site removes it from the zone (it remains unassigned, not deleted).
           </p>
 
           <Form.Control
@@ -460,14 +487,17 @@ export default function ZonesPage() {
             className="mb-3"
           />
 
-          {allSites.length === 0 ? (
-            <Alert variant="info" className="mb-0">No sites found.</Alert>
+          {filteredSites.length === 0 ? (
+            <Alert variant="info" className="mb-0">
+              {allSites.length === 0
+                ? 'No sites found.'
+                : 'Nothing to show — this zone has no sites yet and every other site is already assigned to a zone.'}
+            </Alert>
           ) : (
             <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.375rem' }}>
               {filteredSites.map((site, i) => {
                 const isChecked = checkedSiteIds.has(site.id);
-                const currentZoneId = (site as any).zoneId;
-                const inOtherZone   = currentZoneId && currentZoneId !== sitesTarget?.id;
+                const attached  = site.zone?.id === sitesTarget?.id;
 
                 return (
                   <div
@@ -496,13 +526,14 @@ export default function ZonesPage() {
                         {site.clientName} · {site.location}
                       </div>
                     </div>
-                    {inOtherZone && (
-                      <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem' }}>
-                        Other zone
-                      </Badge>
-                    )}
-                    {isChecked && !inOtherZone && (
+                    {attached && (
                       <Badge bg="success" style={{ fontSize: '0.65rem' }}>In zone</Badge>
+                    )}
+                    {!attached && isChecked && (
+                      <Badge bg="primary" style={{ fontSize: '0.65rem' }}>Will add</Badge>
+                    )}
+                    {attached && !isChecked && (
+                      <Badge bg="danger" style={{ fontSize: '0.65rem' }}>Will remove</Badge>
                     )}
                   </div>
                 );

@@ -6,6 +6,7 @@ import type {
   ClientResponse,
   ClientSummary,
   SiteResponse,
+  ClientDeploymentEntry,
   IncidentResponse,
   PaginatedResponse,
   ClientListQuery,
@@ -143,6 +144,19 @@ export const clientsApi = {
     return api
       .get<{ success: boolean; data: SiteResponse[] }>(`/clients/${clientId}/sites`)
       .then((r) => r.data.data);
+  },
+
+  /** Guards deployed across this client's sites, current stints first. */
+  getDeployments(
+    clientId: string,
+    params: { page?: number; limit?: number; status?: 'ALL' | 'CURRENT' } = {},
+  ): Promise<PaginatedResponse<ClientDeploymentEntry>> {
+    return api
+      .get<{ success: boolean } & PaginatedResponse<ClientDeploymentEntry>>(
+        `/clients/${clientId}/deployments`,
+        { params },
+      )
+      .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
   },
 
   createSite(clientId: string, data: Omit<CreateSiteInput, 'clientId'>): Promise<SiteResponse> {

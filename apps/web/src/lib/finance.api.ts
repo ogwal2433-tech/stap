@@ -12,6 +12,7 @@ import type {
   PaginatedResponse,
   CreateInvoiceInput,
   GenerateInvoiceInput,
+  UpdateInvoiceInput,
   RecordPaymentInput,
   AddFeeIncrementInput,
   CreateDeductionInput,
@@ -76,6 +77,13 @@ export const invoicesApi = {
   addFeeIncrement(invoiceId: string, data: AddFeeIncrementInput): Promise<InvoiceResponse> {
     return api
       .post<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}/increment`, data)
+      .then((r) => r.data.data);
+  },
+
+  /** Edits a still-PENDING invoice; supplied line items replace the rows wholesale. */
+  update(invoiceId: string, data: UpdateInvoiceInput): Promise<InvoiceResponse> {
+    return api
+      .patch<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}`, data)
       .then((r) => r.data.data);
   },
 
@@ -216,7 +224,32 @@ export const payrollApi = {
       .get<{ success: boolean; data: PayslipResponse }>(`/finance/payslips/${id}`)
       .then((r) => r.data.data);
   },
+
+  // ── Printable exports of a calculated run ─────────────────────────────────
+  // Fetched through the API client rather than linked directly, because the
+  // access token is held in memory and would not be sent on a bare navigation.
+
+  async downloadRunExcel(runId: string, filename: string): Promise<void> {
+    const r = await api.get(`/finance/payroll/${runId}/export/excel`, { responseType: 'blob' });
+    downloadBlob(r.data as Blob, filename);
+  },
+
+  async downloadRunPdf(runId: string, filename: string): Promise<void> {
+    const r = await api.get(`/finance/payroll/${runId}/export/pdf`, { responseType: 'blob' });
+    downloadBlob(r.data as Blob, filename);
+  },
 };
+
+function downloadBlob(data: Blob, filename: string) {
+  const url = URL.createObjectURL(data);
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ── Payroll groups ─────────────────────────────────────────────────────────────────
 

@@ -9,6 +9,9 @@ vi.mock('../../db/prisma', () => ({
     client:   { findUnique: vi.fn() },
     contract: { findMany: vi.fn(), findUnique: vi.fn() },
     invoicePayment:      { aggregate: vi.fn() },
+    // The invoice PDF heading reads the configured report title, which lives in
+    // SystemSetting under 'report_titles'.
+    systemSetting:       { findUnique: vi.fn() },
     invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
@@ -25,9 +28,19 @@ vi.mock('../../lib/yoPayments', () => ({
   yoPayments: { requestPayment: vi.fn().mockResolvedValue({ success: true, transactionRef: 'YO-STUB', status: 'PENDING', message: 'ok' }) },
 }));
 
+// Puppeteer must never launch in tests — stub the letterhead renderer and keep
+// the HTML and options it was handed, so the invoice's branding choices are
+// pinned (a refactor that silently reverts to the watermarked STAP header
+// would otherwise pass unnoticed).
+const mockRenderToPdf = vi.fn().mockResolvedValue(Buffer.from('%PDF-1.4 stub'));
+vi.mock('../../lib/pdfBase', () => ({
+  renderToPdf: (html: string, opts: unknown) => mockRenderToPdf(html, opts),
+}));
+
 import prisma from '../../db/prisma';
 import { QueueService } from '../../jobs/QueueService';
 import { invoiceService } from '../../services/invoiceService';
+import { settingsService } from '../../services/settingsService';
 
 const mp = prisma as any;
 
@@ -63,6 +76,8 @@ beforeEach(() => {
   mp.invoice.update.mockResolvedValue({ ...MOCK_INVOICE, status: 'PAID', paidAt: new Date() });
   mp.invoice.updateMany.mockResolvedValue({ count: 0 });
   mp.contract.findMany.mockResolvedValue([]);
+  // No report-title overrides stored, so the invoice heading is the default.
+  mp.systemSetting.findUnique.mockResolvedValue(null);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -204,6 +219,60 @@ describe('invoiceService.recordManualPayment()', () => {
       }),
     );
   });
+
+  it('settles an invoice whose total carries cents, to the cent', async () => {
+    // A 500,000/month contract for 5 guards is 2,500,000.50 a month. Payment had
+    // to stop being an integer column or that last half shilling could never be
+    // paid, leaving the invoice PARTIALLY_PAID for ever.
+    const CENTS_INVOICE = {
+      ...MOCK_INVOICE,
+      subtotal: 2500000.5, totalAmount: 2500000.5, outstandingBalance: 2500000.5,
+    };
+    mp.invoice.findUnique.mockResolvedValue({ ...CENTS_INVOICE, payments: [] });
+    mockPaidTotals(2500000.5);
+
+    await invoiceService.recordManualPayment(
+      { invoiceId: 'inv-1', amountPaid: 2500000.5, mode: 'BANK' },
+      'user-1',
+    );
+
+    expect(mp.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'PAID', paidAmount: 2500000.5, outstandingBalance: 0 }),
+      }),
+    );
+    expect(mp.invoiceCarryForward.upsert).not.toHaveBeenCalled();
+  });
+
+  it('carries the two-decimal remainder when a cents invoice is paid short', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      subtotal: 2500000.5, totalAmount: 2500000.5, outstandingBalance: 2500000.5,
+      payments: [],
+    });
+    mockPaidTotals(2500000);
+
+    await invoiceService.recordManualPayment(
+      { invoiceId: 'inv-1', amountPaid: 2500000, mode: 'CASH' },
+      'user-1',
+    );
+
+    // 0.5 left owing, with no float dust after it.
+    expect(mp.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status:             'PARTIALLY_PAID',
+          paidAmount:         2500000,
+          outstandingBalance: 0.5,
+        }),
+      }),
+    );
+    expect(mp.invoiceCarryForward.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ carryAmount: 0.5 }),
+      }),
+    );
+  });
 });
 
 describe('invoiceService.getARAgingReport()', () => {
@@ -269,5 +338,75 @@ describe('invoiceService.getARAgingReport()', () => {
     expect(mp.invoice.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'OVERDUE' } }),
     );
+  });
+});
+
+// ── buildInvoicePdf() — letterhead identity ───────────────────────────────────
+
+describe('invoiceService.buildInvoicePdf()', () => {
+  it('prints on the tiger logo band with no watermark, like the payroll schedule', async () => {
+    await invoiceService.buildInvoicePdf('inv-1');
+
+    expect(mockRenderToPdf.mock.calls[0][1]).toEqual({
+      logoFile:  'tiger_logo.jpeg',
+      watermark: false,
+      logoOnly:  true,
+    });
+  });
+
+  it('keeps the invoice title, number and subtotal in the body', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      subtotal:    2400000,
+      taxAmount:   0,
+      totalAmount: 2400000,
+      lineItems: [
+        { description: 'Unarmed Guard', guardsCount: 3, ratePerGuard: 800000, days: 1, amount: 2400000 },
+      ],
+    });
+
+    await invoiceService.buildInvoicePdf('inv-1');
+    const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+    expect(html).toContain('INVOICE');
+    expect(html).toContain('STAP/INV/2026/0001');
+    expect(html).toContain('Unarmed Guard');
+    // Subtotal reads the stored subtotal, not the invoice total.
+    expect(html).toContain('UGX 2,400,000</td>');
+  });
+
+  it('escapes client-supplied text rather than embedding it as markup', async () => {
+    mp.invoice.findUnique.mockResolvedValue({
+      ...MOCK_INVOICE,
+      client:     { clientName: '<script>evil</script>' },
+      lineItems:  [{ description: 'A & B <b>cover</b>', guardsCount: 1, ratePerGuard: 1, days: 1, amount: 1 }],
+    });
+
+    await invoiceService.buildInvoicePdf('inv-1');
+    const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+    expect(html).not.toContain('<script>evil</script>');
+    expect(html).toContain('&lt;script&gt;evil&lt;/script&gt;');
+    expect(html).toContain('A &amp; B &lt;b&gt;cover&lt;/b&gt;');
+  });
+
+  it('prints the configured report title, not a hard-coded INVOICE', async () => {
+    // The invoice heading is configurable from Settings. A merge once kept the
+    // title parameter and dropped its use, which compiled cleanly and printed
+    // INVOICE regardless — so the renamed case is pinned here.
+    settingsService.clearReportTitleCache();
+    mp.systemSetting.findUnique.mockResolvedValue({
+      value: JSON.stringify({ invoice: { title: 'Tax Invoice' } }),
+    });
+
+    try {
+      await invoiceService.buildInvoicePdf('inv-1');
+      const html = mockRenderToPdf.mock.calls[0][0] as string;
+
+      expect(html).toContain('>Tax Invoice</div>');
+      expect(html).not.toContain('>INVOICE</div>');
+    } finally {
+      settingsService.clearReportTitleCache();
+    }
   });
 });

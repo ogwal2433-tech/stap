@@ -113,12 +113,12 @@ export default function PayInvoiceModal({ invoice, onClose }: Props) {
               {/* The amount that will actually be collected: the balance owed,
                   not the invoice total. A part-paid invoice was quoting — and
                   charging — the whole original amount a second time. */}
-              <div className="fw-bold mt-1" style={{ color: NAVY }}>UGX {amountDue.toLocaleString()}</div>
+              <div className="fw-bold mt-1" style={{ color: NAVY }}>{formatUgx(amountDue)}</div>
               {(invoice.paidAmount ?? 0) > 0 && (
                 <div className="small text-muted">
-                  of UGX {invoice.totalAmount.toLocaleString()} total ·{' '}
+                  of {formatUgx(invoice.totalAmount)} total ·{' '}
                   <span style={{ color: '#1E8449' }}>
-                    UGX {(invoice.paidAmount ?? 0).toLocaleString()} already paid
+                    {formatUgx(invoice.paidAmount ?? 0)} already paid
                   </span>
                 </div>
               )}
@@ -172,7 +172,7 @@ export default function PayInvoiceModal({ invoice, onClose }: Props) {
                 <div style={{ fontSize: '3rem' }}>✅</div>
                 <h5 className="fw-bold mt-2" style={{ color: '#27ae60' }}>Payment Successful</h5>
                 <p className="small text-muted">
-                  UGX {amountDue.toLocaleString()} received. Invoice {invoice.invoiceNumber} is now marked as PAID.
+                  {formatUgx(amountDue)} received. Invoice {invoice.invoiceNumber} is now marked as PAID.
                 </p>
               </>
             ) : (

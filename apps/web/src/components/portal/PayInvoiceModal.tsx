@@ -22,8 +22,6 @@ const NETWORKS = [
   { code: 'MTN'    as const, label: 'MTN MoMo' },
 ];
 
-const ugx = (n: number) => `UGX ${n.toLocaleString('en-UG')}`;
-
 /** Collects the payer's mobile money number and starts an XCEL collection. */
 export default function PayInvoiceModal({ invoice, show, onClose, onSuccess }: Props) {
   const { showToast } = useToast();

@@ -18,7 +18,12 @@ vi.mock('../../db/prisma', () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
     },
-    deploymentHistory: { createMany: vi.fn() },
+    deploymentHistory: {
+      createMany: vi.fn(),
+      findMany:   vi.fn(),
+      count:      vi.fn(),
+    },
+    client:            { findUnique: vi.fn() },
     attendanceRecord:  { findFirst: vi.fn() },
     auditLog:          { create: vi.fn().mockResolvedValue({}) },
   },
@@ -46,7 +51,12 @@ const mockPrisma = prisma as unknown as {
     delete:     ReturnType<typeof vi.fn>;
     create:     ReturnType<typeof vi.fn>;
   };
-  deploymentHistory: { createMany: ReturnType<typeof vi.fn> };
+  deploymentHistory: {
+    createMany: ReturnType<typeof vi.fn>;
+    findMany:   ReturnType<typeof vi.fn>;
+    count:      ReturnType<typeof vi.fn>;
+  };
+  client:            { findUnique: ReturnType<typeof vi.fn> };
   attendanceRecord:  { findFirst: ReturnType<typeof vi.fn> };
 };
 
@@ -353,5 +363,80 @@ describe('deploymentService.getAvailableReplacements()', () => {
     const result = await deploymentService.getAvailableReplacements('s1', '2026-04-14', 'g-absent');
 
     expect(result).toHaveLength(0);
+  });
+});
+
+// ── listByClient() ────────────────────────────────────────────────────────────
+
+const historyStint = (over: Record<string, unknown> = {}) => ({
+  id:        'dh1',
+  shiftType: 'DAY',
+  startDate: new Date('2026-03-01'),
+  endDate:   null,
+  guard:      { id: 'g1', firstName: 'John', otherNames: null, lastName: 'Doe', systemId: 'SSLG0001', rank: 'GUARD' },
+  site:       { id: 's1', siteName: 'Fort Bet Warehouse' },
+  supervisor: { id: 'u1', name: 'Supervisor One' },
+  ...over,
+});
+
+const CLIENT_QUERY = { page: 1, limit: 20, status: 'ALL' as const };
+
+describe('deploymentService.listByClient()', () => {
+  beforeEach(() => {
+    mockPrisma.client.findUnique.mockResolvedValue({ id: 'c1' });
+    mockPrisma.deploymentHistory.findMany.mockResolvedValue([historyStint()]);
+    mockPrisma.deploymentHistory.count.mockResolvedValue(1);
+  });
+
+  it('names the guard, the site and the supervisor who posted them', async () => {
+    const result = await deploymentService.listByClient('c1', CLIENT_QUERY);
+
+    expect(result.data[0]).toEqual({
+      id:        'dh1',
+      guard:     { id: 'g1', fullName: 'John Doe', systemId: 'SSLG0001', rank: 'GUARD' },
+      site:      { id: 's1', siteName: 'Fort Bet Warehouse' },
+      shiftType: 'DAY',
+      startDate: '2026-03-01T00:00:00.000Z',
+      endDate:   null,
+      supervisor: { id: 'u1', name: 'Supervisor One' },
+    });
+    expect(result.pagination).toEqual({
+      page: 1, limit: 20, total: 1, totalPages: 1, hasNext: false, hasPrev: false,
+    });
+  });
+
+  it('joins every name part, so a guard with other names is not truncated', async () => {
+    mockPrisma.deploymentHistory.findMany.mockResolvedValue([
+      historyStint({ guard: { id: 'g1', firstName: 'John', otherNames: 'Peter', lastName: 'Doe', systemId: null, rank: null } }),
+    ]);
+
+    const result = await deploymentService.listByClient('c1', CLIENT_QUERY);
+
+    expect(result.data[0].guard.fullName).toBe('John Peter Doe');
+    expect(result.data[0].guard.systemId).toBeNull();
+  });
+
+  it('scopes to this client and keeps stints on its current sites only', async () => {
+    await deploymentService.listByClient('c1', CLIENT_QUERY);
+
+    const args = mockPrisma.deploymentHistory.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ site: { clientId: 'c1', deletedAt: null } });
+    // Descending puts the open stints (no end date) first under Postgres.
+    expect(args.orderBy).toEqual([{ endDate: 'desc' }, { startDate: 'desc' }]);
+    expect(mockPrisma.deploymentHistory.count).toHaveBeenCalledWith({ where: args.where });
+  });
+
+  it('CURRENT narrows the list to the guards still on post', async () => {
+    await deploymentService.listByClient('c1', { ...CLIENT_QUERY, status: 'CURRENT' });
+
+    const args = mockPrisma.deploymentHistory.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ site: { clientId: 'c1', deletedAt: null }, endDate: null });
+  });
+
+  it('refuses an unknown client rather than returning an empty tab', async () => {
+    mockPrisma.client.findUnique.mockResolvedValue(null);
+
+    await expect(deploymentService.listByClient('gone', CLIENT_QUERY)).rejects.toThrow(NotFoundError);
+    expect(mockPrisma.deploymentHistory.findMany).not.toHaveBeenCalled();
   });
 });

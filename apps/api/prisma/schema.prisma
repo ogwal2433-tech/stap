@@ -1175,15 +1175,20 @@ model Invoice {
   periodStart        DateTime
   periodEnd          DateTime
   guardsDeployed     Int
-  ratePerGuard       Int
-  subtotal           Int
-  taxAmount          Int       @default(0)
-  totalAmount        Int
+  /// Money is double precision, not integer: a contract's monthly rate divided
+  /// by 30 is rarely a whole shilling, and forcing it to one changes what the
+  /// client is billed. Two decimal places are enforced at the schema boundary
+  /// (packages/shared) and every derived figure is snapped back to them, so
+  /// these columns never accumulate binary rounding dust.
+  ratePerGuard       Float
+  subtotal           Float
+  taxAmount          Float     @default(0)
+  totalAmount        Float
   /// Sum of every payment recorded against this invoice, kept in step whenever
   /// one is recorded so a partial payment is visible without re-aggregating.
-  paidAmount         Int       @default(0)
+  paidAmount         Float     @default(0)
   /// totalAmount - paidAmount, floored at 0.
-  outstandingBalance Int       @default(0)
+  outstandingBalance Float     @default(0)
   status             String    @default("PENDING") // PENDING | PARTIALLY_PAID | OVERDUE | PAID | VOID
   pdfPath            String?
   yoPaymentRef       String?
@@ -1226,7 +1231,8 @@ model InvoiceCarryForward {
   clientId      String
   client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  carryAmount Int
+  /// The exact balance left unpaid, so it keeps the invoice's decimals.
+  carryAmount Float
   note        String?
 
   createdAt DateTime @default(now())
@@ -1239,7 +1245,9 @@ model Payment {
   id              String   @id @default(cuid())
   invoiceId       String
   invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  amountPaid      Int
+  /// Float because an invoice can owe a fractional balance (see Invoice.ratePerGuard);
+  /// a whole-shilling payment column could never settle the last few cents of it.
+  amountPaid      Float
   mode            String
   referenceNumber String?
   yoTransactionId String?
@@ -1255,7 +1263,7 @@ model InvoicePayment {
   extReference      String    @unique // unique per payment attempt
   phone             String
   network           String // MTN | AIRTEL
-  amountPaid        Int
+  amountPaid        Float
   status            String    @default("PENDING") // PENDING | SUCCESS | FAILED | CANCELLED
   xcelTransactionId String?
   failureReason     String?
@@ -1932,9 +1940,11 @@ model InvoiceLineItem {
   description  String
   guardType    String?
   guardsCount  Int      @default(1) // maps to quantity in responses
-  ratePerGuard Int // maps to ratePerDay in responses
+  /// Daily rate per guard, UGX — maps to ratePerDay in responses. May carry up
+  /// to two decimals (see the note on Invoice.ratePerGuard).
+  ratePerGuard Float
   days         Int      @default(30)
-  amount       Int // maps to lineTotal in responses
+  amount       Float // maps to lineTotal in responses; count × ratePerGuard × days
   createdAt    DateTime @default(now())
 }
 

@@ -3,6 +3,7 @@ import { invoicesApi, deductionsApi, payrollApi, payrollGroupsApi, cashbookApi }
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
+  UpdateInvoiceInput,
   RecordPaymentInput,
   AddFeeIncrementInput,
   CreateDeductionInput,
@@ -34,6 +35,14 @@ export function useCreateInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateInvoiceInput) => invoicesApi.create(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+}
+
+export function useUpdateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateInvoiceInput }) => invoicesApi.update(id, data),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   });
 }

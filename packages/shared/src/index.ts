@@ -28,6 +28,7 @@ export * from './schemas/shiftReport';
 export * from './constants/jobTitles';
 export * from './schemas/access';
 export * from './utils/password';
+export * from './utils/money';
 export * from './constants/training';
 export * from './constants/leave';
 export * from './schemas/roles';

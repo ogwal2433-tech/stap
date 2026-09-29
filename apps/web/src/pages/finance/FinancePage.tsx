@@ -20,8 +20,10 @@ import RoleGuard from '../../components/RoleGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import FeeIncrementModal from '../../components/finance/FeeIncrementModal';
+import InvoiceViewModal from '../../components/finance/InvoiceViewModal';
+import InvoiceEditModal from '../../components/finance/InvoiceEditModal';
+import InvoiceActionsMenu from '../../components/finance/InvoiceActionsMenu';
 import VoidInvoiceModal from '../../components/finance/VoidInvoiceModal';
-import PermissionGuard from '../../components/PermissionGuard';
 import { getApiErrorMessage } from '../../lib/api';
 import PayInvoiceModal from '../../components/finance/PayInvoiceModal';
 import CashbookEntryModal from '../../components/finance/CashbookEntryModal';
@@ -46,10 +48,6 @@ function statusBadge(status: string) {
       {status}
     </Badge>
   );
-}
-
-function fmtUGX(n: number) {
-  return `UGX ${n.toLocaleString()}`;
 }
 
 function fmtPeriod(start: string, end: string) {
@@ -103,7 +101,7 @@ function InvoicePaymentHistoryModal({ invoice, onClose }: { invoice: InvoiceResp
                   <td className="small">{new Date(p.initiatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                   <td className="small">{p.phone}</td>
                   <td><Badge bg={p.network === 'MTN' ? 'warning' : 'danger'} text={p.network === 'MTN' ? 'dark' : 'white'}>{p.network}</Badge></td>
-                  <td className="small fw-semibold">UGX {p.amountPaid.toLocaleString()}</td>
+                  <td className="small fw-semibold">{fmtUGX(p.amountPaid)}</td>
                   <td><Badge bg={statusColor[p.status] ?? 'secondary'}>{p.status}</Badge></td>
                   <td className="small text-muted" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.extReference}</td>
                 </tr>
@@ -140,6 +138,8 @@ function InvoicesTab() {
   };
   const [payMoMo,       setPayMoMo]       = useState<InvoiceResponse | null>(null);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceResponse | null>(null);
+  const [viewInvoice,   setViewInvoice]   = useState<InvoiceResponse | null>(null);
+  const [editInvoice,   setEditInvoice]   = useState<InvoiceResponse | null>(null);
   const [sendingId,     setSendingId]     = useState<string | null>(null);
   const { data, isLoading }               = useInvoices();
   const { showToast }                     = useToast();
@@ -256,64 +256,22 @@ function InvoicesTab() {
                   )}
                 </td>
                 <td>
-                  <div className="d-flex gap-1 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant="outline-secondary"
-                      disabled={pdfId === inv.id}
-                      onClick={() => handleOpenPdf(inv)}
-                      title="Open a printable PDF of this invoice"
-                    >
-                      {pdfId === inv.id
-                        ? <><Spinner size="sm" animation="border" className="me-1" />Preparing…</>
-                        : '🖨️ Print / PDF'}
-                    </Button>
-                    <Button size="sm" variant="outline-secondary" onClick={() => setHistoryInvoice(inv)} title="View payment history">
-                      History
-                    </Button>
-                    <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                      <Button
-                        size="sm"
-                        variant={inv.emailSentAt ? 'outline-secondary' : 'outline-primary'}
-                        disabled={!!inv.emailSentAt || sendingId === inv.id || inv.status === 'VOID'}
-                        onClick={() => handleSendEmail(inv)}
-                        title={inv.emailSentAt ? `Sent to ${inv.emailSentTo} on ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}` : 'Send invoice by email'}
-                      >
-                        {sendingId === inv.id ? (
-                          <><Spinner size="sm" animation="border" className="me-1" />Sending…</>
-                        ) : inv.emailSentAt ? (
-                          `✅ Sent ${new Date(inv.emailSentAt).toLocaleDateString('en-GB')}`
-                        ) : (
-                          '📧 Send'
-                        )}
-                      </Button>
-                    </RoleGuard>
-                    {inv.status !== 'PAID' && inv.status !== 'VOID' && (
-                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                        <Button size="sm" variant="outline-warning" onClick={() => setIncrementInvoice(inv)} title="Charge for extra guards on this invoice">
-                          ➕ Add Fees
-                        </Button>
-                      </RoleGuard>
-                    )}
-                    {['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(inv.status) && (
-                      <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-                        <Button size="sm" variant="outline-success" onClick={() => setPayInvoice(inv)}>
-                          Record Payment
-                        </Button>
-                        <Button size="sm" variant="outline-primary" onClick={() => setPayMoMo(inv)} title="Pay via MTN/Airtel Mobile Money">
-                          💳 Mobile Money
-                        </Button>
-                      </RoleGuard>
-                    )}
-                    {/* Only while nothing has been received — the server refuses otherwise. */}
-                    {['PENDING', 'OVERDUE'].includes(inv.status) && inv.paidAmount === 0 && (
-                      <PermissionGuard permission="invoices.void">
-                        <Button size="sm" variant="outline-dark" onClick={() => setVoidTarget(inv)} title="Void — the invoice stays on file marked VOID">
-                          Void
-                        </Button>
-                      </PermissionGuard>
-                    )}
-                  </div>
+                  <InvoiceActionsMenu
+                    invoice={inv}
+                    pdfBusy={pdfId === inv.id}
+                    sendBusy={sendingId === inv.id}
+                    actions={{
+                      onView:          () => setViewInvoice(inv),
+                      onEdit:          () => setEditInvoice(inv),
+                      onPdf:           () => handleOpenPdf(inv),
+                      onHistory:       () => setHistoryInvoice(inv),
+                      onSend:          () => handleSendEmail(inv),
+                      onAddFees:       () => setIncrementInvoice(inv),
+                      onRecordPayment: () => setPayInvoice(inv),
+                      onMobileMoney:   () => setPayMoMo(inv),
+                      onVoid:          () => setVoidTarget(inv),
+                    }}
+                  />
                 </td>
               </tr>
             ))}
@@ -359,6 +317,18 @@ function InvoicesTab() {
         <InvoicePaymentHistoryModal
           invoice={historyInvoice}
           onClose={() => setHistoryInvoice(null)}
+        />
+      )}
+      {viewInvoice && (
+        <InvoiceViewModal
+          invoice={viewInvoice}
+          onClose={() => setViewInvoice(null)}
+        />
+      )}
+      {editInvoice && (
+        <InvoiceEditModal
+          invoice={editInvoice}
+          onClose={() => setEditInvoice(null)}
         />
       )}
     </>
@@ -481,6 +451,7 @@ function PayrollTab() {
   const [hrNotes, setHrNotes] = useState('');
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
+  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
 
   // Payroll is run per group: only ACTIVE groups are selectable, and the
   // chosen group scopes both the calculate action and the card below.
@@ -532,6 +503,23 @@ function PayrollTab() {
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const flaggedCount = payslips.filter((p) => p.hrFlagged).length;
+
+  // Export the calculated run — the server stamps each file with the header
+  // block (month, year, group, print date, generated by).
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    if (!thisRun) return;
+    setExporting(format);
+    const groupSlug = (thisRun.payrollGroupName ?? 'Ungrouped').replace(/[^a-zA-Z0-9]+/g, '_');
+    const base = `${FILE_PREFIX}_Payroll_${groupSlug}_${MONTHS[thisRun.month - 1]}${thisRun.year}`;
+    try {
+      if (format === 'excel') await payrollApi.downloadRunExcel(thisRun.id, `${base}.xlsx`);
+      else                    await payrollApi.downloadRunPdf(thisRun.id, `${base}.pdf`);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, `Failed to export payroll to ${format.toUpperCase()}`), 'danger');
+    } finally {
+      setExporting('');
+    }
+  };
 
   return (
     <>
@@ -613,6 +601,18 @@ function PayrollTab() {
                   )}
                 </div>
                 <div className="d-flex gap-2">
+                  <Button size="sm" variant="outline-primary" disabled={!!exporting}
+                    onClick={() => handleExport('excel')}>
+                    {exporting === 'excel'
+                      ? <><Spinner animation="border" size="sm" className="me-1" />Exporting…</>
+                      : '📊 Excel'}
+                  </Button>
+                  <Button size="sm" variant="outline-primary" disabled={!!exporting}
+                    onClick={() => handleExport('pdf')}>
+                    {exporting === 'pdf'
+                      ? <><Spinner animation="border" size="sm" className="me-1" />Exporting…</>
+                      : '🖨 PDF'}
+                  </Button>
                   {thisRun.status === 'DRAFT' && user?.role === ROLES.DIRECTOR && (
                     <Button size="sm" variant="success"
                       onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>

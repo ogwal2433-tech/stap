@@ -13,6 +13,8 @@ import type {
   GuardAvailabilityResponse,
   DeploymentListQuery,
   DeploymentResponse,
+  ClientDeploymentsQuery,
+  ClientDeploymentEntry,
   ConflictDetail,
   RosterCreationResult,
   DailySheetResponse,
@@ -293,6 +295,85 @@ class DeploymentService {
 
     return {
       data: deployments.map((d) => this.formatDeployment(d, attendanceMap)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  // ── A client's deployments ─────────────────────────────────────────────────
+
+  /**
+   * Every stint guards have served across one client's sites, newest first.
+   *
+   * Ordered `endDate: 'desc'` to lead with the guards still on post: Postgres
+   * sorts NULL first when descending, and an open stint has no end date. The
+   * closed ones then follow by the most recent finish.
+   *
+   * Stints on a deleted site are dropped so the list agrees with the client's
+   * Sites tab, which never shows them. Guards who have since left are kept —
+   * their service is part of this client's history, and the row would otherwise
+   * silently lose days someone can still be billed for.
+   */
+  async listByClient(
+    clientId: string,
+    query: ClientDeploymentsQuery,
+  ): Promise<PaginatedResponse<ClientDeploymentEntry>> {
+    const { page, limit, status } = query;
+    const skip = (page - 1) * limit;
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (!client) throw new NotFoundError(`Client ${clientId} not found`);
+
+    const where: import('@prisma/client').Prisma.DeploymentHistoryWhereInput = {
+      site: { clientId, deletedAt: null },
+    };
+    if (status === 'CURRENT') where.endDate = null;
+
+    const [records, total] = await Promise.all([
+      prisma.deploymentHistory.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ endDate: 'desc' }, { startDate: 'desc' }],
+        include: {
+          guard: {
+            select: {
+              id: true, firstName: true, otherNames: true, lastName: true,
+              systemId: true, rank: true,
+            },
+          },
+          site:       { select: { id: true, siteName: true } },
+          supervisor: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.deploymentHistory.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: records.map((r) => ({
+        id: r.id,
+        guard: {
+          id: r.guard.id,
+          fullName: [r.guard.firstName, r.guard.otherNames, r.guard.lastName]
+            .filter(Boolean)
+            .join(' '),
+          systemId: r.guard.systemId,
+          rank: r.guard.rank,
+        },
+        site:       r.site,
+        shiftType:  r.shiftType,
+        startDate:  r.startDate.toISOString(),
+        endDate:    r.endDate ? r.endDate.toISOString() : null,
+        supervisor: r.supervisor,
+      })),
       pagination: {
         page,
         limit,
