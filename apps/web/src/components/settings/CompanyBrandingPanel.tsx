@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Spinner } from 'react-bootstrap';
-import { COMPANY_BRANDING_DEFAULTS, type CompanyBranding } from '@stap/shared';
+import type { CompanyBranding } from '@stap/shared';
 import { useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { useCompanyBranding, useResetCompanyBranding, useSaveCompanyBranding } from '../../hooks/useCompanyBranding';
+import { COMPANY_BRANDING_DEFAULTS } from '../../lib/branding';
+import { useCompanyBranding, useCompanyBrandingDefaults, useResetCompanyBranding, useSaveCompanyBranding } from '../../hooks/useCompanyBranding';
 
 const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string }> = [
   { key: 'company_name', label: 'Company name' },
@@ -11,7 +12,9 @@ const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string }
   { key: 'company_address', label: 'Company address' },
   { key: 'company_email', label: 'Company email', type: 'email' },
   { key: 'company_phone', label: 'Company phone' },
-  { key: 'company_website', label: 'Company website', type: 'url' },
+  // Not type="url": that demands a scheme, and the website is printed as a bare
+  // host (www.example.com). The browser would refuse to submit the whole form.
+  { key: 'company_website', label: 'Company website' },
   { key: 'company_logo_url', label: 'Company logo URL', type: 'url' },
   { key: 'company_registration_number', label: 'Registration number' },
   { key: 'company_tax_id', label: 'Tax ID' },
@@ -19,6 +22,7 @@ const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string }
 
 export default function CompanyBrandingPanel() {
   const { data, isLoading } = useCompanyBranding();
+  const { data: defaults = COMPANY_BRANDING_DEFAULTS } = useCompanyBrandingDefaults();
   const { showToast } = useToast();
   const canEdit = useHasPermission('settings.edit');
   const save = useSaveCompanyBranding();
@@ -45,10 +49,10 @@ export default function CompanyBrandingPanel() {
       {canEdit && <Button size="sm" variant="outline-danger" disabled={reset.isPending} onClick={doReset}>Reset to defaults</Button>}
     </div>
     <Form onSubmit={submit}>
-      {fields.map(({ key, label, type }) => <Form.Group className="mb-3" key={key}>
+      {fields.map(({ key, label, type }) => <Form.Group className="mb-3" key={key} controlId={`company-branding-${key}`}>
         <Form.Label>{label}</Form.Label>
         <Form.Control type={type ?? 'text'} value={draft[key]} disabled={!canEdit} onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))} />
-        <Form.Text className="text-muted">Default: {COMPANY_BRANDING_DEFAULTS[key] || 'blank'}</Form.Text>
+        <Form.Text className="text-muted">Default: {defaults[key] || 'blank'}</Form.Text>
       </Form.Group>)}
       {canEdit && <Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save changes'}</Button>}
     </Form>

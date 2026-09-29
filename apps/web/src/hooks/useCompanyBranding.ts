@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPANY_BRANDING_DEFAULTS, resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@stap/shared';
+import { resolveCompanyBranding, type CompanyBranding, type CompanyBrandingKey } from '@stap/shared';
+import { COMPANY_BRANDING_DEFAULTS } from '../lib/branding';
 import { settingsApi } from '../lib/settings.api';
 
 const QUERY_KEY = ['company-branding'];
@@ -12,7 +14,21 @@ export function useCompanyBranding() {
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
-  return { ...query, data: resolveCompanyBranding(query.data) };
+  // Resolved once per server response, not once per render: callers seed form
+  // state from this and re-seed when it changes, so a fresh object every render
+  // wipes each keystroke and loops the component.
+  const data = useMemo(() => resolveCompanyBranding(query.data, COMPANY_BRANDING_DEFAULTS), [query.data]);
+  return { ...query, data };
+}
+
+/** What this deployment falls back to for each field, as the API resolves it. */
+export function useCompanyBrandingDefaults() {
+  return useQuery({
+    queryKey: [...QUERY_KEY, 'defaults'],
+    queryFn: settingsApi.getCompanyBrandingDefaults,
+    placeholderData: COMPANY_BRANDING_DEFAULTS,
+    staleTime: Infinity,
+  });
 }
 
 export function useSaveCompanyBranding() {

@@ -1,4 +1,4 @@
-import { resolveBranding } from '@stap/shared';
+import { resolveBranding, resolveCompanyBrandingDefaults } from '@stap/shared';
 
 /**
  * What this deployment calls itself, read at boot.
@@ -13,6 +13,13 @@ export const APP_NAME           = branding.appName;
 export const APP_TAGLINE        = branding.appTagline;
 export const COMPANY_NAME       = branding.companyName;
 export const COMPANY_NAME_UPPER = branding.companyNameUpper;
+
+/**
+ * Company details documents fall back to when Settings > Company Branding has
+ * nothing saved, and what "Reset to defaults" returns to. COMPANY_NAME,
+ * COMPANY_EMAIL, COMPANY_WEBSITE and so on override the original brand's.
+ */
+export const COMPANY_BRANDING_DEFAULTS = resolveCompanyBrandingDefaults(process.env);
 
 /**
  * Prefix for anything the user downloads, e.g. Security360_Guards_2026-09-23.xlsx.

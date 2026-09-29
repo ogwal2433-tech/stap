@@ -19,11 +19,9 @@ const DEFAULT_SETTINGS: Array<{
   dataType?: string;
 }> = [
   // ── GENERAL ─────────────────────────────────────────────────────────
-  { key: 'company_name',         value: 'STAP Security Ltd',       label: 'Company Name',                   group: 'GENERAL' },
-  { key: 'company_address',      value: 'Kampala, Uganda',         label: 'Company Address',                group: 'GENERAL' },
-  { key: 'company_phone',        value: '+256 414 000 000',        label: 'Company Phone',                  group: 'GENERAL' },
-  { key: 'company_email',        value: 'info@stapsecurity.co.ug', label: 'Company Email',                  group: 'GENERAL' },
-  { key: 'company_website',      value: 'www.stapsecurity.co.ug',  label: 'Company Website',                group: 'GENERAL' },
+  // company_name/address/phone/email/website are not seeded: an absent row
+  // resolves to this deployment's defaults (config/branding.ts). Seeding
+  // them would pin the original brand onto every other deployment.
   { key: 'director_name',        value: '',                        label: 'Director Name',                  group: 'GENERAL' },
   { key: 'financial_year_start', value: '01/07',                   label: 'Financial Year Start (DD/MM)',   group: 'GENERAL' },
 

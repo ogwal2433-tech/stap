@@ -195,7 +195,7 @@ import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
 import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey } from '@stap/shared';
 import { COMPANY_BRANDING_KEYS, type CompanyBrandingKey } from '@stap/shared';
-import { getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
+import { companyBrandingDefaults, getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
 
 const router: IRouter = Router();
 
@@ -207,6 +207,9 @@ const reportKeyParam = (raw: string): ReportKey => {
 };
 router.get('/company-branding', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
   res.json({ success: true, data: await getCompanyBranding() });
+}));
+router.get('/company-branding/defaults', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: companyBrandingDefaults });
 }));
 router.patch('/company-branding', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await updateCompanyBranding(req.body, req.user!.userId) });

@@ -8,6 +8,7 @@ import {
   DEFAULT_APP_TAGLINE,
   COMPANY_BRANDING_DEFAULTS,
   resolveCompanyBranding,
+  resolveCompanyBrandingDefaults,
 } from '@stap/shared';
 import { APP_NAME, APP_TAGLINE, COMPANY_NAME, FILE_PREFIX } from '../lib/branding';
 
@@ -81,6 +82,27 @@ describe('resolveBranding()', () => {
   it('company branding resolves blank overrides to safe defaults', () => {
     expect(resolveCompanyBranding({ company_name: '   ' }).company_name).toBe(COMPANY_BRANDING_DEFAULTS.company_name);
     expect(resolveCompanyBranding({ company_name: ' Example Ltd ' }).company_name).toBe('Example Ltd');
+  });
+
+  it('company branding defaults are the original brand when unconfigured', () => {
+    expect(resolveCompanyBrandingDefaults()).toEqual(COMPANY_BRANDING_DEFAULTS);
+    expect(resolveCompanyBrandingDefaults({ COMPANY_EMAIL: '  ' }).company_email).toBe(COMPANY_BRANDING_DEFAULTS.company_email);
+  });
+
+  it('company branding defaults follow the deployment environment', () => {
+    const defaults = resolveCompanyBrandingDefaults({
+      COMPANY_NAME: 'Security360 Ltd', COMPANY_SHORT_NAME: 'Security360',
+      COMPANY_EMAIL: 'info@security360.co.ug', VITE_COMPANY_WEBSITE: ' www.security360.co.ug ',
+    });
+    expect(defaults).toMatchObject({
+      company_name: 'Security360 Ltd', company_short_name: 'Security360',
+      company_email: 'info@security360.co.ug', company_website: 'www.security360.co.ug',
+      company_address: COMPANY_BRANDING_DEFAULTS.company_address, company_tax_id: '',
+    });
+    // A field with nothing saved falls back to the deployment, not the original brand.
+    expect(resolveCompanyBranding({ company_phone: '+256 700 000 000' }, defaults)).toMatchObject({
+      company_name: 'Security360 Ltd', company_phone: '+256 700 000 000',
+    });
   });
 });
 

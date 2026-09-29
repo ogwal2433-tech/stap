@@ -1,4 +1,4 @@
-import { resolveBranding } from '@stap/shared';
+import { resolveBranding, resolveCompanyBrandingDefaults } from '@stap/shared';
 
 /**
  * What this build of the frontend calls itself.
@@ -18,6 +18,12 @@ export const APP_NAME           = branding.appName;
 export const APP_TAGLINE        = branding.appTagline;
 export const COMPANY_NAME       = branding.companyName;
 export const COMPANY_NAME_UPPER = branding.companyNameUpper;
+
+/**
+ * Company details to show until the API's saved branding arrives. The API
+ * holds the authoritative defaults; this only keeps the first paint on brand.
+ */
+export const COMPANY_BRANDING_DEFAULTS = resolveCompanyBrandingDefaults(import.meta.env as unknown as Record<string, string | undefined>);
 
 /**
  * Prefix for anything the user downloads, e.g. Security360_Guards_2026-09-23.xlsx.
