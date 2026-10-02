@@ -5,13 +5,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../db/prisma', () => ({
   default: {
     invoice:  { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    // Reading the branding settings runs a one-off legacy-contact migration in a
+    // transaction; with the whole database stubbed there is nothing to migrate.
+    $transaction: vi.fn(),
     payment:  { create: vi.fn(), aggregate: vi.fn() },
     client:   { findUnique: vi.fn() },
     contract: { findMany: vi.fn(), findUnique: vi.fn() },
     invoicePayment:      { aggregate: vi.fn() },
     // The invoice PDF heading reads the configured report title, which lives in
-    // SystemSetting under 'report_titles'.
-    systemSetting:       { findUnique: vi.fn() },
+    // SystemSetting under 'report_titles', and the printed header resolves the
+    // company profile from the same table.
+    systemSetting:       { findUnique: vi.fn(), findMany: vi.fn() },
     invoiceCarryForward: { findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
@@ -76,8 +80,11 @@ beforeEach(() => {
   mp.invoice.update.mockResolvedValue({ ...MOCK_INVOICE, status: 'PAID', paidAt: new Date() });
   mp.invoice.updateMany.mockResolvedValue({ count: 0 });
   mp.contract.findMany.mockResolvedValue([]);
-  // No report-title overrides stored, so the invoice heading is the default.
+  // No report-title overrides stored, so the invoice heading is the default, and
+  // no branding overrides, so the header prints this deployment's defaults.
   mp.systemSetting.findUnique.mockResolvedValue(null);
+  mp.systemSetting.findMany.mockResolvedValue([]);
+  mp.$transaction.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -344,13 +351,13 @@ describe('invoiceService.getARAgingReport()', () => {
 // ── buildInvoicePdf() — letterhead identity ───────────────────────────────────
 
 describe('invoiceService.buildInvoicePdf()', () => {
-  it('prints on the tiger logo band with no watermark, like the payroll schedule', async () => {
+  it('prints on the plain header band — logo left, company details right, no watermark', async () => {
     await invoiceService.buildInvoicePdf('inv-1');
 
     expect(mockRenderToPdf.mock.calls[0][1]).toEqual({
-      logoFile:  'tiger_logo.jpeg',
-      watermark: false,
-      logoOnly:  true,
+      logoFile:    'tiger_logo.jpeg',
+      watermark:   false,
+      plainHeader: true,
     });
   });
 
@@ -369,7 +376,7 @@ describe('invoiceService.buildInvoicePdf()', () => {
     const html = mockRenderToPdf.mock.calls[0][0] as string;
 
     expect(html).toContain('INVOICE');
-    expect(html).toContain('STAP/INV/2026/0001');
+    expect(html).toContain('S360/INV/2026/0001');
     expect(html).toContain('Unarmed Guard');
     // Subtotal reads the stored subtotal, not the invoice total.
     expect(html).toContain('UGX 2,400,000</td>');

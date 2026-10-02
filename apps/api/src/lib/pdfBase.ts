@@ -106,6 +106,75 @@ function getWatermarkBase64(): string {
 // Full-width amber band (~53mm — 2/3 of original 80mm).
 // Left 1/3 : transparent logo PNG centred, amber shows through.
 // Right 2/3 : company name, tagline, phone / email / website.
+// Every band is 53mm tall whichever style is chosen, because wrapContent's
+// default 56mm body padding assumes it and a taller header pushes content onto
+// a trailing blank page.
+
+// Settings values are typed by whoever holds settings.edit, and they are printed
+// on a document that asks someone for money — so they are escaped rather than
+// trusted to be plain text.
+const text = (value: string): string =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+export interface HeaderOptions {
+  /** Logo-only amber band — no company name or contact rows. */
+  logoOnly?: boolean;
+  /**
+   * Plain band: the page's own white instead of amber, logo pushed to the left
+   * and the company's contact details at the right. Wins over logoOnly.
+   */
+  plainHeader?: boolean;
+}
+
+/**
+ * The plain header an invoice carries: a client reading it must be able to see
+ * who is asking for the payment and write back without looking us up.
+ */
+function buildPlainHeaderHtml(logoBase64: string, company: CompanyProfile): string {
+  const logo = logoBase64
+    ? `<img src="${logoBase64}" alt="${text(company.name)}"
+            style="height:100%; width:auto; max-width:60mm; object-fit:contain; display:block;" />`
+    : `<span style="font-weight:900; font-size:12pt; color:#1B3A6B;">${text(company.nameUpper.slice(0, 4))}</span>`;
+
+  // A detail nobody has filled in is left out rather than printed blank.
+  const detail = (value: string | null): string => value?.trim()
+    ? `<div style="font-size:9pt;color:#4A5568;line-height:1.35;">${text(value.trim())}</div>`
+    : '';
+
+  return `<div style="
+      width:              210mm;
+      height:             53mm;
+      background-color:   #ffffff;
+      display:            flex;
+      flex-direction:     row;
+      align-items:        center;
+      gap:                10mm;
+      padding:            0 14mm 0 12mm;
+      box-sizing:         border-box;
+      font-family:        Arial, Helvetica, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    ">
+
+      <!-- LEFT: the logo, held to the margin rather than centred on the page -->
+      <div style="height:36mm;flex:0 0 auto;display:flex;align-items:center;">
+        ${logo}
+      </div>
+
+      <!-- RIGHT: who we are and how to reach us, read top-down -->
+      <div style="flex:1 1 auto;text-align:right;min-width:0">
+        <div style="font-family:'Arial Black', Arial, sans-serif;font-size:14pt;font-weight:900;
+                    color:#1B3A6B;letter-spacing:0.5px;line-height:1.2;word-wrap:break-word">
+          ${text(company.nameUpper)}
+        </div>
+        ${detail(company.address)}
+        ${detail(company.email)}
+        ${detail(company.phone)}
+        ${detail(company.website)}
+      </div>
+
+    </div>`;
+}
 
 // Letterhead icons, held apart from the markup so the contact rows below read
 // as data rather than a wall of paths.
@@ -116,7 +185,9 @@ const TWITTER_SVG   = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height=
 const PHONE_SVG     = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.58.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.29 21 3 13.71 3 4.5c0-.55.45-1 1-1H7.5c.55 0 1 .45 1 1 0 1.25.2 2.46.57 3.58.11.35.03.74-.24 1.02L6.6 10.8z"/></svg>';
 const WHATSAPP_SVG  = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="white" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.07L2 22l5.07-1.36C8.44 21.51 10.19 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm.01 18c-1.63 0-3.15-.45-4.46-1.23l-.32-.19-3.27.87.88-3.21-.21-.33A7.95 7.95 0 0 1 4 12c0-4.42 3.59-8 8.01-8 4.43 0 7.99 3.58 7.99 8s-3.57 8-7.99 8zm4.39-5.96c-.24-.12-1.41-.69-1.63-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.93-1.18-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.29-.74-1.77-.19-.46-.39-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.39 1.37.5.57.18 1.09.15 1.5.09.46-.07 1.41-.58 1.61-1.13.2-.56.2-1.03.14-1.13-.06-.1-.22-.16-.46-.28z"/></svg>';
 
-function buildHeaderHtml(logoBase64: string, company: CompanyProfile, logoOnly = false): string {
+export function buildHeaderHtml(logoBase64: string, company: CompanyProfile, opts: HeaderOptions = {}): string {
+  if (opts.plainHeader) return buildPlainHeaderHtml(logoBase64, company);
+
   const logoContent = logoBase64
     ? `<img src="${logoBase64}"
             alt="${company.name}"
@@ -125,7 +196,7 @@ function buildHeaderHtml(logoBase64: string, company: CompanyProfile, logoOnly =
 
   // Logo-only band: same height and background as the full letterhead so the
   // content padding in wrapContent still lines up, but nothing but the logo.
-  if (logoOnly) {
+  if (opts.logoOnly) {
     return `<div style="
         width:              210mm;
         height:             53mm;
@@ -143,8 +214,8 @@ function buildHeaderHtml(logoBase64: string, company: CompanyProfile, logoOnly =
 
   // Each contact row is dropped when nothing has been configured for it, rather
   // than printing a placeholder: a wrong address on a letter is worse than none.
-  const icon = (svg: string, text: string) =>
-    `${svg}<span style="vertical-align:middle;">${text}</span>`;
+  const icon = (svg: string, label: string) =>
+    `${svg}<span style="vertical-align:middle;">${label}</span>`;
 
   const addressLine = [
     company.address ? icon(PIN_SVG, company.address) : '',
@@ -379,6 +450,13 @@ export interface PdfRenderOptions {
   watermark?:    boolean;
   /** Set true for a logo-only header band — no company name or contact rows. */
   logoOnly?:     boolean;
+  /**
+   * Set true for a header on the page's own white: logo pushed to the left, the
+   * company's name and contact details at the right. What an invoice wants, so
+   * the client can see who is asking for the money; a letterhead document keeps
+   * the amber band by leaving this unset.
+   */
+  plainHeader?:  boolean;
 }
 
 /**
@@ -402,7 +480,7 @@ export async function renderToPdf(
     : await resolveLogoBase64(company.logoUrl);
   const html       = wrapContent(
     contentHtml,
-    buildHeaderHtml(logoBase64, company, opts?.logoOnly),
+    buildHeaderHtml(logoBase64, company, { logoOnly: opts?.logoOnly, plainHeader: opts?.plainHeader }),
     buildFooterHtml(),
     opts?.marginTop,    // becomes body padding-top
     opts?.marginBottom,

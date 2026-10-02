@@ -786,13 +786,13 @@ class InvoiceService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    // Same print identity as the payroll schedule: the centred tiger logo band
-    // with no company-name header, and no page watermark. The heading itself
-    // still follows the configured report title.
+    // The invoice heading follows the configured report title, and the header
+    // band is the plain one: the tiger logo at the left with our name, address,
+    // email, phone and website at the right, so a client does not have to look
+    // up who is asking for the money. No page watermark, as on the payroll run.
     const invoiceTitle = await settingsService.getReportTitle('invoice');
-    // The invoice's own print identity carries the tiger band and no letterhead
-    // contact rows, so the bank details we take payment into have to be printed
-    // here rather than relied on from the header.
+    // Contact details tell a client who we are; where to send the money is a
+    // different answer, so the bank details are still printed in the body.
     const company = await companyProfile();
     const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title, {
       bankName:        company.bankName,
@@ -801,9 +801,9 @@ class InvoiceService {
       bankAccountName: company.bankAccountName,
       bankAccount:     company.bankAccount,
     }), {
-      logoFile:  'tiger_logo.jpeg',
-      watermark: false,
-      logoOnly:  true,
+      logoFile:     'tiger_logo.jpeg',
+      watermark:    false,
+      plainHeader:  true,
     });
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
