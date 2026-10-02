@@ -1,18 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { ROLES } from '@security360/shared';
 import app from '../../index';
 import prisma from '../../db/prisma';
 import { signAccessToken } from '../../lib/jwt';
 import { clearPermissionCache } from '../../middleware/permissions';
 
 /**
- * GET /guards/export backs the "Export to Excel" button: every guard in one
- * response, with where each is deployed.
+ * GET /guards/export backs the guards Export button: the roll in one response,
+ * unpaged, with where each guard is deployed.
  *
- * Two things matter beyond the happy path. It must not paginate — the export
- * exists precisely to escape the page — and it must not carry the bank account
- * number, which is kept from everyone but the Director and Assistant Manager on
- * the profile and would otherwise leak to anyone holding guards.view.
+ * Three things matter beyond the happy path. It must not paginate — the export
+ * exists precisely to escape the page. It must carry the filters the table was
+ * under, since a file that quietly ignores them is read as complete when it is
+ * not. And it must not carry the bank account number, which is kept from
+ * everyone but the Director and Assistant Manager on the profile and would
+ * otherwise leak to anyone holding guards.view.
  */
 
 const ROLE = 'ZZ_GUARD_EXPORT';
@@ -41,6 +44,9 @@ afterAll(async () => {
 });
 
 async function grantView() {
+  // Written rather than added, so a suite can ask for the permission without
+  // first revoking it — the two describes below both start from "can view".
+  await prisma.rolePermission.deleteMany({ where: { role: ROLE } });
   await prisma.rolePermission.create({ data: { role: ROLE, permissionId: viewPermissionId } });
   clearPermissionCache(ROLE);
 }
@@ -156,5 +162,116 @@ describe('GET /api/v1/guards/export', () => {
     const res = await request(app).get('/api/v1/guards/export').set('Authorization', token);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data.guards)).toBe(true);
+  });
+});
+
+describe('GET /api/v1/guards/export — filters', () => {
+  let sampleSystemId = '';
+  let sampleRank = '';
+
+  beforeAll(async () => {
+    await grantView();
+    // A guard whose roll number and rank are real, so the filters below ask for
+    // something this database actually holds rather than an invented value.
+    const withRank = await prisma.guard.findFirst({
+      where:  { rank: { not: '' } },
+      select: { systemId: true, rank: true },
+    });
+    sampleSystemId = withRank?.systemId ?? '';
+    sampleRank     = withRank?.rank ?? '';
+  });
+
+  const get = (qs: string) =>
+    request(app).get(`/api/v1/guards/export${qs ? `?${qs}` : ''}`).set('Authorization', token);
+
+  /**
+   * Requests the export and counts the matching rows in the table until the two
+   * agree — other suites are creating guards while this runs, so a single read of
+   * each would occasionally be taken a row apart.
+   */
+  async function exportAndCount(qs: string, where: Parameters<typeof prisma.guard.count>[0]) {
+    let res;
+    let live = -1;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await get(qs);
+      live = await prisma.guard.count({ where });
+      if (res.body?.data?.guards?.length === live) break;
+    }
+    return { res: res!, live };
+  }
+
+  it('rejects a filter value it does not recognise', async () => {
+    const res = await get('status=BOGUS');
+    expect(res.status).toBe(400);
+  });
+
+  it('exports exactly the guards the list says it is showing', async () => {
+    if (!sampleSystemId) return;
+    const qs = `search=${encodeURIComponent(sampleSystemId)}`;
+
+    // The list is gated on a role and the export on a permission, so the two
+    // calls cannot be made with the same token. What is being compared is the
+    // answer each gives to one filter, not who was allowed to ask.
+    const directorToken = bearer(`parity-${ROLE}`, ROLES.DIRECTOR);
+
+    const [exp, list] = await Promise.all([
+      get(qs),
+      request(app)
+        .get(`/api/v1/guards?${qs}&limit=500`)
+        .set('Authorization', directorToken),
+    ]);
+
+    expect(list.status).toBe(200);
+    // The table's own count of matches, not a number guessed at here.
+    expect(exp.body.data.guards).toHaveLength(list.body.pagination.total);
+    expect(exp.body.data.guards[0].systemId).toBe(sampleSystemId);
+  });
+
+  it('narrows to one status when asked to', async () => {
+    const { res, live } = await exportAndCount('status=ACTIVE', { employmentStatus: 'ACTIVE' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.guards).toHaveLength(live);
+    // Rows that did not match the filter must not ride along in the file.
+    for (const row of res.body.data.guards) {
+      expect(row.employmentStatus).toBe('ACTIVE');
+    }
+  });
+
+  it('combines filters the way the table does', async () => {
+    if (!sampleRank) return;
+    const where = { rank: sampleRank, employmentStatus: 'ACTIVE' };
+    const { res, live } = await exportAndCount(
+      `rank=${encodeURIComponent(sampleRank)}&status=ACTIVE`,
+      where,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.data.guards).toHaveLength(live);
+    for (const row of res.body.data.guards) {
+      expect(row.rank).toBe(sampleRank);
+      expect(row.employmentStatus).toBe('ACTIVE');
+    }
+  });
+
+  it('ignores paging parameters rather than honouring them by accident', async () => {
+    // The export schema has no page or limit, so a stale query string must not
+    // cut the file down to 20 rows — the whole reason it is a separate endpoint.
+    const full  = await get('');
+    const paged = await get('page=1&limit=20');
+    expect(paged.status).toBe(200);
+    expect(paged.body.data.guards).toHaveLength(full.body.data.guards.length);
+  });
+});
+
+describe('GET /api/v1/guards/export/pdf', () => {
+  it('refuses a role without guards.view', async () => {
+    await revokeAll();
+    const res = await request(app).get('/api/v1/guards/export/pdf').set('Authorization', token);
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a filter value before drawing anything', async () => {
+    await grantView();
+    const res = await request(app).get('/api/v1/guards/export/pdf?status=BOGUS').set('Authorization', token);
+    expect(res.status).toBe(400);
   });
 });
