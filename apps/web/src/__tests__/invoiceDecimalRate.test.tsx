@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { ClientResponse } from '@stap/shared';
+import type { ClientResponse } from '@security360/shared';
 import InvoiceFormModal from '../components/finance/InvoiceFormModal';
 
 /**

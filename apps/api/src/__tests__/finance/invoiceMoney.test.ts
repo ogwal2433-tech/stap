@@ -8,7 +8,7 @@ import {
   formatUgx,
   isTwoDpOrWhole,
   roundMoney,
-} from '@stap/shared';
+} from '@security360/shared';
 
 /**
  * An invoice line's rate is a daily figure, and the one that matters — a

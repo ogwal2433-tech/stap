@@ -11,7 +11,7 @@ import { isTwoDpOrWhole } from '../utils/money';
  * not bill a contract accurately: 500,000/30 rounded up to 16,667 overcharges
  * each guard by 50 UGX a month.
  *
- * The granularity itself is checked by isTwoDpOrWhole (@stap/shared), which the
+ * The granularity itself is checked by isTwoDpOrWhole (@security360/shared), which the
  * web forms reuse so a value accepted on screen is accepted by the API too.
  * Finer than a cent is rejected rather than silently rounded, so what the user
  * typed is what the invoice stores.

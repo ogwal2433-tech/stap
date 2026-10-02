@@ -7,7 +7,7 @@
 
 // formatUgx prints cents only when the figure has them, which a line rate
 // derived from a monthly contract rate (÷30) usually does.
-import { formatUgx as ugx } from '@stap/shared';
+import { formatUgx as ugx } from '@security360/shared';
 
 const NAVY  = '#1B3A6B';
 const AMBER = '#F2AA20';

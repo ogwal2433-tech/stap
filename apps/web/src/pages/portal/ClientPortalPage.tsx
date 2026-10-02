@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { Alert, Badge, Button, Card, Col, Container, Form, Row, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS } from '@security360/shared';
+import { SERVICE_REQUEST_TYPES, SERVICE_REQUEST_STATUS_COLORS, SERVICE_REQUEST_PRIORITY_COLORS, formatUgx } from '@security360/shared';
 import { portalApi } from '../../lib/portal.api';
 import { useToast } from '../../context/ToastContext';
 import { dashboardApi } from '../../lib/dashboard.api';

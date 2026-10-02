@@ -4,7 +4,7 @@ import cron from 'node-cron';
 import prisma from '../db/prisma';
 import { OUTSTANDING_STATUSES } from './invoiceService';
 import { QueueService } from '../jobs/QueueService';
-import { REPORT_TITLE_DEFAULTS, type DirectorDashboardStats, type ScheduledReportInput } from '@security360/shared';
+import { REPORT_TITLE_DEFAULTS, roundMoney as round2, type DirectorDashboardStats, type ScheduledReportInput } from '@security360/shared';
 import { settingsService } from './settingsService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

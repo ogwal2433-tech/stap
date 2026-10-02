@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import type { InvoiceResponse } from '@security360/shared';
+import { formatUgx, isTwoDpOrWhole, roundMoney } from '@security360/shared';
 import { useAddFeeIncrement } from '../../hooks/useFinance';
 import { getApiErrorMessage } from '../../lib/api';
 

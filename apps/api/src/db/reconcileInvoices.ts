@@ -17,7 +17,7 @@ import prisma from './prisma';
 // The same two-decimal snap invoiceService applies when it writes paidAmount and
 // outstandingBalance. Summing payment rows in binary float would otherwise
 // produce dust the stored column never had, and every invoice would read as drift.
-import { roundMoney as round2 } from '@stap/shared';
+import { roundMoney as round2 } from '@security360/shared';
 
 const STATUSES = ['PENDING', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'] as const;
 
