@@ -77,7 +77,7 @@ export function buildInvoiceHtml(
   // its code share a slot because on a Ugandan slip they identify one thing.
   const paymentLines = ([
     ['Bank',           payment?.bankName],
-    ['Branch',         [payment?.bankBranchName, payment?.bankBranchNo].filter(Boolean).join(' · ')],
+    ['Branch',         [payment?.bankBranchName].filter(Boolean).join(' · ')],
     ['Account Name',   payment?.bankAccountName],
     ['Account No',     payment?.bankAccount],
   ] as Array<[string, string | null | undefined]>)
