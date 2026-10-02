@@ -90,6 +90,16 @@ export interface CompanyProfile {
   facebook:  string | null;
   instagram: string | null;
   twitter:   string | null;
+  /**
+   * Where we take payment, from Settings → Company Branding. Null until the
+   * deployment fills them in, which is how a document knows to omit the whole
+   * payment block rather than print an empty account number.
+   */
+  bankName:        string | null;
+  bankBranchName:  string | null;
+  bankBranchNo:    string | null;
+  bankAccountName: string | null;
+  bankAccount:     string | null;
 }
 
 /**
@@ -126,6 +136,11 @@ export async function companyProfile(): Promise<CompanyProfile> {
     facebook:  val('company.facebook'),
     instagram: val('company.instagram'),
     twitter:   val('company.twitter'),
+    bankName:        branding.company_bank_name || null,
+    bankBranchName:  branding.company_bank_branch_name || null,
+    bankBranchNo:    branding.company_bank_branch_no || null,
+    bankAccountName: branding.company_bank_account_name || null,
+    bankAccount:     branding.company_bank_account || null,
   };
 }
 

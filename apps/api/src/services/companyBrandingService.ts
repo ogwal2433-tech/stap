@@ -55,7 +55,9 @@ export async function updateCompanyBranding(input: unknown, actorId: string): Pr
   const patch = CompanyBrandingPatchSchema.parse(input);
   const values = Object.entries(patch).filter(([, value]) => value !== undefined) as Array<[CompanyBrandingKey, string]>;
   for (const [key, value] of values) {
-    if (['company_short_name', 'company_logo_url', 'company_registration_number', 'company_tax_id'].includes(key)
+    if (['company_short_name', 'company_logo_url', 'company_registration_number', 'company_tax_id',
+         'company_bank_name', 'company_bank_branch_name', 'company_bank_branch_no',
+         'company_bank_account_name', 'company_bank_account'].includes(key)
       && value.trim() === COMPANY_BRANDING_DEFAULTS[key]) {
       await prisma.systemSetting.deleteMany({ where: { key } });
       continue;

@@ -790,7 +790,17 @@ class InvoiceService {
     // with no company-name header, and no page watermark. The heading itself
     // still follows the configured report title.
     const invoiceTitle = await settingsService.getReportTitle('invoice');
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title), {
+    // The invoice's own print identity carries the tiger band and no letterhead
+    // contact rows, so the bank details we take payment into have to be printed
+    // here rather than relied on from the header.
+    const company = await companyProfile();
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title, {
+      bankName:        company.bankName,
+      bankBranchName:  company.bankBranchName,
+      bankBranchNo:    company.bankBranchNo,
+      bankAccountName: company.bankAccountName,
+      bankAccount:     company.bankAccount,
+    }), {
       logoFile:  'tiger_logo.jpeg',
       watermark: false,
       logoOnly:  true,

@@ -11,6 +11,15 @@ export const COMPANY_BRANDING_DEFAULTS = {
   company_logo_url: '',
   company_registration_number: '',
   company_tax_id: '',
+  // Where we take payment. Printed on the invoice, so a client does not have to
+  // email to ask. No placeholder value on purpose: an invoice carrying a wrong
+  // account number sends money to somebody else. Every one is optional — a
+  // document prints only what has actually been filled in.
+  company_bank_name: '',
+  company_bank_branch_name: '',
+  company_bank_branch_no: '',
+  company_bank_account_name: '',
+  company_bank_account: '',
 } as const;
 
 export const COMPANY_BRANDING_KEYS = Object.keys(COMPANY_BRANDING_DEFAULTS) as Array<keyof typeof COMPANY_BRANDING_DEFAULTS>;

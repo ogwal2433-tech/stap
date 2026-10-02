@@ -26,7 +26,22 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-export function buildInvoiceHtml(invoice: any, title: string): string {
+export function buildInvoiceHtml(
+  invoice: any,
+  title: string,
+  /**
+   * Where the payment should be sent, from Settings → Company Branding. Each
+   * part is optional and only what has been filled in is printed, so a
+   * deployment that uses a bank without branch codes never shows an empty label.
+   */
+  payment?: {
+    bankName?:        string | null;
+    bankBranchName?:  string | null;
+    bankBranchNo?:    string | null;
+    bankAccountName?: string | null;
+    bankAccount?:     string | null;
+  },
+): string {
   const status = invoice.status as string;
   const badge  = STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
 
@@ -49,6 +64,18 @@ export function buildInvoiceHtml(invoice: any, title: string): string {
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(p.referenceNumber ?? '—')}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
     </tr>`).join('');
+
+  // In the order someone completing a transfer reads them. The branch name and
+  // its code share a slot because on a Ugandan slip they identify one thing.
+  const paymentLines = ([
+    ['Bank',           payment?.bankName],
+    ['Branch',         [payment?.bankBranchName, payment?.bankBranchNo].filter(Boolean).join(' · ')],
+    ['Account Name',   payment?.bankAccountName],
+    ['Account No',     payment?.bankAccount],
+  ] as Array<[string, string | null | undefined]>)
+    .filter(([, value]) => value && value.trim())
+    .map(([label, value]) => `${label}: <strong>${esc(value)}</strong>`)
+    .join('<br>');
 
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3">
@@ -149,6 +176,12 @@ export function buildInvoiceHtml(invoice: any, title: string): string {
         </thead>
         <tbody>${paymentRows}</tbody>
       </table>
+    </div>` : ''}
+
+    ${paymentLines ? `
+    <div style="margin-top:12px;background:#F2F4F7;border-left:3px solid ${AMBER};border-radius:4px;padding:9px 12px;page-break-inside:avoid">
+      <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Payment Details</div>
+      <div style="font-size:10pt;color:${NAVY}">${paymentLines}</div>
     </div>` : ''}
 
     <div style="margin-top:12px;padding-top:8px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
