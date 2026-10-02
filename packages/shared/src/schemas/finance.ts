@@ -87,6 +87,60 @@ export const UpdateInvoiceSchema = z.object({
   })).min(1).optional(),
 });
 
+/**
+ * Query for GET /finance/invoices.
+ *
+ * The dates filter the *raised* date — the moment the invoice came into
+ * existence — which is a different day from the billing period printed in the
+ * Period column and from the due date, so the label on the screen and the name
+ * here both say which one is meant.
+ *
+ * `from`/`to` take either YYYY-MM-DD (a date input) or a full timestamp, and `to`
+ * is read as through the end of that day — the convention the audit log's date
+ * filter already follows, so two screens on one system answer the same question.
+ *
+ * Both the invoice list and the AR aging report take this narrowing, so it is
+ * declared once and extended where the two differ.
+ */
+const invoiceDateFilter = z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Invalid date' });
+
+/** The narrowing both the invoice list and the AR aging report accept. */
+const invoiceFilterBase = z.object({
+  clientId: z.string().min(1).optional(),
+  from:     invoiceDateFilter.optional(),
+  to:       invoiceDateFilter.optional(),
+});
+
+/**
+ * A range the wrong way round is a slip rather than an empty answer, so it is
+ * refused with a message naming the field instead of returning nothing.
+ */
+const fromNotAfterTo = (q: { from?: string; to?: string }) =>
+  !q.from || !q.to || Date.parse(q.from) <= Date.parse(q.to);
+
+const RANGE_MESSAGE = 'The from date must be on or before the to date';
+
+export const InvoiceListQuerySchema = invoiceFilterBase
+  .extend({
+    page:  z.coerce.number().int().positive().default(1),
+    // The invoice table has no pager, so the whole filtered set is expected in
+    // one call; 500 covers this business for years and keeps a stray query from
+    // dragging every invoice in the database across the wire.
+    limit:  z.coerce.number().int().min(1).max(500).default(20),
+    status: z.enum(['PENDING', 'PARTIALLY_PAID', 'OVERDUE', 'PAID', 'VOID']).optional(),
+  })
+  .refine(fromNotAfterTo, { message: RANGE_MESSAGE, path: ['from'] });
+
+/**
+ * Query for GET /finance/invoices/aging: the same narrowing as the invoice list
+ * without the paging or the status, because an aging report buckets every
+ * outstanding invoice — a page of it would total something nobody owes.
+ */
+export const ARAgingQuerySchema = invoiceFilterBase.refine(fromNotAfterTo, {
+  message: RANGE_MESSAGE,
+  path:    ['from'],
+});
+
 export const CreateDeductionSchema = z.object({
   guardId:       z.string().min(1),
   // Deduction types are stored in the DeductionType table and can be user-defined,
@@ -131,6 +185,8 @@ export type CreateInvoiceInput      = z.infer<typeof CreateInvoiceSchema>;
 export type GenerateInvoiceInput    = z.infer<typeof GenerateInvoiceSchema>;
 export type UpdateInvoiceInput      = z.infer<typeof UpdateInvoiceSchema>;
 export type RecordPaymentInput      = z.infer<typeof RecordPaymentSchema>;
+export type InvoiceListQuery        = z.infer<typeof InvoiceListQuerySchema>;
+export type ARAgingQuery            = z.infer<typeof ARAgingQuerySchema>;
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
 export type CashbookEntryInput      = z.infer<typeof CashbookEntrySchema>;

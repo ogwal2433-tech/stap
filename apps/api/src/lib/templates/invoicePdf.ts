@@ -73,13 +73,14 @@ export function buildInvoiceHtml(
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
     </tr>`).join('');
 
-  // In the order someone completing a transfer reads them. The branch name and
-  // its code share a slot because on a Ugandan slip they identify one thing.
+  // In the order someone completing a transfer reads them. The branch's code is
+  // kept in Settings but not printed: the name is what a payer needs, and a
+  // second identifier for the same branch only invites a slip to be miscopied.
   const paymentLines = ([
-    ['Bank',           payment?.bankName],
-    ['Branch',         [payment?.bankBranchName].filter(Boolean).join(' · ')],
-    ['Account Name',   payment?.bankAccountName],
-    ['Account No',     payment?.bankAccount],
+    ['Bank',         payment?.bankName],
+    ['Branch',       payment?.bankBranchName],
+    ['Account Name', payment?.bankAccountName],
+    ['Account No',   payment?.bankAccount],
   ] as Array<[string, string | null | undefined]>)
     .filter(([, value]) => value && value.trim())
     .map(([label, value]) => `${label}: <strong>${esc(value)}</strong>`)

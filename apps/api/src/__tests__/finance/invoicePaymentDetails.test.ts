@@ -57,8 +57,9 @@ describe('invoice PDF payment details', () => {
     expect(html).toContain('Nakasero');
     expect(html).toContain('Tiger Security Services Ltd');
     expect(html).toContain('9210001234567');
-    // Branch name and its code are one value, not two labels.
-    expect(html).toContain('Branch: <strong>Nakasero · 001</strong>');
+    // Only the branch's name is printed; its code stays in Settings.
+    expect(html).toContain('Branch: <strong>Nakasero</strong>');
+    expect(html).not.toContain('Nakasero ·');
     // Stated beside the reference instruction, not in place of it.
     expect(html).toContain('quote invoice S360/INV/2026/0001 with your payment');
   });
@@ -79,10 +80,12 @@ describe('invoice PDF payment details', () => {
   });
 
   it('prints only the labels it holds a value for', () => {
-    // A bank that identifies branches by code alone must not print "Branch: · 001".
+    // A branch known by code alone is not printed under a Branch label: the code
+    // is deliberately off the printout, so a payer is never handed a number they
+    // cannot match to a branch, and no empty label is left behind.
     const html = buildInvoiceHtml(invoice(), 'Invoice', { bankName: 'Stanbic Bank Uganda', bankBranchNo: '001' });
     expect(html).toContain('Bank: <strong>Stanbic Bank Uganda</strong>');
-    expect(html).toContain('Branch: <strong>001</strong>');
+    expect(html).not.toContain('Branch:');
     expect(html).not.toContain('Account Name');
     expect(html).not.toContain('Account No');
   });

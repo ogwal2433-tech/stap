@@ -346,6 +346,64 @@ describe('invoiceService.getARAgingReport()', () => {
       expect.objectContaining({ data: { status: 'OVERDUE' } }),
     );
   });
+
+  // The aging report takes the same narrowing as the invoice list, so the same
+  // two things are pinned: the filter picks which invoices are in the report,
+  // and it does not change how they are aged or what else the call maintains.
+  describe('— filters', () => {
+    /** The `where` the report went out with. */
+    const whereOf = async (
+      query: Parameters<typeof invoiceService.getARAgingReport>[0],
+    ): Promise<any> => {
+      await invoiceService.getARAgingReport(query);
+      return mp.invoice.findMany.mock.calls.at(-1)[0].where;
+    };
+
+    it('narrows the report to one customer', async () => {
+      expect(await whereOf({ clientId: 'client-1' })).toMatchObject({ clientId: 'client-1' });
+    });
+
+    it('bounds the raised date, taking the whole of the last day', async () => {
+      const where = await whereOf({ from: '2026-10-01', to: '2026-10-02' });
+
+      expect(where.createdAt.gte).toEqual(new Date('2026-10-01T00:00:00.000Z'));
+      // An invoice raised that afternoon is billed in the window, so the cut-off
+      // has to sit past the end of the day named.
+      expect(where.createdAt.lte.getTime())
+        .toBeGreaterThanOrEqual(new Date('2026-10-02T23:59:59.999Z').getTime());
+      expect(where.createdAt.lte.getTime()).toBeLessThan(new Date('2026-10-04').getTime());
+    });
+
+    it('narrows the population but still ages by due date', async () => {
+      const where = await whereOf({ from: '2026-10-01' });
+
+      expect(Object.keys(where)).toEqual(['status', 'createdAt']);
+      expect(where).not.toHaveProperty('dueDate');
+      expect(where).not.toHaveProperty('periodStart');
+      expect(mp.invoice.findMany.mock.calls.at(-1)[0].orderBy).toEqual({ dueDate: 'asc' });
+    });
+
+    it('marks every late invoice overdue even when the report shows one customer', async () => {
+      await invoiceService.getARAgingReport({ clientId: 'client-1', from: '2026-10-01' });
+
+      // The ledger correction is not a report action: scoping it to what is on
+      // screen would leave another customer's late invoice sitting marked PENDING.
+      expect(mp.invoice.updateMany).toHaveBeenCalledWith({
+        where: { status: 'PENDING', dueDate: { lt: expect.any(Date) } },
+        data:  { status: 'OVERDUE' },
+      });
+    });
+
+    it('leaves an unreadable date out of the query instead of failing it', async () => {
+      expect((await whereOf({ from: 'not-a-date' })).createdAt).toBeUndefined();
+    });
+
+    it('keeps every outstanding status in play when nothing was filtered', async () => {
+      const where = await whereOf({});
+      expect(Object.keys(where)).toEqual(['status']);
+      expect(where.status.in).toContain('PARTIALLY_PAID');
+    });
+  });
 });
 
 // ── buildInvoicePdf() — letterhead identity ───────────────────────────────────
@@ -416,5 +474,55 @@ describe('invoiceService.buildInvoicePdf()', () => {
     } finally {
       settingsService.clearReportTitleCache();
     }
+  });
+});
+
+// ── Listing with filters ───────────────────────────────────────────────────────
+
+describe('invoiceService.list() — filters', () => {
+  /** The `where` the query went out with. */
+  const whereOf = async (query: Parameters<typeof invoiceService.list>[0]): Promise<any> => {
+    await invoiceService.list(query);
+    return mp.invoice.findMany.mock.calls[0][0].where;
+  };
+
+  it('narrows the list to one customer', async () => {
+    expect(await whereOf({ clientId: 'client-1', page: 1, limit: 20 }))
+      .toMatchObject({ clientId: 'client-1' });
+  });
+
+  it('bounds the raised date, taking the whole of the last day', async () => {
+    const where = await whereOf({ from: '2026-10-01', to: '2026-10-02', page: 1, limit: 20 });
+
+    expect(where.createdAt.gte).toEqual(new Date('2026-10-01T00:00:00.000Z'));
+    // "To 2 October" names a day, so an invoice raised that afternoon belongs in
+    // the answer. The end-of-day itself is dateRangeFilter's job; this pins that
+    // the invoice list asks for it.
+    expect(where.createdAt.lte.getTime())
+      .toBeGreaterThanOrEqual(new Date('2026-10-02T23:59:59.999Z').getTime());
+    expect(where.createdAt.lte.getTime()).toBeLessThan(new Date('2026-10-04').getTime());
+  });
+
+  it('filters the day the invoice was raised, not the period billed or the due date', async () => {
+    const where = await whereOf({ from: '2026-10-01', page: 1, limit: 20 });
+
+    expect(Object.keys(where)).toEqual(['createdAt']);
+    expect(where).not.toHaveProperty('periodStart');
+    expect(where).not.toHaveProperty('dueDate');
+  });
+
+  it('counts exactly the rows it returns', async () => {
+    await invoiceService.list({ clientId: 'client-1', status: 'PAID', page: 1, limit: 20 });
+
+    expect(mp.invoice.count.mock.calls[0][0].where)
+      .toEqual(mp.invoice.findMany.mock.calls[0][0].where);
+  });
+
+  it('leaves an unreadable date out of the query instead of failing it', async () => {
+    expect((await whereOf({ from: 'not-a-date', page: 1, limit: 20 })).createdAt).toBeUndefined();
+  });
+
+  it('returns the whole query unconstrained when nothing was filtered', async () => {
+    expect(await whereOf({ page: 1, limit: 20 })).toEqual({});
   });
 });

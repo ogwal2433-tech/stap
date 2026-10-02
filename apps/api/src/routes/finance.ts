@@ -7,7 +7,28 @@
  * /api/v1/finance/invoices:
  *   get:
  *     tags: [Finance]
- *     summary: List invoices (paginated, filterable by status/client)
+ *     summary: List invoices (paginated, filterable by status/client/raised date)
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PENDING, PARTIALLY_PAID, OVERDUE, PAID, VOID] }
+ *       - in: query
+ *         name: from
+ *         description: Oldest raised date to return, inclusive (YYYY-MM-DD or date-time)
+ *         schema: { type: string }
+ *       - in: query
+ *         name: to
+ *         description: Latest raised date to return; the whole of that day is included
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 500 }
  *     responses:
  *       200:
  *         description: Paginated invoices
@@ -15,6 +36,8 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/PaginatedResponse'
+ *       400:
+ *         description: Unknown status, unreadable date, or from after to
  *   post:
  *     tags: [Finance]
  *     summary: Create invoice manually
@@ -47,9 +70,23 @@
  *   get:
  *     tags: [Finance]
  *     summary: AR aging report — buckets current, 1-30, 31-60, 61-90, 90+ days
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: from
+ *         description: Oldest raised date to include, inclusive (YYYY-MM-DD or date-time)
+ *         schema: { type: string }
+ *       - in: query
+ *         name: to
+ *         description: Latest raised date to include; the whole of that day is included
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Aging report with totals per bucket
+ *       400:
+ *         description: Unreadable date, or from after to
  *
  * /api/v1/finance/invoices/{id}/pay:
  *   post:
@@ -153,6 +190,10 @@ import {
   FINANCE_ROLES,
   HR_ROLES,
   CreateInvoiceSchema,
+  InvoiceListQuerySchema,
+  ARAgingQuerySchema,
+  type InvoiceListQuery,
+  type ARAgingQuery,
   GenerateInvoiceSchema,
   UpdateInvoiceSchema,
   RecordPaymentSchema,
@@ -175,14 +216,16 @@ router.use(authenticate);
 router.get(
   '/invoices',
   requireRole(...FINANCE_ROLES),
+  validateQuery(InvoiceListQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as InvoiceListQuery;
     const result = await invoiceService.list({
-      clientId: req.query.clientId as string | undefined,
-      status:   req.query.status as string | undefined,
-      from:     req.query.from as string | undefined,
-      to:       req.query.to as string | undefined,
-      page:     Number(req.query.page ?? 1),
-      limit:    Number(req.query.limit ?? 20),
+      clientId: query.clientId,
+      status:   query.status,
+      from:     query.from,
+      to:       query.to,
+      page:     query.page,
+      limit:    query.limit,
     });
     res.json({ success: true, ...result });
   }),
@@ -201,8 +244,10 @@ router.post(
 router.get(
   '/invoices/aging',
   requireRole(...FINANCE_ROLES),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const report = await invoiceService.getARAgingReport();
+  validateQuery(ARAgingQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clientId, from, to } = req.query as unknown as ARAgingQuery;
+    const report = await invoiceService.getARAgingReport({ clientId, from, to });
     res.json({ success: true, data: report });
   }),
 );
