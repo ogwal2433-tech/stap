@@ -304,7 +304,12 @@ export function buildHeaderHtml(logoBase64: string, company: CompanyProfile, opt
 
 // ── Footer template ────────────────────────────────────────────────────────────
 
-function buildFooterHtml(): string {
+/**
+ * The line a printed document closes with. A document may carry its own — an
+ * invoice credits who built the software rather than selling protection — so the
+ * wording is a parameter and every other document keeps the letterhead's.
+ */
+export function buildFooterHtml(line = 'Start Protecting Your Future'): string {
   return `
     <div style="
       width: 210mm;
@@ -320,7 +325,7 @@ function buildFooterHtml(): string {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     ">
-      Start Protecting Your Future
+      ${text(line)}
     </div>`;
 }
 
@@ -457,6 +462,11 @@ export interface PdfRenderOptions {
    * the amber band by leaving this unset.
    */
   plainHeader?:  boolean;
+  /**
+   * Replaces the footer line for this document only. Unset keeps the letterhead's
+   * own closing line, so a document that never asked stays exactly as it was.
+   */
+  footerText?:   string;
 }
 
 /**
@@ -481,7 +491,7 @@ export async function renderToPdf(
   const html       = wrapContent(
     contentHtml,
     buildHeaderHtml(logoBase64, company, { logoOnly: opts?.logoOnly, plainHeader: opts?.plainHeader }),
-    buildFooterHtml(),
+    buildFooterHtml(opts?.footerText),
     opts?.marginTop,    // becomes body padding-top
     opts?.marginBottom,
     opts?.marginLeft,

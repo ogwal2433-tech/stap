@@ -12,8 +12,16 @@ import { formatUgx as ugx } from '@security360/shared';
 const NAVY  = '#1B3A6B';
 const AMBER = '#F2AA20';
 
-const fmtDate = (d: Date | string | null | undefined): string =>
-  d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+// A printed invoice is read off the page by someone filling in a transfer form,
+// so the date is spelled the way they write it: 01-Sept-2026, not 1 September 2026.
+// September keeps its four letters because that is how this market abbreviates it.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+const fmtDate = (d: Date | string | null | undefined): string => {
+  if (!d) return '—';
+  const date = new Date(d);
+  return `${String(date.getDate()).padStart(2, '0')}-${MONTHS[date.getMonth()]}-${date.getFullYear()}`;
+};
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
   PAID:           { bg: '#d5f5e3', fg: '#1E8449' },
@@ -78,7 +86,7 @@ export function buildInvoiceHtml(
     .join('<br>');
 
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3;display:flex;flex-direction:column;min-height:222mm">
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
@@ -178,14 +186,20 @@ export function buildInvoiceHtml(
       </table>
     </div>` : ''}
 
-    ${paymentLines ? `
-    <div style="margin-top:12px;background:#F2F4F7;border-left:3px solid ${AMBER};border-radius:4px;padding:9px 12px;page-break-inside:avoid">
-      <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Payment Details</div>
-      <div style="font-size:10pt;color:${NAVY}">${paymentLines}</div>
-    </div>` : ''}
-
     <div style="margin-top:12px;padding-top:8px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
       Thank you for your business. Please quote invoice ${esc(invoice.invoiceNumber)} with your payment.
     </div>
+
+    ${paymentLines ? `
+    <!-- Pinned to the foot of the page rather than trailing the totals: it is the
+         last thing a client looks for, and on a short invoice the space between
+         reads as an unfinished document. margin-top:auto collapses to nothing once
+         the content fills the page, so a long invoice still flows. -->
+    <div style="margin-top:auto;padding-top:12px">
+      <div style="background:#F2F4F7;border-left:3px solid ${AMBER};border-radius:4px;padding:9px 12px;page-break-inside:avoid">
+        <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Payment Details</div>
+        <div style="font-size:10pt;color:${NAVY}">${paymentLines}</div>
+      </div>
+    </div>` : ''}
   </div>`;
 }

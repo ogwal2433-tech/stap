@@ -92,6 +92,48 @@ describe('invoice PDF payment details', () => {
     expect(html).not.toContain('<script>evil</script>');
     expect(html).toContain('&lt;script&gt;evil&lt;/script&gt;');
   });
+
+  it('sits at the foot of the page, after the closing note', () => {
+    // The payment instructions are the last thing on the page rather than a
+    // strip in the middle of the sums, so a short invoice does not read as
+    // unfinished. margin-top:auto is what holds it there.
+    const html = buildInvoiceHtml(invoice(), 'Invoice', STANBIC);
+    expect(html.indexOf('Thank you for your business')).toBeLessThan(html.indexOf('Payment Details'));
+    expect(html).toContain('margin-top:auto');
+  });
+});
+
+describe('invoice PDF dates', () => {
+  it('prints a date the way a transfer form is filled in', () => {
+    const html = buildInvoiceHtml(invoice(), 'Invoice');
+    expect(html).toContain('01-Sept-2026 — 30-Sept-2026');
+    expect(html).toContain('30-Oct-2026');
+    expect(html).not.toContain('1 September 2026');
+  });
+
+  it('pads a single-digit day and keeps the day of a month-end', () => {
+    const html = buildInvoiceHtml(invoice({
+      periodStart: '2026-12-05T00:00:00.000Z',
+      periodEnd:   '2026-12-31T00:00:00.000Z',
+      dueDate:     '2027-01-01T00:00:00.000Z',
+    }), 'Invoice');
+    expect(html).toContain('05-Dec-2026 — 31-Dec-2026');
+    expect(html).toContain('01-Jan-2027');
+  });
+
+  it('prints a payment date in the same shape', () => {
+    const html = buildInvoiceHtml(invoice({
+      payments: [{ createdAt: '2026-09-15T00:00:00.000Z', mode: 'BANK', referenceNumber: 'FT-1', amountPaid: 500000 }],
+    }), 'Invoice', STANBIC);
+    expect(html).toContain('15-Sept-2026');
+  });
+
+  it('prints an em dash for a date that was never set', () => {
+    const html = buildInvoiceHtml(invoice({ dueDate: null }), 'Invoice');
+    expect(html).toContain('01-Sept-2026');
+    // The Due Date cell, not the billing-period separator: both use the dash.
+    expect(html).toContain('<div style="font-weight:600">—</div>');
+  });
 });
 
 describe('invoice email payment details', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHeaderHtml } from '../lib/pdfBase';
+import { buildFooterHtml, buildHeaderHtml } from '../lib/pdfBase';
 import type { CompanyProfile } from '../services/integrationSettings';
 
 // The header an invoice carries. These are asserted on the markup rather than a
@@ -101,5 +101,22 @@ describe('pdfBase header bands left untouched', () => {
     expect(band).toContain('#f2aa20');
     expect(band).toContain(TIGER.nameUpper);
     expect(band).toContain('24/7 Protection Guarantee');
+  });
+});
+
+describe('pdfBase footer line', () => {
+  it('carries the credit the invoice asks for', () => {
+    expect(buildFooterHtml('POWERED BY: Biiteek Globe Ltd')).toContain('POWERED BY: Biiteek Globe Ltd');
+  });
+
+  it('keeps the letterhead line for every document that names none', () => {
+    // The invoice changed its closing line; a payroll schedule or letter that
+    // never asked must not silently follow it.
+    expect(buildFooterHtml()).toContain('Start Protecting Your Future');
+    expect(buildFooterHtml()).not.toContain('Biiteek');
+  });
+
+  it('escapes the line it is given', () => {
+    expect(buildFooterHtml('A & B <b>')).toContain('A &amp; B &lt;b&gt;');
   });
 });

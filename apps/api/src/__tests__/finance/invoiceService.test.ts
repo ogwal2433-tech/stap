@@ -358,6 +358,7 @@ describe('invoiceService.buildInvoicePdf()', () => {
       logoFile:    'tiger_logo.jpeg',
       watermark:   false,
       plainHeader: true,
+      footerText:  'POWERED BY: Biiteek Globe Ltd',
     });
   });
 

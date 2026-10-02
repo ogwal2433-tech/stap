@@ -804,6 +804,9 @@ class InvoiceService {
       logoFile:     'tiger_logo.jpeg',
       watermark:    false,
       plainHeader:  true,
+      // An invoice is a document the client keeps, so it closes with who built
+      // the system rather than the letterhead's sales line.
+      footerText:   'POWERED BY: Biiteek Globe Ltd',
     });
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
