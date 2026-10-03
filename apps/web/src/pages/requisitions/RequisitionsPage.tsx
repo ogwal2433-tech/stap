@@ -11,6 +11,7 @@ import {
   useCreatePurchaseOrder, useAccountability,
 } from '../../hooks/useRequisitions';
 import { useAuth } from '../../context/AuthContext';
+import { requisitionsApi } from '../../lib/requisitions.api';
 import type { UserRole } from '@security360/shared';
 import RoleGuard from '../../components/RoleGuard';
 import RequisitionFormModal from '../../components/requisitions/RequisitionFormModal';
@@ -21,6 +22,9 @@ import AccountabilityTable from '../../components/requisitions/AccountabilityTab
 import AccountabilityFormModal from '../../components/requisitions/AccountabilityFormModal';
 import FundDispatchSection from '../../components/requisitions/FundDispatchSection';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import RequisitionFilterPanel, {
+  EMPTY_REQUISITION_FILTERS, requisitionFiltersQuery, type RequisitionFilters,
+} from '../../components/requisitions/RequisitionFilterPanel';
 import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES, canEditRequisition } from '@security360/shared';
 import type { RequisitionResponse } from '@security360/shared';
@@ -107,6 +111,16 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
   const { user } = useAuth();
   const { data: accountability, refetch: refetchAccountability } = useAccountability(req.id);
   const [showAccountabilityForm, setShowAccountabilityForm] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  async function handlePrint() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.openDetailPdf(req.id);
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   // Accountability applies once the money has been released.
   const fundsReleased = ['APPROVED', 'ASSIGNED', 'IN_PROGRESS'].includes(req.status);
@@ -224,6 +238,13 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
         </Row>
       </Modal.Body>
       <Modal.Footer>
+        <Button
+          variant="outline-primary"
+          onClick={handlePrint}
+          disabled={printing}
+        >
+          {printing ? 'Preparing…' : '🖨 Print PDF'}
+        </Button>
         <Button variant="secondary" onClick={onClose}>Close</Button>
       </Modal.Footer>
 
@@ -353,9 +374,25 @@ function MyRequisitionsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [editReq, setEditReq]       = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]   = useState<RequisitionResponse | null>(null);
-  const { data, isLoading }         = useRequisitions();
+  const [filters, setFilters]       = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
   const { user }                    = useAuth();
+  // The list endpoint only shows other people's requisitions to admin roles; a
+  // requester filter for everyone else could only ever match themselves, so the
+  // picker is dropped where it would be dead weight.
+  const showRequester = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]
+    .includes(user?.role as any);
+  const { data, isLoading }         = useRequisitions(requisitionFiltersQuery(filters));
   const reqs = data?.data ?? [];
+  const [printing, setPrinting]     = useState(false);
+
+  async function handlePrintList() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.downloadListPdf(requisitionFiltersQuery(filters));
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   // Mirrors the API's ownership rule, so the button never appears where the
   // request would come back 403. Approvers see rows raised by other people
@@ -369,10 +406,20 @@ function MyRequisitionsTab() {
     <>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <span className="fw-semibold">My Requisitions</span>
-        <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
-          + New Requisition
-        </Button>
+        <div className="d-flex align-items-center gap-2">
+          <Button
+            size="sm" variant="outline-primary" onClick={handlePrintList} disabled={printing}
+            title="Print the list under the current filters"
+          >
+            {printing ? 'Preparing…' : '🖨 Print'}
+          </Button>
+          <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
+            + New Requisition
+          </Button>
+        </div>
       </div>
+
+      <RequisitionFilterPanel value={filters} onChange={setFilters} showRequester={showRequester} />
 
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
@@ -491,8 +538,10 @@ function ManageTab() {
   const [progressReq, setProgressReq] = useState<RequisitionResponse | null>(null);
   const [poReq, setPoReq]             = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]     = useState<RequisitionResponse | null>(null);
+  const [filters, setFilters]         = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
+  const [printing, setPrinting]       = useState(false);
 
-  const { data, isLoading } = useRequisitions();
+  const { data, isLoading } = useRequisitions(requisitionFiltersQuery(filters));
   const { user }            = useAuth();
   const hrApprove           = useHRApproveRequisition();
   const dirApprove          = useDirectorApproveRequisition();
@@ -503,13 +552,34 @@ function ManageTab() {
 
   const pendingCount = reqs.filter((r) => ['PENDING', 'SUBMITTED'].includes(r.status)).length;
 
+  async function handlePrintList() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.downloadListPdf(requisitionFiltersQuery(filters));
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   return (
     <>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <span className="fw-semibold">Manage Requisitions</span>
+        <Button
+          size="sm" variant="outline-primary" onClick={handlePrintList} disabled={printing}
+          title="Print the list under the current filters"
+        >
+          {printing ? 'Preparing…' : '🖨 Print'}
+        </Button>
+      </div>
+
       {pendingCount > 0 && (
         <Alert variant="warning" className="small py-2">
           {pendingCount} requisition(s) awaiting approval
         </Alert>
       )}
+
+      <RequisitionFilterPanel value={filters} onChange={setFilters} />
 
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
