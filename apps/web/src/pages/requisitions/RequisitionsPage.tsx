@@ -7,9 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   useRequisitions, useSuppliers, useApproveRequisition,
   useHRApproveRequisition, useDirectorApproveRequisition,
+  useRevokeRequisitionApproval,
   useAssignRequisition, useUpdateRequisitionProgress,
   useCreatePurchaseOrder, useAccountability,
 } from '../../hooks/useRequisitions';
+import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { requisitionsApi } from '../../lib/requisitions.api';
 import type { UserRole } from '@security360/shared';
@@ -368,6 +370,60 @@ function ProgressModal({ requisition, onClose }: { requisition: RequisitionRespo
   );
 }
 
+// ── Revoke Approval Modal ─────────────────────────────────────────────────────
+
+/**
+ * Pull an approval back off a requisition that is APPROVED but has had no money
+ * dispatched. Offered only inside that window (the caller hides it otherwise);
+ * the server re-checks the same rule, so a stale row just gets a clear refusal.
+ */
+function RevokeApprovalModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  const revoke = useRevokeRequisitionApproval();
+  const { showToast } = useToast();
+
+  async function handleRevoke() {
+    try {
+      await revoke.mutateAsync({ id: requisition.id, reason: reason.trim() || undefined });
+      showToast('Approval revoked — the requisition is back to Pending', 'success');
+      onClose();
+    } catch {
+      showToast('Could not revoke the approval', 'danger');
+    }
+  }
+
+  return (
+    <Modal show onHide={onClose}>
+      <Modal.Header closeButton><Modal.Title>Revoke Approval</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Alert variant="warning" className="small">
+          This revokes both the <strong>HR</strong> and <strong>Director</strong> approvals,
+          returning the requisition to <strong>PENDING</strong> for the requester to amend and
+          resubmit. It is offered only because no funds have been dispatched against it yet.
+          <div className="mt-1">
+            <strong>{requisition.particulars}</strong> — UGX {requisition.amount.toLocaleString()}
+          </div>
+        </Alert>
+        <Form.Group className="mt-3">
+          <Form.Label>Reason <span className="text-muted small">(optional)</span></Form.Label>
+          <Form.Control
+            as="textarea" rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this approval being revoked?"
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={revoke.isPending}>Cancel</Button>
+        <Button variant="danger" onClick={handleRevoke} disabled={revoke.isPending}>
+          {revoke.isPending ? 'Revoking…' : 'Revoke Approval'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 // ── My Requisitions Tab ───────────────────────────────────────────────────────
 
 function MyRequisitionsTab() {
@@ -538,6 +594,7 @@ function ManageTab() {
   const [progressReq, setProgressReq] = useState<RequisitionResponse | null>(null);
   const [poReq, setPoReq]             = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]     = useState<RequisitionResponse | null>(null);
+  const [revokeReq, setRevokeReq]     = useState<RequisitionResponse | null>(null);
   const [filters, setFilters]         = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
   const [printing, setPrinting]       = useState(false);
 
@@ -549,6 +606,12 @@ function ManageTab() {
 
   const isDirector = user?.role === ROLES.DIRECTOR;
   const isAdmin    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+  // Reversing an approval is held to the roles that can grant it (see PATCH
+  // /:id/revoke-approval), so the button never shows where the call would 403.
+  const isApprover = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any);
+  // The narrow window the server enforces: approved, and nothing paid out yet.
+  const mayRevoke  = (r: RequisitionResponse) =>
+    isApprover && r.status === 'APPROVED' && r.totalDispatched === 0;
 
   const pendingCount = reqs.filter((r) => ['PENDING', 'SUBMITTED'].includes(r.status)).length;
 
@@ -674,6 +737,11 @@ function ManageTab() {
                         Reject
                       </Button>
                     )}
+                    {mayRevoke(r) && (
+                      <Button size="sm" variant="outline-danger" onClick={() => setRevokeReq(r)}>
+                        ↩ Revoke Approval
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -688,6 +756,7 @@ function ManageTab() {
       {assignReq && <AssignModal requisition={assignReq} onClose={() => setAssignReq(null)} />}
       {progressReq && <ProgressModal requisition={progressReq} onClose={() => setProgressReq(null)} />}
       {poReq && <PurchaseOrderModal requisition={poReq} onClose={() => setPoReq(null)} />}
+      {revokeReq && <RevokeApprovalModal requisition={revokeReq} onClose={() => setRevokeReq(null)} />}
       {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
     </>
   );

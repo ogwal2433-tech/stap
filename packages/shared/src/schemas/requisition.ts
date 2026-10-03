@@ -87,6 +87,16 @@ export const HRApproveRequisitionSchema = z.object({});
 
 export const DirectorApproveRequisitionSchema = z.object({});
 
+/**
+ * Pulling an approval back off a requisition that was approved but has had no
+ * money dispatched against it. A reason is captured for the audit trail, not
+ * demanded — the caller has already been told in the UI that the action is only
+ * offered while nothing has been paid out.
+ */
+export const RevokeRequisitionApprovalSchema = z.object({
+  reason: z.string().max(500, 'Reason must be 500 characters or fewer').optional(),
+});
+
 export const AssignRequisitionSchema = z.object({
   assignedToId: z.string().min(1, 'Assignee is required'),
 });
@@ -187,6 +197,7 @@ export type CreateRequisitionInput         = z.infer<typeof CreateRequisitionSch
 export type UpdateRequisitionInput         = z.infer<typeof UpdateRequisitionSchema>;
 export type HRApproveRequisitionInput      = z.infer<typeof HRApproveRequisitionSchema>;
 export type DirectorApproveRequisitionInput = z.infer<typeof DirectorApproveRequisitionSchema>;
+export type RevokeRequisitionApprovalInput  = z.infer<typeof RevokeRequisitionApprovalSchema>;
 export type AssignRequisitionInput         = z.infer<typeof AssignRequisitionSchema>;
 export type UpdateProgressInput            = z.infer<typeof UpdateProgressSchema>;
 export type RejectRequisitionInput         = z.infer<typeof RejectRequisitionSchema>;

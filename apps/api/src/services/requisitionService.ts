@@ -7,6 +7,7 @@ import type {
   CreateRequisitionInput,
   UpdateRequisitionInput,
   ApproveRequisitionInput,
+  RevokeRequisitionApprovalInput,
   AssignRequisitionInput,
   UpdateProgressInput,
   CreatePurchaseOrderInput,
@@ -278,6 +279,62 @@ class RequisitionService {
     await QueueService.logAudit({
       userId: by, action: 'REQUISITION_DIRECTOR_APPROVED', entity: 'requisition', entityId: id,
       newValue: { status: 'APPROVED' },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  /**
+   * Undo the approval on a requisition that was approved but for which no money
+   * has yet been dispatched, sending it all the way back to a fresh PENDING.
+   *
+   * The window is deliberately narrow. It only opens while `status` is APPROVED
+   * and `totalDispatched` is zero: dispatch runs on its own axis, so once any
+   * amount has gone out, pulling the approval would strand a payment against a
+   * requisition no longer approved. Assignment also moves the status off APPROVED,
+   * so a requisition still in this window was never handed to anyone either.
+   *
+   * Both sign-offs are cleared — HR and Director — so the requisition returns to
+   * the requester to amend and resubmit through the full chain, rather than
+   * parking halfway at "awaiting Director". The audit trail already recorded the
+   * original approvals, so nothing is lost by resetting the working state.
+   */
+  async revokeApproval(
+    id: string,
+    data: RevokeRequisitionApprovalInput,
+    by: string,
+  ): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (req.status !== 'APPROVED') {
+      throw new AppError('Only an approved requisition can have its approval revoked.', 400);
+    }
+    if ((req.totalDispatched ?? 0) > 0) {
+      throw new AppError(
+        'Approval cannot be revoked — funds have already been dispatched against this requisition.',
+        400,
+      );
+    }
+
+    const updated = await prisma.requisition.update({
+      where: { id },
+      data: {
+        status:               'PENDING',
+        directorApprovedAt:   null,
+        directorApprovedById: null,
+        hrApprovedAt:         null,
+        hrApprovedById:       null,
+      },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   by,
+      action:   'REQUISITION_APPROVAL_REVOKED',
+      entity:   'requisition',
+      entityId: id,
+      oldValue: { status: 'APPROVED' },
+      newValue: { status: 'PENDING', reason: data.reason ?? null },
     });
 
     return fmtRequisition(updated);

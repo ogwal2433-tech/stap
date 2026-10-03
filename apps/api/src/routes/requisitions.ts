@@ -72,6 +72,7 @@ import {
   ApproveRequisitionSchema,
   HRApproveRequisitionSchema,
   DirectorApproveRequisitionSchema,
+  RevokeRequisitionApprovalSchema,
   AssignRequisitionSchema,
   UpdateProgressSchema,
   CreatePurchaseOrderSchema,
@@ -194,6 +195,21 @@ router.patch(
   validate(DirectorApproveRequisitionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.directorApprove(req.params.id, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+// Undo the approval on a requisition that is APPROVED but has had nothing paid
+// out. The service enforces that narrow window; the gate matches the roles that
+// can grant the approval in the first place (see /:id/approve).
+router.patch(
+  '/:id/revoke-approval',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(RevokeRequisitionApprovalSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.revokeApproval(
+      req.params.id, req.body, req.user!.userId,
+    );
     res.json({ success: true, data: requisition });
   }),
 );

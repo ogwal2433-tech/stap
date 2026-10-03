@@ -9,6 +9,7 @@ import type {
   CreateRequisitionInput,
   UpdateRequisitionInput,
   ApproveRequisitionInput,
+  RevokeRequisitionApprovalInput,
   AssignRequisitionInput,
   UpdateProgressInput,
   CreatePurchaseOrderInput,
@@ -61,6 +62,12 @@ export const requisitionsApi = {
   directorApprove(id: string): Promise<RequisitionResponse> {
     return api
       .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/director-approve`, {})
+      .then((r) => r.data.data);
+  },
+
+  revokeApproval(id: string, data: RevokeRequisitionApprovalInput): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/revoke-approval`, data)
       .then((r) => r.data.data);
   },
 

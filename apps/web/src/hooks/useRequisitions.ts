@@ -62,6 +62,15 @@ export function useDirectorApproveRequisition() {
   });
 }
 
+export function useRevokeRequisitionApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      requisitionsApi.revokeApproval(id, { reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['requisitions'] }),
+  });
+}
+
 export function useAssignRequisition() {
   const qc = useQueryClient();
   return useMutation({
