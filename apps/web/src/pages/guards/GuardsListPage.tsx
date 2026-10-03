@@ -17,7 +17,7 @@ import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_WRITE_ROLES, FINANCE_ROLES, type UserRole,
 } from '@security360/shared';
 import { GUARD_STATUS_CONFIG, guardStatusLabel, type GuardEmploymentStatus } from '@security360/shared';
-import type { GuardResponse } from '@security360/shared';
+import type { GuardResponse, GuardExportQuery } from '@security360/shared';
 import { useGuardRanks } from '../../hooks/useSettings';
 
 const STATUS_BADGE: Record<string, string> = Object.fromEntries(
@@ -79,17 +79,24 @@ export default function GuardsListPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data, isLoading, isError, error, refetch } = useGuardList({
-    page,
-    limit,
+  // The filters as one object. The table pages them; both exports take the very
+  // same object unpaged. Keeping it in a single value is what stops a download
+  // from answering a different question than the rows it was pressed under.
+  const activeFilters: GuardExportQuery = {
     search:          debouncedSearch || undefined,
     status:          (status as GuardEmploymentStatus | '') || undefined,
     rank:            rank || undefined,
-    contractType:    contractType as 'TEMPORARY' | 'PERMANENT' | undefined || undefined,
-    probationStatus: probationStatus as 'ON_PROBATION' | 'CONFIRMED' | undefined || undefined,
+    contractType:    (contractType as 'TEMPORARY' | 'PERMANENT' | '') || undefined,
+    probationStatus: (probationStatus as 'ON_PROBATION' | 'CONFIRMED' | '') || undefined,
     isIncompleteNID: nidFilter === 'true' ? true : undefined,
     idType:          idType || undefined,
     onLeave:         onLeave === 'true' ? true : undefined,
+  };
+
+  const { data, isLoading, isError, error, refetch } = useGuardList({
+    ...activeFilters,
+    page,
+    limit,
     sortBy,
     sortOrder: 'desc',
   });
@@ -147,17 +154,22 @@ export default function GuardsListPage() {
     );
   };
 
-  // Exporting asks the server for the whole roll rather than the page on screen:
-  // the point of the export is every guard, and the list response also cannot
-  // say where each one is deployed.
-  const [exporting, setExporting] = useState(false);
+  // Exports are fetched from the server rather than read off the table, so a
+  // filtered list of 3 gives 3 rows and a filtered list of 300 gives 300 — never
+  // the 20 currently on screen. The server applies the same filter rules, so the
+  // count in the toast is the count the table was showing under them.
+  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
 
-  const handleExport = async () => {
-    setExporting(true);
+  // Named on the menu because the usual surprise is a file that quietly ignored
+  // the filter the whole table was under.
+  const filterCount = Object.values(activeFilters).filter((v) => v !== undefined).length;
+
+  const handleExportExcel = async () => {
+    setExporting('excel');
     try {
-      const { guards: rows, exportedAt } = await guardsApi.exportAll();
+      const { guards: rows, exportedAt } = await guardsApi.exportAll(activeFilters);
       if (rows.length === 0) {
-        showToast('There are no guards to export yet.', 'warning');
+        showToast('No guard matches these filters, so there is nothing to export.', 'warning');
         return;
       }
       exportGuardsList(rows, new Date(exportedAt), companyBranding.company_name);
@@ -165,7 +177,19 @@ export default function GuardsListPage() {
     } catch {
       showToast('Could not export the guard list. Please try again.', 'danger');
     } finally {
-      setExporting(false);
+      setExporting(null);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    setExporting('pdf');
+    try {
+      await guardsApi.downloadRollPdf(activeFilters);
+      showToast(filterCount ? 'Exported the filtered guard list as PDF.' : 'Exported the guard list as PDF.', 'success');
+    } catch {
+      showToast('Could not prepare the PDF. Please try again.', 'danger');
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -185,16 +209,31 @@ export default function GuardsListPage() {
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="guards.view">
-            <Button
-              variant="outline-success"
-              size="sm"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting
-                ? <><Spinner as="span" size="sm" animation="border" className="me-1" />Exporting…</>
-                : <>📊 Export to Excel</>}
-            </Button>
+            <Dropdown align="end">
+              <Dropdown.Toggle
+                variant="outline-success"
+                size="sm"
+                id="guards-export"
+                disabled={exporting !== null}
+              >
+                {exporting
+                  ? <><Spinner as="span" size="sm" animation="border" className="me-1" />Exporting…</>
+                  : <>📥 Export</>}
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <div className="px-3 py-1 small text-muted border-bottom">
+                  {filterCount
+                    ? `Filtered — ${filterCount} filter${filterCount === 1 ? '' : 's'} applied`
+                    : 'All guards'}
+                </div>
+                <Dropdown.Item onClick={handleExportExcel} disabled={exporting !== null}>
+                  📊 Excel — full workbook, every column
+                </Dropdown.Item>
+                <Dropdown.Item onClick={handleExportPdf} disabled={exporting !== null}>
+                  🖨️ PDF — printed list, ready to sign
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
           </PermissionGuard>
           <PermissionGuard permission="guards.create">
             <Button

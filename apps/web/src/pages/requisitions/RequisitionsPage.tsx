@@ -7,10 +7,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   useRequisitions, useSuppliers, useApproveRequisition,
   useHRApproveRequisition, useDirectorApproveRequisition,
+  useRevokeRequisitionApproval,
   useAssignRequisition, useUpdateRequisitionProgress,
   useCreatePurchaseOrder, useAccountability,
 } from '../../hooks/useRequisitions';
+import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { requisitionsApi } from '../../lib/requisitions.api';
 import type { UserRole } from '@security360/shared';
 import RoleGuard from '../../components/RoleGuard';
 import RequisitionFormModal from '../../components/requisitions/RequisitionFormModal';
@@ -21,6 +24,9 @@ import AccountabilityTable from '../../components/requisitions/AccountabilityTab
 import AccountabilityFormModal from '../../components/requisitions/AccountabilityFormModal';
 import FundDispatchSection from '../../components/requisitions/FundDispatchSection';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import RequisitionFilterPanel, {
+  EMPTY_REQUISITION_FILTERS, requisitionFiltersQuery, type RequisitionFilters,
+} from '../../components/requisitions/RequisitionFilterPanel';
 import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES, canEditRequisition } from '@security360/shared';
 import type { RequisitionResponse } from '@security360/shared';
@@ -107,6 +113,16 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
   const { user } = useAuth();
   const { data: accountability, refetch: refetchAccountability } = useAccountability(req.id);
   const [showAccountabilityForm, setShowAccountabilityForm] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  async function handlePrint() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.openDetailPdf(req.id);
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   // Accountability applies once the money has been released.
   const fundsReleased = ['APPROVED', 'ASSIGNED', 'IN_PROGRESS'].includes(req.status);
@@ -224,6 +240,13 @@ function RequisitionDetailModal({ req, onClose }: { req: RequisitionResponse; on
         </Row>
       </Modal.Body>
       <Modal.Footer>
+        <Button
+          variant="outline-primary"
+          onClick={handlePrint}
+          disabled={printing}
+        >
+          {printing ? 'Preparing…' : '🖨 Print PDF'}
+        </Button>
         <Button variant="secondary" onClick={onClose}>Close</Button>
       </Modal.Footer>
 
@@ -347,15 +370,85 @@ function ProgressModal({ requisition, onClose }: { requisition: RequisitionRespo
   );
 }
 
+// ── Revoke Approval Modal ─────────────────────────────────────────────────────
+
+/**
+ * Pull an approval back off a requisition that is APPROVED but has had no money
+ * dispatched. Offered only inside that window (the caller hides it otherwise);
+ * the server re-checks the same rule, so a stale row just gets a clear refusal.
+ */
+function RevokeApprovalModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  const revoke = useRevokeRequisitionApproval();
+  const { showToast } = useToast();
+
+  async function handleRevoke() {
+    try {
+      await revoke.mutateAsync({ id: requisition.id, reason: reason.trim() || undefined });
+      showToast('Approval revoked — the requisition is back to Pending', 'success');
+      onClose();
+    } catch {
+      showToast('Could not revoke the approval', 'danger');
+    }
+  }
+
+  return (
+    <Modal show onHide={onClose}>
+      <Modal.Header closeButton><Modal.Title>Revoke Approval</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Alert variant="warning" className="small">
+          This revokes both the <strong>HR</strong> and <strong>Director</strong> approvals,
+          returning the requisition to <strong>PENDING</strong> for the requester to amend and
+          resubmit. It is offered only because no funds have been dispatched against it yet.
+          <div className="mt-1">
+            <strong>{requisition.particulars}</strong> — UGX {requisition.amount.toLocaleString()}
+          </div>
+        </Alert>
+        <Form.Group className="mt-3">
+          <Form.Label>Reason <span className="text-muted small">(optional)</span></Form.Label>
+          <Form.Control
+            as="textarea" rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this approval being revoked?"
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={revoke.isPending}>Cancel</Button>
+        <Button variant="danger" onClick={handleRevoke} disabled={revoke.isPending}>
+          {revoke.isPending ? 'Revoking…' : 'Revoke Approval'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 // ── My Requisitions Tab ───────────────────────────────────────────────────────
 
 function MyRequisitionsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [editReq, setEditReq]       = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]   = useState<RequisitionResponse | null>(null);
-  const { data, isLoading }         = useRequisitions();
+  const [filters, setFilters]       = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
   const { user }                    = useAuth();
+  // The list endpoint only shows other people's requisitions to admin roles; a
+  // requester filter for everyone else could only ever match themselves, so the
+  // picker is dropped where it would be dead weight.
+  const showRequester = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]
+    .includes(user?.role as any);
+  const { data, isLoading }         = useRequisitions(requisitionFiltersQuery(filters));
   const reqs = data?.data ?? [];
+  const [printing, setPrinting]     = useState(false);
+
+  async function handlePrintList() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.downloadListPdf(requisitionFiltersQuery(filters));
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   // Mirrors the API's ownership rule, so the button never appears where the
   // request would come back 403. Approvers see rows raised by other people
@@ -369,10 +462,20 @@ function MyRequisitionsTab() {
     <>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <span className="fw-semibold">My Requisitions</span>
-        <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
-          + New Requisition
-        </Button>
+        <div className="d-flex align-items-center gap-2">
+          <Button
+            size="sm" variant="outline-primary" onClick={handlePrintList} disabled={printing}
+            title="Print the list under the current filters"
+          >
+            {printing ? 'Preparing…' : '🖨 Print'}
+          </Button>
+          <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
+            + New Requisition
+          </Button>
+        </div>
       </div>
+
+      <RequisitionFilterPanel value={filters} onChange={setFilters} showRequester={showRequester} />
 
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
@@ -491,8 +594,11 @@ function ManageTab() {
   const [progressReq, setProgressReq] = useState<RequisitionResponse | null>(null);
   const [poReq, setPoReq]             = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]     = useState<RequisitionResponse | null>(null);
+  const [revokeReq, setRevokeReq]     = useState<RequisitionResponse | null>(null);
+  const [filters, setFilters]         = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
+  const [printing, setPrinting]       = useState(false);
 
-  const { data, isLoading } = useRequisitions();
+  const { data, isLoading } = useRequisitions(requisitionFiltersQuery(filters));
   const { user }            = useAuth();
   const hrApprove           = useHRApproveRequisition();
   const dirApprove          = useDirectorApproveRequisition();
@@ -500,16 +606,43 @@ function ManageTab() {
 
   const isDirector = user?.role === ROLES.DIRECTOR;
   const isAdmin    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+  // Reversing an approval is held to the roles that can grant it (see PATCH
+  // /:id/revoke-approval), so the button never shows where the call would 403.
+  const isApprover = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any);
+  // The narrow window the server enforces: approved, and nothing paid out yet.
+  const mayRevoke  = (r: RequisitionResponse) =>
+    isApprover && r.status === 'APPROVED' && r.totalDispatched === 0;
 
   const pendingCount = reqs.filter((r) => ['PENDING', 'SUBMITTED'].includes(r.status)).length;
 
+  async function handlePrintList() {
+    setPrinting(true);
+    try {
+      await requisitionsApi.downloadListPdf(requisitionFiltersQuery(filters));
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   return (
     <>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <span className="fw-semibold">Manage Requisitions</span>
+        <Button
+          size="sm" variant="outline-primary" onClick={handlePrintList} disabled={printing}
+          title="Print the list under the current filters"
+        >
+          {printing ? 'Preparing…' : '🖨 Print'}
+        </Button>
+      </div>
+
       {pendingCount > 0 && (
         <Alert variant="warning" className="small py-2">
           {pendingCount} requisition(s) awaiting approval
         </Alert>
       )}
+
+      <RequisitionFilterPanel value={filters} onChange={setFilters} />
 
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
@@ -604,6 +737,11 @@ function ManageTab() {
                         Reject
                       </Button>
                     )}
+                    {mayRevoke(r) && (
+                      <Button size="sm" variant="outline-danger" onClick={() => setRevokeReq(r)}>
+                        ↩ Revoke Approval
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -618,6 +756,7 @@ function ManageTab() {
       {assignReq && <AssignModal requisition={assignReq} onClose={() => setAssignReq(null)} />}
       {progressReq && <ProgressModal requisition={progressReq} onClose={() => setProgressReq(null)} />}
       {poReq && <PurchaseOrderModal requisition={poReq} onClose={() => setPoReq(null)} />}
+      {revokeReq && <RevokeApprovalModal requisition={revokeReq} onClose={() => setRevokeReq(null)} />}
       {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
     </>
   );

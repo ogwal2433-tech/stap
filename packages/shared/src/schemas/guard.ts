@@ -355,23 +355,45 @@ export const PromoteGuardSchema = z.object({
   effectiveDate: z.string().datetime().optional(),
 });
 
-export const GuardListQuerySchema = z.object({
+/**
+ * What the guards filters mean, declared once.
+ *
+ * The list page and both exports (spreadsheet and printed roll) take exactly
+ * these words, so a download cannot answer a different question than the rows
+ * it was pressed under. Paging and sorting live on the list only: an export is
+ * deliberately not paginated.
+ */
+const guardFilterFields = {
   /** A GUARD_ID_TYPES value, or 'NONE' for guards with no document. */
   idType:    z.string().optional(),
-  page:      z.coerce.number().int().positive().default(1),
-  limit:     z.coerce.number().int().min(1).max(500).default(20),
   search:    z.string().optional().describe('Search by name, nationalId, or phone'),
   status:    GuardEmploymentStatusSchema.optional(),
   rank:            z.string().optional(),
   contractType:    z.enum(['TEMPORARY', 'PERMANENT']).optional(),
   probationStatus: z.enum(['ON_PROBATION', 'CONFIRMED']).optional(),
   nidStatus:       z.enum(['PENDING', 'PROVIDED']).optional(),
+  // Both yes/no filters are read with z.coerce.boolean, which turns any
+  // non-empty string — 'false' included — into true. The page sends the word
+  // 'true' to switch one on and omits it to leave the roll alone, which is the
+  // only reading that survives a query string.
   isIncompleteNID: z.coerce.boolean().optional(),
   onLeave:         z.coerce.boolean().optional(),
+};
+
+export const GuardListQuerySchema = z.object({
+  ...guardFilterFields,
+  page:      z.coerce.number().int().positive().default(1),
+  limit:     z.coerce.number().int().min(1).max(500).default(20),
+  // Filters the roll to one site. Accepted on the list endpoint.
   siteId:    z.string().optional(),
   sortBy:    z.enum(['firstName', 'lastName', 'createdAt', 'salaryRate', 'contractStart']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
+
+/**
+ * Query for both guard exports — the whole filtered roll, never a page of it.
+ */
+export const GuardExportQuerySchema = z.object(guardFilterFields);
 
 // ── Vetting sub-schemas (standalone, for the PUT /vetting-data route) ──────────
 
@@ -420,6 +442,7 @@ export type ReinstateGuardInput    = z.infer<typeof ReinstateGuardSchema>;
 export type CreateGuardTransferInput = z.infer<typeof CreateGuardTransferSchema>;
 export type PromoteGuardInput      = z.infer<typeof PromoteGuardSchema>;
 export type GuardListQuery         = z.infer<typeof GuardListQuerySchema>;
+export type GuardExportQuery       = z.infer<typeof GuardExportQuerySchema>;
 export type GuardRelativeInput     = z.infer<typeof GuardRelativeSchema>;
 export type GuardAssociateInput    = z.infer<typeof GuardAssociateSchema>;
 export type GuardVettingDataInput  = z.infer<typeof GuardVettingDataSchema>;

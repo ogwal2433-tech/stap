@@ -13,6 +13,9 @@ import {
   usePayrollGroups, useCreatePayrollGroup, useUpdatePayrollGroup, useDeletePayrollGroup,
 } from '../../hooks/useFinance';
 import { useGuardList } from '../../hooks/useGuards';
+import InvoiceFilterPanel, {
+  EMPTY_INVOICE_FILTERS, areInvoiceFiltersActive, raisedRangeQuery,
+} from '../../components/finance/InvoiceFilterPanel';
 import { useToast } from '../../context/ToastContext';
 import { useReportTitle } from '../../hooks/useReportTitles';
 import { useAuth } from '../../context/AuthContext';
@@ -144,7 +147,25 @@ function InvoicesTab() {
   const [viewInvoice,   setViewInvoice]   = useState<InvoiceResponse | null>(null);
   const [editInvoice,   setEditInvoice]   = useState<InvoiceResponse | null>(null);
   const [sendingId,     setSendingId]     = useState<string | null>(null);
-  const { data, isLoading }               = useInvoices();
+
+  // ── Filters over the list ───────────────────────────────────────────────────
+  // Both bounds are the day the invoice was raised, which the table prints in its
+  // own column: a range that cannot be checked against anything on screen reads
+  // as a broken filter the first time it comes back empty. The panel, the range
+  // it builds and the customer search behind it all live in InvoiceFilterPanel,
+  // shared with the aging report so the two screens cannot drift apart.
+  const [filters, setFilters] = useState(EMPTY_INVOICE_FILTERS);
+  const filtersActive         = areInvoiceFiltersActive(filters);
+
+  const listQuery: Parameters<typeof invoicesApi.list>[0] = {
+    // The table has no pager, so the filtered set comes back in one call. The
+    // tiles above are computed from these rows, which is another reason the old
+    // default of 20 was too few: a busy month made them quietly wrong.
+    limit: 500,
+    ...raisedRangeQuery(filters),
+  };
+
+  const { data, isLoading }               = useInvoices(listQuery);
   const { showToast }                     = useToast();
   const queryClient                       = useQueryClient();
 
@@ -183,7 +204,18 @@ function InvoicesTab() {
   return (
     <>
       <div className="d-flex align-items-center justify-content-between mb-3">
-        <span className="fw-semibold">Invoices</span>
+        <span className="fw-semibold">
+          Invoices
+          {data && (
+            <span className="fw-normal small text-muted ms-2">
+              {data.pagination.total.toLocaleString()} {filtersActive ? 'matching' : 'in total'}
+              {/* Say so when the cap bit, rather than let a short list look like
+                  the whole answer. */}
+              {data.pagination.total > invoices.length
+                && ` · showing the ${invoices.length} most recent`}
+            </span>
+          )}
+        </span>
         <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
           <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
             + Generate Invoice
@@ -212,6 +244,10 @@ function InvoicesTab() {
         ))}
       </Row>
 
+      {/* Filters. The tiles above are untouched by them: those always speak for
+          this month, while the range below narrows the list under it. */}
+      <InvoiceFilterPanel value={filters} onChange={setFilters} />
+
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
       ) : (
@@ -220,6 +256,7 @@ function InvoicesTab() {
             <tr>
               <th>Invoice #</th>
               <th>Client</th>
+              <th>Raised</th>
               <th>Period</th>
               <th>Amount</th>
               <th>Due Date</th>
@@ -229,11 +266,16 @@ function InvoicesTab() {
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-muted py-4">No invoices yet</td></tr>
+              <tr>
+                <td colSpan={8} className="text-center text-muted py-4">
+                  {filtersActive ? 'No invoice matches these filters' : 'No invoices yet'}
+                </td>
+              </tr>
             ) : invoices.map((inv) => (
               <tr key={inv.id}>
                 <td className="fw-medium">{inv.invoiceNumber}</td>
                 <td>{inv.clientName}</td>
+                <td className="text-nowrap">{new Date(inv.createdAt).toLocaleDateString('en-GB')}</td>
                 <td>{fmtPeriod(inv.periodStart, inv.periodEnd)}</td>
                 <td>
                   {fmtUGX(inv.totalAmount)}
@@ -981,60 +1023,87 @@ function CashbookTab() {
 
 function ARAgingTab() {
   const agingTitle = useReportTitle('receivables_aging_report');
-  const { data, isLoading } = useARAgingReport();
+  // The same two narrowings the invoice list offers, reaching the report the same
+  // way: the days bound the invoice's raised date, the customer is its own. The
+  // buckets still age by due date, so a range here answers "what did we bill in
+  // this window, and how much of it is still owed" — not "what fell due in it".
+  const [filters, setFilters] = useState(EMPTY_INVOICE_FILTERS);
+  const filtersActive         = areInvoiceFiltersActive(filters);
+  const { data, isLoading }   = useARAgingReport(raisedRangeQuery(filters));
 
-  if (isLoading) return <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>;
+  const buckets = data ? [
+    { label: 'Current (0-30 days)', value: data.buckets.current,   color: 'success' },
+    { label: '31-60 Days',          value: data.buckets.days31_60, color: 'warning' },
+    { label: '61-90 Days',          value: data.buckets.days61_90, color: 'warning' },
+    { label: '90+ Days',            value: data.buckets.over90,    color: 'danger' },
+  ] : [];
 
-  const report = data;
-  if (!report) return <div className="text-muted small">No data</div>;
-
-  const buckets = [
-    { label: 'Current (0-30 days)', value: report.buckets.current,   color: 'success' },
-    { label: '31-60 Days',          value: report.buckets.days31_60, color: 'warning' },
-    { label: '61-90 Days',          value: report.buckets.days61_90, color: 'warning' },
-    { label: '90+ Days',            value: report.buckets.over90,    color: 'danger' },
-  ];
-
-  const unpaid = report.invoices.filter((i) => ['PENDING', 'OVERDUE'].includes(i.status));
+  const unpaid = (data?.invoices ?? []).filter((i) => ['PENDING', 'OVERDUE'].includes(i.status));
 
   return (
     <>
-      <h6 className="fw-semibold mb-3">{agingTitle.title}</h6>
-      <Row className="g-2 mb-4">
-        {buckets.map(({ label, value, color }) => (
-          <Col xs={6} lg={3} key={label}>
-            <Card className="border-0 shadow-sm text-center">
-              <Card.Body className="py-2 px-1">
-                <div className="small text-muted mb-1" style={{ fontSize: '0.7rem' }}>{label}</div>
-                <Badge bg={color} text={color === 'warning' ? 'dark' : undefined} style={{ fontSize: '0.9rem', padding: '6px 10px' }}>
-                  {fmtUGX(value)}
-                </Badge>
-              </Card.Body>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <h6 className="fw-semibold mb-0">{agingTitle.title}</h6>
+        {data && (
+          <span className="small text-muted">
+            {unpaid.length.toLocaleString()} outstanding invoice{unpaid.length === 1 ? '' : 's'}
+            {filtersActive && ' matching these filters'}
+          </span>
+        )}
+      </div>
 
-      <Table striped responsive className="small">
-        <thead className="table-light">
-          <tr><th>Invoice #</th><th>Client</th><th>Amount</th><th>Due Date</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          {unpaid.length === 0 ? (
-            <tr><td colSpan={5} className="text-center text-muted py-3">No outstanding invoices</td></tr>
-          ) : unpaid.map((inv) => (
-            <tr key={inv.id}>
-              <td>{inv.invoiceNumber}</td>
-              <td>{inv.clientName}</td>
-              <td>{fmtUGX(inv.totalAmount)}</td>
-              <td style={{ color: isOverdue(inv.dueDate) ? '#C0392B' : undefined }}>
-                {new Date(inv.dueDate).toLocaleDateString('en-GB')}
-              </td>
-              <td>{statusBadge(inv.status)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+      {/* Above the loading branch, so the controls a person has just set do not
+          vanish out from under them while the new answer arrives. */}
+      <InvoiceFilterPanel value={filters} onChange={setFilters} />
+
+      {isLoading ? (
+        <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
+      ) : !data ? (
+        <div className="text-muted small">No data</div>
+      ) : (
+        <>
+          <Row className="g-2 mb-4">
+            {buckets.map(({ label, value, color }) => (
+              <Col xs={6} lg={3} key={label}>
+                <Card className="border-0 shadow-sm text-center">
+                  <Card.Body className="py-2 px-1">
+                    <div className="small text-muted mb-1" style={{ fontSize: '0.7rem' }}>{label}</div>
+                    <Badge bg={color} text={color === 'warning' ? 'dark' : undefined} style={{ fontSize: '0.9rem', padding: '6px 10px' }}>
+                      {fmtUGX(value)}
+                    </Badge>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+
+          <Table striped responsive className="small">
+            <thead className="table-light">
+              <tr><th>Invoice #</th><th>Client</th><th>Raised</th><th>Amount</th><th>Due Date</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {unpaid.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center text-muted py-3">
+                    {filtersActive ? 'No outstanding invoice matches these filters' : 'No outstanding invoices'}
+                  </td>
+                </tr>
+              ) : unpaid.map((inv) => (
+                <tr key={inv.id}>
+                  <td>{inv.invoiceNumber}</td>
+                  <td>{inv.clientName}</td>
+                  <td className="text-nowrap">{new Date(inv.createdAt).toLocaleDateString('en-GB')}</td>
+                  <td>{fmtUGX(inv.totalAmount)}</td>
+                  <td style={{ color: isOverdue(inv.dueDate) ? '#C0392B' : undefined }}>
+                    {new Date(inv.dueDate).toLocaleDateString('en-GB')}
+                  </td>
+                  <td>{statusBadge(inv.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </>
+      )}
     </>
   );
 }

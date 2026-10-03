@@ -12,8 +12,16 @@ import { formatUgx as ugx } from '@security360/shared';
 const NAVY  = '#1B3A6B';
 const AMBER = '#F2AA20';
 
-const fmtDate = (d: Date | string | null | undefined): string =>
-  d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+// A printed invoice is read off the page by someone filling in a transfer form,
+// so the date is spelled the way they write it: 01-Sept-2026, not 1 September 2026.
+// September keeps its four letters because that is how this market abbreviates it.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+const fmtDate = (d: Date | string | null | undefined): string => {
+  if (!d) return '—';
+  const date = new Date(d);
+  return `${String(date.getDate()).padStart(2, '0')}-${MONTHS[date.getMonth()]}-${date.getFullYear()}`;
+};
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
   PAID:           { bg: '#d5f5e3', fg: '#1E8449' },
@@ -26,7 +34,33 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-export function buildInvoiceHtml(invoice: any, title: string): string {
+/**
+ * One place the company can be paid. `label`/`currency` head the account only
+ * when a document lists more than one; the branch's code is held in Settings but
+ * never printed, so a payer is not handed a second identifier to miscopy.
+ */
+type PaymentAccountView = {
+  label?:           string | null;
+  currency?:        string | null;
+  bankName?:        string | null;
+  bankBranchName?:  string | null;
+  bankBranchNo?:    string | null;
+  bankAccountName?: string | null;
+  bankAccount?:     string | null;
+};
+
+export function buildInvoiceHtml(
+  invoice: any,
+  title: string,
+  /**
+   * Where the payment should be sent, from Settings → Company Branding. A
+   * company usually holds several accounts, so this accepts one account or the
+   * whole list; every one with a value is printed so a client can choose. Each
+   * part is optional, so a deployment that uses a bank without branch codes
+   * never shows an empty label.
+   */
+  payment?: PaymentAccountView | PaymentAccountView[],
+): string {
   const status = invoice.status as string;
   const badge  = STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
 
@@ -50,8 +84,37 @@ export function buildInvoiceHtml(invoice: any, title: string): string {
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
     </tr>`).join('');
 
+  // In the order someone completing a transfer reads them. The branch's code is
+  // kept in Settings but not printed: the name is what a payer needs, and a
+  // second identifier for the same branch only invites a slip to be miscopied.
+  // One account prints as before (no heading); several are each headed by their
+  // label so a client can pick the right one to pay into.
+  const normalised: PaymentAccountView[] = Array.isArray(payment) ? payment : payment ? [payment] : [];
+  const accounts = normalised
+    .filter((a) => a && [a.bankName, a.bankBranchName, a.bankAccountName, a.bankAccount].some((v) => v && v.trim()));
+  const renderAccount = (acc: PaymentAccountView): string => ([
+    ['Bank',         acc.bankName],
+    ['Branch',       acc.bankBranchName],
+    ['Account Name', acc.bankAccountName],
+    ['Account No',   acc.bankAccount],
+  ] as Array<[string, string | null | undefined]>)
+    .filter(([, value]) => value && value.trim())
+    .map(([label, value]) => `${label}: <strong>${esc(value)}</strong>`)
+    .join('<br>');
+  const paymentLines = accounts
+    .map((acc) => {
+      const lines = renderAccount(acc);
+      if (!lines) return '';
+      const heading = accounts.length > 1
+        ? `<div style="font-weight:700;color:${NAVY}">${esc(acc.label ?? 'Account')}${acc.currency ? ` — ${esc(acc.currency)}` : ''}</div>`
+        : '';
+      return heading + lines;
+    })
+    .filter(Boolean)
+    .join('<div style="height:6px"></div>');
+
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3;display:flex;flex-direction:column;min-height:222mm">
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
@@ -154,5 +217,17 @@ export function buildInvoiceHtml(invoice: any, title: string): string {
     <div style="margin-top:12px;padding-top:8px;border-top:1px solid #e9ecef;font-size:8.5pt;color:#6c757d">
       Thank you for your business. Please quote invoice ${esc(invoice.invoiceNumber)} with your payment.
     </div>
+
+    ${paymentLines ? `
+    <!-- Pinned to the foot of the page rather than trailing the totals: it is the
+         last thing a client looks for, and on a short invoice the space between
+         reads as an unfinished document. margin-top:auto collapses to nothing once
+         the content fills the page, so a long invoice still flows. -->
+    <div style="margin-top:auto;padding-top:12px">
+      <div style="background:#F2F4F7;border-left:3px solid ${AMBER};border-radius:4px;padding:9px 12px;page-break-inside:avoid">
+        <div style="font-size:7.5pt;color:#6c757d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Payment Details</div>
+        <div style="font-size:10pt;color:${NAVY}">${paymentLines}</div>
+      </div>
+    </div>` : ''}
   </div>`;
 }

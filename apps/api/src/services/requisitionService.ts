@@ -2,10 +2,12 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { canEditRequisition } from '@security360/shared';
+import { dateRangeFilter } from '../lib/dateUtils';
 import type {
   CreateRequisitionInput,
   UpdateRequisitionInput,
   ApproveRequisitionInput,
+  RevokeRequisitionApprovalInput,
   AssignRequisitionInput,
   UpdateProgressInput,
   CreatePurchaseOrderInput,
@@ -282,6 +284,62 @@ class RequisitionService {
     return fmtRequisition(updated);
   }
 
+  /**
+   * Undo the approval on a requisition that was approved but for which no money
+   * has yet been dispatched, sending it all the way back to a fresh PENDING.
+   *
+   * The window is deliberately narrow. It only opens while `status` is APPROVED
+   * and `totalDispatched` is zero: dispatch runs on its own axis, so once any
+   * amount has gone out, pulling the approval would strand a payment against a
+   * requisition no longer approved. Assignment also moves the status off APPROVED,
+   * so a requisition still in this window was never handed to anyone either.
+   *
+   * Both sign-offs are cleared — HR and Director — so the requisition returns to
+   * the requester to amend and resubmit through the full chain, rather than
+   * parking halfway at "awaiting Director". The audit trail already recorded the
+   * original approvals, so nothing is lost by resetting the working state.
+   */
+  async revokeApproval(
+    id: string,
+    data: RevokeRequisitionApprovalInput,
+    by: string,
+  ): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (req.status !== 'APPROVED') {
+      throw new AppError('Only an approved requisition can have its approval revoked.', 400);
+    }
+    if ((req.totalDispatched ?? 0) > 0) {
+      throw new AppError(
+        'Approval cannot be revoked — funds have already been dispatched against this requisition.',
+        400,
+      );
+    }
+
+    const updated = await prisma.requisition.update({
+      where: { id },
+      data: {
+        status:               'PENDING',
+        directorApprovedAt:   null,
+        directorApprovedById: null,
+        hrApprovedAt:         null,
+        hrApprovedById:       null,
+      },
+      include: INCLUDE,
+    });
+
+    await QueueService.logAudit({
+      userId:   by,
+      action:   'REQUISITION_APPROVAL_REVOKED',
+      entity:   'requisition',
+      entityId: id,
+      oldValue: { status: 'APPROVED' },
+      newValue: { status: 'PENDING', reason: data.reason ?? null },
+    });
+
+    return fmtRequisition(updated);
+  }
+
   async assign(id: string, data: AssignRequisitionInput, by: string): Promise<RequisitionResponse> {
     const req = await prisma.requisition.findUnique({ where: { id } });
     if (!req) throw new NotFoundError('Requisition not found');
@@ -360,21 +418,50 @@ class RequisitionService {
     return fmtRequisition(updated);
   }
 
-  async list(query: {
-    status?: string;
-    page: number;
-    limit: number;
-  }, viewerRole?: string, viewerId?: string): Promise<PaginatedResponse<RequisitionResponse>> {
-    const { page, limit, status } = query;
-    const skip = (page - 1) * limit;
-
+  /**
+   * The Prisma `where` both the paginated list and the PDF export run on, so a
+   * printed page answers exactly the question the table is under rather than a
+   * subtly different one.
+   */
+  private filterWhere(
+    query: { status?: string; requestedById?: string; from?: string; to?: string },
+    viewerRole?: string,
+    viewerId?: string,
+  ): any {
+    const { status, requestedById, from, to } = query;
     const where: any = {};
     if (status) where.status = status;
+    if (from || to) {
+      // The requisition's own date (the column shown in the table), not the
+      // moment it was submitted. A picker's `to` means the whole of that day,
+      // which is what the third argument asks for.
+      const range = dateRangeFilter(from, to, true);
+      if (range) where.date = range;
+    }
 
     const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'];
     if (viewerRole && !adminRoles.includes(viewerRole) && viewerId) {
+      // Everyone else is scoped to their own submissions, whatever they ask for.
       where.requestedById = viewerId;
+    } else if (requestedById) {
+      where.requestedById = requestedById;
     }
+    return where;
+  }
+
+  async list(query: {
+    status?: string;
+    /** Narrow to requisitions raised by this user; honoured only for admin roles. */
+    requestedById?: string;
+    /** Requisition `date` range, inclusive at both ends. */
+    from?: string;
+    to?: string;
+    page: number;
+    limit: number;
+  }, viewerRole?: string, viewerId?: string): Promise<PaginatedResponse<RequisitionResponse>> {
+    const { page, limit } = query;
+    const skip = (page - 1) * limit;
+    const where = this.filterWhere(query, viewerRole, viewerId);
 
     const [reqs, total] = await Promise.all([
       prisma.requisition.findMany({
@@ -392,6 +479,44 @@ class RequisitionService {
       data: reqs.map(fmtRequisition),
       pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     };
+  }
+
+  /**
+   * Every requisition under the filters, unpaginated — the rows a printed export
+   * must carry. Scoping matches {@link list}, so the PDF matches the table.
+   */
+  async listForExport(
+    query: { status?: string; requestedById?: string; from?: string; to?: string },
+    viewerRole?: string,
+    viewerId?: string,
+  ): Promise<RequisitionResponse[]> {
+    const reqs = await prisma.requisition.findMany({
+      where:    this.filterWhere(query, viewerRole, viewerId),
+      include:  INCLUDE,
+      orderBy:  { date: 'desc' },
+    });
+    return reqs.map(fmtRequisition);
+  }
+
+  /**
+   * A single requisition for printing, held to the same ownership rule as the
+   * list: an admin may print any one, everyone else only their own. A record
+   * outside the caller's reach reads as not-found rather than leaking it exists.
+   */
+  async getForPrint(
+    id: string,
+    viewerRole?: string,
+    viewerId?: string,
+  ): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id }, include: INCLUDE });
+    if (!req) throw new NotFoundError('Requisition not found');
+
+    const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'];
+    const isPrivileged = viewerRole && adminRoles.includes(viewerRole);
+    if (!isPrivileged && req.requestedById !== viewerId) {
+      throw new NotFoundError('Requisition not found');
+    }
+    return fmtRequisition(req);
   }
 
   async createPurchaseOrder(

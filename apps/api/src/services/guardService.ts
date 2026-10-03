@@ -16,6 +16,7 @@ import type {
   CreateGuardInput,
   UpdateGuardInput,
   GuardListQuery,
+  GuardExportQuery,
   GuardResponse,
   GuardRelativeResponse,
   GuardAssociateResponse,
@@ -37,12 +38,17 @@ const ACCOUNT_VISIBLE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAG
 class GuardService {
   // ── List ───────────────────────────────────────────────────────────────────
 
-  async list(
-    query: GuardListQuery,
-    requestingUserRole: UserRole,
-  ): Promise<PaginatedResponse<GuardResponse>> {
-    const { page, limit, search, status, rank, contractType, probationStatus, nidStatus, idType, isIncompleteNID, onLeave, sortBy, sortOrder } = query;
-    const skip = (page - 1) * limit;
+  /**
+   * The roll's filters turned into a Prisma `where`, in one place.
+   *
+   * Both exports call this too, so the spreadsheet and the printed roll contain
+   * exactly the guards the table was showing when they were asked for — a second
+   * copy of these rules is where a download starts disagreeing with the screen.
+   */
+  private filterWhere(
+    query: Partial<GuardExportQuery>,
+  ): import('@prisma/client').Prisma.GuardWhereInput {
+    const { search, status, rank, contractType, probationStatus, nidStatus, idType, isIncompleteNID, onLeave } = query;
 
     const where: import('@prisma/client').Prisma.GuardWhereInput = {};
 
@@ -95,6 +101,18 @@ class GuardService {
         { systemId:   { contains: search, mode: 'insensitive' } },
       ];
     }
+
+    return where;
+  }
+
+  async list(
+    query: GuardListQuery,
+    requestingUserRole: UserRole,
+  ): Promise<PaginatedResponse<GuardResponse>> {
+    const { page, limit, sortBy, sortOrder } = query;
+    const skip = (page - 1) * limit;
+
+    const where = this.filterWhere(query);
 
     const [guards, total] = await Promise.all([
       prisma.guard.findMany({
@@ -741,16 +759,18 @@ class GuardService {
    * including them would make the figures answer a question nobody asked.
    */
   /**
-   * Every guard, for the spreadsheet export. Not paginated on purpose: the
-   * point of the export is the whole roll, and paging it would reintroduce the
-   * cut-off the caller is trying to escape.
+   * The guard roll for export. Not paginated on purpose: the point of an export
+   * is the whole list, and paging it would reintroduce the cut-off the caller is
+   * trying to escape. The filters are the list page's own — an export asked for
+   * under a filter holds just the guards that filter leaves showing.
    *
    * The open deployment record (the one with no end date) is what says where a
    * guard is now, the same rule the profile uses, so a transfer moves them here
    * without a second column to keep in step.
    */
-  async listForExport(): Promise<GuardExportRow[]> {
+  async listForExport(query: GuardExportQuery = {}): Promise<GuardExportRow[]> {
     const guards = await prisma.guard.findMany({
+      where:   this.filterWhere(query),
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       include: {
         deploymentHistory: {

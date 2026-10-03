@@ -83,10 +83,12 @@ export function useInitiateYoPayment() {
   });
 }
 
-export function useARAgingReport() {
+export function useARAgingReport(params?: Parameters<typeof invoicesApi.getARAgingReport>[0]) {
   return useQuery({
-    queryKey: ['invoices', 'aging'],
-    queryFn:  () => invoicesApi.getARAgingReport(),
+    // The filters belong in the key: two ranges are two different reports, and
+    // sharing one key would have either tab read the other's numbers.
+    queryKey: ['invoices', 'aging', params],
+    queryFn:  () => invoicesApi.getARAgingReport(params),
     staleTime: 5 * 60 * 1000,
   });
 }

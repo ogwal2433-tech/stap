@@ -9,6 +9,7 @@ import { sendEmail } from '../lib/mailer';
 import { buildInvoiceEmail } from '../lib/templates/invoiceEmail';
 import { settingsService } from './settingsService';
 import { renderToPdf } from '../lib/pdfBase';
+import { dateRangeFilter } from '../lib/dateUtils';
 import { buildInvoiceHtml } from '../lib/templates/invoicePdf';
 import type {
   CreateInvoiceInput,
@@ -496,6 +497,7 @@ class InvoiceService {
     status?: string;
     page: number;
     limit: number;
+    /** Raised-date (createdAt) range, inclusive at both ends. */
     from?: string;
     to?: string;
   }): Promise<PaginatedResponse<InvoiceResponse>> {
@@ -506,9 +508,12 @@ class InvoiceService {
     if (clientId) where.clientId = clientId;
     if (status)   where.status   = status;
     if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to);
+      // The day the invoice was raised, not the period it bills for or the date
+      // it falls due — those are separate columns, and filtering the wrong one
+      // would quietly return documents nobody asked for. A picker's `to` means
+      // the whole of that day, which is what the third argument asks for.
+      const raised = dateRangeFilter(from, to, true);
+      if (raised) where.createdAt = raised;
     }
 
     const [invoices, total] = await Promise.all([
@@ -786,29 +791,58 @@ class InvoiceService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    // Same print identity as the payroll schedule: the centred tiger logo band
-    // with no company-name header, and no page watermark. The heading itself
-    // still follows the configured report title.
+    // The invoice heading follows the configured report title, and the header
+    // band is the plain one: the tiger logo at the left with our name, address,
+    // email, phone and website at the right, so a client does not have to look
+    // up who is asking for the money. No page watermark, as on the payroll run.
     const invoiceTitle = await settingsService.getReportTitle('invoice');
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title), {
-      logoFile:  'tiger_logo.jpeg',
-      watermark: false,
-      logoOnly:  true,
+    // Contact details tell a client who we are; where to send the money is a
+    // different answer, so the bank details are still printed in the body.
+    const company = await companyProfile();
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title, company.paymentAccounts.map((a) => ({
+      label:           a.label,
+      currency:        a.currency,
+      bankName:        a.bankName,
+      bankBranchName:  a.branchName,
+      bankBranchNo:    a.branchNo,
+      bankAccountName: a.accountName,
+      bankAccount:     a.accountNumber,
+    }))), {
+      logoFile:     'tiger_logo.jpeg',
+      watermark:    false,
+      plainHeader:  true,
+      // An invoice is a document the client keeps, so it closes with who built
+      // the system rather than the letterhead's sales line.
+      footerText:   'POWERED BY: Biiteek Globe Ltd',
     });
     return { pdf, filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9]/g, '_')}.pdf` };
   }
 
-  async getARAgingReport(): Promise<ARAgingReport> {
+  async getARAgingReport(
+    query: { clientId?: string; from?: string; to?: string } = {},
+  ): Promise<ARAgingReport> {
     const now = new Date();
 
-    // Auto-mark overdue
+    // Auto-mark overdue. Deliberately unfiltered: this keeps the whole ledger
+    // honest, and a report narrowed to one customer must not leave another
+    // customer's long-overdue invoice sitting marked PENDING behind it.
     await prisma.invoice.updateMany({
       where:  { status: 'PENDING', dueDate: { lt: now } },
       data:   { status: 'OVERDUE' },
     });
 
+    const { clientId, from, to } = query;
+    const where: any = { status: { in: [...OUTSTANDING_STATUSES] } };
+    if (clientId) where.clientId = clientId;
+    // The two dates narrow the day the invoice was raised, which is what the
+    // filter panel offers on both screens — the buckets themselves still age by
+    // due date, so a range answers "what did we bill in that window and is any
+    // of it still outstanding", not "what fell due in it".
+    const raised = dateRangeFilter(from, to, true);
+    if (raised) where.createdAt = raised;
+
     const invoices = await prisma.invoice.findMany({
-      where:   { status: { in: [...OUTSTANDING_STATUSES] } },
+      where,
       include: { client: true, contract: true, payments: true },
       orderBy: { dueDate: 'asc' },
     });

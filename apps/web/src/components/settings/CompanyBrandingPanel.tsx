@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Alert, Button, Form, Spinner } from 'react-bootstrap';
 import type { CompanyBranding } from '@security360/shared';
 import { useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { COMPANY_BRANDING_DEFAULTS } from '../../lib/branding';
+import CompanyBankAccountsPanel from './CompanyBankAccountsPanel';
 import { useCompanyBranding, useCompanyBrandingDefaults, useResetCompanyBranding, useSaveCompanyBranding } from '../../hooks/useCompanyBranding';
 
-const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string }> = [
+const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string; group?: string; note?: string }> = [
   { key: 'company_name', label: 'Company name' },
   { key: 'company_short_name', label: 'Company short name' },
   { key: 'company_address', label: 'Company address' },
@@ -18,6 +19,9 @@ const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string }
   { key: 'company_logo_url', label: 'Company logo URL', type: 'url' },
   { key: 'company_registration_number', label: 'Registration number' },
   { key: 'company_tax_id', label: 'Tax ID' },
+  // Payment details moved to their own multi-account editor below: a company
+  // usually holds several accounts, so the flat company_bank_* fields no longer
+  // appear here. They still back the single-account fallback until the seed runs.
 ];
 
 export default function CompanyBrandingPanel() {
@@ -43,19 +47,25 @@ export default function CompanyBrandingPanel() {
   });
 
   if (isLoading) return <div className="text-center p-4"><Spinner /></div>;
-  return <div className="card border-0 shadow-sm"><div className="card-body">
+  return <>
+  <div className="card border-0 shadow-sm"><div className="card-body">
     <div className="d-flex justify-content-between align-items-center mb-3">
       <div><h6 className="fw-semibold mb-1">Company Branding</h6><small className="text-muted">Used on company documents, exports, and company-facing screens.</small></div>
       {canEdit && <Button size="sm" variant="outline-danger" disabled={reset.isPending} onClick={doReset}>Reset to defaults</Button>}
     </div>
     <Form onSubmit={submit}>
-      {fields.map(({ key, label, type }) => <Form.Group className="mb-3" key={key} controlId={`company-branding-${key}`}>
-        <Form.Label>{label}</Form.Label>
-        <Form.Control type={type ?? 'text'} value={draft[key]} disabled={!canEdit} onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))} />
-        <Form.Text className="text-muted">Default: {defaults[key] || 'blank'}</Form.Text>
-      </Form.Group>)}
+      {fields.map(({ key, label, type, group, note }, i) => <Fragment key={key}>
+        {group && group !== fields[i - 1]?.group && <div className="fw-semibold small text-uppercase text-muted mt-4 mb-3">{group}</div>}
+        <Form.Group className="mb-3" controlId={`company-branding-${key}`}>
+          <Form.Label>{label}</Form.Label>
+          <Form.Control type={type ?? 'text'} value={draft[key]} disabled={!canEdit} onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))} />
+          <Form.Text className="text-muted">{note ?? `Default: ${defaults[key] || 'blank'}`}</Form.Text>
+        </Form.Group>
+      </Fragment>)}
       {canEdit && <Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save changes'}</Button>}
     </Form>
     {!canEdit && <Alert variant="info" className="small mt-3 mb-0">Read-only access. Contact an administrator with settings.edit to change company branding.</Alert>}
-  </div></div>;
+  </div></div>
+  <CompanyBankAccountsPanel canEdit={canEdit} />
+  </>;
 }

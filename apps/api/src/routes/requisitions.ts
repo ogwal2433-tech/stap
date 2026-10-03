@@ -55,18 +55,24 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
-import { validate } from '../middleware/validate';
+import { validate, validateQuery } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requisitionService } from '../services/requisitionService';
+import { requisitionExportService } from '../services/requisitionExportService';
 import { supplierService } from '../services/supplierService';
 import {
   ROLES,
   INTERNAL_ROLES,
   CreateRequisitionSchema,
+  RequisitionListQuerySchema,
+  RequisitionExportQuerySchema,
+  type RequisitionListQuery,
+  type RequisitionExportQuery,
   UpdateRequisitionSchema,
   ApproveRequisitionSchema,
   HRApproveRequisitionSchema,
   DirectorApproveRequisitionSchema,
+  RevokeRequisitionApprovalSchema,
   AssignRequisitionSchema,
   UpdateProgressSchema,
   CreatePurchaseOrderSchema,
@@ -101,17 +107,41 @@ router.get(
 router.get(
   '/',
   requireRole(...REQUISITION_SUBMITTER_ROLES),
+  validateQuery(RequisitionListQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as RequisitionListQuery;
     const result = await requisitionService.list(
       {
-        status: req.query.status as string | undefined,
-        page:   Number(req.query.page  ?? 1),
-        limit:  Number(req.query.limit ?? 20),
+        status:        query.status,
+        requestedById: query.requestedById,
+        from:          query.from,
+        to:            query.to,
+        page:          query.page,
+        limit:         query.limit,
       },
       req.user!.role,
       req.user!.userId,
     );
     res.json({ success: true, ...result });
+  }),
+);
+
+// ── GET /export/pdf — the filtered list, printed ──────────────────────────────
+// Registered before /:id/pdf so the literal 'export' is never read as an id.
+router.get(
+  '/export/pdf',
+  requireRole(...REQUISITION_SUBMITTER_ROLES),
+  validateQuery(RequisitionExportQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as RequisitionExportQuery;
+    const { pdf, filename } = await requisitionExportService.buildListPdf(query, {
+      generatedBy: req.user!.name,
+      viewerRole:  req.user!.role,
+      viewerId:    req.user!.userId,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdf);
   }),
 );
 
@@ -169,6 +199,21 @@ router.patch(
   }),
 );
 
+// Undo the approval on a requisition that is APPROVED but has had nothing paid
+// out. The service enforces that narrow window; the gate matches the roles that
+// can grant the approval in the first place (see /:id/approve).
+router.patch(
+  '/:id/revoke-approval',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(RevokeRequisitionApprovalSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.revokeApproval(
+      req.params.id, req.body, req.user!.userId,
+    );
+    res.json({ success: true, data: requisition });
+  }),
+);
+
 router.patch(
   '/:id/assign',
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
@@ -199,6 +244,25 @@ router.post(
       req.user!.userId,
     );
     res.status(201).json({ success: true, data: po });
+  }),
+);
+
+// ── GET /:id/pdf — one requisition, printed ───────────────────────────────────
+// Inline disposition so it opens in a tab for previewing and printing. The
+// service holds the same ownership rule as the list: an admin prints any one,
+// everyone else only their own.
+router.get(
+  '/:id/pdf',
+  requireRole(...REQUISITION_SUBMITTER_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { pdf, filename } = await requisitionExportService.buildDetailPdf(req.params.id, {
+      generatedBy: req.user!.name,
+      viewerRole:  req.user!.role,
+      viewerId:    req.user!.userId,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(pdf);
   }),
 );
 

@@ -1,12 +1,15 @@
 import api from './api';
+import { FILE_PREFIX } from './branding';
 import type {
   RequisitionResponse,
+  RequisitionExportQuery,
   PurchaseOrderResponse,
   SupplierResponse,
   PaginatedResponse,
   CreateRequisitionInput,
   UpdateRequisitionInput,
   ApproveRequisitionInput,
+  RevokeRequisitionApprovalInput,
   AssignRequisitionInput,
   UpdateProgressInput,
   CreatePurchaseOrderInput,
@@ -21,6 +24,9 @@ import type {
 export const requisitionsApi = {
   list(params?: {
     status?: string;
+    requestedById?: string;
+    from?: string;
+    to?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<RequisitionResponse>> {
@@ -56,6 +62,12 @@ export const requisitionsApi = {
   directorApprove(id: string): Promise<RequisitionResponse> {
     return api
       .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/director-approve`, {})
+      .then((r) => r.data.data);
+  },
+
+  revokeApproval(id: string, data: RevokeRequisitionApprovalInput): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/revoke-approval`, data)
       .then((r) => r.data.data);
   },
 
@@ -126,6 +138,43 @@ export const requisitionsApi = {
     return api
       .get<{ success: boolean; data: any }>('/requisitions/dashboard')
       .then((r) => r.data.data);
+  },
+
+  /**
+   * The filtered list, printed on the letterhead. Fetched through the API client
+   * rather than linked directly, because the access token is held in memory and
+   * would not be sent on a bare navigation. The same filters narrow it as the
+   * table on screen — an export must never silently dump the whole table.
+   */
+  async downloadListPdf(params?: RequisitionExportQuery): Promise<void> {
+    const r = await api.get('/requisitions/export/pdf', { params, responseType: 'blob' });
+    const url = URL.createObjectURL(new Blob([r.data as BlobPart], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${FILE_PREFIX}_Requisitions_${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  /** One requisition, printed — opened in a tab for previewing and printing. */
+  async openDetailPdf(id: string): Promise<void> {
+    const r = await api.get(`/requisitions/${id}/pdf`, { responseType: 'blob' });
+    const blob = new Blob([r.data as BlobPart], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank', 'noopener');
+    // Popup blocked — fall back to a download so the user still gets the file.
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${FILE_PREFIX}_Requisition_${id.slice(-8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    // Revoke only after a beat; the new tab needs the blob alive to load it.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   },
 };
 

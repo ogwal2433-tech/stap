@@ -87,6 +87,16 @@ export const HRApproveRequisitionSchema = z.object({});
 
 export const DirectorApproveRequisitionSchema = z.object({});
 
+/**
+ * Pulling an approval back off a requisition that was approved but has had no
+ * money dispatched against it. A reason is captured for the audit trail, not
+ * demanded — the caller has already been told in the UI that the action is only
+ * offered while nothing has been paid out.
+ */
+export const RevokeRequisitionApprovalSchema = z.object({
+  reason: z.string().max(500, 'Reason must be 500 characters or fewer').optional(),
+});
+
 export const AssignRequisitionSchema = z.object({
   assignedToId: z.string().min(1, 'Assignee is required'),
 });
@@ -130,6 +140,56 @@ export const CreateSupplierSchema = z.object({
   paymentTerms:   z.string().max(200).optional(),
 });
 
+// ── List query ─────────────────────────────────────────────────────────────────
+
+const requisitionDateFilter = z.string().refine(
+  (v) => !isNaN(Date.parse(v)),
+  { message: 'Invalid date' },
+);
+
+/** A range the wrong way round is a slip, not an empty answer — refuse it. */
+const fromNotAfterTo = (q: { from?: string; to?: string }) =>
+  !q.from || !q.to || Date.parse(q.from) <= Date.parse(q.to);
+
+const RANGE_MESSAGE = 'The from date must be on or before the to date';
+
+/**
+ * The narrowing both the requisition list and its PDF export accept, declared
+ * once so a printed page and the table on screen answer the same question. Dates
+ * bound the requisition's own `date` (the column shown in the table), not
+ * `createdAt`; `requestedById` is honoured only for admin roles, since the
+ * service always scopes everyone else to their own submissions.
+ */
+const requisitionFilterBase = z.object({
+  status:        z.string().optional(),
+  requestedById: z.string().min(1).optional(),
+  from:          requisitionDateFilter.optional(),
+  to:            requisitionDateFilter.optional(),
+});
+
+/** Query for GET /requisitions, shared by the My Requisitions and Manage tabs. */
+export const RequisitionListQuerySchema = requisitionFilterBase
+  .extend({
+    page:  z.coerce.number().int().positive().default(1),
+    // The requisition table has no pager, so the whole filtered set is expected
+    // in one call; 500 bounds a stray query without dragging the table across.
+    limit: z.coerce.number().int().min(1).max(500).default(20),
+  })
+  .refine(fromNotAfterTo, { message: RANGE_MESSAGE, path: ['from'] });
+
+/**
+ * Query for GET /requisitions/export/pdf: the same narrowing as the list with no
+ * paging, because an export prints every row under the filters, not one page.
+ */
+export const RequisitionExportQuerySchema = requisitionFilterBase.refine(
+  fromNotAfterTo,
+  { message: RANGE_MESSAGE, path: ['from'] },
+);
+
+export type RequisitionListQuery   = z.infer<typeof RequisitionListQuerySchema>;
+export type RequisitionExportQuery = z.infer<typeof RequisitionExportQuerySchema>;
+
+
 // ── Inferred input types ───────────────────────────────────────────────────────
 
 export type CategoryItemInput              = z.infer<typeof CategoryItemSchema>;
@@ -137,6 +197,7 @@ export type CreateRequisitionInput         = z.infer<typeof CreateRequisitionSch
 export type UpdateRequisitionInput         = z.infer<typeof UpdateRequisitionSchema>;
 export type HRApproveRequisitionInput      = z.infer<typeof HRApproveRequisitionSchema>;
 export type DirectorApproveRequisitionInput = z.infer<typeof DirectorApproveRequisitionSchema>;
+export type RevokeRequisitionApprovalInput  = z.infer<typeof RevokeRequisitionApprovalSchema>;
 export type AssignRequisitionInput         = z.infer<typeof AssignRequisitionSchema>;
 export type UpdateProgressInput            = z.infer<typeof UpdateProgressSchema>;
 export type RejectRequisitionInput         = z.infer<typeof RejectRequisitionSchema>;

@@ -18,11 +18,30 @@ export interface InvoiceEmailData {
   company: {
     name:  string;
     email: string | null;
+    /** Where to pay. All null until the deployment fills them in in Settings. */
+    bankName:        string | null;
+    bankBranchName:  string | null;
+    bankBranchNo:    string | null;
+    bankAccountName: string | null;
+    bankAccount:     string | null;
   };
 }
 
 export function buildInvoiceEmail(data: InvoiceEmailData): string {
   const fmt = (n: number) => n.toLocaleString('en-UG');
+
+  // Printed only when there is something to print — an emailed invoice with a
+  // blank account number reads as a mistake, and invites a fraudulent one. Each
+  // part is optional, so only what Settings holds appears.
+  const bankLines = ([
+    ['Bank',         data.company.bankName],
+    ['Branch',       [data.company.bankBranchName, data.company.bankBranchNo].filter(Boolean).join(' · ')],
+    ['Account Name', data.company.bankAccountName],
+    ['Account No',   data.company.bankAccount],
+  ] as Array<[string, string | null]>)
+    .filter(([, value]) => value && value.trim())
+    .map(([label, value]) => `${label}: <strong>${value}</strong>`)
+    .join(' &nbsp;·&nbsp; ');
 
   const rows = data.lineItems.map(item => `
     <tr>
@@ -70,6 +89,12 @@ export function buildInvoiceEmail(data: InvoiceEmailData): string {
       Issued: ${data.issueDate} &nbsp;·&nbsp;
       Due: ${data.dueDate}
     </div>
+
+    ${bankLines ? `
+    <div style="margin-top:16px;padding:16px;background:#F2F4F7;border-left:4px solid #F2AA20;border-radius:8px;font-size:0.9rem;color:#1A1A1A">
+      <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:#6c757d;margin-bottom:6px">Payment details</div>
+      ${bankLines}
+    </div>` : ''}
 
     <p style="margin-top:24px;font-size:0.85rem;color:#6c757d">
       ${data.company.email

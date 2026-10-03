@@ -106,9 +106,14 @@ export const invoicesApi = {
     return api.post(`/finance/invoices/${invoiceId}/void`, { reason }).then((r) => r.data.data);
   },
 
-  getARAgingReport(): Promise<ARAgingReport> {
+  /**
+   * The aging report takes the same narrowing as the invoice list — which days
+   * and which customer — minus the paging, since a page of buckets would total
+   * something nobody owes.
+   */
+  getARAgingReport(params?: { clientId?: string; from?: string; to?: string }): Promise<ARAgingReport> {
     return api
-      .get<{ success: boolean; data: ARAgingReport }>('/finance/invoices/aging')
+      .get<{ success: boolean; data: ARAgingReport }>('/finance/invoices/aging', { params })
       .then((r) => r.data.data);
   },
 

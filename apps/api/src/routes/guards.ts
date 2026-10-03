@@ -165,14 +165,47 @@
  *     responses:
  *       201:
  *         description: Document uploaded
+ *
+ * /api/v1/guards/export:
+ *   get:
+ *     tags: [Guards]
+ *     summary: The guard roll as data, for the spreadsheet export — never paginated
+ *     description: >
+ *       Takes the same filters as GET /api/v1/guards (minus paging and sorting),
+ *       so the download holds exactly the guards the table was showing.
+ *     parameters:
+ *       - { in: query, name: search,            schema: { type: string } }
+ *       - { in: query, name: status,             schema: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, RESIGNED, TERMINATED] } }
+ *       - { in: query, name: rank,               schema: { type: string } }
+ *       - { in: query, name: contractType,       schema: { type: string, enum: [TEMPORARY, PERMANENT] } }
+ *       - { in: query, name: probationStatus,    schema: { type: string, enum: [ON_PROBATION, CONFIRMED] } }
+ *       - { in: query, name: nidStatus,          schema: { type: string, enum: [PENDING, PROVIDED] } }
+ *       - { in: query, name: isIncompleteNID,    schema: { type: boolean } }
+ *       - { in: query, name: idType,             schema: { type: string }, description: 'A GUARD_ID_TYPES value, or NONE for no document' }
+ *       - { in: query, name: onLeave,            schema: { type: boolean } }
+ *     responses:
+ *       200: { description: Guards, totalCount and exportedAt }
+ *       400: { description: An unrecognised filter value }
+ *
+ * /api/v1/guards/export/pdf:
+ *   get:
+ *     tags: [Guards]
+ *     summary: The same filtered roll, printed on the letterhead as a PDF
+ *     description: >
+ *       Same filters as GET /api/v1/guards/export. The Salary column prints only
+ *       for the roles that see it on the guards table.
+ *     responses:
+ *       200: { description: application/pdf attachment }
+ *       400: { description: An unrecognised filter value }
  */
-import { Router, type IRouter } from 'express';
+import { Router, type IRouter, type Request } from 'express';
 import { FILE_PREFIX } from '../config/branding';
 import { companyProfile } from '../services/integrationSettings';
 import fs from 'fs';
 import multer from 'multer';
 import prisma from '../db/prisma';
 import { guardService } from '../services/guardService';
+import { guardExportService } from '../services/guardExportService';
 import { softDeleteService } from '../services/softDeleteService';
 import { accessService } from '../services/accessService';
 import { bulkImportService } from '../services/bulkImportService';
@@ -199,6 +232,8 @@ import {
   CreateGuardTransferSchema,
   PromoteGuardSchema,
   GuardListQuerySchema,
+  GuardExportQuerySchema,
+  type GuardExportQuery,
   GuardVettingDataSchema,
   CreateDisciplinarySchema,
   GrantGuardAccessSchema,
@@ -250,13 +285,20 @@ router.post(
   }),
 );
 
-// ── GET /export — every guard, for the Excel export ───────────────────────────
+// The export endpoints share one query shape; validateQuery has already run the
+// values through GuardExportQuerySchema by the time a handler reads them.
+const GUARD_EXPORT_PARAMS = (req: Request) => req.query as unknown as GuardExportQuery;
+
+// ── GET /export — the guard roll, for the Excel export ────────────────────────
 // Declared before /:id so the literal path is not read as a guard id.
+// The filters are the list page's own: an export asked for under a filter holds
+// just the guards that filter leaves showing, and nothing is paginated.
 router.get(
   '/export',
   requirePermission(PERMISSIONS.GUARDS_VIEW),
-  asyncHandler(async (_req, res) => {
-    const guards = await guardService.listForExport();
+  validateQuery(GuardExportQuerySchema),
+  asyncHandler(async (req, res) => {
+    const guards = await guardService.listForExport(GUARD_EXPORT_PARAMS(req));
     res.status(200).json({
       success: true,
       data: {
@@ -265,6 +307,22 @@ router.get(
         exportedAt: new Date().toISOString(),
       },
     });
+  }),
+);
+
+// ── GET /export/pdf — the same roll, printed ─────────────────────────────────
+router.get(
+  '/export/pdf',
+  requirePermission(PERMISSIONS.GUARDS_VIEW),
+  validateQuery(GuardExportQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { pdf, filename } = await guardExportService.buildRollPdf(GUARD_EXPORT_PARAMS(req), {
+      generatedBy: req.user!.name,
+      viewerRole:  req.user!.role,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdf);
   }),
 );
 

@@ -31,6 +31,13 @@ interface EditableLineItem {
    */
   ratePerGuard: string;
   billingDays:  number;
+  /**
+   * true for the rows the contract preview loaded, false for rows added on top.
+   * A contract row keeps its guard type as written and cannot be removed here —
+   * dropping a contracted line is a contract decision, not an invoicing one.
+   * UI bookkeeping only: the API payload never carries it.
+   */
+  fromContract: boolean;
 }
 
 function computeDays(start: string, end: string): number {
@@ -102,6 +109,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
           count:        li.count,
           ratePerGuard: String(li.ratePerGuard),
           billingDays:  li.billingDays,
+          fromContract: true,
         })));
       })
       .catch((err: any) => {
@@ -121,9 +129,12 @@ export default function InvoiceFormModal({ onClose }: Props) {
     setLineItems((prev) => prev.map((li, i) => (i === idx ? { ...li, [field]: value } : li)));
   };
 
-  // Manual mode starts from nothing; each row is typed in by the user.
-  const addManualLine = () => {
-    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: '', billingDays }]);
+  // Extra rows sit on top of whatever is already listed — a part-month posting,
+  // relief cover, a transport charge. In manual mode this is the only way to
+  // get a row at all; in contract mode it is how a charge outside the contract's
+  // rate lines gets billed on the same invoice instead of a second one.
+  const addLine = () => {
+    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: '', billingDays, fromContract: false }]);
   };
 
   const removeLine = (idx: number) => {
@@ -137,13 +148,15 @@ export default function InvoiceFormModal({ onClose }: Props) {
 
   const selectedContract = contracts.find((c: ContractResponse) => c.id === contractId);
 
-  // Manual lines need a name on every row before the invoice makes sense.
-  const manualLinesComplete =
+  // Every line needs a name before the invoice makes sense. The contract's own
+  // rows always have one, so in contract mode this really gates the rows added
+  // on top — an untitled extra line would reach the client as a blank charge.
+  const linesComplete =
     lineItems.length > 0 && lineItems.every((li) => li.guardType.trim().length > 0);
   const canGenerate =
     (!!clientId || !!contractId) &&
     (!!contractId || manualMode) &&
-    (!!contractId ? lineItems.length > 0 : manualLinesComplete) &&
+    linesComplete &&
     !!billingStart &&
     !!billingEnd &&
     !generateMutation.isPending;
@@ -157,12 +170,13 @@ export default function InvoiceFormModal({ onClose }: Props) {
       showToast('Select the client to bill.', 'warning');
       return;
     }
-    if (manualMode && !manualLinesComplete) {
-      showToast('Every manual line needs a description before generating.', 'warning');
+    if (lineItems.length === 0) {
+      showToast('Add at least one invoice line.', 'warning');
       return;
     }
-    if (!contractId && lineItems.length === 0) {
-      showToast('Add at least one invoice line.', 'warning');
+    // Enforced in both modes now that a contract invoice can carry added lines.
+    if (!linesComplete) {
+      showToast('Every invoice line needs a description before generating.', 'warning');
       return;
     }
     if (!billingStart || !billingEnd) {
@@ -171,7 +185,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
     }
     try {
       const lineItemOverrides = lineItems.map((li) => ({
-        guardType:    manualMode ? li.guardType.trim() : li.guardType,
+        guardType:    li.guardType.trim(),
         count:        li.count,
         ratePerGuard: Number(li.ratePerGuard) || 0,
         billingDays:  li.billingDays,
@@ -336,18 +350,41 @@ export default function InvoiceFormModal({ onClose }: Props) {
             </Col>
           )}
 
-          {/* ── Rate lines (from contract preview, or captured manually) ── */}
+          {/* ── Invoice lines: the contract's rate lines, plus any added here ── */}
           <Col md={12}>
-            {manualMode ? (
+            {!contractId && !manualMode ? (
+              <div style={{
+                border: '2px dashed #ced4da', borderRadius: '0.375rem', padding: '24px',
+                textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
+              }}>
+                Select a client and contract above to load the rate breakdown
+                {clientId ? ', or flip the switch below the contract field to capture lines manually' : ''}
+              </div>
+            ) : previewLoading ? (
+              <div className="text-center py-3 text-muted">
+                <Spinner size="sm" className="me-2" />Loading rate breakdown...
+              </div>
+            ) : (
               <div>
                 <div className="fw-bold small text-muted mb-2">
                   Invoice Line Items
-                  <span className="text-muted fw-normal ms-1">(captured manually — no contract)</span>
+                  <span className="text-muted fw-normal ms-1">
+                    {manualMode
+                      ? '(captured manually — no contract)'
+                      : '(loaded from the contract — add extra lines as needed)'}
+                  </span>
                 </div>
                 {lineItems.length === 0 ? (
-                  <Alert variant="info" className="small py-2">
-                    No lines yet — add each charge the client owes for this period.
-                  </Alert>
+                  // A failed preview has already raised its own alert above, so
+                  // claiming the contract has no rate lines would be the wrong
+                  // explanation for an error that came from loading them.
+                  previewError ? null : (
+                    <Alert variant={manualMode ? 'info' : 'warning'} className="small py-2">
+                      {manualMode
+                        ? 'No lines yet — add each charge the client owes for this period.'
+                        : 'This contract has no guard rate lines. Add what you are billing below, or edit the contract to configure them.'}
+                    </Alert>
+                  )
                 ) : (
                   <Table size="sm" bordered className="mb-2">
                     <thead style={{ background: '#F2F4F7' }}>
@@ -364,12 +401,20 @@ export default function InvoiceFormModal({ onClose }: Props) {
                       {lineItems.map((li, idx) => (
                         <tr key={idx}>
                           <td>
-                            <Form.Control
-                              size="sm"
-                              placeholder="e.g. Night guard, 12th–30th Sept"
-                              value={li.guardType}
-                              onChange={(e) => updateLine(idx, 'guardType', e.target.value)}
-                            />
+                            {li.fromContract ? (
+                              // A contract row keeps the guard type the contract
+                              // holds; only the money figures on it are open here.
+                              <div style={{ fontWeight: 500, verticalAlign: 'middle', fontSize: '0.85rem' }}>
+                                {li.guardType}
+                              </div>
+                            ) : (
+                              <Form.Control
+                                size="sm"
+                                placeholder="e.g. Night guard, 12th–30th Sept"
+                                value={li.guardType}
+                                onChange={(e) => updateLine(idx, 'guardType', e.target.value)}
+                              />
+                            )}
                           </td>
                           <td>
                             <Form.Control
@@ -398,14 +443,20 @@ export default function InvoiceFormModal({ onClose }: Props) {
                             {formatUgx(lineTotal(li))}
                           </td>
                           <td className="text-center align-middle" style={{ width: 40 }}>
-                            <button
-                              type="button"
-                              onClick={() => removeLine(idx)}
-                              style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
-                              title="Remove this line"
-                            >
-                              ×
-                            </button>
+                            {/* Contract rows are not removable from here: a month
+                                with fewer guards on post is still billed per
+                                contract, and correcting one is Add Fees or a
+                                void-and-reissue, not deleting the row. */}
+                            {!li.fromContract && (
+                              <button
+                                type="button"
+                                onClick={() => removeLine(idx)}
+                                style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                                title="Remove this line"
+                              >
+                                ×
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -426,93 +477,9 @@ export default function InvoiceFormModal({ onClose }: Props) {
                     </tfoot>
                   </Table>
                 )}
-                <Button size="sm" variant="outline-primary" onClick={addManualLine}>
+                <Button size="sm" variant="outline-primary" onClick={addLine}>
                   <i className="bi bi-plus-lg me-1" />Add line
                 </Button>
-              </div>
-            ) : !contractId ? (
-              <div style={{
-                border: '2px dashed #ced4da', borderRadius: '0.375rem', padding: '24px',
-                textAlign: 'center', color: '#6c757d', fontSize: '0.82rem',
-              }}>
-                Select a client and contract above to load the rate breakdown
-                {clientId ? ', or flip the switch below the contract field to capture lines manually' : ''}
-              </div>
-            ) : previewLoading ? (
-              <div className="text-center py-3 text-muted">
-                <Spinner size="sm" className="me-2" />Loading rate breakdown...
-              </div>
-            ) : lineItems.length === 0 ? (
-              !previewError && (
-                <Alert variant="warning" className="small py-2">
-                  This contract has no guard rate lines. Edit the contract to add rate lines before generating an invoice.
-                </Alert>
-              )
-            ) : (
-              <div>
-                <div className="fw-bold small text-muted mb-2">
-                  Invoice Line Items
-                  <span className="text-muted fw-normal ms-1">(editable before generating)</span>
-                </div>
-                <Table size="sm" bordered className="mb-2">
-                  <thead style={{ background: '#F2F4F7' }}>
-                    <tr>
-                      <th>Guard Type</th>
-                      <th style={{ width: 70 }}>Count</th>
-                      <th style={{ width: 130 }}>Rate / Guard (UGX)</th>
-                      <th style={{ width: 70 }}>Days</th>
-                      <th style={{ width: 130 }}>Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineItems.map((li, idx) => (
-                      <tr key={idx}>
-                        <td style={{ fontWeight: 500, verticalAlign: 'middle', fontSize: '0.85rem' }}>
-                          {li.guardType}
-                        </td>
-                        <td>
-                          <Form.Control
-                            size="sm" type="number" min={1}
-                            value={li.count}
-                            onChange={(e) => updateLine(idx, 'count', parseInt(e.target.value, 10) || 1)}
-                            style={{ textAlign: 'center' }}
-                          />
-                        </td>
-                        <td>
-                          <Form.Control
-                            size="sm" type="number" min={0} step="0.01" placeholder="e.g. 16666.67"
-                            value={li.ratePerGuard}
-                            onChange={(e) => updateLine(idx, 'ratePerGuard', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <Form.Control
-                            size="sm" type="number" min={1}
-                            value={li.billingDays}
-                            onChange={(e) => updateLine(idx, 'billingDays', parseInt(e.target.value, 10) || 30)}
-                            style={{ textAlign: 'center' }}
-                          />
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'middle', color: NAVY, fontSize: '0.85rem' }}>
-                          {formatUgx(lineTotal(li))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#D0EDE9' }}>
-                      <td colSpan={2} style={{ fontWeight: 600, color: '#0F7B6C', fontSize: '0.82rem' }}>
-                        Total Guards: {totalGuards}
-                      </td>
-                      <td colSpan={2} style={{ fontWeight: 600, color: '#0F7B6C', fontSize: '0.82rem' }}>
-                        Total:
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: '#0F7B6C' }}>
-                        {formatUgx(computedTotal)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </Table>
               </div>
             )}
           </Col>

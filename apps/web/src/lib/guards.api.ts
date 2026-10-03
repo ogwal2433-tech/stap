@@ -13,6 +13,7 @@ import type {
   PaginatedResponse,
   CreateGuardInput,
   GuardListQuery,
+  GuardExportQuery,
   BulkImportResult,
   GuardDashboardStats,
   GuardRelativeInput,
@@ -139,11 +140,32 @@ export const guardsApi = {
     return api.post(`/guards/${id}/restore`).then((r) => r.data.data);
   },
 
-  /** Every guard, for the Excel export — deliberately not paginated. */
-  exportAll(): Promise<GuardExportResponse> {
+  /**
+   * The roll for the Excel export — deliberately not paginated, but it does take
+   * the filters the table is under, so the file answers the same question the
+   * screen was answering when Export was pressed.
+   */
+  exportAll(params?: GuardExportQuery): Promise<GuardExportResponse> {
     return api
-      .get<{ success: boolean; data: GuardExportResponse }>('/guards/export')
+      .get<{ success: boolean; data: GuardExportResponse }>('/guards/export', { params })
       .then((r) => r.data.data);
+  },
+
+  /**
+   * The same filtered roll, printed on the letterhead. Fetched through the API
+   * client rather than linked directly, because the access token is held in
+   * memory and would not be sent on a bare navigation.
+   */
+  async downloadRollPdf(params?: GuardExportQuery): Promise<void> {
+    const r = await api.get('/guards/export/pdf', { params, responseType: 'blob' });
+    const url = URL.createObjectURL(new Blob([r.data as BlobPart], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${FILE_PREFIX}_Guards_${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   },
 
   idStats(): Promise<GuardIdStats> {

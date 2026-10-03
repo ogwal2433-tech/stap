@@ -55,7 +55,7 @@ describe('CompanyBrandingPanel', () => {
     draw();
     await waitFor(() => expect(field('Company name').value).toBe(COMPANY_BRANDING_DEFAULTS.company_name));
 
-    for (const label of ['Company name', 'Company short name', 'Company address', 'Company phone', 'Registration number', 'Tax ID']) {
+    for (const label of ['Company name', 'Company short name', 'Company address', 'Company phone', 'Registration number', 'Tax ID', 'Bank name', 'Bank branch name', 'Bank branch no.', 'Account name', 'Bank account number']) {
       fireEvent.change(field(label), { target: { value: `${label} edited` } });
       await waitFor(() => expect(field(label).value).toBe(`${label} edited`));
     }
@@ -71,6 +71,34 @@ describe('CompanyBrandingPanel', () => {
     await waitFor(() => expect(h.saved).toHaveLength(1));
     expect(h.saved[0].company_name).toBe('Acme Guarding Ltd');
     await waitFor(() => expect(field('Company name').value).toBe('Acme Guarding Ltd'));
+  });
+
+  it('saves the bank details an invoice is paid into', async () => {
+    // These leave the building on paper: a keystroke that did not stick here
+    // would print an invoice naming the wrong account.
+    draw();
+    await waitFor(() => expect(field('Company name').value).toBe(COMPANY_BRANDING_DEFAULTS.company_name));
+
+    const values: Record<string, string> = {
+      'Bank name': 'Stanbic Bank Uganda',
+      'Bank branch name': 'Nakasero',
+      'Bank branch no.': '001',
+      'Account name': 'Tiger Security Services Ltd',
+      'Bank account number': '9210001234567',
+    };
+    for (const [label, value] of Object.entries(values)) {
+      fireEvent.change(field(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(h.saved).toHaveLength(1));
+    expect(h.saved[0]).toMatchObject({
+      company_bank_name: 'Stanbic Bank Uganda',
+      company_bank_branch_name: 'Nakasero',
+      company_bank_branch_no: '001',
+      company_bank_account_name: 'Tiger Security Services Ltd',
+      company_bank_account: '9210001234567',
+    });
   });
 
   it('is read-only without settings.edit', async () => {
