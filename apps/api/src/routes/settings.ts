@@ -193,9 +193,10 @@ import { groupView, saveGroup, xcelConfig } from '../services/integrationSetting
 import { verifyMailer } from '../lib/mailer';
 import { requirePermission } from '../middleware/permissions';
 import { PERMISSIONS } from '../constants/permissions';
-import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey } from '@security360/shared';
+import { REPORT_KEYS, ReportTitleConfigPatchSchema, type ReportKey, CompanyBankAccountCreateSchema, CompanyBankAccountUpdateSchema } from '@security360/shared';
 import { COMPANY_BRANDING_KEYS, type CompanyBrandingKey } from '@security360/shared';
 import { companyBrandingDefaults, getCompanyBranding, resetCompanyBranding, updateCompanyBranding } from '../services/companyBrandingService';
+import { companyBankAccountService } from '../services/companyBankAccountService';
 
 const router: IRouter = Router();
 
@@ -220,6 +221,27 @@ router.post('/company-branding/reset', requirePermission(PERMISSIONS.SETTINGS_ED
     throw new AppError('keys must contain valid company branding keys.', 400);
   }
   res.json({ success: true, data: await resetCompanyBranding(keys as CompanyBrandingKey[], req.user!.userId) });
+}));
+
+// ── Company payment accounts ───────────────────────────────────────────────────
+// The accounts a client pays us into, grown out of the single company_bank_*
+// set. Reads need settings.view; every write — including moving the default —
+// needs settings.edit, since a wrong account number on an invoice moves money.
+router.get('/company-bank-accounts', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await companyBankAccountService.list() });
+}));
+router.post('/company-bank-accounts', requirePermission(PERMISSIONS.SETTINGS_EDIT), validate(CompanyBankAccountCreateSchema), asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, data: await companyBankAccountService.create(req.body, req.user!.userId) });
+}));
+router.patch('/company-bank-accounts/:id', requirePermission(PERMISSIONS.SETTINGS_EDIT), validate(CompanyBankAccountUpdateSchema), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await companyBankAccountService.update(req.params.id, req.body, req.user!.userId) });
+}));
+router.post('/company-bank-accounts/:id/default', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await companyBankAccountService.setDefault(req.params.id, req.user!.userId) });
+}));
+router.delete('/company-bank-accounts/:id', requirePermission(PERMISSIONS.SETTINGS_EDIT), asyncHandler(async (req, res) => {
+  await companyBankAccountService.remove(req.params.id, req.user!.userId);
+  res.json({ success: true });
 }));
 router.get('/report-titles', requirePermission(PERMISSIONS.SETTINGS_VIEW), asyncHandler(async (_req, res) => {
   res.json({ success: true, data: await settingsService.getReportTitles() });

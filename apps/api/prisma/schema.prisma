@@ -2243,3 +2243,33 @@ model JobRunLog {
 
   @@index([jobId, startedAt])
 }
+
+// ─── Company Payment Accounts ──────────────────────────────────────────────────
+// Where this company takes payment. A deployment usually holds several — a UGX
+// bank account, a USD one, a mobile-money merchant — so the single set of
+// company_bank_* SystemSetting rows grew into this table. Exactly one is the
+// default (the fallback printed on documents that name one account); every
+// active one is printed on the invoice so a client can pick.
+
+model CompanyBankAccount {
+  id            String   @id @default(cuid())
+  /// How the account is labelled on the invoice: "UGX Current", "MTN MoMo".
+  label         String
+  /// BANK_ACCOUNT | MOBILE_MONEY | OTHER
+  type          String   @default("BANK_ACCOUNT")
+  currency      String?
+  bankName      String?
+  branchName    String?
+  branchNo      String?
+  accountName   String?
+  accountNumber String?
+  /// One true at a time; printed alone where a single account is expected.
+  isDefault     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}

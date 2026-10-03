@@ -18,6 +18,7 @@ import type {
   UpdateShiftTypeInput,
   ReportKey, ReportTitleConfig, ReportTitlesMap,
   CompanyBranding, CompanyBrandingKey,
+  CompanyBankAccountResponse, CompanyBankAccountCreateInput, CompanyBankAccountUpdateInput,
 } from '@security360/shared';
 
 export const settingsApi = {
@@ -32,6 +33,22 @@ export const settingsApi = {
   },
   resetCompanyBranding(keys?: CompanyBrandingKey[]): Promise<CompanyBranding> {
     return api.post<{ data: CompanyBranding }>('/settings/company-branding/reset', keys ? { keys } : {}).then(r => r.data.data);
+  },
+  // ── Company payment accounts ──────────────────────────────────────────────
+  listCompanyBankAccounts(): Promise<CompanyBankAccountResponse[]> {
+    return api.get<{ success: boolean; data: CompanyBankAccountResponse[] }>('/settings/company-bank-accounts').then(r => r.data.data);
+  },
+  createCompanyBankAccount(data: CompanyBankAccountCreateInput): Promise<CompanyBankAccountResponse> {
+    return api.post<{ success: boolean; data: CompanyBankAccountResponse }>('/settings/company-bank-accounts', data).then(r => r.data.data);
+  },
+  updateCompanyBankAccount(id: string, data: CompanyBankAccountUpdateInput): Promise<CompanyBankAccountResponse> {
+    return api.patch<{ success: boolean; data: CompanyBankAccountResponse }>(`/settings/company-bank-accounts/${id}`, data).then(r => r.data.data);
+  },
+  setDefaultCompanyBankAccount(id: string): Promise<CompanyBankAccountResponse> {
+    return api.post<{ success: boolean; data: CompanyBankAccountResponse }>(`/settings/company-bank-accounts/${id}/default`).then(r => r.data.data);
+  },
+  deleteCompanyBankAccount(id: string): Promise<void> {
+    return api.delete(`/settings/company-bank-accounts/${id}`).then(() => undefined);
   },
   getReportTitles(): Promise<ReportTitlesMap> {
     return api.get<{ data: ReportTitlesMap }>('/settings/report-titles').then(r => r.data.data);

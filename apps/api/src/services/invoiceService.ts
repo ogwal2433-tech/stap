@@ -799,13 +799,15 @@ class InvoiceService {
     // Contact details tell a client who we are; where to send the money is a
     // different answer, so the bank details are still printed in the body.
     const company = await companyProfile();
-    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title, {
-      bankName:        company.bankName,
-      bankBranchName:  company.bankBranchName,
-      bankBranchNo:    company.bankBranchNo,
-      bankAccountName: company.bankAccountName,
-      bankAccount:     company.bankAccount,
-    }), {
+    const pdf = await renderToPdf(buildInvoiceHtml(invoice, invoiceTitle.title, company.paymentAccounts.map((a) => ({
+      label:           a.label,
+      currency:        a.currency,
+      bankName:        a.bankName,
+      bankBranchName:  a.branchName,
+      bankBranchNo:    a.branchNo,
+      bankAccountName: a.accountName,
+      bankAccount:     a.accountNumber,
+    }))), {
       logoFile:     'tiger_logo.jpeg',
       watermark:    false,
       plainHeader:  true,

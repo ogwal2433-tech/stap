@@ -34,21 +34,32 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
+/**
+ * One place the company can be paid. `label`/`currency` head the account only
+ * when a document lists more than one; the branch's code is held in Settings but
+ * never printed, so a payer is not handed a second identifier to miscopy.
+ */
+type PaymentAccountView = {
+  label?:           string | null;
+  currency?:        string | null;
+  bankName?:        string | null;
+  bankBranchName?:  string | null;
+  bankBranchNo?:    string | null;
+  bankAccountName?: string | null;
+  bankAccount?:     string | null;
+};
+
 export function buildInvoiceHtml(
   invoice: any,
   title: string,
   /**
-   * Where the payment should be sent, from Settings → Company Branding. Each
-   * part is optional and only what has been filled in is printed, so a
-   * deployment that uses a bank without branch codes never shows an empty label.
+   * Where the payment should be sent, from Settings → Company Branding. A
+   * company usually holds several accounts, so this accepts one account or the
+   * whole list; every one with a value is printed so a client can choose. Each
+   * part is optional, so a deployment that uses a bank without branch codes
+   * never shows an empty label.
    */
-  payment?: {
-    bankName?:        string | null;
-    bankBranchName?:  string | null;
-    bankBranchNo?:    string | null;
-    bankAccountName?: string | null;
-    bankAccount?:     string | null;
-  },
+  payment?: PaymentAccountView | PaymentAccountView[],
 ): string {
   const status = invoice.status as string;
   const badge  = STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
@@ -76,15 +87,31 @@ export function buildInvoiceHtml(
   // In the order someone completing a transfer reads them. The branch's code is
   // kept in Settings but not printed: the name is what a payer needs, and a
   // second identifier for the same branch only invites a slip to be miscopied.
-  const paymentLines = ([
-    ['Bank',         payment?.bankName],
-    ['Branch',       payment?.bankBranchName],
-    ['Account Name', payment?.bankAccountName],
-    ['Account No',   payment?.bankAccount],
+  // One account prints as before (no heading); several are each headed by their
+  // label so a client can pick the right one to pay into.
+  const normalised: PaymentAccountView[] = Array.isArray(payment) ? payment : payment ? [payment] : [];
+  const accounts = normalised
+    .filter((a) => a && [a.bankName, a.bankBranchName, a.bankAccountName, a.bankAccount].some((v) => v && v.trim()));
+  const renderAccount = (acc: PaymentAccountView): string => ([
+    ['Bank',         acc.bankName],
+    ['Branch',       acc.bankBranchName],
+    ['Account Name', acc.bankAccountName],
+    ['Account No',   acc.bankAccount],
   ] as Array<[string, string | null | undefined]>)
     .filter(([, value]) => value && value.trim())
     .map(([label, value]) => `${label}: <strong>${esc(value)}</strong>`)
     .join('<br>');
+  const paymentLines = accounts
+    .map((acc) => {
+      const lines = renderAccount(acc);
+      if (!lines) return '';
+      const heading = accounts.length > 1
+        ? `<div style="font-weight:700;color:${NAVY}">${esc(acc.label ?? 'Account')}${acc.currency ? ` — ${esc(acc.currency)}` : ''}</div>`
+        : '';
+      return heading + lines;
+    })
+    .filter(Boolean)
+    .join('<div style="height:6px"></div>');
 
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:10pt;line-height:1.3;display:flex;flex-direction:column;min-height:222mm">

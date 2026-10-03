@@ -4,6 +4,7 @@ import type { CompanyBranding } from '@security360/shared';
 import { useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { COMPANY_BRANDING_DEFAULTS } from '../../lib/branding';
+import CompanyBankAccountsPanel from './CompanyBankAccountsPanel';
 import { useCompanyBranding, useCompanyBrandingDefaults, useResetCompanyBranding, useSaveCompanyBranding } from '../../hooks/useCompanyBranding';
 
 const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string; group?: string; note?: string }> = [
@@ -18,13 +19,9 @@ const fields: Array<{ key: keyof CompanyBranding; label: string; type?: string; 
   { key: 'company_logo_url', label: 'Company logo URL', type: 'url' },
   { key: 'company_registration_number', label: 'Registration number' },
   { key: 'company_tax_id', label: 'Tax ID' },
-  // Kept apart from the letterhead identity: these reach the client as payment
-  // instructions on the invoice, so a typo here moves money.
-  { key: 'company_bank_name', label: 'Bank name', group: 'Bank details — printed on invoices', note: 'Printed on the invoice PDF and the invoice email. Each one is optional — a blank field prints nothing.' },
-  { key: 'company_bank_branch_name', label: 'Bank branch name' },
-  { key: 'company_bank_branch_no', label: 'Bank branch no.' },
-  { key: 'company_bank_account_name', label: 'Account name' },
-  { key: 'company_bank_account', label: 'Bank account number' },
+  // Payment details moved to their own multi-account editor below: a company
+  // usually holds several accounts, so the flat company_bank_* fields no longer
+  // appear here. They still back the single-account fallback until the seed runs.
 ];
 
 export default function CompanyBrandingPanel() {
@@ -50,7 +47,8 @@ export default function CompanyBrandingPanel() {
   });
 
   if (isLoading) return <div className="text-center p-4"><Spinner /></div>;
-  return <div className="card border-0 shadow-sm"><div className="card-body">
+  return <>
+  <div className="card border-0 shadow-sm"><div className="card-body">
     <div className="d-flex justify-content-between align-items-center mb-3">
       <div><h6 className="fw-semibold mb-1">Company Branding</h6><small className="text-muted">Used on company documents, exports, and company-facing screens.</small></div>
       {canEdit && <Button size="sm" variant="outline-danger" disabled={reset.isPending} onClick={doReset}>Reset to defaults</Button>}
@@ -67,5 +65,7 @@ export default function CompanyBrandingPanel() {
       {canEdit && <Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save changes'}</Button>}
     </Form>
     {!canEdit && <Alert variant="info" className="small mt-3 mb-0">Read-only access. Contact an administrator with settings.edit to change company branding.</Alert>}
-  </div></div>;
+  </div></div>
+  <CompanyBankAccountsPanel canEdit={canEdit} />
+  </>;
 }

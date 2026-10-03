@@ -2,8 +2,10 @@ import prisma from '../db/prisma';
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/settingsEncryption';
 import { SETTINGS_CONFIG, definitionFor, type SettingsGroup } from '../constants/settingsConfig';
 import { getCompanyBranding } from './companyBrandingService';
+import { companyBankAccountService } from './companyBankAccountService';
 import { AppError } from '../errors/AppError';
 import { QueueService } from '../jobs/QueueService';
+import type { CompanyBankAccountResponse } from '@security360/shared';
 
 /**
  * Resolves the integration credentials, database first and environment second.
@@ -94,12 +96,21 @@ export interface CompanyProfile {
    * Where we take payment, from Settings → Company Branding. Null until the
    * deployment fills them in, which is how a document knows to omit the whole
    * payment block rather than print an empty account number.
+   *
+   * These mirror the default entry of `paymentAccounts` below — the one account
+   * printed wherever a document names only a single account. They are retained
+   * for existing callers; a company's full list lives in `paymentAccounts`.
    */
   bankName:        string | null;
   bankBranchName:  string | null;
   bankBranchNo:    string | null;
   bankAccountName: string | null;
   bankAccount:     string | null;
+  /**
+   * Every active account, the default first. The invoice prints all of them so
+   * a client can choose; empty when nothing has been configured.
+   */
+  paymentAccounts: CompanyBankAccountResponse[];
 }
 
 /**
@@ -121,6 +132,14 @@ export async function companyProfile(): Promise<CompanyProfile> {
   const branding = await getCompanyBranding();
   const name = branding.company_name;
 
+  // Where payments land is now a list (CompanyBankAccount), grown out of the one
+  // set of company_bank_* settings. The flat fields below mirror the default
+  // entry so existing single-account callers — and the invoice email — keep
+  // working, while paymentAccounts carries the whole list for the printed
+  // invoice. Sourced live rather than cached, so a saved account shows at once.
+  const paymentAccounts = await companyBankAccountService.listActive();
+  const primary = paymentAccounts.find((a) => a.isDefault) ?? paymentAccounts[0] ?? null;
+
   return {
     name,
     nameUpper: name.toUpperCase(),
@@ -136,11 +155,12 @@ export async function companyProfile(): Promise<CompanyProfile> {
     facebook:  val('company.facebook'),
     instagram: val('company.instagram'),
     twitter:   val('company.twitter'),
-    bankName:        branding.company_bank_name || null,
-    bankBranchName:  branding.company_bank_branch_name || null,
-    bankBranchNo:    branding.company_bank_branch_no || null,
-    bankAccountName: branding.company_bank_account_name || null,
-    bankAccount:     branding.company_bank_account || null,
+    bankName:        primary?.bankName      ?? null,
+    bankBranchName:  primary?.branchName    ?? null,
+    bankBranchNo:    primary?.branchNo      ?? null,
+    bankAccountName: primary?.accountName   ?? null,
+    bankAccount:     primary?.accountNumber ?? null,
+    paymentAccounts,
   };
 }
 
