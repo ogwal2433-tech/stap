@@ -1379,13 +1379,13 @@ model PayrollGroup {
   payrollRuns PayrollRun[]
 }
 
-/// Join row between a guard and a payroll group. A guard holds at most ONE
-/// group — the unique index on guardId makes the database, not just the UI,
-/// the authority. Deleting the group or the guard removes the link, never the
-/// people either side of it.
+/// Join row between a guard and a payroll group. A guard may hold SEVERAL
+/// groups (e.g. a site team and a pay batch), but only one row per group —
+/// the (guardId, groupId) unique index keeps the pair unique. Deleting the
+/// group or the guard removes the link, never the people either side of it.
 model GuardPayrollGroupMember {
   id        String   @id @default(cuid())
-  guardId   String   @unique
+  guardId   String
   groupId   String
   createdAt DateTime @default(now())
 

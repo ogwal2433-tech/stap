@@ -260,6 +260,47 @@ class PayrollService {
     return fmtRun(updated);
   }
 
+  // ── Delete a DRAFT run — the regeneration path ───────────────────────────
+
+  async remove(payrollRunId: string, deletedBy: string): Promise<void> {
+    const run = await prisma.payrollRun.findUnique({ where: { id: payrollRunId } });
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (run.status !== 'DRAFT') {
+      throw new AppError(
+        `This run is ${run.status} — only DRAFT payrolls can be deleted. Once approved, the figures are signed off.`,
+        400,
+      );
+    }
+
+    // Nothing was paid on a draft, so the rows it consumed are rewound rather
+    // than kept: deductions go back to PENDING (a regenerated run re-applies
+    // them) and the materialised payslips go with the run. Both are Restrict
+    // FKs, so the order below is what lets the delete through.
+    await prisma.$transaction(async (tx) => {
+      await tx.guardDeduction.updateMany({
+        where: { payrollRunId },
+        data:  { status: 'PENDING', payrollRunId: null },
+      });
+      await tx.payslip.deleteMany({ where: { payrollRunId } });
+      await tx.payrollRun.delete({ where: { id: payrollRunId } });
+    });
+
+    await QueueService.logAudit({
+      userId:   deletedBy,
+      action:   'PAYROLL_RUN_DELETED',
+      entity:   'payrollRun',
+      entityId: payrollRunId,
+      oldValue: {
+        month:          run.month,
+        year:           run.year,
+        payrollGroupId: run.payrollGroupId,
+        status:         run.status,
+        totalGuards:    run.totalGuards,
+        totalNet:       run.totalNet,
+      },
+    });
+  }
+
   // ── HR: flag or unflag an individual guard's payslip ────────────────────────
 
   async flagPayslip(data: {

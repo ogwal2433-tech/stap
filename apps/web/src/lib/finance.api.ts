@@ -198,6 +198,10 @@ export const payrollApi = {
     return api.post(`/finance/payroll/${id}/disburse`).then(() => undefined);
   },
 
+  remove(id: string): Promise<void> {
+    return api.delete(`/finance/payroll/${id}`).then(() => undefined);
+  },
+
   flagPayslip(payslipId: string, data: FlagPayslipInput): Promise<PayslipResponse> {
     return api
       .patch<{ success: boolean; data: PayslipResponse }>(`/finance/payroll/payslips/${payslipId}/flag`, data)

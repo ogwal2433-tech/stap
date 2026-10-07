@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
-  useRunPayroll, useApprovePayroll, useDisbursePayroll,
+  useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
   useHrApprovePayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
   usePayrollGroups, useCreatePayrollGroup, useUpdatePayrollGroup, useDeletePayrollGroup,
@@ -487,6 +487,11 @@ function payrollStatusColor(status: string): { bg: string; dark?: boolean } {
   }
 }
 
+// Same gate as the DELETE endpoint: dropping a draft is a write action on the
+// same footing as calculating one, but stopping short of the money trail an
+// approved run leaves is why only these two roles may do it.
+const RUN_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+
 function PayrollTab() {
   const now   = new Date();
   const [month, setMonth]         = useState(now.getMonth() + 1);
@@ -497,6 +502,8 @@ function PayrollTab() {
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
   const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
+  // Two-step inline confirmation, shared by the run card and the history row.
+  const [confirmDeleteRunId, setConfirmDeleteRunId] = useState<string | null>(null);
 
   // Payroll is run per group: only ACTIVE groups are selectable, and the
   // chosen group scopes both the calculate action and the card below.
@@ -511,6 +518,7 @@ function PayrollTab() {
   const approvePayroll         = useApprovePayroll();
   const hrApprovePayroll       = useHrApprovePayroll();
   const disbursePayroll        = useDisbursePayroll();
+  const deletePayrollRun       = useDeletePayrollRun();
   const unflagPayslip          = useUnflagPayslip();
   const { showToast }          = useToast();
   const { user }               = useAuth();
@@ -522,6 +530,18 @@ function PayrollTab() {
   const payslips = runDetail?.payslips ?? [];
 
   const isHR = !!user && HR_ROLES.includes(user.role as any);
+  const canDeleteRun = !!user && RUN_DELETE_ROLES.includes(user.role as typeof RUN_DELETE_ROLES[number]);
+
+  const handleDeleteRun = async (id: string) => {
+    try {
+      await deletePayrollRun.mutateAsync(id);
+      showToast('Draft payroll deleted — its deductions are pending again.', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Could not delete the payroll run.', 'danger');
+    } finally {
+      setConfirmDeleteRunId(null);
+    }
+  };
 
   const handleCalculate = async () => {
     try {
@@ -663,6 +683,20 @@ function PayrollTab() {
                       onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>
                       Approve
                     </Button>
+                  )}
+                  {thisRun.status === 'DRAFT' && canDeleteRun && (
+                    confirmDeleteRunId === thisRun.id ? (
+                      <>
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteRun(thisRun.id)} disabled={deletePayrollRun.isPending}>
+                          {deletePayrollRun.isPending ? 'Deleting…' : 'Confirm delete?'}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(thisRun.id)}>
+                        Delete
+                      </Button>
+                    )
                   )}
                   {thisRun.status === 'APPROVED' && isHR && (
                     <Button size="sm" variant="success" onClick={() => setHrApproving(true)}>
@@ -840,7 +874,10 @@ function PayrollTab() {
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
           <thead className="table-light">
-            <tr><th>Period</th><th>Group</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
+            <tr>
+              <th>Period</th><th>Group</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th>
+              {canDeleteRun && <th className="text-end">Actions</th>}
+            </tr>
           </thead>
           <tbody>
             {runs.map((r) => {
@@ -857,6 +894,24 @@ function PayrollTab() {
                       {r.status.replace('_', ' ')}
                     </Badge>
                   </td>
+                  {canDeleteRun && (
+                    <td className="text-end">
+                      {r.status === 'DRAFT' && (
+                        confirmDeleteRunId === r.id ? (
+                          <span className="d-inline-flex gap-1">
+                            <Button size="sm" variant="danger" onClick={() => handleDeleteRun(r.id)} disabled={deletePayrollRun.isPending}>
+                              {deletePayrollRun.isPending ? 'Deleting…' : 'Confirm delete?'}
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                          </span>
+                        ) : (
+                          <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(r.id)}>
+                            Delete
+                          </Button>
+                        )
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -1133,31 +1188,48 @@ function PayrollGroupFormModal({
   );
   const [memberSearch, setMemberSearch] = useState('');
 
+  // Membership as saved on the server when the modal opened. The picker lists
+  // these first and keeps them there while you tick, so rows do not jump out
+  // from under the cursor mid-edit (same rule as the zone site picker).
+  const savedMemberIds = new Set<string>(
+    isNew ? [] : (group.members ?? []).map((m) => m.id),
+  );
+
   // One fetch of the active roll; filtering is local so picking members does
   // not requery the server on every keystroke.
   const { data: guardPage, isLoading: guardsLoading } = useGuardList({ page: 1, limit: 500, status: 'ACTIVE' });
   const guards = guardPage?.data ?? [];
 
-  // A guard belongs to only one group, so offer everyone except guards already
-  // grouped elsewhere. The groups query is cached from the tab — no extra fetch.
-  const { data: allGroups } = usePayrollGroups();
-  const takenGuardIds = new Set(
-    (allGroups ?? [])
-      .filter((grp) => isNew || grp.id !== group.id)
-      .flatMap((grp) => (grp.members ?? []).map((m) => m.id)),
-  );
-
   const q = memberSearch.trim().toLowerCase();
-  const selectableGuards = guards.filter((g) => !takenGuardIds.has(g.id) || guardIds.has(g.id));
-  const visibleGuards = q
-    ? selectableGuards.filter((g) => g.fullName.toLowerCase().includes(q) || (g.systemId ?? '').toLowerCase().includes(q))
-    : selectableGuards;
+  const matched = q
+    ? guards.filter((g) => g.fullName.toLowerCase().includes(q) || (g.systemId ?? '').toLowerCase().includes(q))
+    : guards;
+  // Saved members first, everyone else after; sort is stable so the list
+  // order inside each block is untouched.
+  const visibleGuards = [...matched].sort(
+    (a, b) => Number(savedMemberIds.has(b.id)) - Number(savedMemberIds.has(a.id)),
+  );
   const selectedCount = guardIds.size;
 
   const toggleGuard = (id: string) => {
     setGuardIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Select-all works on the rows currently on screen, so a search narrows the
+  // bulk pick the same way it narrows the checkboxes. Once every visible guard
+  // is ticked the control flips to clearing them again.
+  const allVisibleSelected =
+    visibleGuards.length > 0 && visibleGuards.every((g) => guardIds.has(g.id));
+
+  const toggleSelectAll = () => {
+    setGuardIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleGuards.forEach((g) => next.delete(g.id));
+      else visibleGuards.forEach((g) => next.add(g.id));
       return next;
     });
   };
@@ -1220,7 +1292,19 @@ function PayrollGroupFormModal({
           <div>
             <div className="d-flex align-items-center justify-content-between mb-1">
               <Form.Label className="small fw-semibold mb-0">Members</Form.Label>
-              <Badge bg={selectedCount ? 'primary' : 'secondary'}>{selectedCount} selected</Badge>
+              <div className="d-flex align-items-center gap-2">
+                <Badge bg={selectedCount ? 'primary' : 'secondary'}>{selectedCount} selected</Badge>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-decoration-none"
+                  style={{ fontSize: '0.78rem' }}
+                  onClick={toggleSelectAll}
+                  disabled={guardsLoading || visibleGuards.length === 0}
+                >
+                  {allVisibleSelected ? 'Clear all' : 'Select all'}
+                </Button>
+              </div>
             </div>
             <Form.Control
               size="sm"
@@ -1252,9 +1336,9 @@ function PayrollGroupFormModal({
               )}
             </div>
             <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
-              Each guard can only be in one payroll group, so guards already grouped elsewhere are not listed.
-              Only active guards are offered; existing members who have since left stay in the group until you
-              remove them here.
+              Guards can belong to several payroll groups, so every active guard is offered even if already
+              grouped elsewhere. Saved members are listed first. Existing members who have since left stay in
+              the group until you remove them here.
             </div>
           </div>
         </Form>

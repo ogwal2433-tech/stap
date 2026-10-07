@@ -457,6 +457,15 @@ router.post(
   }),
 );
 
+router.delete(
+  '/payroll/:id',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    await payrollService.remove(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  }),
+);
+
 router.patch(
   '/payroll/payslips/:id/flag',
   requireRole(...HR_ROLES),

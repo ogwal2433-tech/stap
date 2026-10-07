@@ -171,6 +171,18 @@ export function useDisbursePayroll() {
   });
 }
 
+export function useDeletePayrollRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => payrollApi.remove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payroll'] });
+      // Deleting a draft returns its deductions to PENDING
+      qc.invalidateQueries({ queryKey: ['deductions'] });
+    },
+  });
+}
+
 export function useFlagPayslip() {
   const qc = useQueryClient();
   return useMutation({

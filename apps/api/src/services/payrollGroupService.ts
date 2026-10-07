@@ -45,32 +45,6 @@ async function assertGuardsExist(guardIds: string[]): Promise<void> {
   }
 }
 
-/**
- * A guard belongs to at most one payroll group — the unique index on the join
- * row enforces it, but catching the clash here says which guard sits in which
- * group instead of surfacing a raw P2002.
- */
-async function assertNotInOtherGroup(guardIds: string[], groupId: string | null): Promise<void> {
-  if (guardIds.length === 0) return;
-  const clashes = await prisma.guardPayrollGroupMember.findMany({
-    where: {
-      guardId: { in: guardIds },
-      ...(groupId ? { groupId: { not: groupId } } : {}),
-    },
-    include: {
-      guard: { select: { firstName: true, lastName: true } },
-      group: { select: { name: true } },
-    },
-  });
-  if (clashes.length > 0) {
-    const list = clashes.map((c) => `${c.guard.firstName} ${c.guard.lastName} (${c.group.name})`).join(', ');
-    throw new AppError(
-      `Each guard can only be in one payroll group. Already grouped: ${list}.`,
-      409,
-    );
-  }
-}
-
 // ── PayrollGroupService ────────────────────────────────────────────────────────
 
 class PayrollGroupService {
@@ -96,7 +70,6 @@ class PayrollGroupService {
     }
 
     await assertGuardsExist(guardIds);
-    await assertNotInOtherGroup(guardIds, null);
 
     const group = await prisma.payrollGroup.create({
       data: {
@@ -140,7 +113,6 @@ class PayrollGroupService {
     const guardIds = replacesMembers ? [...new Set(data.guardIds!)] : [];
     if (replacesMembers) {
       await assertGuardsExist(guardIds);
-      await assertNotInOtherGroup(guardIds, id);
     }
 
     const group = await prisma.$transaction(async (tx) => {
