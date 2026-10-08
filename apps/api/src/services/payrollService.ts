@@ -1,8 +1,8 @@
-import { PAID_STATUSES } from '@security360/shared';
+import { PAID_STATUSES, ROLES } from '@security360/shared';
 import { companyProfile } from './integrationSettings';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
-import { NotFoundError, AppError } from '../errors/AppError';
+import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
 import { deductionService } from './deductionService';
 import * as xcel from '../lib/xcel';
 import * as xcelPartner from '../lib/xcelPartner';
@@ -12,6 +12,10 @@ import type {
   PayslipResponse,
   PayrollSummary,
   PaginatedResponse,
+  ZonePayrollRoster,
+  ZonePayrollRosterResponse,
+  ZonePayrollSite,
+  ZonePayrollGuard,
 } from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -25,9 +29,9 @@ function fmtRun(r: any): PayrollRunResponse {
     id:              r.id,
     month:           r.month,
     year:            r.year,
-    // Null on historical runs created before payroll was grouped.
-    payrollGroupId:   r.payrollGroupId ?? null,
-    payrollGroupName: r.payrollGroup?.name ?? null,
+    // Legacy company-wide and grouped runs have no zone — the UI labels them.
+    zoneId:          r.zoneId ?? null,
+    zoneName:        r.zone?.name ?? null,
     totalGuards:     r.totalGuards,
     totalGross:      r.totalGross,
     totalDeductions: r.totalDeductions,
@@ -35,6 +39,9 @@ function fmtRun(r: any): PayrollRunResponse {
     status:          r.status,
     approvedBy:      r.approvedBy,
     approvedAt:      r.approvedAt?.toISOString() ?? null,
+    rejectedBy:      r.rejectedBy ?? null,
+    rejectedAt:      r.rejectedAt?.toISOString() ?? null,
+    rejectReason:    r.rejectReason ?? null,
     hrApprovedBy:    r.hrApprovedBy ?? null,
     hrApprovedAt:    r.hrApprovedAt?.toISOString() ?? null,
     hrNotes:         r.hrNotes ?? null,
@@ -71,46 +78,152 @@ function fmtPayslip(p: any): PayslipResponse {
   };
 }
 
+// ── Zone attribution ───────────────────────────────────────────────────────────
+//
+// The zone a guard belongs to for a period is decided by the deployment rows:
+// the zone holding most of their deployment days that month, ties broken by
+// zone name. One guard maps to exactly one zone, so no guard can be paid from
+// two zone runs for the same period. Guards deployed only to sites outside
+// every ACTIVE zone land in unZonedGuardIds — no run can claim them.
+
+interface ZoneAttribution {
+  zones:            Array<{ id: string; name: string }>;
+  zoneById:         Map<string, { id: string; name: string }>;
+  paidGuards:       Map<string, any>;
+  attribution:      Map<string, string>;                 // guardId -> zoneId
+  daysBySite:       Map<string, Map<string, number>>;    // guardId -> siteId -> days
+  siteById:         Map<string, { siteId: string; siteName: string; zoneId: string }>;
+  unZonedGuardIds:  Set<string>;
+}
+
+async function buildZoneAttribution(periodStart: Date, periodEnd: Date): Promise<ZoneAttribution> {
+  const [zones, guards, deployments] = await Promise.all([
+    prisma.zone.findMany({
+      where:   { isActive: true },
+      orderBy: { name: 'asc' },
+      select:  { id: true, name: true },
+    }),
+    prisma.guard.findMany({ where: { employmentStatus: { in: PAID_STATUSES } } }),
+    prisma.deployment.findMany({
+      where: {
+        date: { gte: periodStart, lte: periodEnd },
+        site: { deletedAt: null },
+      },
+      select: {
+        guardId: true,
+        siteId:  true,
+        site:    { select: { id: true, siteName: true, zoneId: true } },
+      },
+    }),
+  ]);
+
+  const zoneById   = new Map(zones.map((z) => [z.id, z]));
+  const paidGuards = new Map(guards.map((g) => [g.id, g]));
+
+  const attr: ZoneAttribution = {
+    zones: zones.map((z) => ({ id: z.id, name: z.name })),
+    zoneById,
+    paidGuards,
+    attribution:     new Map(),
+    daysBySite:      new Map(),
+    siteById:        new Map(),
+    unZonedGuardIds: new Set(),
+  };
+
+  // @@unique([guardId, date]) means deployment rows are already one per guard
+  // per day, so counting rows is counting days.
+  const daysByZone = new Map<string, Map<string, number>>();
+  const unZonedDays = new Map<string, number>();
+
+  for (const d of deployments) {
+    if (!paidGuards.has(d.guardId) || !d.site) continue;
+
+    const zoneId = d.site.zoneId && zoneById.has(d.site.zoneId) ? d.site.zoneId : null;
+    if (zoneId && !attr.siteById.has(d.siteId)) {
+      attr.siteById.set(d.siteId, { siteId: d.site.id, siteName: d.site.siteName, zoneId });
+    }
+
+    const bySite = attr.daysBySite.get(d.guardId) ?? new Map<string, number>();
+    bySite.set(d.siteId, (bySite.get(d.siteId) ?? 0) + 1);
+    attr.daysBySite.set(d.guardId, bySite);
+
+    if (zoneId) {
+      const byZone = daysByZone.get(d.guardId) ?? new Map<string, number>();
+      byZone.set(zoneId, (byZone.get(zoneId) ?? 0) + 1);
+      daysByZone.set(d.guardId, byZone);
+    } else {
+      unZonedDays.set(d.guardId, (unZonedDays.get(d.guardId) ?? 0) + 1);
+    }
+  }
+
+  for (const [guardId, byZone] of daysByZone) {
+    let bestZoneId = '';
+    let bestDays   = -1;
+    let bestName   = '';
+    for (const [zid, days] of byZone) {
+      const name = zoneById.get(zid)!.name;
+      if (days > bestDays || (days === bestDays && name < bestName)) {
+        bestZoneId = zid; bestDays = days; bestName = name;
+      }
+    }
+    attr.attribution.set(guardId, bestZoneId);
+  }
+  for (const guardId of unZonedDays.keys()) {
+    if (!daysByZone.has(guardId)) attr.unZonedGuardIds.add(guardId);
+  }
+  return attr;
+}
+
 // ── PayrollService ─────────────────────────────────────────────────────────────
 
 class PayrollService {
   async calculateRun(
     month: number,
     year: number,
-    payrollGroupId: string,
+    zoneId: string,
     calculatedBy: string,
+    guardIds: string[],
   ): Promise<PayrollSummary> {
-    // Only active groups can be paid; a deleted-or-archived group id sitting
-    // in a stale browser form must not produce a run.
-    const group = await prisma.payrollGroup.findUnique({ where: { id: payrollGroupId } });
-    if (!group) throw new NotFoundError('Payroll group not found');
-    if (!group.isActive) throw new AppError(`"${group.name}" is inactive — reactivate it before running its payroll.`, 400);
+    const zone = await prisma.zone.findUnique({ where: { id: zoneId } });
+    if (!zone) throw new NotFoundError('Zone not found');
+    if (!zone.isActive) {
+      throw new AppError(`Zone "${zone.name}" is not active — payroll runs only for active zones.`, 400);
+    }
 
-    // Prevent duplicate runs for the same group and period
+    // One run per zone and period. Legacy history holds several runs for the
+    // same month/year, so this stays a code-level check, not a unique index.
     const existing = await prisma.payrollRun.findFirst({
-      where: { month, year, payrollGroupId, status: { in: ['DRAFT', 'APPROVED', 'DISBURSED'] } },
+      where: { month, year, zoneId, status: { in: ['DRAFT', 'APPROVED', 'HR_APPROVED', 'DISBURSING', 'DISBURSED'] } },
     });
     if (existing) {
-      throw new AppError(`Payroll already run for "${group.name}" in this period`, 409);
+      throw new AppError(`Payroll has already been run for ${zone.name} in this period`, 409);
     }
 
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd   = new Date(year, month, 0, 23, 59, 59);
 
-    // Guards on leave stay on the payroll — they are still employed. Suspended,
-    // resigned and terminated guards are excluded. Since payroll is grouped,
-    // only members of this group are considered.
-    const guards = await prisma.guard.findMany({
-      where: {
-        employmentStatus: { in: PAID_STATUSES },
-        payrollGroups:    { some: { groupId: payrollGroupId } },
-      },
-    });
-    if (guards.length === 0) {
+    // Attribution is recomputed here rather than trusted from the screen: even
+    // if two zone tabs raced, one guard cannot end up in two runs for the
+    // same period.
+    const attr = await buildZoneAttribution(periodStart, periodEnd);
+    const selected = [...new Set(guardIds)];
+    const notInZone = selected.filter((id) => attr.attribution.get(id) !== zoneId);
+    if (notInZone.length > 0) {
+      const names = notInZone.map((id) => {
+        const g     = attr.paidGuards.get(id);
+        const who   = g ? `${g.firstName} ${g.lastName}` : id;
+        const other = attr.attribution.get(id);
+        return other ? `${who} (paid under ${attr.zoneById.get(other)?.name ?? 'another zone'})` : who;
+      }).join(', ');
       throw new AppError(
-        `"${group.name}" has no active guards to pay. Add members to the group first.`,
+        `Not on this zone's payroll for the period: ${names}. Each guard is paid from the zone with most of their deployment days.`,
         400,
       );
+    }
+
+    const guards = selected.map((id) => attr.paidGuards.get(id)!);
+    if (guards.length === 0) {
+      throw new AppError(`There are no guards to pay in ${zone.name} for this period.`, 400);
     }
 
     let totalGross      = 0;
@@ -174,7 +287,7 @@ class PayrollService {
       data: {
         month,
         year,
-        payrollGroupId,
+        zoneId,
         totalGuards:     guards.length,
         totalGross,
         totalDeductions,
@@ -210,8 +323,8 @@ class PayrollService {
     return {
       month,
       year,
-      payrollGroupId,
-      payrollGroupName: group.name,
+      zoneId,
+      zoneName:        zone.name,
       totalGuards:     guards.length,
       totalGross,
       totalDeductions,
@@ -220,10 +333,88 @@ class PayrollService {
     };
   }
 
+  // ── Zone payroll roster — the tick-list behind the Payroll tab ────────────────
+
+  async getZonePayrollRoster(month: number, year: number): Promise<ZonePayrollRosterResponse> {
+    const periodStart = new Date(year, month - 1, 1);
+    const periodEnd   = new Date(year, month, 0, 23, 59, 59);
+    const attr = await buildZoneAttribution(periodStart, periodEnd);
+
+    // Attendance shown next to each guard counts all sites — the same basis as
+    // the pro-rata salary, so the tick-list previews what will actually be paid.
+    const attendanceGroups = await prisma.attendanceRecord.groupBy({
+      by:     ['guardId'],
+      where:  { status: { in: ['PRESENT', 'LATE'] }, date: { gte: periodStart, lte: periodEnd } },
+      _count: { _all: true },
+    });
+    const attendanceDays = new Map<string, number>(
+      attendanceGroups.map((g: any) => [g.guardId, g._count._all] as [string, number]),
+    );
+
+    // One row per (zone, guard): the guard sits under the zone's site where
+    // they had most days, so nobody appears twice in the same zone's list.
+    const placement = new Map<string, Map<string, { siteId: string; siteName: string; days: number }>>();
+    for (const [guardId, bySite] of attr.daysBySite) {
+      for (const [siteId, days] of bySite) {
+        const site = attr.siteById.get(siteId);
+        if (!site) continue; // site is not inside an active zone
+        const zoneMap = placement.get(site.zoneId) ?? new Map();
+        const current = zoneMap.get(guardId);
+        if (!current || days > current.days || (days === current.days && site.siteName < current.siteName)) {
+          zoneMap.set(guardId, { siteId, siteName: site.siteName, days });
+        }
+        placement.set(site.zoneId, zoneMap);
+      }
+    }
+
+    const zoneRosters: ZonePayrollRoster[] = attr.zones.map((zone) => {
+      const guardsBySite = new Map<string, ZonePayrollGuard[]>();
+      let assignedCount      = 0;
+      let alsoElsewhereCount = 0;
+
+      for (const [guardId, place] of (placement.get(zone.id) ?? new Map<string, { siteId: string; siteName: string; days: number }>())) {
+        const g        = attr.paidGuards.get(guardId)!;
+        const assigned = attr.attribution.get(guardId) === zone.id;
+        if (assigned) assignedCount++; else alsoElsewhereCount++;
+        const otherZoneId = attr.attribution.get(guardId);
+        const row: ZonePayrollGuard = {
+          guardId,
+          name:             `${g.firstName} ${g.lastName}`,
+          systemId:         g.systemId ?? null,
+          employmentStatus: g.employmentStatus,
+          salaryRate:       g.salaryRate,
+          deploymentDays:   place.days,
+          attendanceDays:   attendanceDays.get(guardId) ?? 0,
+          assignedHere:     assigned,
+          assignedZoneName: assigned ? null : (otherZoneId ? (attr.zoneById.get(otherZoneId)?.name ?? null) : null),
+        };
+        const list = guardsBySite.get(place.siteId) ?? [];
+        list.push(row);
+        guardsBySite.set(place.siteId, list);
+      }
+
+      const sites: ZonePayrollSite[] = [...guardsBySite.entries()]
+        .map(([siteId, guards]) => ({
+          siteId,
+          siteName: attr.siteById.get(siteId)!.siteName,
+          // Guards that will be paid from this run come first, then by name —
+          // the established picker convention.
+          guards: guards
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .sort((a, b) => Number(b.assignedHere) - Number(a.assignedHere)),
+        }))
+        .sort((a, b) => a.siteName.localeCompare(b.siteName));
+
+      return { zoneId: zone.id, zoneName: zone.name, sites, assignedCount, alsoElsewhereCount };
+    });
+
+    return { month, year, zones: zoneRosters, unZonedGuardCount: attr.unZonedGuardIds.size };
+  }
+
   async approve(payrollRunId: string, approvedBy: string): Promise<PayrollRunResponse> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: payrollRunId },
-      include: { _count: { select: { payslips: true } } },
+      include: { _count: { select: { payslips: true } }, zone: true },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'DRAFT') throw new AppError('Only DRAFT payrolls can be approved', 400);
@@ -231,7 +422,7 @@ class PayrollService {
     const updated = await prisma.payrollRun.update({
       where: { id: payrollRunId },
       data:  { status: 'APPROVED', approvedBy, approvedAt: new Date() },
-      include: { _count: { select: { payslips: true } } },
+      include: { _count: { select: { payslips: true } }, zone: true },
     });
 
     // Queue payslip PDF generation for each guard
@@ -293,12 +484,85 @@ class PayrollService {
       oldValue: {
         month:          run.month,
         year:           run.year,
-        payrollGroupId: run.payrollGroupId,
+        zoneId:         run.zoneId,
         status:         run.status,
         totalGuards:    run.totalGuards,
         totalNet:       run.totalNet,
       },
     });
+  }
+
+  // ── Reject a run — send it back before any money moves ──────────────────
+  //
+  // Two windows: a DRAFT can be rejected by whoever may calculate or delete
+  // one; an APPROVED run only by DIRECTOR — the role that stamped it. After
+  // HR_APPROVED the run is Finance's to disburse and rejection is gone; use
+  // flags or the HR note instead.
+
+  async reject(payrollRunId: string, rejectedBy: string, reason: string): Promise<PayrollRunResponse> {
+    const run = await prisma.payrollRun.findUnique({
+      where:   { id: payrollRunId },
+      include: { _count: { select: { payslips: true } }, zone: true },
+    });
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (run.status !== 'DRAFT' && run.status !== 'APPROVED') {
+      throw new AppError(
+        `This run is ${run.status} — only DRAFT or APPROVED payrolls can be rejected. Once HR has approved it, the run belongs to the disbursement queue.`,
+        400,
+      );
+    }
+
+    // The route admits DIRECTOR and ASSISTANT_MANAGER; the APPROVED window
+    // narrows to the role that granted the approval.
+    const actor = await prisma.user.findUnique({ where: { id: rejectedBy }, select: { role: true } });
+    if (run.status === 'APPROVED' && actor?.role !== ROLES.DIRECTOR) {
+      throw new ForbiddenError('Only the Director can reject a financially approved payroll run.');
+    }
+
+    // Same rewind as deleting a draft: nothing was paid, so the figures and
+    // deductions the run consumed are released. The run row itself stays with
+    // the rejection stamp as the trail, and because REJECTED is not one of
+    // the live statuses the zone/period opens up for recalculation.
+    await prisma.$transaction(async (tx) => {
+      await tx.guardDeduction.updateMany({
+        where: { payrollRunId },
+        data:  { status: 'PENDING', payrollRunId: null },
+      });
+      await tx.payslip.deleteMany({ where: { payrollRunId } });
+      await tx.payrollRun.update({
+        where: { id: payrollRunId },
+        data:  {
+          status:       'REJECTED',
+          rejectedBy,
+          rejectedAt:   new Date(),
+          rejectReason: reason,
+        },
+        include: { _count: { select: { payslips: true } }, zone: true },
+      });
+    });
+
+    await QueueService.logAudit({
+      userId:   rejectedBy,
+      action:   'PAYROLL_RUN_REJECTED',
+      entity:   'payrollRun',
+      entityId: payrollRunId,
+      oldValue: {
+        status:      run.status,
+        month:       run.month,
+        year:        run.year,
+        zoneId:      run.zoneId,
+        totalGuards: run.totalGuards,
+        totalNet:    run.totalNet,
+      },
+      newValue: { status: 'REJECTED', reason },
+    });
+
+    // Re-read so fmtRun reports the rewound payslip count (0).
+    const rejected = await prisma.payrollRun.findUnique({
+      where:   { id: payrollRunId },
+      include: { _count: { select: { payslips: true } }, zone: true },
+    });
+    return fmtRun(rejected!);
   }
 
   // ── HR: flag or unflag an individual guard's payslip ────────────────────────
@@ -334,7 +598,7 @@ class PayrollService {
   async hrApprove(payrollRunId: string, reviewedBy: string, notes?: string): Promise<PayrollRunResponse> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: payrollRunId },
-      include: { _count: { select: { payslips: true } } },
+      include: { _count: { select: { payslips: true } }, zone: true },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'APPROVED') {
@@ -347,7 +611,7 @@ class PayrollService {
     const updated = await prisma.payrollRun.update({
       where: { id: payrollRunId },
       data:  { status: 'HR_APPROVED', hrApprovedBy: reviewedBy, hrApprovedAt: new Date(), hrNotes: notes ?? null },
-      include: { _count: { select: { payslips: true } } },
+      include: { _count: { select: { payslips: true } }, zone: true },
     });
 
     await QueueService.logAudit({
@@ -364,10 +628,7 @@ class PayrollService {
   // ── Finance: disburse an HR-approved run via XCEL mobile money ──────────────
 
   async disburse(payrollRunId: string, disbursedBy: string): Promise<void> {
-    const run = await prisma.payrollRun.findUnique({
-      where:  { id: payrollRunId },
-      include: { payrollGroup: true },
-    });
+    const run = await prisma.payrollRun.findUnique({ where: { id: payrollRunId } });
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'HR_APPROVED') {
       throw new AppError(
@@ -543,21 +804,18 @@ class PayrollService {
   async getRunHistory(query: {
     page: number;
     limit: number;
-    payrollGroupId?: string;
   }): Promise<PaginatedResponse<PayrollRunResponse>> {
-    const { page, limit, payrollGroupId } = query;
+    const { page, limit } = query;
     const skip = (page - 1) * limit;
-    const where = payrollGroupId ? { payrollGroupId } : {};
 
     const [runs, total] = await Promise.all([
       prisma.payrollRun.findMany({
-        where,
-        orderBy: [{ year: 'desc' }, { month: 'desc' }],
+        orderBy: [{ year: 'desc' }, { month: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
-        include: { payrollGroup: true, _count: { select: { payslips: true } } },
+        include: { _count: { select: { payslips: true } }, zone: true },
       }),
-      prisma.payrollRun.count({ where }),
+      prisma.payrollRun.count(),
     ]);
 
     const totalPages = Math.ceil(total / limit);
@@ -570,7 +828,7 @@ class PayrollService {
   async getRunDetail(runId: string): Promise<PayrollRunResponse & { payslips: PayslipResponse[] }> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: runId },
-      include: { payslips: { include: { guard: true } }, payrollGroup: true, _count: { select: { payslips: true } } },
+      include: { payslips: { include: { guard: true } }, _count: { select: { payslips: true } }, zone: true },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
 

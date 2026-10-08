@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { invoicesApi, deductionsApi, payrollApi, payrollGroupsApi, cashbookApi } from '../lib/finance.api';
+import { invoicesApi, deductionsApi, payrollApi, cashbookApi } from '../lib/finance.api';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
@@ -10,8 +10,6 @@ import type {
   RunPayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
-  CreatePayrollGroupInput,
-  UpdatePayrollGroupInput,
 } from '@security360/shared';
 
 // ── Invoice hooks ──────────────────────────────────────────────────────────────
@@ -128,10 +126,18 @@ export function useCancelDeduction() {
 
 // ── Payroll hooks ──────────────────────────────────────────────────────────────
 
-export function usePayrollRuns(params?: { page?: number; limit?: number; payrollGroupId?: string }) {
+export function usePayrollRuns(params?: { page?: number; limit?: number }) {
   return useQuery({
     queryKey: ['payroll', params],
     queryFn:  () => payrollApi.list(params),
+  });
+}
+
+/** Zone → sites → employees tick-list for the period picked on the Payroll tab. */
+export function useZonePayrollRoster(month: number, year: number) {
+  return useQuery({
+    queryKey: ['payroll', 'zones-roster', month, year],
+    queryFn:  () => payrollApi.zoneRoster(month, year),
   });
 }
 
@@ -178,6 +184,18 @@ export function useDeletePayrollRun() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['payroll'] });
       // Deleting a draft returns its deductions to PENDING
+      qc.invalidateQueries({ queryKey: ['deductions'] });
+    },
+  });
+}
+
+export function useRejectPayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => payrollApi.reject(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payroll'] });
+      // Rejecting rewinds applied deductions to PENDING, same as deleting a draft
       qc.invalidateQueries({ queryKey: ['deductions'] });
     },
   });
@@ -232,39 +250,5 @@ export function useCashbookSummary(month: number, year: number) {
   return useQuery({
     queryKey: ['cashbook-summary', month, year],
     queryFn:  () => cashbookApi.getMonthSummary(month, year),
-  });
-}
-
-// ── Payroll group hooks ─────────────────────────────────────────────────────────────
-
-export function usePayrollGroups() {
-  return useQuery({
-    queryKey: ['payroll-groups'],
-    queryFn:  () => payrollGroupsApi.list(),
-  });
-}
-
-export function useCreatePayrollGroup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreatePayrollGroupInput) => payrollGroupsApi.create(data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
-  });
-}
-
-export function useUpdatePayrollGroup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdatePayrollGroupInput }) =>
-      payrollGroupsApi.update(id, data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
-  });
-}
-
-export function useDeletePayrollGroup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => payrollGroupsApi.remove(id),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll-groups'] }),
   });
 }

@@ -19,9 +19,7 @@ import type {
   RunPayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
-  PayrollGroupResponse,
-  CreatePayrollGroupInput,
-  UpdatePayrollGroupInput,
+  ZonePayrollRosterResponse,
 } from '@security360/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -170,7 +168,7 @@ export const deductionsApi = {
 // ── Payroll ───────────────────────────────────────────────────────────────────
 
 export const payrollApi = {
-  list(params?: { page?: number; limit?: number; payrollGroupId?: string }): Promise<PaginatedResponse<PayrollRunResponse>> {
+  list(params?: { page?: number; limit?: number }): Promise<PaginatedResponse<PayrollRunResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<PayrollRunResponse>>('/finance/payroll', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
@@ -179,6 +177,13 @@ export const payrollApi = {
   calculate(data: RunPayrollInput): Promise<PayrollSummary> {
     return api
       .post<{ success: boolean; data: PayrollSummary }>('/finance/payroll/calculate', data)
+      .then((r) => r.data.data);
+  },
+
+  /** Zone → sites → employees tick-list for a period. */
+  zoneRoster(month: number, year: number): Promise<ZonePayrollRosterResponse> {
+    return api
+      .get<{ success: boolean; data: ZonePayrollRosterResponse }>('/finance/payroll/zones-roster', { params: { month, year } })
       .then((r) => r.data.data);
   },
 
@@ -196,6 +201,12 @@ export const payrollApi = {
 
   disburse(id: string): Promise<void> {
     return api.post(`/finance/payroll/${id}/disburse`).then(() => undefined);
+  },
+
+  reject(id: string, reason: string): Promise<PayrollRunResponse> {
+    return api
+      .post<{ success: boolean; data: PayrollRunResponse }>(`/finance/payroll/${id}/reject`, { reason })
+      .then((r) => r.data.data);
   },
 
   remove(id: string): Promise<void> {
@@ -259,32 +270,6 @@ function downloadBlob(data: Blob, filename: string) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
-// ── Payroll groups ─────────────────────────────────────────────────────────────────
-
-export const payrollGroupsApi = {
-  list(): Promise<PayrollGroupResponse[]> {
-    return api
-      .get<{ success: boolean; data: PayrollGroupResponse[] }>('/finance/payroll-groups')
-      .then((r) => r.data.data);
-  },
-
-  create(data: CreatePayrollGroupInput): Promise<PayrollGroupResponse> {
-    return api
-      .post<{ success: boolean; data: PayrollGroupResponse }>('/finance/payroll-groups', data)
-      .then((r) => r.data.data);
-  },
-
-  update(id: string, data: UpdatePayrollGroupInput): Promise<PayrollGroupResponse> {
-    return api
-      .patch<{ success: boolean; data: PayrollGroupResponse }>(`/finance/payroll-groups/${id}`, data)
-      .then((r) => r.data.data);
-  },
-
-  remove(id: string): Promise<void> {
-    return api.delete(`/finance/payroll-groups/${id}`).then(() => undefined);
-  },
-};
 
 // ── Cashbook ──────────────────────────────────────────────────────────────────
 

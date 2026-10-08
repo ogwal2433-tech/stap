@@ -153,14 +153,23 @@ export const CreateDeductionSchema = z.object({
 });
 
 /**
- * Payroll is run per payroll group per period. The group must be active —
- * that is checked against the database at calculation time, not here.
+ * A payroll run covers one zone for a period. guardIds is the explicit
+ * tick-list from the zone roster: the finance user unticks anyone who should
+ * not be paid, so the server never silently decides the roster on its own.
  */
 export const RunPayrollSchema = z.object({
-  month:         z.number().int().min(1).max(12),
-  year:          z.number().int().min(2024).max(2030),
-  payrollGroupId: z.string().min(1, 'Select a payroll group'),
+  month:    z.number().int().min(1).max(12),
+  year:     z.number().int().min(2024).max(2030),
+  zoneId:   z.string().min(1, 'Pick the zone to pay'),
+  guardIds: z.array(z.string().min(1)).min(1, 'At least one guard must be selected'),
 });
+
+/** Period selector for the zone payroll roster (query string, so coerced). */
+export const PayrollRosterQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year:  z.coerce.number().int().min(2024).max(2030),
+});
+export type PayrollRosterQuery = z.infer<typeof PayrollRosterQuerySchema>;
 
 export const CashbookEntrySchema = z.object({
   date:        z.string().datetime(),
@@ -179,6 +188,13 @@ export const HrApprovePayrollSchema = z.object({
   notes: z.string().optional(),
 });
 
+// Rejecting a run sends it back out of the pipeline with a reason on record —
+// mandatory, unlike HR approval notes, because the recalculation team needs to
+// know what to fix.
+export const RejectPayrollSchema = z.object({
+  reason: z.string().trim().min(5, 'Give a reason — at least 5 characters').max(500),
+});
+
 // ── Inferred input types ───────────────────────────────────────────────────────
 
 export type CreateInvoiceInput      = z.infer<typeof CreateInvoiceSchema>;
@@ -189,6 +205,7 @@ export type InvoiceListQuery        = z.infer<typeof InvoiceListQuerySchema>;
 export type ARAgingQuery            = z.infer<typeof ARAgingQuerySchema>;
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
+export type RejectPayrollInput      = z.infer<typeof RejectPayrollSchema>;
 export type CashbookEntryInput      = z.infer<typeof CashbookEntrySchema>;
 export type FlagPayslipInput        = z.infer<typeof FlagPayslipSchema>;
 export type HrApprovePayrollInput   = z.infer<typeof HrApprovePayrollSchema>;
@@ -290,16 +307,20 @@ export interface PayrollRunResponse {
   id:             string;
   month:          number;
   year:           number;
-  // Null only on historical runs from before payroll was grouped.
-  payrollGroupId:   string | null;
-  payrollGroupName: string | null;
+  // Null on legacy company-wide / grouped runs — UI labels those "Company-wide (legacy)".
+  zoneId:         string | null;
+  zoneName:       string | null;
   totalGuards:    number;
   totalGross:     number;
   totalDeductions:number;
   totalNet:       number;
-  status:         string; // DRAFT | APPROVED | HR_APPROVED | DISBURSING | DISBURSED
+  status:         string; // DRAFT | APPROVED | HR_APPROVED | DISBURSING | DISBURSED | REJECTED
   approvedBy:     string | null;
   approvedAt:     string | null;
+  // Rejection trail — present once a DRAFT/APPROVED run has been rejected.
+  rejectedBy:     string | null;
+  rejectedAt:     string | null;
+  rejectReason:   string | null;
   hrApprovedBy:   string | null;
   hrApprovedAt:   string | null;
   hrNotes:        string | null;
@@ -365,13 +386,57 @@ export interface ARAgingReport {
 export interface PayrollSummary {
   month:          number;
   year:           number;
-  payrollGroupId:   string;
-  payrollGroupName: string;
+  zoneId:         string | null;
+  zoneName:       string | null;
   totalGuards:    number;
   totalGross:     number;
   totalDeductions:number;
   totalNet:       number;
   byGuard:        PayslipResponse[];
+}
+
+// ── Zone payroll roster ────────────────────────────────────────────────────────
+
+/**
+ * One guard as offered on a zone's payroll tick-list. Attribution is decided
+ * per period: a guard belongs to the zone with the most deployment days that
+ * month, so exactly one roster row has assignedHere = true per guard; the
+ * others show them greyed with assignedZoneName as the "Paid under …" hint.
+ */
+export interface ZonePayrollGuard {
+  guardId:          string;
+  name:             string;
+  systemId:         string | null;
+  employmentStatus: string;
+  salaryRate:       number;
+  /** Deployment days at this zone's sites during the period. */
+  deploymentDays:   number;
+  /** Attendance (PRESENT/LATE) days across all sites — the pro-rata basis. */
+  attendanceDays:   number;
+  assignedHere:     boolean;
+  assignedZoneName: string | null;
+}
+
+export interface ZonePayrollSite {
+  siteId:   string;
+  siteName: string;
+  guards:   ZonePayrollGuard[];
+}
+
+export interface ZonePayrollRoster {
+  zoneId:             string;
+  zoneName:           string;
+  sites:              ZonePayrollSite[];
+  assignedCount:      number;
+  alsoElsewhereCount: number;
+}
+
+/** Whole-period roster: every active zone plus guards deployed only to un-zoned sites. */
+export interface ZonePayrollRosterResponse {
+  month:                 number;
+  year:                  number;
+  zones:                 ZonePayrollRoster[];
+  unZonedGuardCount:     number;
 }
 
 // ── Fee increment ──────────────────────────────────────────────────────────────
@@ -412,42 +477,3 @@ export const VoidInvoiceSchema = z.object({
   reason: z.string().trim().min(5, 'Say why the invoice is being voided (at least 5 characters).').max(500),
 });
 export type VoidInvoiceInput = z.infer<typeof VoidInvoiceSchema>;
-
-// ── Payroll groups ─────────────────────────────────────────────────────────────────────
-
-/**
- * A named grouping of guards for payroll organisation (teams, sites, pay
- * batches). guardIds replaces the whole membership on create/update rather
- * than adding to it, so the editor can save exactly what is on screen.
- */
-export const CreatePayrollGroupSchema = z.object({
-  name:        z.string().trim().min(2, 'Name is too short').max(80),
-  description: z.string().trim().max(300).optional().nullable(),
-  isActive:    z.boolean().default(true),
-  guardIds:    z.array(z.string().min(1)).default([]),
-});
-
-export const UpdatePayrollGroupSchema = CreatePayrollGroupSchema.partial();
-
-export type CreatePayrollGroupInput = z.input<typeof CreatePayrollGroupSchema>;
-export type UpdatePayrollGroupInput = z.infer<typeof UpdatePayrollGroupSchema>;
-
-/** A guard inside a group, reduced to what the member list displays. */
-export interface PayrollGroupMember {
-  id:       string;
-  fullName: string;
-  rank:     string;
-}
-
-export interface PayrollGroupResponse {
-  id:          string;
-  name:        string;
-  description: string | null;
-  isActive:    boolean;
-  memberCount: number;
-  /** Only present on detail/list responses that asked for members. */
-  members?:    PayrollGroupMember[];
-  createdAt:   string;
-  updatedAt:   string;
-}
-
