@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../db/prisma', () => ({
   default: {
     payrollRun:       { create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    payslip:          { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    payslip:          { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), deleteMany: vi.fn() },
     guard:            { findMany: vi.fn() },
     attendanceRecord: { count: vi.fn(), groupBy: vi.fn() },
     guardDeduction:   { findMany: vi.fn(), updateMany: vi.fn() },
@@ -44,6 +44,13 @@ vi.mock('../../lib/xcelPartner', () => ({
 // Import deductionService so we can mock applyToPayroll
 vi.mock('../../services/deductionService', () => ({
   deductionService: { applyToPayroll: vi.fn().mockResolvedValue(undefined) },
+}));
+
+// disburse() stamps the payment description with the company name via
+// companyProfile(), which otherwise reads SystemSetting/branding rows the mock
+// prisma does not model — the unit under test only needs the string back.
+vi.mock('../../services/integrationSettings', () => ({
+  companyProfile: vi.fn().mockResolvedValue({ name: 'Tiger Security Services Ltd' }),
 }));
 
 import prisma from '../../db/prisma';
@@ -90,10 +97,13 @@ const MOCK_PAYSLIP = {
 // run a guard belongs to. Both mocks put each mock guard at one zone-1 site.
 const ZONE_1 = { id: 'zone-1', name: 'Kampala' };
 const SITE_1 = { id: 'site-1', siteName: 'Site 1', zoneId: 'zone-1' };
+// prisma resolves `select: { site: { select: { id, siteName, zoneId } } }` to a
+// plain site object on each row — the fixtures must mirror the unpacked shape,
+// otherwise buildZoneAttribution sees no zone and nobody is attributed.
 const zoneDeployment = (guardId: string) => ({
   guardId,
   siteId: SITE_1.id,
-  site:   { select: SITE_1 },
+  site:   SITE_1,
 });
 
 beforeEach(() => {
@@ -165,6 +175,31 @@ describe('payrollService.calculateRun()', () => {
     ).rejects.toThrow('Payroll has already been run for Kampala');
   });
 
+  it('recalculating a rejected run reopens it in place instead of creating a new one', async () => {
+    mp.guard.findMany.mockResolvedValue([MOCK_GUARD]);
+    // calculateRun checks live runs first (none), then persistRun finds the
+    // rejected run for the same zone/period and updates it back to DRAFT.
+    mp.payrollRun.findFirst
+      .mockResolvedValueOnce(null)                                            // no live zone run
+      .mockResolvedValueOnce(null)                                            // no live company-wide run
+      .mockResolvedValueOnce({ ...MOCK_RUN, zoneId: 'zone-1', status: 'REJECTED' }); // rejected to reopen
+    mp.payrollRun.update.mockResolvedValue({ ...MOCK_RUN, zoneId: 'zone-1', status: 'DRAFT' });
+    mp.payslip.deleteMany.mockResolvedValue({ count: 0 });
+
+    const summary = await payrollService.calculateRun(4, 2026, 'zone-1', 'user-1', ['guard-1']);
+
+    expect(mp.payrollRun.create).not.toHaveBeenCalled();
+    expect(mp.payrollRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run-1' },
+        data: expect.objectContaining({ status: 'DRAFT', approvedBy: null, disbursedBy: null }),
+      }),
+    );
+    expect(mp.payslip.deleteMany).toHaveBeenCalledWith({ where: { payrollRunId: 'run-1' } });
+    expect(summary.zoneName).toBe('Kampala');
+    expect(summary.byGuard).toHaveLength(1);
+  });
+
   it('throws 404 when the zone does not exist', async () => {
     mp.zone.findUnique.mockResolvedValue(null);
     await expect(
@@ -187,7 +222,7 @@ describe('payrollService.calculateRun()', () => {
     mp.zone.findMany.mockResolvedValue([{ ...ZONE_1, isActive: true }, { ...ZONE_2, isActive: true }]);
     mp.deployment.findMany.mockResolvedValue([
       zoneDeployment('guard-1'),
-      { guardId: 'guard-2', siteId: SITE_2.id, site: { select: SITE_2 } },
+      { guardId: 'guard-2', siteId: SITE_2.id, site: SITE_2 },
     ]);
     await expect(
       payrollService.calculateRun(4, 2026, 'zone-1', 'user-1', ['guard-1', 'guard-2']),
@@ -224,11 +259,13 @@ describe('payrollService.getZonePayrollRoster()', () => {
     const ZONE_2 = { id: 'zone-2', name: 'Entebbe' };
     const SITE_2 = { id: 'site-2', siteName: 'Site 2', zoneId: 'zone-2' };
     mp.zone.findMany.mockResolvedValue([{ ...ZONE_1, isActive: true }, { ...ZONE_2, isActive: true }]);
+    // One row per guard per day (@@unique([guardId, date])) — two distinct days
+    // at zone-2 vs one at zone-1, so Amina's majority zone is Entebbe.
     mp.deployment.findMany.mockResolvedValue([
       zoneDeployment('guard-1'),
       zoneDeployment('guard-2'),
-      { guardId: 'guard-2', siteId: SITE_2.id, site: { select: SITE_2 } },
-      { guardId: 'guard-2', siteId: SITE_2.id, site: { select: SITE_2 } },
+      { guardId: 'guard-2', date: new Date('2026-04-02'), siteId: SITE_2.id, site: SITE_2 },
+      { guardId: 'guard-2', date: new Date('2026-04-03'), siteId: SITE_2.id, site: SITE_2 },
     ]);
     const roster = await payrollService.getZonePayrollRoster(4, 2026);
     const z1 = roster.zones.find((z) => z.zoneId === 'zone-1')!;
@@ -242,13 +279,84 @@ describe('payrollService.getZonePayrollRoster()', () => {
     const SITE_NO_ZONE = { id: 'site-9', siteName: 'Roadside', zoneId: null };
     mp.deployment.findMany.mockResolvedValue([
       zoneDeployment('guard-1'),
-      { guardId: 'guard-2', siteId: SITE_NO_ZONE.id, site: { select: SITE_NO_ZONE } },
+      { guardId: 'guard-2', siteId: SITE_NO_ZONE.id, site: SITE_NO_ZONE },
     ]);
     const roster = await payrollService.getZonePayrollRoster(4, 2026);
     expect(roster.unZonedGuardCount).toBe(1);
     expect(roster.zones[0].assignedCount).toBe(1);
   });
 });
+
+// ── Company-wide run — pay every deployed guard, zone ignored ───────────────────
+
+describe('payrollService.calculateCompanyRun()', () => {
+  it('creates one run with no zone covering every selected deployed guard', async () => {
+    const summary = await payrollService.calculateCompanyRun(4, 2026, 'user-1', ['guard-1', 'guard-2']);
+    const createData = mp.payrollRun.create.mock.calls[0][0].data;
+    expect(createData.zoneId).toBeNull();
+    expect(createData.totalGuards).toBe(2);
+    expect(summary.zoneId).toBeNull();
+    expect(summary.zoneName).toBeNull();
+    expect(summary.byGuard).toHaveLength(2);
+  });
+
+  it('refuses when any live run already covers the period — the either/or rule', async () => {
+    // A zone run (or a prior company-wide one) existing means a company-wide run
+    // would pay those guards a second time.
+    mp.payrollRun.findFirst.mockResolvedValue({ ...MOCK_RUN, zoneId: 'zone-1' });
+    await expect(
+      payrollService.calculateCompanyRun(4, 2026, 'user-1', ['guard-1', 'guard-2']),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('refuses a guard who was not deployed in the period', async () => {
+    // Only David has a deployment row this month, so submitting Amina is rejected
+    // rather than silently paying an absent guard.
+    mp.deployment.findMany.mockResolvedValue([zoneDeployment('guard-1')]);
+    await expect(
+      payrollService.calculateCompanyRun(4, 2026, 'user-1', ['guard-1', 'guard-2']),
+    ).rejects.toThrow(/Not eligible for the company-wide payroll.*Amina/);
+  });
+
+  it('a zone run is blocked while a live company-wide run covers the period', async () => {
+    // calculateRun checks the per-zone duplicate first (none), then the
+    // company-wide run for the same period — which exists here.
+    mp.payrollRun.findFirst
+      .mockResolvedValueOnce(null)                        // no existing zone-1 run
+      .mockResolvedValueOnce({ ...MOCK_RUN, zoneId: null }); // a live company-wide run
+    await expect(
+      payrollService.calculateRun(4, 2026, 'zone-1', 'user-1', ['guard-1']),
+    ).rejects.toThrow(/already run company-wide/);
+  });
+});
+
+// ── Company-wide roster (the Company-wide tick-list source) ─────────────────────
+
+describe('payrollService.getCompanyPayrollRoster()', () => {
+  it('lists every deployed guard under their main site, zone or not', async () => {
+    const SITE_NO_ZONE = { id: 'site-9', siteName: 'Roadside', zoneId: null };
+    mp.deployment.findMany.mockResolvedValue([
+      zoneDeployment('guard-1'),
+      { guardId: 'guard-2', siteId: SITE_NO_ZONE.id, site: SITE_NO_ZONE },
+    ]);
+    const roster = await payrollService.getCompanyPayrollRoster(4, 2026);
+    expect(roster.guardCount).toBe(2);
+    // Grouped by site NAME, alphabetical: Roadside before Site 1.
+    expect(roster.sites.map((s) => s.siteName)).toEqual(['Roadside', 'Site 1']);
+    // Amina is deployed only to an un-zoned site — still offered, with no zone.
+    expect(roster.sites[0].guards[0]).toMatchObject({
+      guardId: 'guard-2', primarySiteName: 'Roadside', primaryZoneName: null,
+    });
+  });
+
+  it('omits a payable guard who had no deployment in the period', async () => {
+    mp.deployment.findMany.mockResolvedValue([zoneDeployment('guard-1')]);
+    const roster = await payrollService.getCompanyPayrollRoster(4, 2026);
+    expect(roster.guardCount).toBe(1);
+    expect(roster.sites.flatMap((s) => s.guards).map((g) => g.guardId)).toEqual(['guard-1']);
+  });
+});
+
 
 describe('payrollService.approve()', () => {
   it('changes status from DRAFT to APPROVED', async () => {
@@ -319,7 +427,7 @@ describe('payrollService.reject()', () => {
     expect(result.payslipCount).toBe(0); // re-read reflects the deleted payslips
   });
 
-  it('an APPROVED run stays rejectable by the Director who stamped it', async () => {
+  it('an APPROVED run is rejectable by either payroll run role (Director here)', async () => {
     mp.payrollRun.findUnique
       .mockResolvedValueOnce({ ...MOCK_RUN, status: 'APPROVED', _count: { payslips: 2 } })
       .mockResolvedValueOnce({ ...REJECTED_RUN, status: 'REJECTED' });
@@ -327,10 +435,13 @@ describe('payrollService.reject()', () => {
     expect(result.status).toBe('REJECTED');
   });
 
-  it('forbids a non-Director from rejecting an APPROVED run', async () => {
-    mp.payrollRun.findUnique.mockResolvedValueOnce({ ...MOCK_RUN, status: 'APPROVED', _count: { payslips: 2 } });
-    mp.user.findUnique.mockResolvedValue({ role: 'ASSISTANT_MANAGER' });
-    await expect(payrollService.reject('run-1', 'am-1', 'Nope')).rejects.toMatchObject({ statusCode: 403 });
+  it('an Assistant Manager can also reject an APPROVED run — no Director-only gate', async () => {
+    mp.payrollRun.findUnique
+      .mockResolvedValueOnce({ ...MOCK_RUN, status: 'APPROVED', _count: { payslips: 2 } })
+      .mockResolvedValueOnce({ ...REJECTED_RUN, rejectedBy: 'am-1', status: 'REJECTED' });
+    const result = await payrollService.reject('run-1', 'am-1', 'Wrong guard list');
+    expect(result.status).toBe('REJECTED');
+    expect(result.rejectedBy).toBe('am-1');
   });
 
   it('refuses to reject once HR has approved — the run is in the pay queue', async () => {

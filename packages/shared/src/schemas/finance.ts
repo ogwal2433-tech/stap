@@ -153,15 +153,24 @@ export const CreateDeductionSchema = z.object({
 });
 
 /**
- * A payroll run covers one zone for a period. guardIds is the explicit
- * tick-list from the zone roster: the finance user unticks anyone who should
- * not be paid, so the server never silently decides the roster on its own.
+ * A payroll run covers one zone for a period, or — with scope COMPANY — the
+ * whole company at once. guardIds is the explicit tick-list from the matching
+ * roster: the finance user unticks anyone who should not be paid, so the
+ * server never silently decides the roster on its own.
+ *
+ * A period is either zone-runs or one company-wide run, never both: the
+ * company-wide run covers every deployed guard, so it is refused while any
+ * live run exists for the period (enforced in the service, not here).
  */
 export const RunPayrollSchema = z.object({
   month:    z.number().int().min(1).max(12),
   year:     z.number().int().min(2024).max(2030),
-  zoneId:   z.string().min(1, 'Pick the zone to pay'),
+  scope:    z.enum(['ZONE', 'COMPANY']).default('ZONE'),
+  zoneId:   z.string().min(1).optional(),
   guardIds: z.array(z.string().min(1)).min(1, 'At least one guard must be selected'),
+}).refine((d) => d.scope === 'COMPANY' || !!d.zoneId, {
+  message: 'Pick the zone to pay',
+  path:    ['zoneId'],
 });
 
 /** Period selector for the zone payroll roster (query string, so coerced). */
@@ -307,7 +316,7 @@ export interface PayrollRunResponse {
   id:             string;
   month:          number;
   year:           number;
-  // Null on legacy company-wide / grouped runs — UI labels those "Company-wide (legacy)".
+  // Null on company-wide runs (both current and legacy) — UI labels them "Company-wide".
   zoneId:         string | null;
   zoneName:       string | null;
   totalGuards:    number;
@@ -437,6 +446,38 @@ export interface ZonePayrollRosterResponse {
   year:                  number;
   zones:                 ZonePayrollRoster[];
   unZonedGuardCount:     number;
+}
+
+// ── Company-wide payroll roster ────────────────────────────────────────────────
+
+/**
+ * One guard as offered on the company-wide payroll tick-list: every payable
+ * guard deployed anywhere in the period, zone ignored. A guard appears once,
+ * under the site where they had most deployment days — the site/zone names are
+ * context only and play no part in who is paid.
+ */
+export interface CompanyPayrollGuard {
+  guardId:          string;
+  name:             string;
+  systemId:         string | null;
+  employmentStatus: string;
+  salaryRate:       number;
+  /** Deployment days across ALL sites during the period. */
+  deploymentDays:   number;
+  /** Attendance (PRESENT/LATE) days across all sites — the pro-rata basis. */
+  attendanceDays:   number;
+  primarySiteName:  string;
+  primaryZoneName:  string | null;
+}
+
+/** One company-wide period: every deployed guard, grouped by their main site. */
+export interface CompanyPayrollRosterResponse {
+  month:      number;
+  year:       number;
+  // Grouped by site NAME — guards land under their majority-day site, which
+  // may sit in any zone (or none), so the site id adds nothing the name isn't.
+  sites:      Array<{ siteName: string; guards: CompanyPayrollGuard[] }>;
+  guardCount: number;
 }
 
 // ── Fee increment ──────────────────────────────────────────────────────────────

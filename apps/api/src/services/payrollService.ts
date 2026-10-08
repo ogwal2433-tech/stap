@@ -1,8 +1,8 @@
-import { PAID_STATUSES, ROLES } from '@security360/shared';
+import { PAID_STATUSES } from '@security360/shared';
 import { companyProfile } from './integrationSettings';
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
-import { NotFoundError, AppError, ForbiddenError } from '../errors/AppError';
+import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
 import * as xcel from '../lib/xcel';
 import * as xcelPartner from '../lib/xcelPartner';
@@ -16,11 +16,18 @@ import type {
   ZonePayrollRosterResponse,
   ZonePayrollSite,
   ZonePayrollGuard,
+  CompanyPayrollGuard,
+  CompanyPayrollRosterResponse,
 } from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const TOTAL_WORKING_DAYS = 26; // Mon-Sat average
+
+// Statuses that still "own" a (period, scope) slot — a run in any of these
+// blocks recalculating over it. REJECTED is deliberately absent, which is what
+// keeps a rejected zone/period immediately re-calculable.
+const LIVE_RUN_STATUSES = ['DRAFT', 'APPROVED', 'HR_APPROVED', 'DISBURSING', 'DISBURSED'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +100,10 @@ interface ZoneAttribution {
   attribution:      Map<string, string>;                 // guardId -> zoneId
   daysBySite:       Map<string, Map<string, number>>;    // guardId -> siteId -> days
   siteById:         Map<string, { siteId: string; siteName: string; zoneId: string }>;
+  // Every deployment site seen in the period, zoned or not — the company-wide
+  // roster groups by site name and must show guards deployed only to un-zoned
+  // sites too, which siteById (zoned-only) deliberately leaves out.
+  allSitesById:     Map<string, { siteId: string; siteName: string; zoneId: string | null }>;
   unZonedGuardIds:  Set<string>;
 }
 
@@ -127,6 +138,7 @@ async function buildZoneAttribution(periodStart: Date, periodEnd: Date): Promise
     attribution:     new Map(),
     daysBySite:      new Map(),
     siteById:        new Map(),
+    allSitesById:    new Map(),
     unZonedGuardIds: new Set(),
   };
 
@@ -141,6 +153,9 @@ async function buildZoneAttribution(periodStart: Date, periodEnd: Date): Promise
     const zoneId = d.site.zoneId && zoneById.has(d.site.zoneId) ? d.site.zoneId : null;
     if (zoneId && !attr.siteById.has(d.siteId)) {
       attr.siteById.set(d.siteId, { siteId: d.site.id, siteName: d.site.siteName, zoneId });
+    }
+    if (!attr.allSitesById.has(d.siteId)) {
+      attr.allSitesById.set(d.siteId, { siteId: d.site.id, siteName: d.site.siteName, zoneId });
     }
 
     const bySite = attr.daysBySite.get(d.guardId) ?? new Map<string, number>();
@@ -193,10 +208,21 @@ class PayrollService {
     // One run per zone and period. Legacy history holds several runs for the
     // same month/year, so this stays a code-level check, not a unique index.
     const existing = await prisma.payrollRun.findFirst({
-      where: { month, year, zoneId, status: { in: ['DRAFT', 'APPROVED', 'HR_APPROVED', 'DISBURSING', 'DISBURSED'] } },
+      where: { month, year, zoneId, status: { in: LIVE_RUN_STATUSES } },
     });
     if (existing) {
       throw new AppError(`Payroll has already been run for ${zone.name} in this period`, 409);
+    }
+    // A live company-wide run (zoneId null) already covers every guard in this
+    // zone, so the either/or rule closes the zone window for the period too.
+    const companyRun = await prisma.payrollRun.findFirst({
+      where: { month, year, zoneId: null, status: { in: LIVE_RUN_STATUSES } },
+    });
+    if (companyRun) {
+      throw new AppError(
+        'This period was already run company-wide — the company-wide run covers this zone. Reject or delete that run first to pay by zone.',
+        409,
+      );
     }
 
     const periodStart = new Date(year, month - 1, 1);
@@ -226,6 +252,79 @@ class PayrollService {
       throw new AppError(`There are no guards to pay in ${zone.name} for this period.`, 400);
     }
 
+    return this.persistRun(month, year, zoneId, zone.name, calculatedBy, guards, periodStart, periodEnd);
+  }
+
+  // ── Company-wide run — everyone deployed in the period, zone ignored ─────────
+
+  async calculateCompanyRun(
+    month: number,
+    year: number,
+    calculatedBy: string,
+    guardIds: string[],
+  ): Promise<PayrollSummary> {
+    // The company-wide run claims every deployed guard, so ANY live run for
+    // the period — this one or a zone's — would mean paying someone twice.
+    // The zone path refuses a company-wide run the same way.
+    const existing = await prisma.payrollRun.findFirst({
+      where:   { month, year, status: { in: LIVE_RUN_STATUSES } },
+      include: { zone: { select: { name: true } } },
+    });
+    if (existing) {
+      throw new AppError(
+        'Payroll has already been run for this period'
+          + (existing.zoneId ? ` (${existing.zone?.name ?? 'a zone'})` : ' company-wide')
+          + ' — a company-wide run would pay those guards again. Reject that run first.',
+        409,
+      );
+    }
+
+    const periodStart = new Date(year, month - 1, 1);
+    const periodEnd   = new Date(year, month, 0, 23, 59, 59);
+
+    // Eligible = payable guard with at least one deployment day in the period,
+    // at any site — zoned or not. The roster showed exactly this set, so a
+    // guard arriving outside it means a stale screen or a hand-built request.
+    const attr = await buildZoneAttribution(periodStart, periodEnd);
+    const selected = [...new Set(guardIds)];
+    const ineligible = selected.filter((id) => !attr.daysBySite.has(id) || !attr.paidGuards.has(id));
+    if (ineligible.length > 0) {
+      const names = ineligible.map((id) => {
+        const g = attr.paidGuards.get(id);
+        return g ? `${g.firstName} ${g.lastName}` : id;
+      }).join(', ');
+      throw new AppError(
+        `Not eligible for the company-wide payroll for this period: ${names}. Every guard to be paid must be on the payroll with a deployment in the period.`,
+        400,
+      );
+    }
+
+    const guards = selected.map((id) => attr.paidGuards.get(id)!);
+    if (guards.length === 0) {
+      throw new AppError('There are no guards to pay for this period.', 400);
+    }
+
+    return this.persistRun(month, year, null, null, calculatedBy, guards, periodStart, periodEnd);
+  }
+
+  // ── Shared machinery for both scopes ────────────────────────────────────────
+
+  /**
+   * Turns the chosen guards into a DRAFT run with materialised payslips:
+   * company-wide attendance day count, pro-rata against TOTAL_WORKING_DAYS and
+   * pending deductions — identical maths for both scopes, the scope only
+   * decides who is in the run.
+   */
+  private async persistRun(
+    month:          number,
+    year:           number,
+    zoneId:         string | null,
+    zoneName:       string | null,
+    calculatedBy:   string,
+    guards:         any[],
+    periodStart:    Date,
+    periodEnd:      Date,
+  ): Promise<PayrollSummary> {
     let totalGross      = 0;
     let totalDeductions = 0;
     const payslipData: any[] = [];
@@ -282,19 +381,55 @@ class PayrollService {
       });
     }
 
-    // Create the payroll run
-    const run = await prisma.payrollRun.create({
-      data: {
-        month,
-        year,
-        zoneId,
-        totalGuards:     guards.length,
-        totalGross,
-        totalDeductions,
-        totalNet:        totalGross - totalDeductions,
-        createdBy:       calculatedBy,
-      },
+    // A recalculation reopens the run that was rejected for this same scope and
+    // period, rather than leaving it behind and starting a second row: the
+    // rejected run's reason/who/when stay on file and its totals refresh in
+    // place. Reject is not a live status, so the caller's duplicate check
+    // already let this through; we pick the most recent REJECTED run if several
+    // were left by the old create-a-new-draft behaviour.
+    const rejectedRun = await prisma.payrollRun.findFirst({
+      where:   { month, year, zoneId, status: 'REJECTED' },
+      orderBy: { rejectedAt: 'desc' },
     });
+
+    let runId: string;
+    if (rejectedRun) {
+      const reopened = await prisma.payrollRun.update({
+        where: { id: rejectedRun.id },
+        data: {
+          zoneId,
+          status:          'DRAFT',
+          totalGuards:     guards.length,
+          totalGross,
+          totalDeductions,
+          totalNet:        totalGross - totalDeductions,
+          createdBy:       calculatedBy,
+          // Clear the approval/disbursement trail so the reopened draft re-enters
+          // the flow clean; the reject reason stays as the record of why it reopened.
+          approvedBy: null, approvedAt: null,
+          hrApprovedBy: null, hrApprovedAt: null, hrNotes: null,
+          disbursedBy: null, disbursedAt: null, successCount: 0, failedCount: 0,
+        },
+      });
+      runId = reopened.id;
+      // Defensive: a rejected run's payslips were deleted on reject, but clear
+      // any strays before rebuilding so totals and rows never diverge.
+      await prisma.payslip.deleteMany({ where: { payrollRunId: runId } });
+    } else {
+      const created = await prisma.payrollRun.create({
+        data: {
+          month,
+          year,
+          zoneId,
+          totalGuards:     guards.length,
+          totalGross,
+          totalDeductions,
+          totalNet:        totalGross - totalDeductions,
+          createdBy:       calculatedBy,
+        },
+      });
+      runId = created.id;
+    }
 
     // Create payslips and apply deductions
     const payslips: any[] = [];
@@ -302,7 +437,7 @@ class PayrollService {
       const payslip = await prisma.payslip.create({
         data: {
           guardId:             p.guard.id,
-          payrollRunId:        run.id,
+          payrollRunId:        runId,
           grossSalary:         p.grossSalary,
           deductionsBreakdown: p.deductionsBreakdown,
           totalDeductions:     p.totalDeductions,
@@ -314,7 +449,7 @@ class PayrollService {
       });
 
       if (p.pendingDeductionIds.length > 0) {
-        await deductionService.applyToPayroll(p.pendingDeductionIds, run.id);
+        await deductionService.applyToPayroll(p.pendingDeductionIds, runId);
       }
 
       payslips.push(payslip);
@@ -324,7 +459,7 @@ class PayrollService {
       month,
       year,
       zoneId,
-      zoneName:        zone.name,
+      zoneName,
       totalGuards:     guards.length,
       totalGross,
       totalDeductions,
@@ -409,6 +544,73 @@ class PayrollService {
     });
 
     return { month, year, zones: zoneRosters, unZonedGuardCount: attr.unZonedGuardIds.size };
+  }
+
+  // ── Company-wide roster — every deployed guard, zone ignored ─────────────────
+
+  async getCompanyPayrollRoster(month: number, year: number): Promise<CompanyPayrollRosterResponse> {
+    const periodStart = new Date(year, month - 1, 1);
+    const periodEnd   = new Date(year, month, 0, 23, 59, 59);
+    const attr = await buildZoneAttribution(periodStart, periodEnd);
+
+    const attendanceGroups = await prisma.attendanceRecord.groupBy({
+      by:     ['guardId'],
+      where:  { status: { in: ['PRESENT', 'LATE'] }, date: { gte: periodStart, lte: periodEnd } },
+      _count: { _all: true },
+    });
+    const attendanceDays = new Map<string, number>(
+      attendanceGroups.map((g: any) => [g.guardId, g._count._all] as [string, number]),
+    );
+
+    // A guard sits under the site where they had most days that period, so
+    // nobody appears twice in the tick-list. daysBySite also counts sites
+    // outside every active zone — the company-wide list takes them all.
+    const guards: CompanyPayrollGuard[] = [];
+    for (const [guardId, g] of attr.paidGuards) {
+      const bySite = attr.daysBySite.get(guardId);
+      if (!bySite) continue; // payable but not deployed this period — nothing to pay
+
+      let bestSiteId  = '';
+      let bestDays    = -1;
+      let bestName    = '';
+      for (const [siteId, days] of bySite) {
+        const site = attr.allSitesById.get(siteId);
+        if (!site) continue; // site soft-deleted since the deployment rows were written
+        if (days > bestDays || (days === bestDays && site.siteName < bestName)) {
+          bestSiteId = siteId; bestDays = days; bestName = site.siteName;
+        }
+      }
+      const best = attr.allSitesById.get(bestSiteId);
+      if (!best) continue;
+
+      guards.push({
+        guardId,
+        name:             `${g.firstName} ${g.lastName}`,
+        systemId:         g.systemId ?? null,
+        employmentStatus: g.employmentStatus,
+        salaryRate:       g.salaryRate,
+        deploymentDays:   [...bySite.values()].reduce((s, d) => s + d, 0),
+        attendanceDays:   attendanceDays.get(guardId) ?? 0,
+        primarySiteName:  best.siteName,
+        primaryZoneName:  best.zoneId ? attr.zoneById.get(best.zoneId)?.name ?? null : null,
+      });
+    }
+
+    const bySite = new Map<string, CompanyPayrollGuard[]>();
+    for (const guard of guards) {
+      const list = bySite.get(guard.primarySiteName) ?? [];
+      list.push(guard);
+      bySite.set(guard.primarySiteName, list);
+    }
+
+    const sites = [...bySite.entries()]
+      .map(([siteName, siteGuards]) => ({
+        siteName,
+        guards: siteGuards.sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.siteName.localeCompare(b.siteName));
+
+    return { month, year, sites, guardCount: guards.length };
   }
 
   async approve(payrollRunId: string, approvedBy: string): Promise<PayrollRunResponse> {
@@ -512,13 +714,9 @@ class PayrollService {
       );
     }
 
-    // The route admits DIRECTOR and ASSISTANT_MANAGER; the APPROVED window
-    // narrows to the role that granted the approval.
-    const actor = await prisma.user.findUnique({ where: { id: rejectedBy }, select: { role: true } });
-    if (run.status === 'APPROVED' && actor?.role !== ROLES.DIRECTOR) {
-      throw new ForbiddenError('Only the Director can reject a financially approved payroll run.');
-    }
-
+    // Both payroll-run roles (DIRECTOR, ASSISTANT_MANAGER — enforced at the
+    // route) can send back a draft or an approved run; approval is a Director
+    // action but rejection is the shared "this looks wrong, rewind it" control.
     // Same rewind as deleting a draft: nothing was paid, so the figures and
     // deductions the run consumed are released. The run row itself stays with
     // the rejection stamp as the trail, and because REJECTED is not one of

@@ -453,18 +453,40 @@ router.get(
   }),
 );
 
+// Company-wide tick-list: every payable guard deployed in the period, zone
+// ignored. Same read gate as the zones roster, also before '/payroll/:id'.
+router.get(
+  '/payroll/company-roster',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validateQuery(PayrollRosterQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const roster = await payrollService.getCompanyPayrollRoster(
+      Number(req.query.month),
+      Number(req.query.year),
+    );
+    res.json({ success: true, data: roster });
+  }),
+);
+
 router.post(
   '/payroll/calculate',
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
   validate(RunPayrollSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const summary = await payrollService.calculateRun(
-      req.body.month,
-      req.body.year,
-      req.body.zoneId,
-      req.user!.userId,
-      req.body.guardIds,
-    );
+    const summary = req.body.scope === 'COMPANY'
+      ? await payrollService.calculateCompanyRun(
+          req.body.month,
+          req.body.year,
+          req.user!.userId,
+          req.body.guardIds,
+        )
+      : await payrollService.calculateRun(
+          req.body.month,
+          req.body.year,
+          req.body.zoneId,
+          req.user!.userId,
+          req.body.guardIds,
+        );
     res.status(201).json({ success: true, data: summary });
   }),
 );

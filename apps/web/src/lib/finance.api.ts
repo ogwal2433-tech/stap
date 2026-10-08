@@ -20,6 +20,7 @@ import type {
   CashbookEntryInput,
   FlagPayslipInput,
   ZonePayrollRosterResponse,
+  CompanyPayrollRosterResponse,
 } from '@security360/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -184,6 +185,13 @@ export const payrollApi = {
   zoneRoster(month: number, year: number): Promise<ZonePayrollRosterResponse> {
     return api
       .get<{ success: boolean; data: ZonePayrollRosterResponse }>('/finance/payroll/zones-roster', { params: { month, year } })
+      .then((r) => r.data.data);
+  },
+
+  /** Company-wide tick-list: every deployed guard for a period, zone ignored. */
+  companyRoster(month: number, year: number): Promise<CompanyPayrollRosterResponse> {
+    return api
+      .get<{ success: boolean; data: CompanyPayrollRosterResponse }>('/finance/payroll/company-roster', { params: { month, year } })
       .then((r) => r.data.data);
   },
 

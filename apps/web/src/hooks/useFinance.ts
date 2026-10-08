@@ -141,6 +141,15 @@ export function useZonePayrollRoster(month: number, year: number) {
   });
 }
 
+/** Company-wide tick-list: every deployed guard for the period, zone ignored. */
+export function useCompanyPayrollRoster(month: number, year: number, enabled = true) {
+  return useQuery({
+    queryKey: ['payroll', 'company-roster', month, year],
+    queryFn:  () => payrollApi.companyRoster(month, year),
+    enabled,
+  });
+}
+
 export function useRunPayroll() {
   const qc = useQueryClient();
   return useMutation({

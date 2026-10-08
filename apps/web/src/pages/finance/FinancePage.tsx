@@ -10,7 +10,7 @@ import {
   useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
   useHrApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
-  useZonePayrollRoster,
+  useZonePayrollRoster, useCompanyPayrollRoster,
 } from '../../hooks/useFinance';
 import InvoiceFilterPanel, {
   EMPTY_INVOICE_FILTERS, areInvoiceFiltersActive, raisedRangeQuery,
@@ -33,7 +33,7 @@ import { useInvoicePayments } from '../../hooks/usePayments';
 // Invoice amounts may carry cents now (a monthly contract rate ÷ 30 rarely lands
 // on a whole shilling); payroll figures are whole and print unchanged.
 import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@security360/shared';
-import type { InvoiceResponse, PayslipResponse, PayrollRunResponse } from '@security360/shared';
+import type { InvoiceResponse, PayslipResponse, PayrollRunResponse, RunPayrollInput } from '@security360/shared';
 import { invoicesApi, payrollApi } from '../../lib/finance.api';
 import { FILE_PREFIX } from '../../lib/branding';
 
@@ -496,6 +496,9 @@ function PayrollTab() {
   const now   = new Date();
   const [month, setMonth]         = useState(now.getMonth() + 1);
   const [year,  setYear]          = useState(now.getFullYear());
+  // Payroll scope: by zone, or one company-wide run that ignores zones. A period
+  // is covered by one or the other, never both — the server enforces the either/or.
+  const [scope, setScope]         = useState<'ZONE' | 'COMPANY'>('ZONE');
   const [confirming, setConfirming] = useState(false);
   const [hrApproving, setHrApproving] = useState(false);
   const [hrNotes, setHrNotes] = useState('');
@@ -508,13 +511,23 @@ function PayrollTab() {
   // history row — instead of an inline confirm.
   const [rejectTarget, setRejectTarget] = useState<PayrollRunResponse | null>(null);
 
-  // Payroll is run per zone: the roster drives the zone dropdown and the
-  // sites → employees tick-list inside the confirm card.
+  // By zone: the roster drives the zone dropdown and the sites → employees
+  // tick-list inside the confirm card. Company-wide: one flat roster of every
+  // deployed guard, fetched only while that scope is active.
   const { data: rosterData } = useZonePayrollRoster(month, year);
   const zones = rosterData?.zones ?? [];
   const [zoneId, setZoneId] = useState('');
   const selectedZoneId = zones.some((z) => z.zoneId === zoneId) ? zoneId : (zones[0]?.zoneId ?? '');
   const selectedZone = zones.find((z) => z.zoneId === selectedZoneId);
+
+  const { data: companyRosterData } = useCompanyPayrollRoster(month, year, scope === 'COMPANY');
+  const companySites = companyRosterData?.sites ?? [];
+
+  // Whether a run can be opened for the active scope. Company-wide is always
+  // offered (one roster covers every zone), matching the zone path which shows
+  // the button as soon as a zone exists — the confirm card handles the empty
+  // case, and the server refuses a run with no guards.
+  const canOpenRun = scope === 'COMPANY' || !!selectedZone;
 
   // Guards unticked in the confirm list, keyed by guard id — a removal, not an
   // allow-list, so newly assigned guards arrive pre-checked by default.
@@ -536,7 +549,10 @@ function PayrollTab() {
   const { user }               = useAuth();
 
   const runs    = data?.data ?? [];
-  const thisRun = runs.find((r) => r.month === month && r.year === year && (r.zoneId ?? '') === selectedZoneId);
+  const thisRun = runs.find((r) =>
+    r.month === month && r.year === year &&
+    (scope === 'COMPANY' ? !r.zoneId : (r.zoneId ?? '') === selectedZoneId),
+  );
 
   const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
   const payslips = runDetail?.payslips ?? [];
@@ -555,15 +571,51 @@ function PayrollTab() {
     }
   };
 
-  // The zone's payable roster: assigned guards minus the manual unticks.
-  const selectableGuards = selectedZone?.sites.flatMap((s) => s.guards).filter((g) => g.assignedHere) ?? [];
+  // A REJECTED run is not a live status, so the same calculate endpoint opens
+  // a fresh DRAFT for the zone/period — straight back into the approval flow
+  // while the rejected row stays on file as the trail. Jump the selectors to
+  // the rejected run's period/zone, pre-tick everyone, and open the confirm
+  // card; the roster is recomputed for that period before proceeding.
+  const startRecalculate = (run: PayrollRunResponse) => {
+    setMonth(run.month);
+    setYear(run.year);
+    if (run.zoneId) { setScope('ZONE'); setZoneId(run.zoneId); } else setScope('COMPANY');
+    setUnpicked(new Set());
+    setConfirming(true);
+  };
+
+  // Jump between the two scopes; drop any half-built confirm so the tick-list
+  // and the "already run" card re-derive for the other scope.
+  const switchScope = (next: 'ZONE' | 'COMPANY') => {
+    if (next === scope) return;
+    setScope(next);
+    setConfirming(false);
+    setUnpicked(new Set());
+  };
+
+  // The payable roster for the active scope, minus the manual unticks. In zone
+  // mode a guard shows under every site they touched but is only selectable at
+  // their majority zone; company mode offers each deployed guard exactly once.
+  const selectableGuards = scope === 'COMPANY'
+    ? companySites.flatMap((s) => s.guards)
+    : (selectedZone?.sites.flatMap((s) => s.guards).filter((g) => g.assignedHere) ?? []);
   const selectedGuardIds = selectableGuards.filter((g) => !unpicked.has(g.guardId)).map((g) => g.guardId);
 
   const handleCalculate = async () => {
-    if (!selectedZone) return;
+    if (!canOpenRun) return;
+    const isRecalc = thisRun?.status === 'REJECTED';
+    const payload: RunPayrollInput = scope === 'COMPANY'
+      ? { month, year, scope: 'COMPANY', guardIds: selectedGuardIds }
+      : { month, year, scope: 'ZONE', zoneId: selectedZoneId, guardIds: selectedGuardIds };
+    const label = scope === 'COMPANY' ? 'all zones (company-wide)' : (selectedZone?.zoneName ?? '');
     try {
-      await runPayroll.mutateAsync({ month, year, zoneId: selectedZoneId, guardIds: selectedGuardIds });
-      showToast(`Payroll calculated for ${selectedZone.zoneName}`, 'success');
+      await runPayroll.mutateAsync(payload);
+      showToast(
+        isRecalc
+          ? `Payroll recalculated for ${label} — new draft is back for approval`
+          : `Payroll calculated for ${label}`,
+        'success',
+      );
       setConfirming(false);
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to calculate payroll', 'danger');
@@ -607,83 +659,136 @@ function PayrollTab() {
   return (
     <>
       <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <div className="btn-group btn-group-sm" role="group" aria-label="Payroll scope">
+          <Button size="sm" variant={scope === 'ZONE' ? 'primary' : 'outline-primary'}
+            onClick={() => switchScope('ZONE')}>By zone</Button>
+          <Button size="sm" variant={scope === 'COMPANY' ? 'primary' : 'outline-primary'}
+            onClick={() => switchScope('COMPANY')}>Company-wide</Button>
+        </div>
         <Form.Select size="sm" style={{ width: 120 }} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
           {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
         </Form.Select>
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
-        <Form.Select size="sm" style={{ width: 260 }} value={selectedZoneId} onChange={(e) => setZoneId(e.target.value)}>
-          {zones.length === 0 && <option value="">— No active zones —</option>}
-          {zones.map((z) => (
-            <option key={z.zoneId} value={z.zoneId}>
-              {z.zoneName} ({z.assignedCount} guard{z.assignedCount === 1 ? '' : 's'})
-            </option>
-          ))}
-        </Form.Select>
+        {scope === 'ZONE' && (
+          <Form.Select size="sm" style={{ width: 260 }} value={selectedZoneId} onChange={(e) => setZoneId(e.target.value)}>
+            {zones.length === 0 && <option value="">— No active zones —</option>}
+            {zones.map((z) => (
+              <option key={z.zoneId} value={z.zoneId}>
+                {z.zoneName} ({z.assignedCount} guard{z.assignedCount === 1 ? '' : 's'})
+              </option>
+            ))}
+          </Form.Select>
+        )}
         <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
-          {!thisRun && selectedZone && (
+          {canOpenRun && (!thisRun || thisRun.status === 'REJECTED') && (
             <Button
               size="sm"
               style={{ background: NAVY, borderColor: NAVY }}
               onClick={() => setConfirming(true)}
               disabled={runPayroll.isPending}
             >
-              Calculate Payroll
+              {thisRun?.status === 'REJECTED' ? 'Recalculate Payroll' : 'Calculate Payroll'}
             </Button>
           )}
         </RoleGuard>
       </div>
 
-      {confirming && selectedZone && (
-        <Card className="border-warning mb-3">
+      {confirming && canOpenRun && (
+        <Card className={`mb-3 border-${thisRun?.status === 'REJECTED' ? 'danger' : 'warning'}`}>
           <Card.Body className="small">
-            <strong>Confirm:</strong> Calculate {MONTHS[month - 1]} {year} payroll for{' '}
-            <strong>{selectedZone.zoneName}</strong>. Everyone deployed to this zone is listed under
-            their main site — untick anyone who should not be paid in this run.
-            {selectedZone.sites.length === 0 ? (
-              <div className="text-muted mt-2">No guards were deployed to this zone's sites during the period.</div>
-            ) : (
-              <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
-                {selectedZone.sites.map((site) => (
-                  <div key={site.siteId} className="mb-2">
-                    <div className="fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
-                      {site.siteName}
-                    </div>
-                    {site.guards.map((g) => (
-                      <div key={g.guardId} className="d-flex align-items-center justify-content-between ms-2">
-                        {g.assignedHere ? (
+            <strong>Confirm:</strong>{' '}
+            {thisRun?.status === 'REJECTED' ? 'Recalculate' : 'Calculate'} {MONTHS[month - 1]} {year} payroll for{' '}
+            <strong>{scope === 'COMPANY' ? 'the whole company (all zones)' : selectedZone?.zoneName}</strong>.{' '}
+            {scope === 'COMPANY'
+              ? 'Every guard deployed anywhere this period is listed under their main site — zone is ignored. Untick anyone who should not be paid.'
+              : 'Everyone deployed to this zone is listed under their main site — untick anyone who should not be paid in this run.'}
+            {scope === 'COMPANY' && (
+              <Alert variant="info" className="mt-2 mb-2 py-2">
+                A company-wide run pays <strong>every zone at once</strong>, so it is only available while this
+                period has no zone runs. Guards paid here cannot be run again by zone for the same period.
+              </Alert>
+            )}
+            {thisRun?.status === 'REJECTED' && (
+              <Alert variant="secondary" className="mt-2 mb-2 py-2">
+                This creates a fresh <strong>DRAFT</strong> that re-enters the approval flow. The rejected
+                run stays on file as the trail — nothing was paid from it.
+              </Alert>
+            )}
+            {scope === 'COMPANY' ? (
+              companySites.length === 0 ? (
+                <div className="text-muted mt-2">No guards were deployed anywhere during the period.</div>
+              ) : (
+                <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {companySites.map((site) => (
+                    <div key={site.siteName} className="mb-2">
+                      <div className="fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
+                        {site.siteName}
+                      </div>
+                      {site.guards.map((g) => (
+                        <div key={g.guardId} className="d-flex align-items-center justify-content-between ms-2">
                           <Form.Check
                             type="switch"
-                            id={`pp-${selectedZoneId}-${g.guardId}`}
+                            id={`ppc-${g.guardId}`}
                             label={`${g.name}${g.systemId ? ` (${g.systemId})` : ''}`}
                             checked={!unpicked.has(g.guardId)}
                             onChange={() => toggleGuard(g.guardId)}
                           />
-                        ) : (
-                          <span className="text-muted">
-                            {g.name}{' '}
-                            <Badge bg="secondary" text="light" className="ms-1" style={{ fontSize: '0.62rem' }}>
-                              Paid under {g.assignedZoneName ?? 'another zone'}
-                            </Badge>
+                          <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                            {g.deploymentDays}d deployed · {g.attendanceDays}d present · {g.primaryZoneName ?? 'no zone'}
                           </span>
-                        )}
-                        <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                          {g.deploymentDays}d deployed · {g.attendanceDays}d present
-                        </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : (selectedZone?.sites.length ?? 0) === 0 ? (
+              <div className="text-muted mt-2">No guards were deployed to this zone's sites during the period.</div>
+            ) : (
+              <>
+                <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {selectedZone!.sites.map((site) => (
+                    <div key={site.siteId} className="mb-2">
+                      <div className="fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
+                        {site.siteName}
                       </div>
-                    ))}
+                      {site.guards.map((g) => (
+                        <div key={g.guardId} className="d-flex align-items-center justify-content-between ms-2">
+                          {g.assignedHere ? (
+                            <Form.Check
+                              type="switch"
+                              id={`pp-${selectedZoneId}-${g.guardId}`}
+                              label={`${g.name}${g.systemId ? ` (${g.systemId})` : ''}`}
+                              checked={!unpicked.has(g.guardId)}
+                              onChange={() => toggleGuard(g.guardId)}
+                            />
+                          ) : (
+                            <span className="text-muted">
+                              {g.name}{' '}
+                              <Badge bg="secondary" text="light" className="ms-1" style={{ fontSize: '0.62rem' }}>
+                                Paid under {g.assignedZoneName ?? 'another zone'}
+                              </Badge>
+                            </span>
+                          )}
+                          <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                            {g.deploymentDays}d deployed · {g.attendanceDays}d present
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {(selectedZone!.alsoElsewhereCount > 0 || (rosterData?.unZonedGuardCount ?? 0) > 0) && (
+                  <div className="mt-1 text-muted" style={{ fontSize: '0.75rem' }}>
+                    {selectedZone!.alsoElsewhereCount > 0 &&
+                      `${selectedZone!.alsoElsewhereCount} guard(s) deployed here are paid under another zone this period. `}
+                    {(rosterData?.unZonedGuardCount ?? 0) > 0 &&
+                      `${rosterData!.unZonedGuardCount} guard(s) are deployed only to sites with no zone — they are not in any zone payroll.`}
                   </div>
-                ))}
-              </div>
-            )}
-            {(selectedZone.alsoElsewhereCount > 0 || (rosterData?.unZonedGuardCount ?? 0) > 0) && (
-              <div className="mt-1 text-muted" style={{ fontSize: '0.75rem' }}>
-                {selectedZone.alsoElsewhereCount > 0 &&
-                  `${selectedZone.alsoElsewhereCount} guard(s) deployed here are paid under another zone this period. `}
-                {(rosterData?.unZonedGuardCount ?? 0) > 0 &&
-                  `${rosterData!.unZonedGuardCount} guard(s) are deployed only to sites with no zone — they are not in any zone payroll.`}
-              </div>
+                )}
+              </>
             )}
             <div className="mt-2 d-flex gap-2">
               <Button size="sm" variant="primary" onClick={handleCalculate}
@@ -715,7 +820,7 @@ function PayrollTab() {
                     );
                   })()}
                   <div className="small fw-semibold" style={{ color: NAVY }}>
-                    {thisRun.zoneName ?? 'Company-wide (legacy)'}
+                    {thisRun.zoneName ?? 'Company-wide (all zones)'}
                   </div>
                   {thisRun.status === 'REJECTED' && (
                     <Alert variant="danger" className="mt-2 mb-0 small py-2">
@@ -723,7 +828,8 @@ function PayrollTab() {
                       {thisRun.rejectedAt && (
                         <span className="text-muted"> · {new Date(thisRun.rejectedAt).toLocaleString('en-GB')}</span>
                       )}
-                      . Deductions were released back to pending — this zone and period can be calculated again.
+                      . Deductions were released back to pending — use <strong>Recalculate Payroll</strong> above to
+                      build a fresh draft and restart the approval flow.
                     </Alert>
                   )}
                   <div className="small">
@@ -774,14 +880,14 @@ function PayrollTab() {
                       </Button>
                     )
                   )}
-                  {/* Reject windows: a draft by either run role, an APPROVED run
-                      only by the Director who stamped it (enforced server-side). */}
+                  {/* Reject windows: a draft or an APPROVED run by either payroll
+                      run role (Director / Assistant Manager) — enforced server-side. */}
                   {thisRun.status === 'DRAFT' && canDeleteRun && (
                     <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
                       🚫 Reject
                     </Button>
                   )}
-                  {thisRun.status === 'APPROVED' && user?.role === ROLES.DIRECTOR && (
+                  {thisRun.status === 'APPROVED' && canDeleteRun && (
                     <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
                       🚫 Reject
                     </Button>
@@ -934,11 +1040,14 @@ function PayrollTab() {
         </>
       ) : (
         <div className="text-muted small text-center py-4">
-          {selectedZone ? (
+          {scope === 'COMPANY' ? (
+            <>No company-wide payroll run for {MONTHS[month - 1]} {year} yet.
+              {' '}Use "Calculate Payroll" to run every zone at once{companySites.length === 0 ? ' — but no guards were deployed this period' : ''}.</>
+          ) : selectedZone ? (
             <>No payroll run for <strong>{selectedZone.zoneName}</strong> in {MONTHS[month - 1]} {year} yet.
               Use "Calculate Payroll" to generate one.</>
           ) : (
-            'No active zones — payroll runs are created per zone.'
+            'No active zones — payroll runs are created per zone, or company-wide from the toggle above.'
           )}
         </div>
       )}
@@ -995,7 +1104,16 @@ function PayrollTab() {
                   </td>
                   {canDeleteRun && (
                     <td className="text-end">
-                      {r.status === 'APPROVED' && user?.role === ROLES.DIRECTOR && (
+                      {/* A rejected run can be re-opened as a fresh draft —
+                          the same roles that may reject may calculate. A zone
+                          run only if its zone still exists; a company-wide run
+                          (no zone) recalculates straight back into company scope. */}
+                      {r.status === 'REJECTED' && (!r.zoneId || zones.some((z) => z.zoneId === r.zoneId)) && (
+                        <Button size="sm" variant="outline-primary" onClick={() => startRecalculate(r)}>
+                          Recalculate
+                        </Button>
+                      )}
+                      {r.status === 'APPROVED' && canDeleteRun && (
                         <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(r)}>
                           Reject
                         </Button>
@@ -1129,7 +1247,7 @@ function RejectPayrollModal({ run, onClose }: { run: PayrollRunResponse; onClose
       </Modal.Header>
       <Modal.Body className="small">
         <div className="mb-2">
-          <span className="fw-semibold">{run.zoneName ?? 'Company-wide (legacy)'}</span>{' '}
+          <span className="fw-semibold">{run.zoneName ?? 'Company-wide (all zones)'}</span>{' '}
           · {new Date(run.createdAt).toLocaleDateString('en-GB', { month: 'long' })} {run.year}
           {' '}· {run.totalGuards} guard(s)
         </div>
