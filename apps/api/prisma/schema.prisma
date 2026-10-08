@@ -358,7 +358,6 @@ model Guard {
   relatives          GuardRelative[]
   associates         GuardAssociate[]
   transfers          GuardTransfer[]
-  payrollGroups      GuardPayrollGroupMember[]
   promotions         GuardPromotion[]
 
   // ── Soft delete ─────────────────────────────────────────────────────────────
@@ -868,6 +867,7 @@ model Zone {
   supervisor User?  @relation("ZoneSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
   alternate  User?  @relation("ZoneAlternate", fields: [alternateId], references: [id], onDelete: SetNull)
   sites      Site[]
+  payrollRuns PayrollRun[]
 }
 
 model Contract {
@@ -1293,16 +1293,24 @@ model PayrollRun {
   id              String    @id @default(cuid())
   month           Int
   year            Int
-  payrollGroupId  String?
-  payrollGroup    PayrollGroup? @relation(fields: [payrollGroupId], references: [id], onDelete: Restrict)
+  // Zone-based payroll: one run per (month, year, zone). Null on legacy
+  // company-wide and grouped history, which is kept as it stands.
+  zoneId          String?
+  zone            Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   totalGuards     Int
   totalGross      Int
   totalDeductions Int
   totalNet        Int
   status          String    @default("DRAFT")
-  // DRAFT | APPROVED | HR_APPROVED | DISBURSING | DISBURSED
+  // DRAFT | APPROVED | HR_APPROVED | DISBURSING | DISBURSED | REJECTED
   approvedBy      String?
   approvedAt      DateTime?
+
+  // Rejection trail — kept on the run after payslips are rewound, so a
+  // rejected zone/period can be recalculated with the reason on record.
+  rejectedBy   String?
+  rejectedAt   DateTime?
+  rejectReason String?
 
   // HR review — required after financial APPROVED, before Finance can disburse
   hrApprovedBy String?
@@ -1323,10 +1331,9 @@ model PayrollRun {
   payslips   Payslip[]
   deductions GuardDeduction[]
 
-  /// One payroll run per group per period. payrollGroupId is null only on
-  /// historical runs from before payroll was grouped; Postgres treats those
-  /// nulls as distinct, so legacy rows never collide.
-  @@unique([month, year, payrollGroupId])
+  // One run per zone and period going forward, enforced in calculateRun: the
+  // DB keeps no unique index because legacy history already holds several
+  // runs for the same month/year.
 }
 
 model Payslip {
@@ -1359,40 +1366,6 @@ model Payslip {
   webhookPayload    Json?
 
   createdAt DateTime @default(now())
-}
-
-/// A named grouping of guards for payroll organisation (teams, sites, pay
-/// batches). Reference data only for now — no payroll run depends on it yet,
-/// which is why membership cascades rather than restricts.
-model PayrollGroup {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  members GuardPayrollGroupMember[]
-
-  /// Payroll runs are per group per month. Restrict: once a group has money
-  /// history the run rows must keep pointing at it.
-  payrollRuns PayrollRun[]
-}
-
-/// Join row between a guard and a payroll group. A guard holds at most ONE
-/// group — the unique index on guardId makes the database, not just the UI,
-/// the authority. Deleting the group or the guard removes the link, never the
-/// people either side of it.
-model GuardPayrollGroupMember {
-  id        String   @id @default(cuid())
-  guardId   String   @unique
-  groupId   String
-  createdAt DateTime @default(now())
-
-  guard Guard        @relation(fields: [guardId], references: [id], onDelete: Cascade)
-  group PayrollGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@unique([guardId, groupId])
 }
 
 model CashbookEntry {

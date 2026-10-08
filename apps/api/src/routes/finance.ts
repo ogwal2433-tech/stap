@@ -115,22 +115,29 @@
  * /api/v1/finance/payroll/calculate:
  *   post:
  *     tags: [Finance]
- *     summary: Run payroll calculation for a given month/year
+ *     summary: Run payroll calculation for one zone in a given month/year
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [month, year]
+ *             required: [month, year, zoneId, guardIds]
  *             properties:
  *               month: { type: integer, minimum: 1, maximum: 12 }
  *               year: { type: integer }
+ *               zoneId: { type: string }
+ *               guardIds:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: The tick-list of guards to pay, all attributed to this zone
  *     responses:
  *       201:
  *         description: Payroll run created (DRAFT status)
+ *       400:
+ *         description: Zone inactive, or a submitted guard belongs to another zone
  *       409:
- *         description: Run already exists for this period
+ *         description: Run already exists for this zone and period
  *
  * /api/v1/finance/payroll/{id}/approve:
  *   post:
@@ -200,13 +207,12 @@ import {
   AddFeeIncrementSchema,
   CreateDeductionSchema,
   RunPayrollSchema,
+  PayrollRosterQuerySchema,
   CashbookEntrySchema,
   FlagPayslipSchema,
   HrApprovePayrollSchema,
-  CreatePayrollGroupSchema,
-  UpdatePayrollGroupSchema,
+  RejectPayrollSchema,
 } from '@security360/shared';
-import { payrollGroupService } from '../services/payrollGroupService';
 
 const router: IRouter = Router();
 router.use(authenticate);
@@ -427,9 +433,38 @@ router.get(
     const result = await payrollService.getRunHistory({
       page:           Number(req.query.page ?? 1),
       limit:          Number(req.query.limit ?? 20),
-      payrollGroupId: typeof req.query.payrollGroupId === 'string' ? req.query.payrollGroupId : undefined,
     });
     res.json({ success: true, ...result });
+  }),
+);
+
+// Zone → sites → employees tick-list for a period. Registered before every
+// '/payroll/:id' route so the literal path is never shadowed.
+router.get(
+  '/payroll/zones-roster',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validateQuery(PayrollRosterQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const roster = await payrollService.getZonePayrollRoster(
+      Number(req.query.month),
+      Number(req.query.year),
+    );
+    res.json({ success: true, data: roster });
+  }),
+);
+
+// Company-wide tick-list: every payable guard deployed in the period, zone
+// ignored. Same read gate as the zones roster, also before '/payroll/:id'.
+router.get(
+  '/payroll/company-roster',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validateQuery(PayrollRosterQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const roster = await payrollService.getCompanyPayrollRoster(
+      Number(req.query.month),
+      Number(req.query.year),
+    );
+    res.json({ success: true, data: roster });
   }),
 );
 
@@ -438,12 +473,20 @@ router.post(
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
   validate(RunPayrollSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const summary = await payrollService.calculateRun(
-      req.body.month,
-      req.body.year,
-      req.body.payrollGroupId,
-      req.user!.userId,
-    );
+    const summary = req.body.scope === 'COMPANY'
+      ? await payrollService.calculateCompanyRun(
+          req.body.month,
+          req.body.year,
+          req.user!.userId,
+          req.body.guardIds,
+        )
+      : await payrollService.calculateRun(
+          req.body.month,
+          req.body.year,
+          req.body.zoneId,
+          req.user!.userId,
+          req.body.guardIds,
+        );
     res.status(201).json({ success: true, data: summary });
   }),
 );
@@ -454,6 +497,15 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.approve(req.params.id, req.user!.userId);
     res.json({ success: true, data: run });
+  }),
+);
+
+router.delete(
+  '/payroll/:id',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    await payrollService.remove(req.params.id, req.user!.userId);
+    res.json({ success: true });
   }),
 );
 
@@ -486,6 +538,18 @@ router.post(
   validate(HrApprovePayrollSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.hrApprove(req.params.id, req.user!.userId, req.body.notes);
+    res.json({ success: true, data: run });
+  }),
+);
+
+router.post(
+  '/payroll/:id/reject',
+  // Both windows cover these two roles; the service narrows APPROVED further
+  // to DIRECTOR, the role that granted the approval.
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(RejectPayrollSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const run = await payrollService.reject(req.params.id, req.user!.userId, req.body.reason);
     res.json({ success: true, data: run });
   }),
 );
@@ -557,46 +621,6 @@ router.get(
       }
     }
     res.json({ success: true, data: payslip });
-  }),
-);
-
-// ── Payroll groups ───────────────────────────────────────────────────────────
-
-router.get(
-  '/payroll-groups',
-  requireRole(...FINANCE_ROLES, ...HR_ROLES),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const groups = await payrollGroupService.list();
-    res.json({ success: true, data: groups });
-  }),
-);
-
-router.post(
-  '/payroll-groups',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
-  validate(CreatePayrollGroupSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const group = await payrollGroupService.create(req.body, req.user!.userId);
-    res.status(201).json({ success: true, data: group });
-  }),
-);
-
-router.patch(
-  '/payroll-groups/:id',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
-  validate(UpdatePayrollGroupSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const group = await payrollGroupService.update(req.params.id, req.body, req.user!.userId);
-    res.json({ success: true, data: group });
-  }),
-);
-
-router.delete(
-  '/payroll-groups/:id',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
-  asyncHandler(async (req: Request, res: Response) => {
-    await payrollGroupService.remove(req.params.id, req.user!.userId);
-    res.json({ success: true });
   }),
 );
 

@@ -3,8 +3,8 @@
  *
  * Only the inner content — renderToPdf() wraps this in the Security360 letterhead,
  * so the company details and footer are not repeated here. The header block
- * carries the fields a printed payroll must be identified by: month, year,
- * payroll group, print date and who generated the export.
+ * carries the fields a printed payroll must be identified by: zone, month,
+ * year, print date and who generated the export.
  */
 
 const NAVY  = '#1B3A6B';
@@ -31,7 +31,7 @@ export interface PayrollExportRow {
 export interface PayrollRunPdfData {
   monthName:       string;
   year:            number;
-  groupName:       string;
+  zoneName:        string;
   printDate:       string;
   generatedBy:     string;
   status:          string;
@@ -95,7 +95,7 @@ export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
         <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">PAYROLL SCHEDULE</div>
-        <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(data.groupName)} — ${esc(data.monthName)} ${data.year}</div>
+        <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(data.zoneName)} — ${esc(data.monthName)} ${data.year}</div>
       </div>
       <div style="text-align:right">
         <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:9pt;
@@ -107,9 +107,9 @@ export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
 
     <table style="width:100%;border-collapse:collapse;background:#F2F4F7;border-left:3px solid ${AMBER};margin-bottom:10px">
       <tr>
+        ${metaCell('Zone', data.zoneName)}
         ${metaCell('Payroll Month', data.monthName)}
         ${metaCell('Year', String(data.year))}
-        ${metaCell('Payroll Group', data.groupName)}
       </tr>
       <tr>
         ${metaCell('Print Date', data.printDate)}

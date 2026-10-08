@@ -7,12 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
-  useRunPayroll, useApprovePayroll, useDisbursePayroll,
-  useHrApprovePayroll, useFlagPayslip, useUnflagPayslip,
+  useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
+  useHrApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
-  usePayrollGroups, useCreatePayrollGroup, useUpdatePayrollGroup, useDeletePayrollGroup,
+  useZonePayrollRoster, useCompanyPayrollRoster,
 } from '../../hooks/useFinance';
-import { useGuardList } from '../../hooks/useGuards';
 import InvoiceFilterPanel, {
   EMPTY_INVOICE_FILTERS, areInvoiceFiltersActive, raisedRangeQuery,
 } from '../../components/finance/InvoiceFilterPanel';
@@ -34,7 +33,7 @@ import { useInvoicePayments } from '../../hooks/usePayments';
 // Invoice amounts may carry cents now (a monthly contract rate ÷ 30 rarely lands
 // on a whole shilling); payroll figures are whole and print unchanged.
 import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@security360/shared';
-import type { InvoiceResponse, PayslipResponse, PayrollGroupResponse } from '@security360/shared';
+import type { InvoiceResponse, PayslipResponse, PayrollRunResponse, RunPayrollInput } from '@security360/shared';
 import { invoicesApi, payrollApi } from '../../lib/finance.api';
 import { FILE_PREFIX } from '../../lib/branding';
 
@@ -483,50 +482,140 @@ function payrollStatusColor(status: string): { bg: string; dark?: boolean } {
     case 'HR_APPROVED': return { bg: 'primary' };
     case 'DISBURSING':  return { bg: 'info', dark: true };
     case 'DISBURSED':   return { bg: 'success' };
+    case 'REJECTED':    return { bg: 'danger' };
     default:             return { bg: 'secondary' };
   }
 }
+
+// Same gate as the DELETE endpoint: dropping a draft is a write action on the
+// same footing as calculating one, but stopping short of the money trail an
+// approved run leaves is why only these two roles may do it.
+const RUN_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 function PayrollTab() {
   const now   = new Date();
   const [month, setMonth]         = useState(now.getMonth() + 1);
   const [year,  setYear]          = useState(now.getFullYear());
+  // Payroll scope: by zone, or one company-wide run that ignores zones. A period
+  // is covered by one or the other, never both — the server enforces the either/or.
+  const [scope, setScope]         = useState<'ZONE' | 'COMPANY'>('ZONE');
   const [confirming, setConfirming] = useState(false);
   const [hrApproving, setHrApproving] = useState(false);
   const [hrNotes, setHrNotes] = useState('');
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
   const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
+  // Two-step inline confirmation, shared by the run card and the history row.
+  const [confirmDeleteRunId, setConfirmDeleteRunId] = useState<string | null>(null);
+  // Rejection always needs a reason, so it goes through a modal — run card or
+  // history row — instead of an inline confirm.
+  const [rejectTarget, setRejectTarget] = useState<PayrollRunResponse | null>(null);
 
-  // Payroll is run per group: only ACTIVE groups are selectable, and the
-  // chosen group scopes both the calculate action and the card below.
-  const { data: allGroups } = usePayrollGroups();
-  const activeGroups = (allGroups ?? []).filter((g) => g.isActive);
-  const [groupId, setGroupId] = useState('');
-  const selectedGroupId = activeGroups.some((g) => g.id === groupId) ? groupId : (activeGroups[0]?.id ?? '');
-  const selectedGroup = activeGroups.find((g) => g.id === selectedGroupId);
+  // By zone: the roster drives the zone dropdown and the sites → employees
+  // tick-list inside the confirm card. Company-wide: one flat roster of every
+  // deployed guard, fetched only while that scope is active.
+  const { data: rosterData } = useZonePayrollRoster(month, year);
+  const zones = rosterData?.zones ?? [];
+  const [zoneId, setZoneId] = useState('');
+  const selectedZoneId = zones.some((z) => z.zoneId === zoneId) ? zoneId : (zones[0]?.zoneId ?? '');
+  const selectedZone = zones.find((z) => z.zoneId === selectedZoneId);
+
+  const { data: companyRosterData } = useCompanyPayrollRoster(month, year, scope === 'COMPANY');
+  const companySites = companyRosterData?.sites ?? [];
+
+  // Whether a run can be opened for the active scope. Company-wide is always
+  // offered (one roster covers every zone), matching the zone path which shows
+  // the button as soon as a zone exists — the confirm card handles the empty
+  // case, and the server refuses a run with no guards.
+  const canOpenRun = scope === 'COMPANY' || !!selectedZone;
+
+  // Guards unticked in the confirm list, keyed by guard id — a removal, not an
+  // allow-list, so newly assigned guards arrive pre-checked by default.
+  const [unpicked, setUnpicked] = useState<Set<string>>(new Set());
+  const toggleGuard = (id: string) => setUnpicked((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const { data, isLoading }   = usePayrollRuns();
   const runPayroll             = useRunPayroll();
   const approvePayroll         = useApprovePayroll();
   const hrApprovePayroll       = useHrApprovePayroll();
   const disbursePayroll        = useDisbursePayroll();
+  const deletePayrollRun       = useDeletePayrollRun();
   const unflagPayslip          = useUnflagPayslip();
   const { showToast }          = useToast();
   const { user }               = useAuth();
 
   const runs    = data?.data ?? [];
-  const thisRun = runs.find((r) => r.month === month && r.year === year && r.payrollGroupId === selectedGroupId);
+  const thisRun = runs.find((r) =>
+    r.month === month && r.year === year &&
+    (scope === 'COMPANY' ? !r.zoneId : (r.zoneId ?? '') === selectedZoneId),
+  );
 
   const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
   const payslips = runDetail?.payslips ?? [];
 
   const isHR = !!user && HR_ROLES.includes(user.role as any);
+  const canDeleteRun = !!user && RUN_DELETE_ROLES.includes(user.role as typeof RUN_DELETE_ROLES[number]);
+
+  const handleDeleteRun = async (id: string) => {
+    try {
+      await deletePayrollRun.mutateAsync(id);
+      showToast('Draft payroll deleted — its deductions are pending again.', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Could not delete the payroll run.', 'danger');
+    } finally {
+      setConfirmDeleteRunId(null);
+    }
+  };
+
+  // A REJECTED run is not a live status, so the same calculate endpoint opens
+  // a fresh DRAFT for the zone/period — straight back into the approval flow
+  // while the rejected row stays on file as the trail. Jump the selectors to
+  // the rejected run's period/zone, pre-tick everyone, and open the confirm
+  // card; the roster is recomputed for that period before proceeding.
+  const startRecalculate = (run: PayrollRunResponse) => {
+    setMonth(run.month);
+    setYear(run.year);
+    if (run.zoneId) { setScope('ZONE'); setZoneId(run.zoneId); } else setScope('COMPANY');
+    setUnpicked(new Set());
+    setConfirming(true);
+  };
+
+  // Jump between the two scopes; drop any half-built confirm so the tick-list
+  // and the "already run" card re-derive for the other scope.
+  const switchScope = (next: 'ZONE' | 'COMPANY') => {
+    if (next === scope) return;
+    setScope(next);
+    setConfirming(false);
+    setUnpicked(new Set());
+  };
+
+  // The payable roster for the active scope, minus the manual unticks. In zone
+  // mode a guard shows under every site they touched but is only selectable at
+  // their majority zone; company mode offers each deployed guard exactly once.
+  const selectableGuards = scope === 'COMPANY'
+    ? companySites.flatMap((s) => s.guards)
+    : (selectedZone?.sites.flatMap((s) => s.guards).filter((g) => g.assignedHere) ?? []);
+  const selectedGuardIds = selectableGuards.filter((g) => !unpicked.has(g.guardId)).map((g) => g.guardId);
 
   const handleCalculate = async () => {
+    if (!canOpenRun) return;
+    const isRecalc = thisRun?.status === 'REJECTED';
+    const payload: RunPayrollInput = scope === 'COMPANY'
+      ? { month, year, scope: 'COMPANY', guardIds: selectedGuardIds }
+      : { month, year, scope: 'ZONE', zoneId: selectedZoneId, guardIds: selectedGuardIds };
+    const label = scope === 'COMPANY' ? 'all zones (company-wide)' : (selectedZone?.zoneName ?? '');
     try {
-      await runPayroll.mutateAsync({ month, year, payrollGroupId: selectedGroupId });
-      showToast('Payroll calculated', 'success');
+      await runPayroll.mutateAsync(payload);
+      showToast(
+        isRecalc
+          ? `Payroll recalculated for ${label} — new draft is back for approval`
+          : `Payroll calculated for ${label}`,
+        'success',
+      );
       setConfirming(false);
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to calculate payroll', 'danger');
@@ -550,12 +639,13 @@ function PayrollTab() {
   const flaggedCount = payslips.filter((p) => p.hrFlagged).length;
 
   // Export the calculated run — the server stamps each file with the header
-  // block (month, year, group, print date, generated by).
+  // block (zone, month, year, print date, generated by) and names it the same
+  // way, so the client mirror must slug the zone identically.
   const handleExport = async (format: 'excel' | 'pdf') => {
     if (!thisRun) return;
     setExporting(format);
-    const groupSlug = (thisRun.payrollGroupName ?? 'Ungrouped').replace(/[^a-zA-Z0-9]+/g, '_');
-    const base = `${FILE_PREFIX}_Payroll_${groupSlug}_${MONTHS[thisRun.month - 1]}${thisRun.year}`;
+    const zoneSlug = (thisRun.zoneName ?? 'Company-wide').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const base = `${FILE_PREFIX}_Payroll_${zoneSlug}_${MONTHS[thisRun.month - 1]}${thisRun.year}`;
     try {
       if (format === 'excel') await payrollApi.downloadRunExcel(thisRun.id, `${base}.xlsx`);
       else                    await payrollApi.downloadRunPdf(thisRun.id, `${base}.pdf`);
@@ -569,41 +659,143 @@ function PayrollTab() {
   return (
     <>
       <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <div className="btn-group btn-group-sm" role="group" aria-label="Payroll scope">
+          <Button size="sm" variant={scope === 'ZONE' ? 'primary' : 'outline-primary'}
+            onClick={() => switchScope('ZONE')}>By zone</Button>
+          <Button size="sm" variant={scope === 'COMPANY' ? 'primary' : 'outline-primary'}
+            onClick={() => switchScope('COMPANY')}>Company-wide</Button>
+        </div>
         <Form.Select size="sm" style={{ width: 120 }} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
           {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
         </Form.Select>
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
-        <Form.Select size="sm" style={{ width: 260 }} value={selectedGroupId} onChange={(e) => setGroupId(e.target.value)}>
-          {activeGroups.length === 0 && <option value="">— No active payroll groups —</option>}
-          {activeGroups.map((g) => (
-            <option key={g.id} value={g.id}>{g.name} ({g.memberCount} members)</option>
-          ))}
-        </Form.Select>
+        {scope === 'ZONE' && (
+          <Form.Select size="sm" style={{ width: 260 }} value={selectedZoneId} onChange={(e) => setZoneId(e.target.value)}>
+            {zones.length === 0 && <option value="">— No active zones —</option>}
+            {zones.map((z) => (
+              <option key={z.zoneId} value={z.zoneId}>
+                {z.zoneName} ({z.assignedCount} guard{z.assignedCount === 1 ? '' : 's'})
+              </option>
+            ))}
+          </Form.Select>
+        )}
         <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
-          {!thisRun && selectedGroup && (
+          {canOpenRun && (!thisRun || thisRun.status === 'REJECTED') && (
             <Button
               size="sm"
               style={{ background: NAVY, borderColor: NAVY }}
               onClick={() => setConfirming(true)}
               disabled={runPayroll.isPending}
             >
-              Calculate Payroll
+              {thisRun?.status === 'REJECTED' ? 'Recalculate Payroll' : 'Calculate Payroll'}
             </Button>
           )}
         </RoleGuard>
       </div>
 
-      {confirming && (
-        <Card className="border-warning mb-3">
+      {confirming && canOpenRun && (
+        <Card className={`mb-3 border-${thisRun?.status === 'REJECTED' ? 'danger' : 'warning'}`}>
           <Card.Body className="small">
-            <strong>Confirm:</strong> Calculate payroll for {MONTHS[month - 1]} {year} — group{' '}
-            <strong>{selectedGroup?.name}</strong> ({selectedGroup?.memberCount ?? 0} members)? Only this
-            group's guards are included.
+            <strong>Confirm:</strong>{' '}
+            {thisRun?.status === 'REJECTED' ? 'Recalculate' : 'Calculate'} {MONTHS[month - 1]} {year} payroll for{' '}
+            <strong>{scope === 'COMPANY' ? 'the whole company (all zones)' : selectedZone?.zoneName}</strong>.{' '}
+            {scope === 'COMPANY'
+              ? 'Every guard deployed anywhere this period is listed under their main site — zone is ignored. Untick anyone who should not be paid.'
+              : 'Everyone deployed to this zone is listed under their main site — untick anyone who should not be paid in this run.'}
+            {scope === 'COMPANY' && (
+              <Alert variant="info" className="mt-2 mb-2 py-2">
+                A company-wide run pays <strong>every zone at once</strong>, so it is only available while this
+                period has no zone runs. Guards paid here cannot be run again by zone for the same period.
+              </Alert>
+            )}
+            {thisRun?.status === 'REJECTED' && (
+              <Alert variant="secondary" className="mt-2 mb-2 py-2">
+                This creates a fresh <strong>DRAFT</strong> that re-enters the approval flow. The rejected
+                run stays on file as the trail — nothing was paid from it.
+              </Alert>
+            )}
+            {scope === 'COMPANY' ? (
+              companySites.length === 0 ? (
+                <div className="text-muted mt-2">No guards were deployed anywhere during the period.</div>
+              ) : (
+                <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {companySites.map((site) => (
+                    <div key={site.siteName} className="mb-2">
+                      <div className="fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
+                        {site.siteName}
+                      </div>
+                      {site.guards.map((g) => (
+                        <div key={g.guardId} className="d-flex align-items-center justify-content-between ms-2">
+                          <Form.Check
+                            type="switch"
+                            id={`ppc-${g.guardId}`}
+                            label={`${g.name}${g.systemId ? ` (${g.systemId})` : ''}`}
+                            checked={!unpicked.has(g.guardId)}
+                            onChange={() => toggleGuard(g.guardId)}
+                          />
+                          <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                            {g.deploymentDays}d deployed · {g.attendanceDays}d present · {g.primaryZoneName ?? 'no zone'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : (selectedZone?.sites.length ?? 0) === 0 ? (
+              <div className="text-muted mt-2">No guards were deployed to this zone's sites during the period.</div>
+            ) : (
+              <>
+                <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {selectedZone!.sites.map((site) => (
+                    <div key={site.siteId} className="mb-2">
+                      <div className="fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
+                        {site.siteName}
+                      </div>
+                      {site.guards.map((g) => (
+                        <div key={g.guardId} className="d-flex align-items-center justify-content-between ms-2">
+                          {g.assignedHere ? (
+                            <Form.Check
+                              type="switch"
+                              id={`pp-${selectedZoneId}-${g.guardId}`}
+                              label={`${g.name}${g.systemId ? ` (${g.systemId})` : ''}`}
+                              checked={!unpicked.has(g.guardId)}
+                              onChange={() => toggleGuard(g.guardId)}
+                            />
+                          ) : (
+                            <span className="text-muted">
+                              {g.name}{' '}
+                              <Badge bg="secondary" text="light" className="ms-1" style={{ fontSize: '0.62rem' }}>
+                                Paid under {g.assignedZoneName ?? 'another zone'}
+                              </Badge>
+                            </span>
+                          )}
+                          <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                            {g.deploymentDays}d deployed · {g.attendanceDays}d present
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {(selectedZone!.alsoElsewhereCount > 0 || (rosterData?.unZonedGuardCount ?? 0) > 0) && (
+                  <div className="mt-1 text-muted" style={{ fontSize: '0.75rem' }}>
+                    {selectedZone!.alsoElsewhereCount > 0 &&
+                      `${selectedZone!.alsoElsewhereCount} guard(s) deployed here are paid under another zone this period. `}
+                    {(rosterData?.unZonedGuardCount ?? 0) > 0 &&
+                      `${rosterData!.unZonedGuardCount} guard(s) are deployed only to sites with no zone — they are not in any zone payroll.`}
+                  </div>
+                )}
+              </>
+            )}
             <div className="mt-2 d-flex gap-2">
-              <Button size="sm" variant="primary" onClick={handleCalculate} disabled={runPayroll.isPending}>
-                {runPayroll.isPending ? 'Calculating…' : 'Proceed'}
+              <Button size="sm" variant="primary" onClick={handleCalculate}
+                disabled={runPayroll.isPending || selectedGuardIds.length === 0}>
+                {runPayroll.isPending
+                  ? 'Calculating…'
+                  : `Proceed — pay ${selectedGuardIds.length} of ${selectableGuards.length}`}
               </Button>
               <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Cancel</Button>
             </div>
@@ -628,8 +820,18 @@ function PayrollTab() {
                     );
                   })()}
                   <div className="small fw-semibold" style={{ color: NAVY }}>
-                    {thisRun.payrollGroupName ?? 'Ungrouped (historical run)'}
+                    {thisRun.zoneName ?? 'Company-wide (all zones)'}
                   </div>
+                  {thisRun.status === 'REJECTED' && (
+                    <Alert variant="danger" className="mt-2 mb-0 small py-2">
+                      🚫 Rejected payroll — {thisRun.rejectReason || 'no reason given'}
+                      {thisRun.rejectedAt && (
+                        <span className="text-muted"> · {new Date(thisRun.rejectedAt).toLocaleString('en-GB')}</span>
+                      )}
+                      . Deductions were released back to pending — use <strong>Recalculate Payroll</strong> above to
+                      build a fresh draft and restart the approval flow.
+                    </Alert>
+                  )}
                   <div className="small">
                     <strong>{thisRun.totalGuards}</strong> guards &nbsp;|&nbsp;
                     Gross: <strong>{fmtUGX(thisRun.totalGross)}</strong> &nbsp;|&nbsp;
@@ -662,6 +864,32 @@ function PayrollTab() {
                     <Button size="sm" variant="success"
                       onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>
                       Approve
+                    </Button>
+                  )}
+                  {thisRun.status === 'DRAFT' && canDeleteRun && (
+                    confirmDeleteRunId === thisRun.id ? (
+                      <>
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteRun(thisRun.id)} disabled={deletePayrollRun.isPending}>
+                          {deletePayrollRun.isPending ? 'Deleting…' : 'Confirm delete?'}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(thisRun.id)}>
+                        Delete
+                      </Button>
+                    )
+                  )}
+                  {/* Reject windows: a draft or an APPROVED run by either payroll
+                      run role (Director / Assistant Manager) — enforced server-side. */}
+                  {thisRun.status === 'DRAFT' && canDeleteRun && (
+                    <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
+                      🚫 Reject
+                    </Button>
+                  )}
+                  {thisRun.status === 'APPROVED' && canDeleteRun && (
+                    <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
+                      🚫 Reject
                     </Button>
                   )}
                   {thisRun.status === 'APPROVED' && isHR && (
@@ -812,9 +1040,15 @@ function PayrollTab() {
         </>
       ) : (
         <div className="text-muted small text-center py-4">
-          {selectedGroup
-            ? <>No payroll run for {MONTHS[month - 1]} {year} in group <strong>{selectedGroup.name}</strong>. Use "Calculate Payroll" to generate one.</>
-            : 'No active payroll groups — create and activate one in the Payroll Groups tab before running payroll.'}
+          {scope === 'COMPANY' ? (
+            <>No company-wide payroll run for {MONTHS[month - 1]} {year} yet.
+              {' '}Use "Calculate Payroll" to run every zone at once{companySites.length === 0 ? ' — but no guards were deployed this period' : ''}.</>
+          ) : selectedZone ? (
+            <>No payroll run for <strong>{selectedZone.zoneName}</strong> in {MONTHS[month - 1]} {year} yet.
+              Use "Calculate Payroll" to generate one.</>
+          ) : (
+            'No active zones — payroll runs are created per zone, or company-wide from the toggle above.'
+          )}
         </div>
       )}
 
@@ -836,11 +1070,22 @@ function PayrollTab() {
         />
       )}
 
+      {/* Reject-run modal */}
+      {rejectTarget && (
+        <RejectPayrollModal
+          run={rejectTarget}
+          onClose={() => setRejectTarget(null)}
+        />
+      )}
+
       {/* Run history */}
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
           <thead className="table-light">
-            <tr><th>Period</th><th>Group</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th></tr>
+            <tr>
+              <th>Period</th><th>Zone</th><th>Guards</th><th>Gross</th><th>Net</th><th>Status</th>
+              {canDeleteRun && <th className="text-end">Actions</th>}
+            </tr>
           </thead>
           <tbody>
             {runs.map((r) => {
@@ -848,7 +1093,7 @@ function PayrollTab() {
               return (
                 <tr key={r.id}>
                   <td>{MONTHS[r.month - 1]} {r.year}</td>
-                  <td>{r.payrollGroupName ?? '—'}</td>
+                  <td>{r.zoneName ?? 'Company-wide'}</td>
                   <td>{r.totalGuards}</td>
                   <td>{fmtUGX(r.totalGross)}</td>
                   <td>{fmtUGX(r.totalNet)}</td>
@@ -857,6 +1102,38 @@ function PayrollTab() {
                       {r.status.replace('_', ' ')}
                     </Badge>
                   </td>
+                  {canDeleteRun && (
+                    <td className="text-end">
+                      {/* A rejected run can be re-opened as a fresh draft —
+                          the same roles that may reject may calculate. A zone
+                          run only if its zone still exists; a company-wide run
+                          (no zone) recalculates straight back into company scope. */}
+                      {r.status === 'REJECTED' && (!r.zoneId || zones.some((z) => z.zoneId === r.zoneId)) && (
+                        <Button size="sm" variant="outline-primary" onClick={() => startRecalculate(r)}>
+                          Recalculate
+                        </Button>
+                      )}
+                      {r.status === 'APPROVED' && canDeleteRun && (
+                        <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(r)}>
+                          Reject
+                        </Button>
+                      )}
+                      {r.status === 'DRAFT' && (
+                        confirmDeleteRunId === r.id ? (
+                          <span className="d-inline-flex gap-1">
+                            <Button size="sm" variant="danger" onClick={() => handleDeleteRun(r.id)} disabled={deletePayrollRun.isPending}>
+                              {deletePayrollRun.isPending ? 'Deleting…' : 'Confirm delete?'}
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                          </span>
+                        ) : (
+                          <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(r.id)}>
+                            Delete
+                          </Button>
+                        )
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -933,6 +1210,67 @@ function FlagPayslipModal({ payslip, onClose }: { payslip: PayslipResponse; onCl
         <Button variant="secondary" onClick={onClose} disabled={flagPayslip.isPending}>Cancel</Button>
         <Button variant="warning" onClick={handleSubmit} disabled={flagPayslip.isPending}>
           {flagPayslip.isPending ? 'Flagging…' : '⚠️ Flag Guard'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+// ── Reject Payroll Modal ───────────────────────────────────────────────────────
+
+// Rejecting releases everything the run consumed — payslips go, applied
+// deductions return to PENDING — and the zone/period opens up for a fresh
+// calculation. The reason is mandatory so the redo has something to go on.
+function RejectPayrollModal({ run, onClose }: { run: PayrollRunResponse; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  const { showToast } = useToast();
+  const rejectPayroll = useRejectPayroll();
+
+  const handleSubmit = async () => {
+    if (reason.trim().length < 5) {
+      showToast('Give a reason — at least 5 characters', 'danger');
+      return;
+    }
+    try {
+      await rejectPayroll.mutateAsync({ id: run.id, reason: reason.trim() });
+      showToast(`Payroll for ${run.zoneName ?? 'this run'} rejected — deductions are pending again`, 'success');
+      onClose();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to reject the payroll run.', 'danger');
+    }
+  };
+
+  return (
+    <Modal show onHide={onClose} centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="h6">Reject Payroll Run</Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="small">
+        <div className="mb-2">
+          <span className="fw-semibold">{run.zoneName ?? 'Company-wide (all zones)'}</span>{' '}
+          · {new Date(run.createdAt).toLocaleDateString('en-GB', { month: 'long' })} {run.year}
+          {' '}· {run.totalGuards} guard(s)
+        </div>
+        <Alert variant="warning" className="mb-3 py-2">
+          The {run.status} run's payslips are removed and its deductions return to pending.
+          The run stays on file marked <strong>REJECTED</strong> with your reason, and this
+          zone can be calculated again.
+        </Alert>
+        <Form.Group>
+          <Form.Label className="fw-semibold">Reason <span className="text-danger">*</span></Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={2}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Deployment days for two guards look wrong — recalculate after fixing."
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={rejectPayroll.isPending}>Cancel</Button>
+        <Button variant="danger" onClick={handleSubmit} disabled={rejectPayroll.isPending}>
+          {rejectPayroll.isPending ? 'Rejecting…' : '🚫 Reject Payroll'}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -1108,278 +1446,6 @@ function ARAgingTab() {
   );
 }
 
-// ── Payroll groups tab ─────────────────────────────────────────────────────────────
-
-const GROUP_WRITE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
-const GROUP_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
-
-function PayrollGroupFormModal({
-  group,
-  onClose,
-}: {
-  group: PayrollGroupResponse | 'new';
-  onClose: () => void;
-}) {
-  const { showToast } = useToast();
-  const createGroup = useCreatePayrollGroup();
-  const updateGroup = useUpdatePayrollGroup();
-  const isNew = group === 'new';
-
-  const [name, setName] = useState(isNew ? '' : group.name);
-  const [description, setDescription] = useState(isNew ? '' : group.description ?? '');
-  const [isActive, setIsActive] = useState(isNew ? true : group.isActive);
-  const [guardIds, setGuardIds] = useState<Set<string>>(
-    new Set(isNew ? [] : (group.members ?? []).map((m) => m.id)),
-  );
-  const [memberSearch, setMemberSearch] = useState('');
-
-  // One fetch of the active roll; filtering is local so picking members does
-  // not requery the server on every keystroke.
-  const { data: guardPage, isLoading: guardsLoading } = useGuardList({ page: 1, limit: 500, status: 'ACTIVE' });
-  const guards = guardPage?.data ?? [];
-
-  // A guard belongs to only one group, so offer everyone except guards already
-  // grouped elsewhere. The groups query is cached from the tab — no extra fetch.
-  const { data: allGroups } = usePayrollGroups();
-  const takenGuardIds = new Set(
-    (allGroups ?? [])
-      .filter((grp) => isNew || grp.id !== group.id)
-      .flatMap((grp) => (grp.members ?? []).map((m) => m.id)),
-  );
-
-  const q = memberSearch.trim().toLowerCase();
-  const selectableGuards = guards.filter((g) => !takenGuardIds.has(g.id) || guardIds.has(g.id));
-  const visibleGuards = q
-    ? selectableGuards.filter((g) => g.fullName.toLowerCase().includes(q) || (g.systemId ?? '').toLowerCase().includes(q))
-    : selectableGuards;
-  const selectedCount = guardIds.size;
-
-  const toggleGuard = (id: string) => {
-    setGuardIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSave = async () => {
-    const payload = {
-      name: name.trim(),
-      description: description.trim() || null,
-      isActive,
-      // Always sent: save replaces the membership with exactly what is on screen.
-      guardIds: [...guardIds],
-    };
-    try {
-      if (isNew) await createGroup.mutateAsync(payload);
-      else await updateGroup.mutateAsync({ id: group.id, data: payload });
-      showToast(`Payroll group ${isNew ? 'created' : 'updated'}.`, 'success');
-      onClose();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'Could not save the group.'), 'danger');
-    }
-  };
-
-  return (
-    <Modal show onHide={onClose} size="lg" centered>
-      <Modal.Header closeButton>
-        <Modal.Title className="small fw-bold">
-          {isNew ? 'Add Payroll Group' : `Edit — ${group.name}`}
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        <Form className="d-flex flex-column gap-3">
-          <Form.Group>
-            <Form.Label className="small fw-semibold">Name</Form.Label>
-            <Form.Control
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Night Shift — Industrial Area"
-              maxLength={80}
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Label className="small fw-semibold">Description</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional — what this group is for"
-              maxLength={300}
-            />
-          </Form.Group>
-          <Form.Check
-            type="switch"
-            id="group-active"
-            label={<span className="small">Active</span>}
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-          />
-
-          <div>
-            <div className="d-flex align-items-center justify-content-between mb-1">
-              <Form.Label className="small fw-semibold mb-0">Members</Form.Label>
-              <Badge bg={selectedCount ? 'primary' : 'secondary'}>{selectedCount} selected</Badge>
-            </div>
-            <Form.Control
-              size="sm"
-              placeholder="Search active guards by name or system ID…"
-              value={memberSearch}
-              onChange={(e) => setMemberSearch(e.target.value)}
-              className="mb-2"
-            />
-            <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.375rem' }}>
-              {guardsLoading ? (
-                <div className="text-center py-3"><Spinner size="sm" animation="border" /></div>
-              ) : visibleGuards.length === 0 ? (
-                <div className="text-muted small text-center py-3">No available guards match the search.</div>
-              ) : (
-                visibleGuards.map((g) => (
-                  <div key={g.id} className="d-flex align-items-center gap-2" style={{ padding: '6px 10px', borderBottom: '1px solid #f0f0f0' }}>
-                    <Form.Check
-                      id={`member-${g.id}`}
-                      checked={guardIds.has(g.id)}
-                      onChange={() => toggleGuard(g.id)}
-                    />
-                    <label htmlFor={`member-${g.id}`} className="mb-0 small flex-grow-1" style={{ cursor: 'pointer' }}>
-                      <span className="fw-semibold">{g.fullName}</span>
-                      <span className="text-muted ms-2">{g.rank}</span>
-                    </label>
-                    {g.systemId && <span className="text-muted" style={{ fontSize: '0.72rem', fontFamily: 'monospace' }}>{g.systemId}</span>}
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
-              Each guard can only be in one payroll group, so guards already grouped elsewhere are not listed.
-              Only active guards are offered; existing members who have since left stay in the group until you
-              remove them here.
-            </div>
-          </div>
-        </Form>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-        <Button
-          size="sm"
-          style={{ backgroundColor: NAVY, borderColor: NAVY }}
-          onClick={handleSave}
-          disabled={createGroup.isPending || updateGroup.isPending || name.trim().length < 2}
-        >
-          {createGroup.isPending || updateGroup.isPending ? 'Saving…' : 'Save'}
-        </Button>
-      </Modal.Footer>
-    </Modal>
-  );
-}
-
-function PayrollGroupsTab() {
-  const { user } = useAuth();
-  const { showToast } = useToast();
-  const { data: groups, isLoading, isError } = usePayrollGroups();
-  const deleteGroup = useDeletePayrollGroup();
-  const [editing, setEditing] = useState<PayrollGroupResponse | 'new' | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
-  const canManage = !!user && GROUP_WRITE_ROLES.includes(user.role as typeof GROUP_WRITE_ROLES[number]);
-  const canDelete = !!user && GROUP_DELETE_ROLES.includes(user.role as typeof GROUP_DELETE_ROLES[number]);
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteGroup.mutateAsync(id);
-      showToast('Payroll group deleted.', 'success');
-    } catch {
-      showToast('Could not delete the group.', 'danger');
-    } finally {
-      setConfirmDeleteId(null);
-    }
-  };
-
-  return (
-    <>
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div className="text-muted small">
-          Named groupings of guards for payroll organisation — teams, sites or pay batches.
-        </div>
-        {canManage && (
-          <Button size="sm" style={{ backgroundColor: NAVY, borderColor: NAVY }} onClick={() => setEditing('new')}>
-            + Add Group
-          </Button>
-        )}
-      </div>
-
-      {isLoading && <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>}
-      {isError && <Alert variant="danger" className="small">Could not load payroll groups.</Alert>}
-      {!isLoading && (groups?.length ?? 0) === 0 && (
-        <Alert variant="info" className="small">
-          No payroll groups yet. {canManage ? "Click '+ Add Group' to create one." : 'Ask Finance or the Director to create one.'}
-        </Alert>
-      )}
-      {!isLoading && (groups?.length ?? 0) > 0 && (
-        <Table striped hover responsive size="sm" className="align-middle">
-          <thead className="table-light">
-            <tr>
-              <th>Name</th>
-              <th>Description</th>
-              <th className="text-center">Members</th>
-              <th>Status</th>
-              <th>Updated</th>
-              {(canManage || canDelete) && <th className="text-end">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {groups!.map((g) => (
-              <tr key={g.id}>
-                <td className="fw-semibold">{g.name}</td>
-                <td className="small text-muted">{g.description ?? '—'}</td>
-                <td className="text-center">
-                  <Badge bg="secondary">{g.memberCount}</Badge>
-                </td>
-                <td>
-                  <Badge bg={g.isActive ? 'success' : 'secondary'}>{g.isActive ? 'Active' : 'Inactive'}</Badge>
-                </td>
-                <td className="small text-muted">{new Date(g.updatedAt).toLocaleDateString('en-GB')}</td>
-                {(canManage || canDelete) && (
-                  <td className="text-end">
-                    {canManage && (
-                      <Button variant="outline-secondary" size="sm" className="me-1" onClick={() => setEditing(g)}>
-                        Edit
-                      </Button>
-                    )}
-                    {canDelete && (confirmDeleteId === g.id ? (
-                      <>
-                        <Button variant="danger" size="sm" className="me-1" onClick={() => handleDelete(g.id)}>
-                          Confirm
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>
-                          Cancel
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() => setConfirmDeleteId(g.id)}
-                      >
-                        Delete
-                      </Button>
-                    ))}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
-
-      {editing && (
-        <PayrollGroupFormModal group={editing} onClose={() => setEditing(null)} />
-      )}
-    </>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 import { Form } from 'react-bootstrap';
@@ -1405,9 +1471,6 @@ export default function FinancePage() {
             </Tab>
             <Tab eventKey="payroll" title="Payroll">
               <PayrollTab />
-            </Tab>
-            <Tab eventKey="groups" title="Payroll Groups">
-              <PayrollGroupsTab />
             </Tab>
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />
