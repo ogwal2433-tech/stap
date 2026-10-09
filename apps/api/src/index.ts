@@ -17,6 +17,7 @@ import { buildPreviewHtml } from './lib/pdfBase';
   './public/uploads/guards',
   './public/uploads/invoices',
   './public/uploads/payslips',
+  './public/uploads/payroll',
   './public/uploads/letters',
 ].forEach(dir => fs.mkdirSync(dir, { recursive: true }));
 

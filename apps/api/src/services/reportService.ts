@@ -54,6 +54,13 @@ const scheduledJobs = new Map<string, ReturnType<typeof cron.schedule>>();
 
 // ── Service ────────────────────────────────────────────────────────────────────
 
+// Payroll display only: local-format numbers (0772...) read better on
+// schedules than +256... Storage and XCEL disbursement keep full format.
+function displayPhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  return phone.replace(/^\+256/, '0');
+}
+
 class ReportService {
   async getDirectorDashboard(): Promise<DirectorDashboardStats> {
     const now   = new Date();
@@ -332,7 +339,7 @@ class ReportService {
       where:   { month, year },
       include: {
         payslips: {
-          include: { guard: { select: { firstName: true, lastName: true } } },
+          include: { guard: { select: { firstName: true, lastName: true, phone: true } } },
         },
       },
     });
@@ -358,20 +365,21 @@ class ReportService {
     }
 
     const detail = wb.addWorksheet('Guard Detail');
-    detail.addRow(['Guard', 'Gross (UGX)', 'Deductions (UGX)', 'Net (UGX)', 'Days Worked', 'Disbursement']);
+    detail.addRow(['Guard', 'Gross (UGX)', 'Deductions (UGX)', 'Net (UGX)', 'Phone', 'Days Worked', 'Disbursement']);
     styleHeader(detail.getRow(1));
     (run?.payslips ?? []).forEach((ps, i) => {
       const r = detail.addRow([
-        `${ps.guard.firstName} ${ps.guard.lastName}`,
+        `${ps.guard?.firstName ?? ''} ${ps.guard?.lastName ?? ''}`.trim(),
         ps.grossSalary,
         ps.totalDeductions,
         ps.netSalary,
+        displayPhone(ps.guard?.phone) ?? '',
         ps.daysWorked,
         ps.disbursementStatus,
       ]);
       styleRow(r, i);
     });
-    [25, 16, 18, 16, 14, 16].forEach((w, i) => { detail.getColumn(i + 1).width = w; });
+    [25, 16, 18, 16, 16, 14, 16].forEach((w, i) => { detail.getColumn(i + 1).width = w; });
 
     return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }

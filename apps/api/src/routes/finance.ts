@@ -191,6 +191,7 @@ import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
 import { payrollService } from '../services/payrollService';
 import { payrollExportService } from '../services/payrollExportService';
+import { payrollShareService } from '../services/payrollShareService';
 import { cashbookService } from '../services/cashbookService';
 import {
   ROLES,
@@ -206,7 +207,10 @@ import {
   RecordPaymentSchema,
   AddFeeIncrementSchema,
   CreateDeductionSchema,
+  CreateStaffDeductionSchema,
   RunPayrollSchema,
+  RunStaffPayrollSchema,
+  SharePayrollSchema,
   PayrollRosterQuerySchema,
   CashbookEntrySchema,
   FlagPayslipSchema,
@@ -430,9 +434,11 @@ router.get(
   '/payroll',
   requireRole(...FINANCE_ROLES, ...HR_ROLES),
   asyncHandler(async (req: Request, res: Response) => {
+    const runType = req.query.runType as string | undefined;
     const result = await payrollService.getRunHistory({
       page:           Number(req.query.page ?? 1),
       limit:          Number(req.query.limit ?? 20),
+      runType:        runType === 'STAFF' || runType === 'GUARD' ? runType : undefined,
     });
     res.json({ success: true, ...result });
   }),
@@ -446,6 +452,22 @@ router.get(
   validateQuery(PayrollRosterQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const roster = await payrollService.getZonePayrollRoster(
+      Number(req.query.month),
+      Number(req.query.year),
+    );
+    res.json({ success: true, data: roster });
+  }),
+);
+
+// Staff tick-list: every active internal account with salary and phone
+// readiness flags. Same read gate as the guard rosters, also before
+// '/payroll/:id' so the literal path is never shadowed.
+router.get(
+  '/payroll/staff-roster',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validateQuery(PayrollRosterQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const roster = await payrollService.getStaffPayrollRoster(
       Number(req.query.month),
       Number(req.query.year),
     );
@@ -491,9 +513,11 @@ router.post(
   }),
 );
 
+// Financial approval: Directors always; Assistant Managers on staff-only
+// runs (Harold's lane - the service re-checks per run type).
 router.post(
   '/payroll/:id/approve',
-  requireRole(ROLES.DIRECTOR),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.approve(req.params.id, req.user!.userId);
     res.json({ success: true, data: run });
@@ -542,6 +566,17 @@ router.post(
   }),
 );
 
+// MD final approval: the last stamp before disbursement. Only the MD role
+// grants it, and the service refuses an MD who already stamped this run.
+router.post(
+  '/payroll/:id/md-approve',
+  requireRole(ROLES.MD),
+  asyncHandler(async (req: Request, res: Response) => {
+    const run = await payrollService.mdApprove(req.params.id, req.user!.userId);
+    res.json({ success: true, data: run });
+  }),
+);
+
 router.post(
   '/payroll/:id/reject',
   // Both windows cover these two roles; the service narrows APPROVED further
@@ -551,6 +586,56 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.reject(req.params.id, req.user!.userId, req.body.reason);
     res.json({ success: true, data: run });
+  }),
+);
+
+// Staff-only payroll calculation: fixed salaries, no zones. Approve,
+// HR-approve, disburse, reject, delete, detail and exports all run through
+// the existing run-based endpoints unchanged.
+router.post(
+  '/staff-payroll/calculate',
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  validate(RunStaffPayrollSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const summary = await payrollService.calculateStaffRun(
+      req.body.month,
+      req.body.year,
+      req.user!.userId,
+      req.body.userIds,
+    );
+    res.status(201).json({ success: true, data: summary });
+  }),
+);
+
+// Staff deductions (NSSF, PAYE, advances): same gates as guard deductions.
+router.get(
+  '/staff-deductions',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await deductionService.listStaff({
+      userId: req.query.userId as string | undefined,
+      status: req.query.status as string | undefined,
+    });
+    res.json({ success: true, data: result });
+  }),
+);
+
+router.post(
+  '/staff-deductions',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER),
+  validate(CreateStaffDeductionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const deduction = await deductionService.createStaff(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: deduction });
+  }),
+);
+
+router.patch(
+  '/staff-deductions/:id/cancel',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const deduction = await deductionService.cancelStaff(req.params.id, req.user!.userId);
+    res.json({ success: true, data: deduction });
   }),
 );
 
@@ -603,6 +688,51 @@ router.get(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(pdf);
+  }),
+);
+
+// -- In-system payroll inbox: share run files with staff accounts ---------------
+// Shares persist the file on disk and notify recipients through the bell;
+// nothing is emailed or leaves the system.
+router.post(
+  '/payroll/:id/share',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validate(SharePayrollSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const shares = await payrollShareService.share(
+      req.params.id,
+      req.body,
+      req.user!.userId,
+      req.user!.name,
+    );
+    res.status(201).json({ success: true, data: shares });
+  }),
+);
+
+router.get(
+  '/shares',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const shares = await payrollShareService.list({
+      runId:  req.query.runId as string | undefined,
+      format: req.query.format as string | undefined,
+    });
+    res.json({ success: true, data: shares });
+  }),
+);
+
+// Recipient-only download: no role gate here, the service admits the
+// recipient or finance/HR and refuses everyone else with 403.
+router.get(
+  '/shares/:id/download',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { buffer, filename, contentType } = await payrollShareService.download(
+      req.params.id,
+      req.user!,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   }),
 );
 

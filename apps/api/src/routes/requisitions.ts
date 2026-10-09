@@ -191,7 +191,7 @@ router.patch(
 
 router.patch(
   '/:id/director-approve',
-  requireRole(ROLES.DIRECTOR),
+  requireRole(ROLES.DIRECTOR, ROLES.MD),
   validate(DirectorApproveRequisitionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.directorApprove(req.params.id, req.user!.userId);

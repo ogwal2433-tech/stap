@@ -7,6 +7,7 @@ import { deductionService } from './deductionService';
 import * as xcel from '../lib/xcel';
 import * as xcelPartner from '../lib/xcelPartner';
 import { errorLogger } from './errorLogger';
+import { notificationService } from './notificationService';
 import type {
   PayrollRunResponse,
   PayslipResponse,
@@ -18,6 +19,7 @@ import type {
   ZonePayrollGuard,
   CompanyPayrollGuard,
   CompanyPayrollRosterResponse,
+  StaffPayrollRosterResponse,
 } from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -39,7 +41,11 @@ function fmtRun(r: any): PayrollRunResponse {
     // Legacy company-wide and grouped runs have no zone — the UI labels them.
     zoneId:          r.zoneId ?? null,
     zoneName:        r.zone?.name ?? null,
+    runType:         r.runType ?? 'GUARD',
+    mdApprovedBy:    r.mdApprovedBy ?? null,
+    mdApprovedAt:    r.mdApprovedAt?.toISOString() ?? null,
     totalGuards:     r.totalGuards,
+    totalStaff:      r.totalStaff ?? 0,
     totalGross:      r.totalGross,
     totalDeductions: r.totalDeductions,
     totalNet:        r.totalNet,
@@ -62,11 +68,22 @@ function fmtRun(r: any): PayrollRunResponse {
   };
 }
 
+// Payroll display only: local-format numbers (0772...) read better on
+// schedules than +256... Storage and XCEL disbursement keep full format.
+function displayPhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  return phone.replace(/^\+256/, '0');
+}
+
 function fmtPayslip(p: any): PayslipResponse {
   return {
     id:                  p.id,
-    guardId:             p.guardId,
+    guardId:             p.guardId ?? null,
     guardName:           p.guard ? `${p.guard.firstName} ${p.guard.lastName}` : '',
+    guardPhone:          displayPhone(p.guard?.phone),
+    userId:              p.userId ?? null,
+    staffName:           p.user ? p.user.name : '',
+    staffPhone:          displayPhone(p.user?.phone),
     payrollRunId:        p.payrollRunId,
     grossSalary:         p.grossSalary,
     deductionsBreakdown: p.deductionsBreakdown as PayslipResponse['deductionsBreakdown'],
@@ -307,6 +324,224 @@ class PayrollService {
     return this.persistRun(month, year, null, null, calculatedBy, guards, periodStart, periodEnd);
   }
 
+  // -- Staff-only run: fixed monthly salaries -----------------------------------
+
+  /**
+   * Staff tick-list for a period: every active internal account (guard and
+   * client portal roles excluded). Salary and phone readiness ride along so
+   * finance can see who is payable before calculating.
+   */
+  async getStaffPayrollRoster(month: number, year: number): Promise<StaffPayrollRosterResponse> {
+    const staff = await prisma.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        role:   { notIn: ['GUARD', 'CLIENT'] },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return {
+      month,
+      year,
+      members: staff.map((u) => ({
+        userId:     u.id,
+        name:       u.name,
+        systemId:   u.systemId,
+        role:       u.role,
+        salaryRate: u.salaryRate,
+        phone:      u.preferredPaymentContact ?? u.phone,
+        hasPhone:   !!(u.preferredPaymentContact ?? u.phone),
+      })),
+    };
+  }
+
+  /**
+   * Staff-only payroll for a month: fixed salaryRate in full (no attendance
+   * prorating, staff are salaried), minus PENDING staff deductions (NSSF,
+   * PAYE, advances) effective in the period. One live STAFF run per period;
+   * guard runs never collide because runType keeps the ledgers apart.
+   */
+  async calculateStaffRun(
+    month: number,
+    year: number,
+    calculatedBy: string,
+    userIds: string[],
+  ): Promise<PayrollSummary> {
+    const existing = await prisma.payrollRun.findFirst({
+      where: {
+        month,
+        year,
+        zoneId:  null,
+        runType: 'STAFF',
+        status:  { in: LIVE_RUN_STATUSES },
+      },
+    });
+    if (existing) {
+      throw new AppError('Staff payroll has already been run for this period', 409);
+    }
+
+    const periodEnd = new Date(year, month, 0, 23, 59, 59);
+
+    const selected = [...new Set(userIds)];
+    if (selected.length === 0) {
+      throw new AppError('There are no staff to pay for this period.', 400);
+    }
+    const staff = await prisma.user.findMany({
+      where: {
+        id:     { in: selected },
+        status: 'ACTIVE',
+        role:   { notIn: ['GUARD', 'CLIENT'] },
+      },
+    });
+    const byId = new Map(staff.map((u) => [u.id, u]));
+    const problems = selected
+      .map((id) => {
+        const u = byId.get(id);
+        if (!u) return `${id} (not an active staff account)`;
+        if (u.salaryRate == null) return `${u.name} (no salary set)`;
+        return null;
+      })
+      .filter(Boolean);
+    if (problems.length > 0) {
+      throw new AppError(
+        `Not payable on staff payroll: ${problems.join(', ')}. Set a salary on each staff profile first.`,
+        400,
+      );
+    }
+
+    let totalGross      = 0;
+    let totalDeductions = 0;
+    const payslipData: any[] = [];
+
+    for (const id of selected) {
+      const member = byId.get(id)!;
+      const gross = member.salaryRate as number;
+
+      const pendingDeductions = await prisma.staffDeduction.findMany({
+        where: {
+          userId:        member.id,
+          status:        'PENDING',
+          effectiveDate: { lte: periodEnd },
+        },
+      });
+
+      const deductionBreakdown = pendingDeductions.map((d) => ({
+        deductionId:   d.id,
+        type:          d.type,
+        amount:        d.amount,
+        description:   d.description,
+        effectiveDate: d.effectiveDate.toISOString(),
+      }));
+
+      const totalDed = pendingDeductions.reduce((s, d) => s + d.amount, 0);
+      const net      = Math.max(0, gross - totalDed);
+
+      totalGross      += gross;
+      totalDeductions += totalDed;
+
+      payslipData.push({
+        user: member,
+        grossSalary:         gross,
+        deductionsBreakdown: deductionBreakdown,
+        totalDeductions:     totalDed,
+        netSalary:           net,
+        daysWorked:          TOTAL_WORKING_DAYS,
+        totalDays:           TOTAL_WORKING_DAYS,
+        pendingDeductionIds: pendingDeductions.map((d) => d.id),
+      });
+    }
+
+    // Rejected staff runs reopen in place, same as guard runs.
+    const rejectedRun = await prisma.payrollRun.findFirst({
+      where:   { month, year, zoneId: null, runType: 'STAFF', status: 'REJECTED' },
+      orderBy: { rejectedAt: 'desc' },
+    });
+
+    let runId: string;
+    if (rejectedRun) {
+      const reopened = await prisma.payrollRun.update({
+        where: { id: rejectedRun.id },
+        data: {
+          status:          'DRAFT',
+          totalGuards:     0,
+          totalStaff:      selected.length,
+          totalGross,
+          totalDeductions,
+          totalNet:        totalGross - totalDeductions,
+          createdBy:       calculatedBy,
+          approvedBy: null, approvedAt: null,
+          hrApprovedBy: null, hrApprovedAt: null, hrNotes: null,
+          disbursedBy: null, disbursedAt: null, successCount: 0, failedCount: 0,
+        },
+      });
+      runId = reopened.id;
+      await prisma.payslip.deleteMany({ where: { payrollRunId: runId } });
+    } else {
+      const created = await prisma.payrollRun.create({
+        data: {
+          month,
+          year,
+          zoneId:      null,
+          runType:     'STAFF',
+          totalGuards: 0,
+          totalStaff:  selected.length,
+          totalGross,
+          totalDeductions,
+          totalNet:    totalGross - totalDeductions,
+          createdBy:   calculatedBy,
+        },
+      });
+      runId = created.id;
+    }
+
+    try {
+      await notificationService.sendToRoles(['ASSISTANT_MANAGER'], {
+        type:       'PAYROLL_CALCULATED',
+        title:      `Staff payroll calculated: ${month}/${year}`,
+        message:    `A staff payroll run for ${month}/${year} was calculated and needs Harold's approval.`,
+        entityType: 'payroll',
+        entityId:   runId,
+      });
+    } catch (err) { console.error('Staff payroll calculate handoff bell failed', err); }
+
+    const payslips: any[] = [];
+    for (const p of payslipData) {
+      const payslip = await prisma.payslip.create({
+        data: {
+          userId:              p.user.id,
+          payrollRunId:        runId,
+          grossSalary:         p.grossSalary,
+          deductionsBreakdown: p.deductionsBreakdown,
+          totalDeductions:     p.totalDeductions,
+          netSalary:           p.netSalary,
+          daysWorked:          p.daysWorked,
+          totalDays:           p.totalDays,
+        },
+        include: { user: true },
+      });
+
+      if (p.pendingDeductionIds.length > 0) {
+        await deductionService.applyStaffToPayroll(p.pendingDeductionIds, runId);
+      }
+
+      payslips.push(payslip);
+    }
+
+    return {
+      month,
+      year,
+      zoneId:          null,
+      zoneName:        null,
+      totalGuards:     0,
+      totalStaff:      selected.length,
+      totalGross,
+      totalDeductions,
+      totalNet:        totalGross - totalDeductions,
+      byGuard:         [],
+      byStaff:         payslips.map(fmtPayslip),
+    };
+  }
+
+
   // ── Shared machinery for both scopes ────────────────────────────────────────
 
   /**
@@ -431,6 +666,16 @@ class PayrollService {
       runId = created.id;
     }
 
+    try {
+      await notificationService.sendToRoles(['DIRECTOR'], {
+        type:       'PAYROLL_CALCULATED',
+        title:      `Payroll calculated: ${month}/${year}`,
+        message:    `A payroll run for ${zoneName ?? 'the company'} (${month}/${year}) was calculated and needs financial approval.`,
+        entityType: 'payroll',
+        entityId:   runId,
+      });
+    } catch (err) { console.error('Payroll calculate handoff bell failed', err); }
+
     // Create payslips and apply deductions
     const payslips: any[] = [];
     for (const p of payslipData) {
@@ -445,7 +690,7 @@ class PayrollService {
           daysWorked:          p.daysWorked,
           totalDays:           p.totalDays,
         },
-        include: { guard: true },
+        include: { guard: true, user: true },
       });
 
       if (p.pendingDeductionIds.length > 0) {
@@ -461,6 +706,7 @@ class PayrollService {
       zoneId,
       zoneName,
       totalGuards:     guards.length,
+      totalStaff:      0,
       totalGross,
       totalDeductions,
       totalNet:        totalGross - totalDeductions,
@@ -621,19 +867,32 @@ class PayrollService {
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'DRAFT') throw new AppError('Only DRAFT payrolls can be approved', 400);
 
+    // Staff runs are Harold's lane: an Assistant Manager may financially
+    // approve them. Guard runs stay Director-only (enforced at the route,
+    // re-checked here so the rule holds however approve is reached).
+    if ((run as any).runType === 'STAFF') {
+      const actor = await prisma.user.findUnique({ where: { id: approvedBy }, select: { role: true } });
+      if (!actor || (actor.role !== 'DIRECTOR' && actor.role !== 'ASSISTANT_MANAGER' && actor.role !== 'MD')) {
+        throw new AppError('Only the Director, Assistant Manager or MD may approve a staff payroll run', 403);
+      }
+    }
+
     const updated = await prisma.payrollRun.update({
       where: { id: payrollRunId },
-      data:  { status: 'APPROVED', approvedBy, approvedAt: new Date() },
+      data:  { status: 'APPROVED', approvedBy, approvedAt: new Date(), mdApprovedBy: null, mdApprovedAt: null },
       include: { _count: { select: { payslips: true } }, zone: true },
     });
 
     // Queue payslip PDF generation for each guard
     const payslips = await prisma.payslip.findMany({
       where:   { payrollRunId },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
 
     for (const payslip of payslips) {
+      // The payslip PDF job is guard-keyed; staff slips skip it (the worker
+      // only logs today) while the approval and audit trail run as normal.
+      if (!payslip.guardId) continue;
       await QueueService.generatePayslip({
         guardId:     payslip.guardId,
         payrollRunId,
@@ -641,6 +900,16 @@ class PayrollService {
         periodEnd:   new Date(run.year, run.month, 0).toISOString(),
       });
     }
+
+    try {
+      await notificationService.sendToRoles(['ASSISTANT_MANAGER'], {
+        type:       'PAYROLL_APPROVED',
+        title:      `Payroll approved: ${run.month}/${run.year}`,
+        message:    `A payroll run for ${run.month}/${run.year} was financially approved and now needs HR review.`,
+        entityType: 'payroll',
+        entityId:   payrollRunId,
+      });
+    } catch (err) { console.error('Payroll approve handoff bell failed', err); }
 
     await QueueService.logAudit({
       userId:   approvedBy,
@@ -734,6 +1003,8 @@ class PayrollService {
           rejectedBy,
           rejectedAt:   new Date(),
           rejectReason: reason,
+          mdApprovedBy: null,
+          mdApprovedAt: null,
         },
         include: { _count: { select: { payslips: true } }, zone: true },
       });
@@ -777,7 +1048,7 @@ class PayrollService {
         hrFlagReason:     data.flagReason,
         hrAdjustedAmount: data.adjustedAmount ?? null,
       },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
     return fmtPayslip(payslip);
   }
@@ -786,7 +1057,7 @@ class PayrollService {
     const payslip = await prisma.payslip.update({
       where: { id: payslipId },
       data:  { hrFlagged: false, hrFlagReason: null, hrAdjustedAmount: null },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
     return fmtPayslip(payslip);
   }
@@ -812,6 +1083,16 @@ class PayrollService {
       include: { _count: { select: { payslips: true } }, zone: true },
     });
 
+    try {
+      await notificationService.sendToRoles(['MD'], {
+        type:       'PAYROLL_HR_APPROVED',
+        title:      `Payroll needs MD approval: ${run.month}/${run.year}`,
+        message:    `A payroll run for ${run.month}/${run.year} passed HR review and now needs final MD approval before disbursement.`,
+        entityType: 'payroll',
+        entityId:   payrollRunId,
+      });
+    } catch (err) { console.error('Payroll HR handoff bell failed', err); }
+
     await QueueService.logAudit({
       userId:   reviewedBy,
       action:   'PAYROLL_HR_APPROVED',
@@ -822,15 +1103,62 @@ class PayrollService {
 
     return fmtRun(updated);
   }
+  // -- MD: final approval, the last stamp before Finance can disburse --------
+
+  async mdApprove(payrollRunId: string, mdApprovedBy: string): Promise<PayrollRunResponse> {
+    const run = await prisma.payrollRun.findUnique({
+      where:   { id: payrollRunId },
+      include: { _count: { select: { payslips: true } }, zone: true },
+    });
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (run.status !== 'HR_APPROVED') {
+      throw new AppError(
+        `This run is ${run.status} - only HR-approved runs can receive MD final approval.`,
+        400,
+      );
+    }
+    // Separation of duties: the final authority must be fresh eyes. The MD
+    // cannot stamp a run they already approved or HR-reviewed.
+    if (run.approvedBy === mdApprovedBy || run.hrApprovedBy === mdApprovedBy) {
+      throw new AppError('MD final approval must come from someone who did not approve this run before.', 403);
+    }
+
+    const updated = await prisma.payrollRun.update({
+      where: { id: payrollRunId },
+      data:  { status: 'MD_APPROVED', mdApprovedBy, mdApprovedAt: new Date() },
+      include: { _count: { select: { payslips: true } }, zone: true },
+    });
+
+    try {
+      await notificationService.sendToRoles(['DIRECTOR'], {
+        type:       'PAYROLL_MD_APPROVED',
+        title:      `Payroll ready to disburse: ${run.month}/${run.year}`,
+        message:    `A payroll run for ${run.month}/${run.year} received MD final approval and can now be disbursed.`,
+        entityType: 'payroll',
+        entityId:   payrollRunId,
+      });
+    } catch (err) { console.error('Payroll MD handoff bell failed', err); }
+
+    await QueueService.logAudit({
+      userId:   mdApprovedBy,
+      action:   'PAYROLL_MD_APPROVED',
+      entity:   'payrollRun',
+      entityId: payrollRunId,
+      newValue: { status: 'MD_APPROVED' },
+    });
+
+    return fmtRun(updated);
+  }
+
 
   // ── Finance: disburse an HR-approved run via XCEL mobile money ──────────────
 
   async disburse(payrollRunId: string, disbursedBy: string): Promise<void> {
     const run = await prisma.payrollRun.findUnique({ where: { id: payrollRunId } });
     if (!run) throw new NotFoundError('Payroll run not found');
-    if (run.status !== 'HR_APPROVED') {
+    if (run.status !== 'MD_APPROVED') {
       throw new AppError(
-        `This run is ${run.status}. Only HR_APPROVED runs can be disbursed — HR must approve the run before Finance can pay.`,
+        `This run is ${run.status}. Only MD_APPROVED runs can be disbursed - MD must give final approval — HR must approve the run before Finance can pay.`,
         400,
       );
     }
@@ -842,7 +1170,7 @@ class PayrollService {
 
     const payslips = await prisma.payslip.findMany({
       where:   { payrollRunId, disbursementStatus: 'PENDING' },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
 
     const period = `${run.year}-${String(run.month).padStart(2, '0')}`;
@@ -865,18 +1193,46 @@ class PayrollService {
 
       const payAmount = payslip.hrAdjustedAmount ?? payslip.netSalary;
 
+      // Staff payslips carry userId instead of guardId: resolve one payee
+      // shape so the XCEL steps below work for both ledgers unchanged.
+      const payee = payslip.guard
+        ? {
+            id: payslip.guardId as string,
+            displayName: `${payslip.guard.firstName} ${payslip.guard.lastName}`,
+            firstName: payslip.guard.firstName,
+            lastName: payslip.guard.lastName,
+            payToNumber: payslip.guard.preferredPaymentContact ?? payslip.guard.phone,
+            network: payslip.guard.mobileNetwork,
+            accountName:
+              payslip.guard.momoAccountName ||
+              `${payslip.guard.firstName} ${payslip.guard.lastName}`,
+          }
+        : payslip.user
+          ? splitStaffPayee(payslip.userId as string, payslip.user)
+          : null;
+      if (!payee) {
+        await prisma.payslip.update({
+          where: { id: payslip.id },
+          data: {
+            disbursementStatus: 'FAILED',
+            disbursementFailureReason: 'Payslip has neither a guard nor a staff user on record.',
+          },
+        });
+        failedCount++;
+        continue;
+      }
+
       // Phone is optional on a guard now, so a record can reach payroll with no
       // number at all. Caught here rather than left to normalisePhone, which
       // would report "Unrecognised phone format: null" — true, but no help to
       // whoever has to go and find the number.
-      const payToNumber = payslip.guard.preferredPaymentContact ?? payslip.guard.phone;
-      if (!payToNumber) {
+      if (!payee.payToNumber) {
         await prisma.payslip.update({
           where: { id: payslip.id },
           data: {
             disbursementStatus:        'FAILED',
             disbursementFailureReason:
-              `No mobile money number on record for ${payslip.guard.firstName} ${payslip.guard.lastName}. `
+              `No mobile money number on record for ${payee.displayName}. `
               + 'Add a phone number or a preferred payment contact to their profile.',
           },
         });
@@ -885,10 +1241,10 @@ class PayrollService {
       }
 
       try {
-        const phone = xcel.normalisePhone(payToNumber);
+        const phone = xcel.normalisePhone(payee.payToNumber as string);
           // The guard's own setting wins. Detection reads the prefix and throws
           // on a range it does not know, which would fail an otherwise valid number.
-          const network = payslip.guard.mobileNetwork || xcel.detectNetwork(phone);
+          const network = payee.network || xcel.detectNetwork(phone);
 
         const dlCode = await xcelPartner.generateDynamicLinkOtp({
           amount:     payAmount,
@@ -896,7 +1252,7 @@ class PayrollService {
           accountNum: phone,
         });
 
-        const reference = xcel.generateDisbursementRef(payslip.guardId, period);
+        const reference = xcel.generateDisbursementRef(payee.id, period);
 
         const result = await xcelPartner.initiateBankPayment({
           amount:      payAmount,
@@ -905,11 +1261,10 @@ class PayrollService {
           bankCode:    network,
           accountNum:  phone,
           // What the wallet is registered as, which need not be the legal name.
-            accountName: payslip.guard.momoAccountName
-              || `${payslip.guard.firstName} ${payslip.guard.lastName}`,
+            accountName: payee.accountName,
           description: `${(await companyProfile()).name} - Salary ${run.month}/${run.year}`,
-          receiverFirstName: payslip.guard.firstName,
-          receiverLastName:  payslip.guard.lastName,
+          receiverFirstName: payee.firstName,
+          receiverLastName:  payee.lastName,
         });
 
         await prisma.payslip.update({
@@ -935,7 +1290,7 @@ class PayrollService {
           severity:  'ERROR',
           category:  'PAYMENT',
           errorCode: 'XCEL_API_ERROR',
-          context:   { payrollRunId, payslipId: payslip.id, guardId: payslip.guardId, amount: payAmount },
+          context:   { payrollRunId, payslipId: payslip.id, payeeId: payee.id, amount: payAmount },
         });
         failedCount++;
       }
@@ -1002,18 +1357,21 @@ class PayrollService {
   async getRunHistory(query: {
     page: number;
     limit: number;
+    runType?: string;
   }): Promise<PaginatedResponse<PayrollRunResponse>> {
     const { page, limit } = query;
+    const where: any = query.runType ? { runType: query.runType } : {};
     const skip = (page - 1) * limit;
 
     const [runs, total] = await Promise.all([
       prisma.payrollRun.findMany({
+        where,
         orderBy: [{ year: 'desc' }, { month: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
         include: { _count: { select: { payslips: true } }, zone: true },
       }),
-      prisma.payrollRun.count(),
+      prisma.payrollRun.count({ where }),
     ]);
 
     const totalPages = Math.ceil(total / limit);
@@ -1026,7 +1384,7 @@ class PayrollService {
   async getRunDetail(runId: string): Promise<PayrollRunResponse & { payslips: PayslipResponse[] }> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: runId },
-      include: { payslips: { include: { guard: true } }, _count: { select: { payslips: true } }, zone: true },
+      include: { payslips: { include: { guard: true, user: true } }, _count: { select: { payslips: true } }, zone: true },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
 
@@ -1036,7 +1394,7 @@ class PayrollService {
   async getPayslipsByRun(runId: string): Promise<PayslipResponse[]> {
     const payslips = await prisma.payslip.findMany({
       where:   { payrollRunId: runId },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
     return payslips.map(fmtPayslip);
   }
@@ -1044,11 +1402,31 @@ class PayrollService {
   async getPayslip(id: string): Promise<PayslipResponse> {
     const payslip = await prisma.payslip.findUnique({
       where:   { id },
-      include: { guard: true },
+      include: { guard: true, user: true },
     });
     if (!payslip) throw new NotFoundError('Payslip not found');
     return fmtPayslip(payslip);
   }
+}
+
+// Split a staff display name for XCEL, which wants a first and last name.
+// Single-name staff fall back to the same value twice rather than failing.
+function splitStaffPayee(userId: string, user: any): {
+  id: string; displayName: string; firstName: string; lastName: string;
+  payToNumber: string | null; network: string | null; accountName: string;
+} {
+  const parts = String(user.name ?? '').trim().split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? 'Staff';
+  const lastName = parts.slice(1).join(' ') || firstName;
+  return {
+    id: userId,
+    displayName: user.name ?? 'Staff',
+    firstName,
+    lastName,
+    payToNumber: user.preferredPaymentContact ?? user.phone ?? null,
+    network: user.mobileNetwork ?? null,
+    accountName: user.momoAccountName || user.name || 'Staff',
+  };
 }
 
 export const payrollService = new PayrollService();

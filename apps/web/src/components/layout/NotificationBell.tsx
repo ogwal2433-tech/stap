@@ -20,6 +20,7 @@ const ENTITY_ROUTE: Record<string, string> = {
   complaint: '/complaints',
   invoice:   '/finance',
   payroll:   '/finance',
+  payrollShare: '/finance',
 };
 
 // Guard notifications (e.g. a letter awaiting approval) link to that specific

@@ -212,8 +212,37 @@ export type UpdateInvoiceInput      = z.infer<typeof UpdateInvoiceSchema>;
 export type RecordPaymentInput      = z.infer<typeof RecordPaymentSchema>;
 export type InvoiceListQuery        = z.infer<typeof InvoiceListQuerySchema>;
 export type ARAgingQuery            = z.infer<typeof ARAgingQuerySchema>;
+export const CreateStaffDeductionSchema = z.object({
+  userId:        z.string().min(1),
+  // Same catalogue as guard deductions (NSSF, PAYE, advances); any non-empty
+  // string is accepted rather than a hardcoded enum.
+  type:          z.string().min(1),
+  amount:        z.number().int().positive(),
+  description:   z.string().min(5),
+  effectiveDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Invalid date' }),
+});
+
+export const RunStaffPayrollSchema = z.object({
+  month:   z.number().int().min(1).max(12),
+  year:    z.number().int().min(2024).max(2030),
+  // Explicit tick-list from the staff roster: finance unticks anyone who
+  // should not be paid, so the server never silently decides the roster.
+  userIds: z.array(z.string().min(1)).min(1, 'At least one staff member must be selected'),
+});
+
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
+export const SharePayrollSchema = z.object({
+  formats: z.array(z.enum(['EXCEL', 'PDF'])).min(1, 'Pick at least one format'),
+  // Internal staff accounts only; guard and client portal roles are refused
+  // by the service so payroll schedules never reach them.
+  userIds: z.array(z.string().min(1)).min(1, 'Pick at least one staff member'),
+  note:    z.string().max(300).optional(),
+});
+
+export type CreateStaffDeductionInput = z.infer<typeof CreateStaffDeductionSchema>;
+export type RunStaffPayrollInput      = z.infer<typeof RunStaffPayrollSchema>;
+export type SharePayrollInput           = z.infer<typeof SharePayrollSchema>;
 export type RejectPayrollInput      = z.infer<typeof RejectPayrollSchema>;
 export type CashbookEntryInput      = z.infer<typeof CashbookEntrySchema>;
 export type FlagPayslipInput        = z.infer<typeof FlagPayslipSchema>;
@@ -312,10 +341,29 @@ export interface DeductionResponse {
   createdAt:        string;
 }
 
+export interface StaffDeductionResponse {
+  id:               string;
+  userId:           string;
+  staffName:        string;
+  type:             string;
+  amount:           number;
+  description:      string;
+  effectiveDate:    string;
+  status:           string;
+  payrollRunId:     string | null;
+  appliedInPayroll: { month: number; year: number } | null;
+  createdBy:        string;
+  createdAt:        string;
+}
+
 export interface PayrollRunResponse {
   id:             string;
   month:          number;
   year:           number;
+  // GUARD | STAFF. Guard runs may also carry a zone; staff runs are
+  // company-wide (zoneId null) and pay User rows instead of guards.
+  runType:        string;
+  totalStaff:     number;
   // Null on company-wide runs (both current and legacy) — UI labels them "Company-wide".
   zoneId:         string | null;
   zoneName:       string | null;
@@ -333,6 +381,8 @@ export interface PayrollRunResponse {
   hrApprovedBy:   string | null;
   hrApprovedAt:   string | null;
   hrNotes:        string | null;
+  mdApprovedBy:   string | null;
+  mdApprovedAt:   string | null;
   disbursedBy:    string | null;
   disbursedAt:    string | null;
   successCount:   number;
@@ -344,8 +394,13 @@ export interface PayrollRunResponse {
 
 export interface PayslipResponse {
   id:                  string;
-  guardId:             string;
+  // Exactly one payee holds: a guard, or a staff user on staff-only runs.
+  guardId:             string | null;
   guardName:           string;
+  guardPhone:          string | null;
+  userId:              string | null;
+  staffName:           string;
+  staffPhone:          string | null;
   payrollRunId:        string;
   grossSalary:         number;
   deductionsBreakdown: Array<{
@@ -398,10 +453,48 @@ export interface PayrollSummary {
   zoneId:         string | null;
   zoneName:       string | null;
   totalGuards:    number;
+  totalStaff:     number;
   totalGross:     number;
   totalDeductions:number;
   totalNet:       number;
   byGuard:        PayslipResponse[];
+  byStaff?:       PayslipResponse[];
+}
+
+// One staff member as offered on the staff payroll tick-list.
+export interface StaffPayrollMember {
+  userId:       string;
+  name:         string;
+  systemId:     string | null;
+  role:         string;
+  salaryRate:   number | null;
+  phone:        string | null;
+  hasPhone:     boolean;
+}
+
+export interface PayrollShareRecipientResponse {
+  userId:    string;
+  staffName: string;
+  readAt:    string | null;
+}
+
+export interface PayrollShareResponse {
+  id:          string;
+  payrollRunId: string;
+  period:      string;
+  runType:     string;
+  format:      string;
+  filename:    string;
+  note:        string | null;
+  generatedBy: string;
+  createdAt:   string;
+  recipients:  PayrollShareRecipientResponse[];
+}
+
+export interface StaffPayrollRosterResponse {
+  month:   number;
+  year:    number;
+  members: StaffPayrollMember[];
 }
 
 // ── Zone payroll roster ────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { invoicesApi, deductionsApi, payrollApi, cashbookApi } from '../lib/finance.api';
+import { invoicesApi, deductionsApi, payrollApi, staffPayrollApi, staffDeductionsApi, payrollSharesApi, cashbookApi } from '../lib/finance.api';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
@@ -7,7 +7,10 @@ import type {
   RecordPaymentInput,
   AddFeeIncrementInput,
   CreateDeductionInput,
+  CreateStaffDeductionInput,
   RunPayrollInput,
+  RunStaffPayrollInput,
+  SharePayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
 } from '@security360/shared';
@@ -178,6 +181,14 @@ export function useHrApprovePayroll() {
   });
 }
 
+export function useMdApprovePayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => payrollApi.mdApprove(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
 export function useDisbursePayroll() {
   const qc = useQueryClient();
   return useMutation({
@@ -237,6 +248,22 @@ export function usePayrollDetail(id: string) {
 
 // ── Cashbook hooks ─────────────────────────────────────────────────────────────
 
+export function usePayrollShares(runId?: string) {
+  return useQuery({
+    queryKey: ['payroll-shares', runId],
+    queryFn:  () => payrollSharesApi.list(runId ? { runId } : undefined),
+  });
+}
+
+export function useSharePayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, data }: { runId: string; data: SharePayrollInput }) =>
+      payrollSharesApi.share(runId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll-shares'] }),
+  });
+}
+
 export function useCashbook(params?: Parameters<typeof cashbookApi.list>[0]) {
   return useQuery({
     queryKey: ['cashbook', params],
@@ -259,5 +286,55 @@ export function useCashbookSummary(month: number, year: number) {
   return useQuery({
     queryKey: ['cashbook-summary', month, year],
     queryFn:  () => cashbookApi.getMonthSummary(month, year),
+  });
+}
+
+// -- Staff payroll hooks ------------------------------------------------------
+
+export function useStaffPayrollRoster(month: number, year: number) {
+  return useQuery({
+    queryKey: ['staff-payroll', 'roster', month, year],
+    queryFn:  () => staffPayrollApi.roster(month, year),
+  });
+}
+
+export function useStaffPayrollRuns() {
+  return useQuery({
+    queryKey: ['payroll', { runType: 'STAFF' }],
+    queryFn:  () => payrollApi.list({ limit: 50, runType: 'STAFF' }),
+  });
+}
+
+export function useRunStaffPayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: RunStaffPayrollInput) => staffPayrollApi.calculate(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
+export function useStaffDeductions(params?: { userId?: string; status?: string }) {
+  return useQuery({
+    queryKey: ['staff-deductions', params],
+    queryFn:  () => staffDeductionsApi.list(params),
+  });
+}
+
+export function useCreateStaffDeduction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateStaffDeductionInput) => staffDeductionsApi.create(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['staff-deductions'] }),
+  });
+}
+
+export function useCancelStaffDeduction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => staffDeductionsApi.cancel(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['staff-deductions'] });
+      qc.invalidateQueries({ queryKey: ['payroll'] });
+    },
   });
 }

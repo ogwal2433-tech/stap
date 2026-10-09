@@ -4,6 +4,7 @@ import type {
   InvoicePreviewResponse,
   PaymentResponse,
   DeductionResponse,
+  StaffDeductionResponse,
   PayrollRunResponse,
   PayslipResponse,
   CashbookEntryResponse,
@@ -16,11 +17,16 @@ import type {
   RecordPaymentInput,
   AddFeeIncrementInput,
   CreateDeductionInput,
+  CreateStaffDeductionInput,
   RunPayrollInput,
+  RunStaffPayrollInput,
+  SharePayrollInput,
   CashbookEntryInput,
   FlagPayslipInput,
   ZonePayrollRosterResponse,
   CompanyPayrollRosterResponse,
+  StaffPayrollRosterResponse,
+  PayrollShareResponse,
 } from '@security360/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -169,7 +175,7 @@ export const deductionsApi = {
 // ── Payroll ───────────────────────────────────────────────────────────────────
 
 export const payrollApi = {
-  list(params?: { page?: number; limit?: number }): Promise<PaginatedResponse<PayrollRunResponse>> {
+  list(params?: { page?: number; limit?: number; runType?: string }): Promise<PaginatedResponse<PayrollRunResponse>> {
     return api
       .get<{ success: boolean } & PaginatedResponse<PayrollRunResponse>>('/finance/payroll', { params })
       .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
@@ -198,6 +204,12 @@ export const payrollApi = {
   approve(id: string): Promise<PayrollRunResponse> {
     return api
       .post<{ success: boolean; data: PayrollRunResponse }>(`/finance/payroll/${id}/approve`)
+      .then((r) => r.data.data);
+  },
+
+  mdApprove(id: string): Promise<PayrollRunResponse> {
+    return api
+      .post<{ success: boolean; data: PayrollRunResponse }>(`/finance/payroll/${id}/md-approve`)
       .then((r) => r.data.data);
   },
 
@@ -280,6 +292,59 @@ function downloadBlob(data: Blob, filename: string) {
 }
 
 // ── Cashbook ──────────────────────────────────────────────────────────────────
+
+export const staffPayrollApi = {
+  roster(month: number, year: number): Promise<StaffPayrollRosterResponse> {
+    return api
+      .get<{ success: boolean; data: StaffPayrollRosterResponse }>('/finance/payroll/staff-roster', { params: { month, year } })
+      .then((r) => r.data.data);
+  },
+
+  calculate(data: RunStaffPayrollInput): Promise<PayrollSummary> {
+    return api
+      .post<{ success: boolean; data: PayrollSummary }>('/finance/staff-payroll/calculate', data)
+      .then((r) => r.data.data);
+  },
+};
+
+export const staffDeductionsApi = {
+  list(params?: { userId?: string; status?: string }): Promise<StaffDeductionResponse[]> {
+    return api
+      .get<{ success: boolean; data: StaffDeductionResponse[] }>('/finance/staff-deductions', { params })
+      .then((r) => r.data.data);
+  },
+
+  create(data: CreateStaffDeductionInput): Promise<StaffDeductionResponse> {
+    return api
+      .post<{ success: boolean; data: StaffDeductionResponse }>('/finance/staff-deductions', data)
+      .then((r) => r.data.data);
+  },
+
+  cancel(id: string): Promise<StaffDeductionResponse> {
+    return api
+      .patch<{ success: boolean; data: StaffDeductionResponse }>(`/finance/staff-deductions/${id}/cancel`)
+      .then((r) => r.data.data);
+  },
+};
+
+export const payrollSharesApi = {
+  share(runId: string, data: SharePayrollInput): Promise<PayrollShareResponse[]> {
+    return api
+      .post<{ success: boolean; data: PayrollShareResponse[] }>(`/finance/payroll/${runId}/share`, data)
+      .then((r) => r.data.data);
+  },
+
+  list(params?: { runId?: string; format?: string }): Promise<PayrollShareResponse[]> {
+    return api
+      .get<{ success: boolean; data: PayrollShareResponse[] }>('/finance/shares', { params })
+      .then((r) => r.data.data);
+  },
+
+  async download(shareId: string, filename: string): Promise<void> {
+    const r = await api.get(`/finance/shares/${shareId}/download`, { responseType: 'blob' });
+    downloadBlob(r.data as Blob, filename);
+  },
+};
 
 export const cashbookApi = {
   list(params?: {

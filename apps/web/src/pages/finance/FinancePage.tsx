@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert, Badge, Breadcrumb, Button, Card, Col, Modal, Row, Spinner,
   Tab, Table, Tabs,
@@ -8,10 +8,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
   useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
-  useHrApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
+  useHrApprovePayroll, useMdApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
   useZonePayrollRoster, useCompanyPayrollRoster,
+  useStaffPayrollRoster, useStaffPayrollRuns, useRunStaffPayroll,
+  useStaffDeductions, useCreateStaffDeduction, useCancelStaffDeduction,
+  usePayrollShares, useSharePayroll,
 } from '../../hooks/useFinance';
+import { useStaffList } from '../../hooks/useStaff';
 import InvoiceFilterPanel, {
   EMPTY_INVOICE_FILTERS, areInvoiceFiltersActive, raisedRangeQuery,
 } from '../../components/finance/InvoiceFilterPanel';
@@ -34,7 +38,7 @@ import { useInvoicePayments } from '../../hooks/usePayments';
 // on a whole shilling); payroll figures are whole and print unchanged.
 import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@security360/shared';
 import type { InvoiceResponse, PayslipResponse, PayrollRunResponse, RunPayrollInput } from '@security360/shared';
-import { invoicesApi, payrollApi } from '../../lib/finance.api';
+import { invoicesApi, payrollApi, payrollSharesApi } from '../../lib/finance.api';
 import { FILE_PREFIX } from '../../lib/branding';
 
 const NAVY = '#1B3A6B';
@@ -399,7 +403,7 @@ function PayslipDetailModal({
     <Modal show onHide={onClose} size="lg" centered>
       <Modal.Header closeButton>
         <Modal.Title className="small fw-bold">
-          Payslip — {payslip.guardName} — {MONTHS[month - 1]} {year}
+          Payslip — {(payslip.guardName || payslip.staffName)} — {MONTHS[month - 1]} {year}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -480,6 +484,7 @@ function payrollStatusColor(status: string): { bg: string; dark?: boolean } {
     case 'DRAFT':       return { bg: 'warning', dark: true };
     case 'APPROVED':    return { bg: 'info', dark: true };
     case 'HR_APPROVED': return { bg: 'primary' };
+    case 'MD_APPROVED':  return { bg: 'dark' };
     case 'DISBURSING':  return { bg: 'info', dark: true };
     case 'DISBURSED':   return { bg: 'success' };
     case 'REJECTED':    return { bg: 'danger' };
@@ -517,6 +522,7 @@ function PayrollTab() {
   const { data: rosterData } = useZonePayrollRoster(month, year);
   const zones = rosterData?.zones ?? [];
   const [zoneId, setZoneId] = useState('');
+  const [shareTarget, setShareTarget] = useState<PayrollRunResponse | null>(null);
   const selectedZoneId = zones.some((z) => z.zoneId === zoneId) ? zoneId : (zones[0]?.zoneId ?? '');
   const selectedZone = zones.find((z) => z.zoneId === selectedZoneId);
 
@@ -542,6 +548,7 @@ function PayrollTab() {
   const runPayroll             = useRunPayroll();
   const approvePayroll         = useApprovePayroll();
   const hrApprovePayroll       = useHrApprovePayroll();
+  const mdApprovePayroll         = useMdApprovePayroll();
   const disbursePayroll        = useDisbursePayroll();
   const deletePayrollRun       = useDeletePayrollRun();
   const unflagPayslip          = useUnflagPayslip();
@@ -860,6 +867,9 @@ function PayrollTab() {
                       ? <><Spinner animation="border" size="sm" className="me-1" />Exporting…</>
                       : '🖨 PDF'}
                   </Button>
+                  <Button size="sm" variant="outline-primary" onClick={() => setShareTarget(thisRun)}>
+                    <i className="bi bi-share me-1" />Share
+                  </Button>
                   {thisRun.status === 'DRAFT' && user?.role === ROLES.DIRECTOR && (
                     <Button size="sm" variant="success"
                       onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>
@@ -897,7 +907,12 @@ function PayrollTab() {
                       ✅ HR Approve
                     </Button>
                   )}
-                  {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.DIRECTOR && (
+                                    {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.MD && (
+                    <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(thisRun.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                      <i className="bi bi-award me-1" />MD Approve
+                    </Button>
+                  )}
+                  {thisRun.status === 'MD_APPROVED' && user?.role === ROLES.DIRECTOR && (
                     <Button size="sm" variant="primary"
                       onClick={() => disbursePayroll.mutateAsync(thisRun.id).then(() => showToast('Disbursement initiated', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
                       💸 Disburse via Mobile Money
@@ -920,8 +935,15 @@ function PayrollTab() {
               {thisRun.status === 'HR_APPROVED' && (
                 <Alert variant="success" className="mt-3 mb-0 small">
                   <div className="fw-bold mb-1">✅ HR Approved</div>
-                  This run has been reviewed and approved by HR
+                  This run has been reviewed and approved by HR and now needs MD final approval before anything can be disbursed.
                   {thisRun.hrNotes ? `: "${thisRun.hrNotes}"` : '.'} You may now disburse salaries via mobile money.
+                </Alert>
+              )}
+
+              {thisRun.status === 'MD_APPROVED' && (
+                <Alert variant="dark" className="mt-3 mb-0 small">
+                  <div className="fw-bold mb-1"><i className="bi bi-award me-1" />MD Approved - ready to disburse</div>
+                  Final approval is recorded. Finance may now disburse via mobile money.
                 </Alert>
               )}
 
@@ -961,6 +983,7 @@ function PayrollTab() {
                     <th className="text-end">Gross (UGX)</th>
                     <th className="text-end">Deductions (UGX)</th>
                     <th className="text-end">Net (UGX)</th>
+                    <th>Phone</th>
                     <th>HR Flag</th>
                     {thisRun.status !== 'DRAFT' && thisRun.status !== 'APPROVED' && <th>Payment</th>}
                     <th></th>
@@ -983,6 +1006,7 @@ function PayrollTab() {
                           </div>
                         )}
                       </td>
+                      <td>{p.guardPhone ?? '-'}</td>
                       <td>
                         {p.hrFlagged ? (
                           <div>
@@ -1078,6 +1102,11 @@ function PayrollTab() {
         />
       )}
 
+      {shareTarget && (
+        <SharePayrollModal run={shareTarget} onClose={() => setShareTarget(null)} />
+      )}
+      <SharedSchedulesList runType="GUARD" />
+
       {/* Run history */}
       {runs.length > 0 && (
         <Table striped responsive className="small mt-3">
@@ -1165,7 +1194,7 @@ function FlagPayslipModal({ payslip, onClose }: { payslip: PayslipResponse; onCl
           adjustedAmount: adjustedAmount ? Number(adjustedAmount) : undefined,
         },
       });
-      showToast(`${payslip.guardName} flagged`, 'success');
+      showToast(`${(payslip.guardName || payslip.staffName)} flagged`, 'success');
       onClose();
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to flag guard', 'danger');
@@ -1180,7 +1209,7 @@ function FlagPayslipModal({ payslip, onClose }: { payslip: PayslipResponse; onCl
       <Modal.Body>
         <Form.Group className="mb-3">
           <Form.Label className="fw-semibold small text-muted text-uppercase">Guard</Form.Label>
-          <div className="fw-medium">{payslip.guardName}</div>
+          <div className="fw-medium">{(payslip.guardName || payslip.staffName)}</div>
           <div className="text-muted small">Net pay: UGX {payslip.netSalary.toLocaleString()}</div>
         </Form.Group>
         <Form.Group className="mb-3">
@@ -1278,6 +1307,756 @@ function RejectPayrollModal({ run, onClose }: { run: PayrollRunResponse; onClose
 }
 
 // ── Cashbook Tab ──────────────────────────────────────────────────────────────
+
+// -- Staff Payroll Tab --------------------------------------------------------
+
+function StaffPayrollTab() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [confirming, setConfirming] = useState(false);
+  const [hrApproving, setHrApproving] = useState(false);
+  const [hrNotes, setHrNotes] = useState('');
+  const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
+  const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
+  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
+  const [confirmDeleteRunId, setConfirmDeleteRunId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PayrollRunResponse | null>(null);
+  const [unpicked, setUnpicked] = useState<Set<string>>(new Set());
+  const [showDeductionForm, setShowDeductionForm] = useState(false);
+  const [deducteeId, setDeducteeId] = useState('');
+  const [shareTarget, setShareTarget] = useState<PayrollRunResponse | null>(null);
+  const [dedType, setDedType] = useState('NSSF');
+  const [dedAmount, setDedAmount] = useState('');
+  const [dedDesc, setDedDesc] = useState('');
+  const [dedDate, setDedDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const { data: roster } = useStaffPayrollRoster(month, year);
+  const members = roster?.members ?? [];
+  const { data: runsData, isLoading } = useStaffPayrollRuns();
+  const runStaffPayroll = useRunStaffPayroll();
+  const approvePayroll = useApprovePayroll();
+  const hrApprovePayroll = useHrApprovePayroll();
+  const mdApprovePayroll         = useMdApprovePayroll();
+  const disbursePayroll = useDisbursePayroll();
+  const deletePayrollRun = useDeletePayrollRun();
+  const unflagPayslip = useUnflagPayslip();
+  const createStaffDeduction = useCreateStaffDeduction();
+  const cancelStaffDeduction = useCancelStaffDeduction();
+  const { data: staffDeductions } = useStaffDeductions();
+  const { showToast } = useToast();
+  const { user } = useAuth();
+
+  const runs = runsData?.data ?? [];
+  const thisRun = runs.find((r) => r.month === month && r.year === year);
+  const { data: runDetail } = usePayrollDetail(thisRun?.id ?? '');
+  const payslips = runDetail?.payslips ?? [];
+
+  const isHR = !!user && HR_ROLES.includes(user.role as any);
+  const canDeleteRun = !!user && RUN_DELETE_ROLES.includes(user.role as typeof RUN_DELETE_ROLES[number]);
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const toggleMember = (id: string) => setUnpicked((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const payable = members.filter((m) => m.salaryRate != null);
+  const selectedIds = payable.filter((m) => !unpicked.has(m.userId)).map((m) => m.userId);
+  const blocked = members.filter((m) => m.salaryRate == null);
+  const flaggedCount = payslips.filter((p) => p.hrFlagged).length;
+
+  const handleCalculate = async () => {
+    try {
+      await runStaffPayroll.mutateAsync({ month, year, userIds: selectedIds });
+      showToast(`Staff payroll calculated for ${MONTHS[month - 1]} ${year}`, 'success');
+      setConfirming(false);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to calculate staff payroll', 'danger');
+      setConfirming(false);
+    }
+  };
+
+  const handleHrApprove = async () => {
+    if (!thisRun) return;
+    try {
+      await hrApprovePayroll.mutateAsync({ id: thisRun.id, notes: hrNotes.trim() || undefined });
+      showToast('Staff run approved by HR - Finance may now disburse', 'success');
+      setHrApproving(false);
+      setHrNotes('');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to approve', 'danger');
+    }
+  };
+
+  const handleDeleteRun = async (id: string) => {
+    try {
+      await deletePayrollRun.mutateAsync(id);
+      showToast('Draft staff payroll deleted - its deductions are pending again.', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Could not delete the staff payroll run.', 'danger');
+    } finally {
+      setConfirmDeleteRunId(null);
+    }
+  };
+
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    if (!thisRun) return;
+    setExporting(format);
+    const base = `${FILE_PREFIX}_Staff_Payroll_${MONTHS[thisRun.month - 1]}${thisRun.year}`;
+    try {
+      if (format === 'excel') await payrollApi.downloadRunExcel(thisRun.id, `${base}.xlsx`);
+      else await payrollApi.downloadRunPdf(thisRun.id, `${base}.pdf`);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, `Failed to export staff payroll to ${format.toUpperCase()}`), 'danger');
+    } finally {
+      setExporting('');
+    }
+  };
+
+  const handleAddDeduction = async () => {
+    const amount = parseInt(dedAmount.replace(/[^0-9]/g, ''), 10);
+    if (!deducteeId) { showToast('Pick the staff member first.', 'danger'); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { showToast('Enter a valid amount.', 'danger'); return; }
+    if (dedDesc.trim().length < 5) { showToast('Describe the deduction (at least 5 characters).', 'danger'); return; }
+    try {
+      await createStaffDeduction.mutateAsync({
+        userId: deducteeId,
+        type: dedType.trim() || 'OTHER',
+        amount,
+        description: dedDesc.trim(),
+        effectiveDate: new Date(dedDate).toISOString(),
+      });
+      showToast('Staff deduction recorded.', 'success');
+      setShowDeductionForm(false);
+      setDeducteeId(''); setDedType('NSSF'); setDedAmount(''); setDedDesc('');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to record deduction.', 'danger');
+    }
+  };
+
+  const payeeName = (p: PayslipResponse) => p.staffName || p.guardName;
+  const payeePhone = (p: PayslipResponse) => p.staffPhone ?? p.guardPhone;
+
+  return (
+    <>
+      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span className="badge text-bg-primary">
+          <i className="bi bi-people me-1" />Staff payroll
+        </span>
+        <span className="text-muted small">Fixed monthly salaries. No zones, no attendance count.</span>
+        <Form.Select size="sm" style={{ width: 120 }} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+          {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+        </Form.Select>
+        <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+        </Form.Select>
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+          {(!thisRun || thisRun.status === 'REJECTED') && (
+            <Button
+              size="sm"
+              style={{ background: NAVY, borderColor: NAVY }}
+              onClick={() => setConfirming(true)}
+              disabled={runStaffPayroll.isPending}
+            >
+              <i className="bi bi-calculator me-1" />
+              {thisRun?.status === 'REJECTED' ? 'Recalculate Staff Payroll' : 'Calculate Staff Payroll'}
+            </Button>
+          )}
+        </RoleGuard>
+      </div>
+
+      {confirming && (
+        <Card className={`mb-3 border-${thisRun?.status === 'REJECTED' ? 'danger' : 'warning'}`}>
+          <Card.Body className="small">
+            <strong>Confirm:</strong> calculate {MONTHS[month - 1]} {year} staff payroll for{' '}
+            <strong>{selectedIds.length} staff</strong>. Everyone with a set salary is listed - untick anyone who
+            should not be paid in this run.
+            {blocked.length > 0 && (
+              <Alert variant="secondary" className="mt-2 mb-2 py-2">
+                <i className="bi bi-exclamation-triangle me-1" />
+                {blocked.length} staff have no salary set ({blocked.map((m) => m.name).join(', ')}) and are
+                excluded. Set salaries on their staff profiles to include them.
+              </Alert>
+            )}
+            {members.length === 0 ? (
+              <div className="text-muted mt-2">No active staff accounts.</div>
+            ) : (
+              <div className="mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                {members.map((m) => (
+                  <div key={m.userId} className="d-flex align-items-center justify-content-between ms-2">
+                    <Form.Check
+                      type="switch"
+                      id={`staff-pc-${m.userId}`}
+                      label={`${m.name}${m.systemId ? ` (${m.systemId})` : ''}`}
+                      checked={m.salaryRate != null && !unpicked.has(m.userId)}
+                      disabled={m.salaryRate == null}
+                      onChange={() => toggleMember(m.userId)}
+                    />
+                    <span className="text-muted ms-2" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                      {m.salaryRate != null ? `${m.salaryRate.toLocaleString()} UGX` : 'no salary'}
+                      {m.hasPhone ? '' : ' - no payout number'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="d-flex gap-2 mt-3">
+              <Button size="sm" variant="warning" onClick={handleCalculate} disabled={runStaffPayroll.isPending || selectedIds.length === 0}>
+                {runStaffPayroll.isPending ? 'Calculating...' : `Confirm - pay ${selectedIds.length} staff`}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Cancel</Button>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
+      ) : thisRun ? (
+        <>
+          <Card className="mb-3 border-0 shadow-sm">
+            <Card.Body>
+              <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  {(() => {
+                    const c = payrollStatusColor(thisRun.status);
+                    return (
+                      <Badge bg={c.bg} text={c.dark ? 'dark' : undefined} className="mb-2">
+                        {thisRun.status.replace('_', ' ')}
+                      </Badge>
+                    );
+                  })()}
+                  <div className="small fw-semibold" style={{ color: NAVY }}>Staff payroll</div>
+                  <div className="small">
+                    <strong>{thisRun.totalStaff}</strong> staff &nbsp;|&nbsp;
+                    Gross: <strong>{fmtUGX(thisRun.totalGross)}</strong> &nbsp;|&nbsp;
+                    Deductions: <strong>{fmtUGX(thisRun.totalDeductions)}</strong> &nbsp;|&nbsp;
+                    Net: <strong>{fmtUGX(thisRun.totalNet)}</strong>
+                  </div>
+                  {thisRun.status === 'DISBURSED' && (
+                    <div className="small mt-1">
+                      <span className="text-success"><i className="bi bi-check-circle me-1" />{thisRun.successCount} paid</span>
+                      {thisRun.failedCount > 0 && (
+                        <span className="text-danger ms-2"><i className="bi bi-x-circle me-1" />{thisRun.failedCount} failed</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="d-flex gap-2 flex-wrap">
+                  <Button size="sm" variant="outline-primary" disabled={!!exporting} onClick={() => handleExport('excel')}>
+                    {exporting === 'excel'
+                      ? <><Spinner animation="border" size="sm" className="me-1" />Exporting...</>
+                      : <><i className="bi bi-file-earmark-excel me-1" />Excel</>}
+                  </Button>
+                  <Button size="sm" variant="outline-primary" disabled={!!exporting} onClick={() => handleExport('pdf')}>
+                    {exporting === 'pdf'
+                      ? <><Spinner animation="border" size="sm" className="me-1" />Exporting...</>
+                      : <><i className="bi bi-file-earmark-pdf me-1" />PDF</>}
+                  </Button>
+                  <Button size="sm" variant="outline-primary" onClick={() => setShareTarget(thisRun)}>
+                    <i className="bi bi-share me-1" />Share
+                  </Button>
+                  {thisRun.status === 'DRAFT' && user?.role === ROLES.DIRECTOR && (
+                    <Button size="sm" variant="success"
+                      onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Staff payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>
+                      <i className="bi bi-check-lg me-1" />Approve
+                    </Button>
+                  )}
+                  {thisRun.status === 'DRAFT' && canDeleteRun && (
+                    confirmDeleteRunId === thisRun.id ? (
+                      <>
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteRun(thisRun.id)} disabled={deletePayrollRun.isPending}>
+                          {deletePayrollRun.isPending ? 'Deleting...' : 'Confirm delete?'}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(thisRun.id)}>
+                        <i className="bi bi-trash me-1" />Delete
+                      </Button>
+                    )
+                  )}
+                  {(thisRun.status === 'DRAFT' || thisRun.status === 'APPROVED') && canDeleteRun && (
+                    <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
+                      <i className="bi bi-arrow-counterclockwise me-1" />Reject
+                    </Button>
+                  )}
+                  {thisRun.status === 'APPROVED' && isHR && (
+                    <Button size="sm" variant="success" onClick={() => setHrApproving(true)}>
+                      <i className="bi bi-check-lg me-1" />HR Approve
+                    </Button>
+                  )}
+                                    {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.MD && (
+                    <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(thisRun.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                      <i className="bi bi-award me-1" />MD Approve
+                    </Button>
+                  )}
+                  {thisRun.status === 'MD_APPROVED' && user?.role === ROLES.DIRECTOR && (
+                    <Button size="sm" variant="primary"
+                      onClick={() => disbursePayroll.mutateAsync(thisRun.id).then(() => showToast('Disbursement initiated', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                      <i className="bi bi-send me-1" />Disburse via Mobile Money
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {thisRun.status === 'APPROVED' && isHR && (
+                <Alert variant="info" className="mt-3 mb-0 small">
+                  <div className="fw-bold mb-1"><i className="bi bi-info-circle me-1" />HR Review Required</div>
+                  Review each salary below. Flag any that need adjustment before approving. Once HR-approved, the run needs MD final approval before Finance can disburse.
+                  {flaggedCount > 0 && <div className="mt-1">{flaggedCount} staff payslip(s) currently flagged.</div>}
+                </Alert>
+              )}
+
+              {thisRun.status === 'MD_APPROVED' && (
+                <Alert variant="dark" className="mt-3 mb-0 small">
+                  <div className="fw-bold mb-1"><i className="bi bi-award me-1" />MD Approved - ready to disburse</div>
+                  Final approval is recorded. Finance may now disburse via mobile money.
+                </Alert>
+              )}
+
+              {hrApproving && (
+                <div className="mt-3 border-top pt-3">
+                  <Form.Group className="mb-2">
+                    <Form.Label className="small fw-bold">Notes (optional)</Form.Label>
+                    <Form.Control as="textarea" rows={2} size="sm" value={hrNotes}
+                      onChange={(e) => setHrNotes(e.target.value)}
+                      placeholder="e.g. All salaries verified, no adjustments needed." />
+                  </Form.Group>
+                  <div className="d-flex gap-2">
+                    <Button size="sm" variant="success" onClick={handleHrApprove} disabled={hrApprovePayroll.isPending}>
+                      {hrApprovePayroll.isPending ? 'Approving...' : 'Confirm HR Approval'}
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setHrApproving(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+
+          {payslips.length > 0 && (
+            <div className="mt-3">
+              <h6 className="fw-semibold small text-uppercase text-muted mb-2">Payslips</h6>
+              <Table size="sm" hover responsive className="align-middle small">
+                <thead className="table-light">
+                  <tr>
+                    <th>Staff</th>
+                    <th className="text-center">Days</th>
+                    <th className="text-end">Gross (UGX)</th>
+                    <th className="text-end">Deductions (UGX)</th>
+                    <th className="text-end">Net (UGX)</th>
+                    <th>Phone</th>
+                    <th>HR Flag</th>
+                    {thisRun.status !== 'DRAFT' && thisRun.status !== 'APPROVED' && <th>Payment</th>}
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payslips.map((p) => (
+                    <tr key={p.id} style={{ background: p.hrFlagged ? '#fff3cd' : undefined }}>
+                      <td>{payeeName(p)}</td>
+                      <td className="text-center">{p.daysWorked}/{p.totalDays}</td>
+                      <td className="text-end">{p.grossSalary.toLocaleString()}</td>
+                      <td className="text-end text-danger">
+                        {p.totalDeductions > 0 ? p.totalDeductions.toLocaleString() : '-'}
+                      </td>
+                      <td className="text-end fw-semibold">
+                        {(p.hrAdjustedAmount ?? p.netSalary).toLocaleString()}
+                        {p.hrAdjustedAmount != null && p.hrAdjustedAmount !== p.netSalary && (
+                          <div className="text-muted fw-normal" style={{ fontSize: '0.68rem' }}>
+                            was {p.netSalary.toLocaleString()}
+                          </div>
+                        )}
+                      </td>
+                      <td>{payeePhone(p) ?? '-'}</td>
+                      <td>
+                        {p.hrFlagged ? (
+                          <Badge bg="warning" text="dark"><i className="bi bi-flag me-1" />Flagged</Badge>
+                        ) : (
+                          <Badge bg="success"><i className="bi bi-check me-1" />Clear</Badge>
+                        )}
+                      </td>
+                      {thisRun.status !== 'DRAFT' && thisRun.status !== 'APPROVED' && (
+                        <td>
+                          <Badge bg={
+                            p.disbursementStatus === 'SUCCESS' ? 'success'
+                            : p.disbursementStatus === 'FAILED' ? 'danger'
+                            : p.disbursementStatus === 'SENT' ? 'info'
+                            : 'secondary'
+                          }>
+                            {p.disbursementStatus}
+                          </Badge>
+                        </td>
+                      )}
+                      <td className="d-flex gap-1">
+                        <Button size="sm" variant="outline-secondary" style={{ fontSize: '0.7rem' }}
+                          onClick={() => setViewPayslip(p)}>
+                          <i className="bi bi-eye me-1" />View
+                        </Button>
+                        {thisRun.status === 'APPROVED' && isHR && (
+                          p.hrFlagged ? (
+                            <Button size="sm" variant="outline-success" style={{ fontSize: '0.7rem' }}
+                              onClick={() => unflagPayslip.mutateAsync(p.id)}>
+                              Unflag
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline-warning" style={{ fontSize: '0.7rem' }}
+                              onClick={() => setFlagTarget(p)}>
+                              <i className="bi bi-flag me-1" />Flag
+                            </Button>
+                          )
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-muted small text-center py-4">
+          No staff payroll run for {MONTHS[month - 1]} {year} yet. Use "Calculate Staff Payroll" to generate one.
+        </div>
+      )}
+
+      <Card className="mt-4">
+        <Card.Body>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h6 className="fw-semibold small text-uppercase text-muted mb-0">
+              <i className="bi bi-dash-circle me-1" />Staff deductions (NSSF, PAYE, advances)
+            </h6>
+            <Button size="sm" variant="outline-primary" onClick={() => setShowDeductionForm((v) => !v)}>
+              <i className="bi bi-plus-lg me-1" />Record deduction
+            </Button>
+          </div>
+          {showDeductionForm && (
+            <Row className="g-2 mb-3">
+              <Col md={3}>
+                <Form.Select size="sm" value={deducteeId} onChange={(e) => setDeducteeId(e.target.value)}>
+                  <option value="">Pick staff...</option>
+                  {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}</option>)}
+                </Form.Select>
+              </Col>
+              <Col md={2}>
+                <Form.Select size="sm" value={dedType} onChange={(e) => setDedType(e.target.value)}>
+                  {['NSSF', 'PAYE', 'ADVANCE', 'UNIFORM', 'DAMAGE_LOSS', 'OTHER'].map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </Form.Select>
+              </Col>
+              <Col md={2}>
+                <Form.Control size="sm" type="number" min="0" placeholder="Amount UGX" value={dedAmount}
+                  onChange={(e) => setDedAmount(e.target.value)} />
+              </Col>
+              <Col md={3}>
+                <Form.Control size="sm" placeholder="Description (min 5 chars)" value={dedDesc}
+                  onChange={(e) => setDedDesc(e.target.value)} />
+              </Col>
+              <Col md={2}>
+                <Form.Control size="sm" type="date" value={dedDate} onChange={(e) => setDedDate(e.target.value)} />
+              </Col>
+              <Col md={12}>
+                <Button size="sm" variant="primary" onClick={handleAddDeduction} disabled={createStaffDeduction.isPending}>
+                  {createStaffDeduction.isPending ? 'Saving...' : 'Save deduction'}
+                </Button>
+              </Col>
+            </Row>
+          )}
+          <Table size="sm" hover responsive className="align-middle small mb-0">
+            <thead className="table-light">
+              <tr><th>Staff</th><th>Type</th><th className="text-end">Amount</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {(staffDeductions ?? []).map((d) => (
+                <tr key={d.id}>
+                  <td>{d.staffName}</td>
+                  <td>{d.type}</td>
+                  <td className="text-end">{d.amount.toLocaleString()}</td>
+                  <td><Badge bg={d.status === 'PENDING' ? 'warning' : d.status === 'APPLIED' ? 'success' : 'secondary'}>{d.status}</Badge></td>
+                  <td className="text-end">
+                    {d.status === 'PENDING' && (
+                      <Button size="sm" variant="outline-secondary"
+                        onClick={() => cancelStaffDeduction.mutateAsync(d.id).catch(() => showToast('Failed to cancel.', 'danger'))}>
+                        Cancel
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {(staffDeductions ?? []).length === 0 && (
+                <tr><td colSpan={5} className="text-muted text-center">No staff deductions recorded.</td></tr>
+              )}
+            </tbody>
+          </Table>
+        </Card.Body>
+      </Card>
+
+      {shareTarget && (
+        <SharePayrollModal run={shareTarget} onClose={() => setShareTarget(null)} />
+      )}
+      <SharedSchedulesList runType="STAFF" />
+
+      {runs.length > 0 && (
+        <Table striped responsive className="small mt-3">
+          <thead className="table-light">
+            <tr>
+              <th>Period</th><th>Staff</th><th>Gross</th><th>Net</th><th>Status</th>
+              {canDeleteRun && <th className="text-end">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((r) => {
+              const c = payrollStatusColor(r.status);
+              return (
+                <tr key={r.id}>
+                  <td>{MONTHS[r.month - 1]} {r.year}</td>
+                  <td>{r.totalStaff}</td>
+                  <td>{fmtUGX(r.totalGross)}</td>
+                  <td>{fmtUGX(r.totalNet)}</td>
+                  <td>
+                    <Badge bg={c.bg} text={c.dark ? 'dark' : undefined}>
+                      {r.status.replace('_', ' ')}
+                    </Badge>
+                  </td>
+                  {canDeleteRun && (
+                    <td className="text-end">
+                      {r.status === 'DRAFT' && (
+                        confirmDeleteRunId === r.id ? (
+                          <span className="d-inline-flex gap-1">
+                            <Button size="sm" variant="danger" onClick={() => handleDeleteRun(r.id)} disabled={deletePayrollRun.isPending}>
+                              {deletePayrollRun.isPending ? 'Deleting...' : 'Confirm delete?'}
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setConfirmDeleteRunId(null)}>Cancel</Button>
+                          </span>
+                        ) : (
+                          <Button size="sm" variant="outline-danger" onClick={() => setConfirmDeleteRunId(r.id)}>
+                            <i className="bi bi-trash me-1" />Delete
+                          </Button>
+                        )
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      )}
+
+      {viewPayslip && (
+        <PayslipDetailModal payslip={viewPayslip} month={month} year={year} onClose={() => setViewPayslip(null)} />
+      )}
+      {flagTarget && (
+        <FlagPayslipModal payslip={flagTarget} onClose={() => setFlagTarget(null)} />
+      )}
+      {rejectTarget && (
+        <RejectPayrollModal run={rejectTarget} onClose={() => setRejectTarget(null)} />
+      )}
+    </>
+  );
+}
+
+// -- Payroll inbox: share modal + shared list ---------------------------------
+
+function SharePayrollModal({ run, onClose }: { run: PayrollRunResponse | null; onClose: () => void }) {
+  const [formats, setFormats] = useState<Set<string>>(new Set(['EXCEL', 'PDF']));
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [note, setNote] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const { data: staffData } = useStaffList({ limit: 100 });
+  const sharePayroll = useSharePayroll();
+  const { showToast } = useToast();
+
+  // Reset the form each time another run is shared.
+  useEffect(() => {
+    setFormats(new Set(['EXCEL', 'PDF']));
+    setPicked(new Set());
+    setSearch('');
+    setNote('');
+    setFormError(null);
+  }, [run?.id]);
+
+  if (!run) return null;
+  const staff = (staffData?.data ?? []).filter(
+    (s) => s.isActive !== false && (s.name.toLowerCase().includes(search.toLowerCase()) || search.trim() === ''),
+  );
+  const toggle = (set: Set<string>, id: string, apply: (n: Set<string>) => void) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    apply(next);
+  };
+
+  const handleShare = async () => {
+    setFormError(null);
+    if (formats.size === 0) { setFormError('Pick at least one format.'); return; }
+    if (picked.size === 0) { setFormError('Pick at least one staff member.'); return; }
+    try {
+      await sharePayroll.mutateAsync({
+        runId: run.id,
+        data: {
+          formats: [...formats] as ('EXCEL' | 'PDF')[],
+          userIds: [...picked],
+          note: note.trim() || undefined,
+        },
+      });
+      showToast(`Schedule shared with ${picked.size} staff member(s).`, 'success');
+      onClose();
+    } catch (err: any) {
+      setFormError(err?.response?.data?.error ?? 'Failed to share the schedule.');
+    }
+  };
+
+  return (
+    <Modal show onHide={onClose} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>
+          <i className="bi bi-share me-2" />Share payroll schedule in system
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p className="small text-muted">
+          The files stay inside the system. Recipients get a bell notification and can re-download
+          from Shared schedules. Nothing is emailed.
+        </p>
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-bold small">Formats</Form.Label>
+          <div className="d-flex gap-3">
+            {(['EXCEL', 'PDF'] as const).map((f) => (
+              <Form.Check
+                key={f}
+                type="checkbox"
+                id={`share-fmt-${f}`}
+                label={f === 'EXCEL' ? 'Excel' : 'PDF'}
+                checked={formats.has(f)}
+                onChange={() => toggle(formats, f, setFormats)}
+              />
+            ))}
+          </div>
+        </Form.Group>
+        <Form.Group className="mb-2">
+          <Form.Label className="fw-bold small">Share with (staff accounts)</Form.Label>
+          <Form.Control
+            size="sm"
+            placeholder="Search staff..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Form.Group>
+        <div style={{ maxHeight: 240, overflowY: 'auto' }} className="mb-3 border rounded p-2">
+          {staff.length === 0 && (
+            <div className="text-muted small">No staff found. The directory needs Director-level access.</div>
+          )}
+          {staff.map((s) => (
+            <Form.Check
+              key={s.id}
+              type="checkbox"
+              id={`share-u-${s.id}`}
+              label={`${s.name} (${s.role})`}
+              checked={picked.has(s.id)}
+              onChange={() => toggle(picked, s.id, setPicked)}
+            />
+          ))}
+        </div>
+        <Form.Group className="mb-2">
+          <Form.Label className="fw-bold small">Note (optional)</Form.Label>
+          <Form.Control
+            size="sm"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. October salaries for review"
+            maxLength={300}
+          />
+        </Form.Group>
+        {formError && <Alert variant="danger" className="py-2 small">{formError}</Alert>}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" onClick={handleShare} disabled={sharePayroll.isPending}>
+          {sharePayroll.isPending ? 'Sharing...' : `Share with ${picked.size} staff`}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+function SharedSchedulesList({ runType }: { runType: 'GUARD' | 'STAFF' }) {
+  const { data: shares, isLoading } = usePayrollShares();
+  const { showToast } = useToast();
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const rows = (shares ?? []).filter((s) => s.runType === runType);
+
+  const handleDownload = async (shareId: string, filename: string) => {
+    setDownloading(shareId);
+    try {
+      await payrollSharesApi.download(shareId, filename);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to download.', 'danger');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  if (isLoading) return null;
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <h6 className="fw-semibold small text-uppercase text-muted mb-2">
+        <i className="bi bi-share me-1" />Shared schedules
+      </h6>
+      <Table size="sm" hover responsive className="align-middle small">
+        <thead className="table-light">
+          <tr>
+            <th>Period</th>
+            <th>Format</th>
+            <th>Shared with</th>
+            <th>Note</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s) => {
+            const read = s.recipients.filter((r) => r.readAt).length;
+            return (
+              <tr key={s.id}>
+                <td>{s.period}</td>
+                <td>
+                  <i className={`bi ${s.format === 'PDF' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-excel'} me-1`} />
+                  {s.format === 'PDF' ? 'PDF' : 'Excel'}
+                </td>
+                <td>
+                  {s.recipients.length} staff ({read} read)
+                  <div className="text-muted" style={{ fontSize: '0.7rem' }}>
+                    {s.recipients.map((r) => r.staffName).join(', ')}
+                  </div>
+                </td>
+                <td className="text-muted">{s.note ?? '-'}</td>
+                <td className="text-muted">{new Date(s.createdAt).toLocaleString('en-GB')}</td>
+                <td className="text-end">
+                  <Button
+                    size="sm"
+                    variant="outline-primary"
+                    disabled={downloading === s.id}
+                    onClick={() => handleDownload(s.id, s.filename)}
+                  >
+                    <i className="bi bi-download me-1" />
+                    {downloading === s.id ? '...' : 'Download'}
+                  </Button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
 
 function CashbookTab() {
   const now = new Date();
@@ -1471,6 +2250,9 @@ export default function FinancePage() {
             </Tab>
             <Tab eventKey="payroll" title="Payroll">
               <PayrollTab />
+            </Tab>
+            <Tab eventKey="staff-payroll" title={<><i className="bi bi-people me-1" />Staff Payroll</>}>
+              <StaffPayrollTab />
             </Tab>
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />

@@ -25,6 +25,12 @@ export interface RoleConfig {
  * the business uses without the database column having to be renamed.
  */
 export const ROLE_CONFIG: Record<string, RoleConfig> = {
+  MD: {
+    label:       'Managing Director',
+    description: 'Final authority. Gives the last approval on payroll and requisitions, then Finance disburses.',
+    colour:      '#4B0082',
+    icon:        'bi-award',
+  },
   DIRECTOR: {
     label:       'Director',
     description: 'Full system access. Can manage all modules, approve requisitions, and view all reports.',
@@ -145,6 +151,18 @@ export const CreateStaffSchema = z.object({
   jobTitle:   z.string().max(100).optional().nullable(),
   /** Left blank, a secure password is generated and emailed to the new account. */
   password:   z.string().min(8).max(128).optional(),
+  // -- Staff payroll --
+  // Fixed monthly salary in UGX. Null means the staffer is not payable and
+  // the staff payroll roster blocks them until finance sets a salary.
+  salaryRate:            z.number().int().positive().optional().nullable(),
+  bankName:              z.string().max(100).optional().nullable(),
+  accountNumber:         z.string().max(50).optional().nullable(),
+  // Mobile-money wallet for XCEL disbursement; falls back to phone.
+  preferredPaymentContact: z.string().max(20).optional().nullable(),
+  mobileNetwork:         z.string().max(20).optional().nullable(),
+  momoAccountName:       z.string().max(100).optional().nullable(),
+  nssfNumber:            z.string().max(50).optional().nullable(),
+  tinNumber:             z.string().max(50).optional().nullable(),
 });
 
 export const UpdateStaffSchema = z.object({
@@ -155,6 +173,18 @@ export const UpdateStaffSchema = z.object({
   role:             StaffRoleEnum.optional(),
   emergencyContact: z.string().max(100).optional().nullable(),
   emergencyPhone:   z.string().max(20).optional().nullable(),
+  // -- Staff payroll --
+  // Fixed monthly salary in UGX. Null means the staffer is not payable and
+  // the staff payroll roster blocks them until finance sets a salary.
+  salaryRate:            z.number().int().positive().optional().nullable(),
+  bankName:              z.string().max(100).optional().nullable(),
+  accountNumber:         z.string().max(50).optional().nullable(),
+  // Mobile-money wallet for XCEL disbursement; falls back to phone.
+  preferredPaymentContact: z.string().max(20).optional().nullable(),
+  mobileNetwork:         z.string().max(20).optional().nullable(),
+  momoAccountName:       z.string().max(100).optional().nullable(),
+  nssfNumber:            z.string().max(50).optional().nullable(),
+  tinNumber:             z.string().max(50).optional().nullable(),
 });
 
 export const DeactivateStaffSchema = z.object({
@@ -196,6 +226,14 @@ export interface StaffResponse {
   deactivationReason: string | null;
   emergencyContact:   string | null;
   emergencyPhone:     string | null;
+  salaryRate:            number | null;
+  bankName:                string | null;
+  accountNumber:           string | null;
+  preferredPaymentContact: string | null;
+  mobileNetwork:           string | null;
+  momoAccountName:         string | null;
+  nssfNumber:              string | null;
+  tinNumber:               string | null;
   createdAt:          string;
   updatedAt:          string;
   roleConfig:         RoleConfig | null;

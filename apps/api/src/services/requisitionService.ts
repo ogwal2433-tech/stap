@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
+import { notificationService } from './notificationService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { canEditRequisition } from '@security360/shared';
 import { dateRangeFilter } from '../lib/dateUtils';
@@ -261,6 +262,18 @@ class RequisitionService {
       newValue: { hrApprovedById: by },
     });
 
+    // Harold approved: tell the Directors (and the MD) it is their turn.
+    // Bell-only; nothing leaves the system.
+    try {
+      await notificationService.sendToRoles(['DIRECTOR', 'MD'], {
+        type:       'REQUISITION_HR_APPROVED',
+        title:      `Requisition awaiting director approval`,
+        message:    `Requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) passed HR review and needs director approval.`,
+        entityType: 'requisition',
+        entityId:   id,
+      });
+    } catch (err) { console.error('Requisition HR handoff bell failed', err); }
+
     return fmtRequisition(updated);
   }
 
@@ -280,6 +293,18 @@ class RequisitionService {
       userId: by, action: 'REQUISITION_DIRECTOR_APPROVED', entity: 'requisition', entityId: id,
       newValue: { status: 'APPROVED' },
     });
+
+    // Micheal approved: tell the requester their requisition is approved.
+    try {
+      await notificationService.send({
+        userId:     updated.requestedById,
+        type:       'REQUISITION_DIRECTOR_APPROVED',
+        title:      `Requisition approved`,
+        message:    `Your requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) was approved and moves to assignment.`,
+        entityType: 'requisition',
+        entityId:   id,
+      });
+    } catch (err) { console.error('Requisition approval bell failed', err); }
 
     return fmtRequisition(updated);
   }

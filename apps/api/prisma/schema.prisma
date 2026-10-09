@@ -124,6 +124,19 @@ model User {
   deactivatedById    String?
   deactivationReason String?
 
+  // -- Staff payroll (see /staff-payroll) --
+  // Fixed monthly salary; staff-only runs pay salaryRate in full.
+  // Bank and mobile-money fields mirror Guard so the same XCEL
+  // disbursement path can pay staff to their phone or wallet.
+  salaryRate              Int?
+  bankName                String?
+  accountNumber           String?
+  preferredPaymentContact String?
+  mobileNetwork           String?
+  momoAccountName         String?
+  nssfNumber              String?
+  tinNumber               String?
+
   deactivatedBy    User?  @relation("UserDeactivator", fields: [deactivatedById], references: [id], onDelete: SetNull)
   deactivatedUsers User[] @relation("UserDeactivator")
 
@@ -179,6 +192,9 @@ model User {
   approvedLetters         GeneratedLetter[]       @relation("LetterApprover")
   resolvedErrors          SystemError[]           @relation("ErrorResolver")
   guardPromotions         GuardPromotion[]        @relation("GuardPromotedBy")
+  staffDeductions         StaffDeduction[]
+  staffPayslips            Payslip[]
+  payrollShareReceipts    PayrollShareRecipient[]
 
   submittedAccountability  RequisitionAccountability[] @relation("AccountabilitySubmitter")
   adminAccountability      RequisitionAccountability[] @relation("AccountabilityAdmin")
@@ -1289,6 +1305,53 @@ model GuardDeduction {
   updatedAt     DateTime    @updatedAt
 }
 
+model StaffDeduction {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type          String
+  amount        Int
+  description   String
+  effectiveDate DateTime
+  status        String      @default("PENDING")
+  // PENDING | APPLIED | CANCELLED
+  payrollRunId  String?
+  payrollRun    PayrollRun? @relation(fields: [payrollRunId], references: [id])
+  createdBy     String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model PayrollShare {
+  id           String   @id @default(cuid())
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  format       String
+  // EXCEL | PDF
+  filePath     String
+  // relative to the uploads volume, e.g. payroll/<runId>/<ts>.pdf
+  note         String?
+  generatedBy  String
+  createdAt    DateTime @default(now())
+
+  recipients   PayrollShareRecipient[]
+
+  @@index([payrollRunId])
+}
+
+model PayrollShareRecipient {
+  id        String    @id @default(cuid())
+  shareId   String
+  share     PayrollShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([shareId, userId])
+  @@index([userId])
+}
+
 model PayrollRun {
   id              String    @id @default(cuid())
   month           Int
@@ -1298,6 +1361,11 @@ model PayrollRun {
   zoneId          String?
   zone            Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   totalGuards     Int
+  // Staff-only runs carry runType STAFF and pay User rows; guard runs
+  // keep runType GUARD. One run per (month, year, zone, runType).
+  runType         String @default("GUARD")
+  // GUARD | STAFF
+  totalStaff      Int    @default(0)
   totalGross      Int
   totalDeductions Int
   totalNet        Int
@@ -1317,6 +1385,11 @@ model PayrollRun {
   hrApprovedAt DateTime?
   hrNotes      String?
 
+  // MD final approval: required after HR approval, before Finance
+  // can disburse. Only the MD role grants it.
+  mdApprovedBy String?
+  mdApprovedAt DateTime?
+
   // Finance disbursement
   disbursedBy String?
   disbursedAt DateTime?
@@ -1330,6 +1403,8 @@ model PayrollRun {
 
   payslips   Payslip[]
   deductions GuardDeduction[]
+  staffDeductions StaffDeduction[]
+  shares     PayrollShare[]
 
   // One run per zone and period going forward, enforced in calculateRun: the
   // DB keeps no unique index because legacy history already holds several
@@ -1338,8 +1413,11 @@ model PayrollRun {
 
 model Payslip {
   id                        String     @id @default(cuid())
-  guardId                   String
-  guard                     Guard      @relation(fields: [guardId], references: [id])
+  guardId                   String?
+  guard                     Guard?     @relation(fields: [guardId], references: [id])
+  // Staff payslip when userId is set; exactly one of guardId/userId holds.
+  userId                    String?
+  user                      User?      @relation(fields: [userId], references: [id], onDelete: Restrict)
   payrollRunId              String
   payrollRun                PayrollRun @relation(fields: [payrollRunId], references: [id])
   grossSalary               Int

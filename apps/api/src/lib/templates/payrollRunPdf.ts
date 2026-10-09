@@ -25,6 +25,7 @@ export interface PayrollExportRow {
   gross:          number;
   deductions:     number;
   net:            number;
+  phone:          string;
   paymentStatus:  string;
 }
 
@@ -36,6 +37,10 @@ export interface PayrollRunPdfData {
   generatedBy:     string;
   status:          string;
   guardCount:      number;
+  // 'Guard' on guard runs, 'Staff' on staff-only runs: labels the name
+  // column and the totals line in both file exports.
+  payeeLabel:       string;
+  payeePlural:      string;
   totalGross:      number;
   totalDeductions: number;
   totalNet:        number;
@@ -86,6 +91,7 @@ export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
       <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right">${ugx(r.gross)}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right;color:${r.deductions > 0 ? '#C0392B' : '#6c757d'}">${ugx(r.deductions)}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:right;font-weight:700">${ugx(r.net)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e9ecef">${esc(r.phone || '-')}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #e9ecef;text-align:center;font-size:8.5pt;font-weight:700;color:${PAY_STATUS_COLOR[r.paymentStatus] ?? '#6c757d'}">${esc(r.paymentStatus)}</td>
     </tr>`).join('');
 
@@ -123,16 +129,17 @@ export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
         <tr style="background:${NAVY};color:#ffffff">
           <th style="padding:5px 8px;text-align:center;font-size:8pt;width:28px">#</th>
           <th style="padding:5px 8px;text-align:left;font-size:8pt;width:70px">Sys ID</th>
-          <th style="padding:5px 8px;text-align:left;font-size:8pt">Guard Name</th>
+          <th style="padding:5px 8px;text-align:left;font-size:8pt">${data.payeeLabel} Name</th>
           <th style="padding:5px 8px;text-align:center;font-size:8pt;width:60px">Days</th>
           <th style="padding:5px 8px;text-align:right;font-size:8pt;width:95px">Gross (UGX)</th>
           <th style="padding:5px 8px;text-align:right;font-size:8pt;width:105px">Deductions</th>
           <th style="padding:5px 8px;text-align:right;font-size:8pt;width:105px">Net (UGX)</th>
+          <th style="padding:5px 8px;text-align:left;font-size:8pt;width:90px">Phone</th>
           <th style="padding:5px 8px;text-align:center;font-size:8pt;width:70px">Payment</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6c757d">No payslips on this run.</td></tr>'}
+        ${rows || '<tr><td colspan="9" style="padding:12px;text-align:center;color:#6c757d">No payslips on this run.</td></tr>'}
       </tbody>
       <tfoot>
         <tr style="background:${NAVY};color:#ffffff;font-weight:900">
@@ -140,6 +147,7 @@ export function buildPayrollRunPdfHtml(data: PayrollRunPdfData): string {
           <td style="padding:6px 8px;text-align:right">${ugx(data.totalGross)}</td>
           <td style="padding:6px 8px;text-align:right">${ugx(data.totalDeductions)}</td>
           <td style="padding:6px 8px;text-align:right;color:${AMBER}">${ugx(data.totalNet)}</td>
+          <td></td>
           <td></td>
         </tr>
       </tfoot>

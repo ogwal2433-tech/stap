@@ -25,6 +25,7 @@
  */
 
 export const ROLES = {
+  MD: 'MD',
   DIRECTOR: 'DIRECTOR',
   ASSISTANT_MANAGER: 'ASSISTANT_MANAGER',
   ADMINISTRATOR: 'ADMINISTRATOR',
@@ -50,6 +51,7 @@ export type UserRole = (typeof ROLES)[keyof typeof ROLES];
  * Index 0 = most privileged (DIRECTOR).
  */
 export const ROLE_HIERARCHY: UserRole[] = [
+  ROLES.MD,
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
   ROLES.ADMINISTRATOR,
@@ -89,6 +91,7 @@ export function hasMinimumRole(userRole: UserRole, minimumRole: UserRole): boole
 
 /** Roles with access to finance and accounts modules. */
 export const FINANCE_ROLES: UserRole[] = [
+  ROLES.MD,
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
   ROLES.ACCOUNTS_OFFICER,
@@ -110,6 +113,7 @@ export const DEPLOYMENT_ROLES: UserRole[] = [
 
 /** Roles with access to reports. */
 export const REPORT_ROLES: UserRole[] = [
+  ROLES.MD,
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
   ROLES.ACCOUNTS_OFFICER,
@@ -117,6 +121,7 @@ export const REPORT_ROLES: UserRole[] = [
 
 /** All internal staff roles (excludes GUARD and CLIENT). */
 export const INTERNAL_ROLES: UserRole[] = [
+  ROLES.MD,
   ROLES.DIRECTOR,
   ROLES.ASSISTANT_MANAGER,
   ROLES.ADMINISTRATOR,

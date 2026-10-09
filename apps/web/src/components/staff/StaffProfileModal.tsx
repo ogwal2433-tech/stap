@@ -80,6 +80,8 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
   const [form, setForm] = useState({
     name: '', phone: '', department: '', jobTitle: '',
     role: '' as StaffRole | '', emergencyContact: '', emergencyPhone: '',
+    salaryRate: '', bankName: '', accountNumber: '', preferredPaymentContact: '',
+    mobileNetwork: '', momoAccountName: '', nssfNumber: '', tinNumber: '',
   });
 
   // Refill the edit form whenever the fetched record changes, so an inline edit
@@ -94,6 +96,14 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
       role:             staff.role,
       emergencyContact: staff.emergencyContact ?? '',
       emergencyPhone:   staff.emergencyPhone ?? '',
+      salaryRate: staff.salaryRate != null ? String(staff.salaryRate) : '',
+      bankName: staff.bankName ?? '',
+      accountNumber: staff.accountNumber ?? '',
+      preferredPaymentContact: staff.preferredPaymentContact ?? '',
+      mobileNetwork: staff.mobileNetwork ?? '',
+      momoAccountName: staff.momoAccountName ?? '',
+      nssfNumber: staff.nssfNumber ?? '',
+      tinNumber: staff.tinNumber ?? '',
     });
   }, [staff]);
 
@@ -128,6 +138,14 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
           jobTitle:         (form.jobTitle.trim() || null) as never,
           emergencyContact: form.emergencyContact.trim() || null,
           emergencyPhone:   form.emergencyPhone.trim()   || null,
+          salaryRate: (() => { const n = parseInt(form.salaryRate.replace(/[^0-9]/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : null; })(),
+          bankName:              form.bankName.trim()              || null,
+          accountNumber:         form.accountNumber.trim()         || null,
+          preferredPaymentContact: form.preferredPaymentContact.trim() || null,
+          mobileNetwork:         form.mobileNetwork.trim()         || null,
+          momoAccountName:       form.momoAccountName.trim()       || null,
+          nssfNumber:            form.nssfNumber.trim()            || null,
+          tinNumber:             form.tinNumber.trim()             || null,
           // The server refuses a self role change; don't even send one.
           ...(form.role && form.role !== staff?.role && !isSelf ? { role: form.role } : {}),
         },
@@ -428,8 +446,97 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                     />
                   </Form.Group>
                 </Col>
+                <Col md={12}>
+                  <div style={SECTION_TITLE}><i className="bi bi-cash-coin me-1" />Payroll - salary and payout details</div>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">Monthly Salary (UGX)</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      type="number"
+                      min="0"
+                      value={form.salaryRate}
+                      onChange={e => set('salaryRate', e.target.value)}
+                      placeholder="Required before staff payroll can pay them"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">Payment Number</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.preferredPaymentContact}
+                      onChange={e => set('preferredPaymentContact', e.target.value)}
+                      placeholder="MoMo wallet; falls back to Phone"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">Mobile Network</Form.Label>
+                    <Form.Select size="sm" value={form.mobileNetwork} onChange={e => set('mobileNetwork', e.target.value)}>
+                      <option value="">Auto-detect</option>
+                      <option value="MTN">MTN</option>
+                      <option value="AIRTEL">Airtel</option>
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">MoMo Account Name</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.momoAccountName}
+                      onChange={e => set('momoAccountName', e.target.value)}
+                      placeholder="Wallet name if different from staff name"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">Bank</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.bankName}
+                      onChange={e => set('bankName', e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">Account Number</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.accountNumber}
+                      onChange={e => set('accountNumber', e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">NSSF Number</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.nssfNumber}
+                      onChange={e => set('nssfNumber', e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-bold small">TIN</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      value={form.tinNumber}
+                      onChange={e => set('tinNumber', e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
               </Row>
             ) : (
+              <>
               <Row style={{ marginBottom: '12px' }}>
                 <Col md={6}><Field label="Email"             value={staff.email} /></Col>
                 <Col md={6}><Field label="Phone"             value={staff.phone} /></Col>
@@ -438,6 +545,20 @@ export default function StaffProfileModal({ staffId, show, onClose, onUpdate }: 
                 <Col md={6}><Field label="Emergency Contact" value={staff.emergencyContact} /></Col>
                 <Col md={6}><Field label="Emergency Phone"   value={staff.emergencyPhone} /></Col>
               </Row>
+              <>
+              <div style={SECTION_TITLE}><i className="bi bi-cash-coin me-1" />Payroll</div>
+              <Row style={{ marginBottom: '12px' }}>
+                <Col md={6}><Field label="Monthly Salary (UGX)" value={staff.salaryRate != null ? staff.salaryRate.toLocaleString() : null} /></Col>
+                <Col md={6}><Field label="Payment Number" value={staff.preferredPaymentContact ?? staff.phone} /></Col>
+                <Col md={6}><Field label="Mobile Network" value={staff.mobileNetwork} /></Col>
+                <Col md={6}><Field label="MoMo Account Name" value={staff.momoAccountName} /></Col>
+                <Col md={6}><Field label="Bank" value={staff.bankName} /></Col>
+                <Col md={6}><Field label="Account Number" value={staff.accountNumber} /></Col>
+                <Col md={6}><Field label="NSSF Number" value={staff.nssfNumber} /></Col>
+                <Col md={6}><Field label="TIN" value={staff.tinNumber} /></Col>
+              </Row>
+              </>
+              </>
             )}
 
             {/* ── Recent activity ────────────────────────────────────────── */}
