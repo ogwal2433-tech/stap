@@ -12,6 +12,11 @@ import { SearchableSelect } from '../ui/SearchableSelect';
  */
 
 export interface RequisitionFilters {
+  /**
+   * One status, a comma list (the KPI tiles link to "approved at any stage"),
+   * or '' for all. Mirrors the API's `status` param exactly.
+   */
+  status: string;
   dateFrom: string;
   dateTo: string;
   requestedById: string;
@@ -22,18 +27,22 @@ export interface RequisitionFilters {
    * filtering.
    */
   requestedByName: string;
+  /** Only requisitions with a non-cancelled PO past its expected delivery. */
+  overdue: boolean;
 }
 
 export const EMPTY_REQUISITION_FILTERS: RequisitionFilters = {
+  status:         '',
   dateFrom:        '',
   dateTo:          '',
   requestedById:   '',
   requestedByName: '',
+  overdue:         false,
 };
 
 /** Anything on the panel actually narrowing the list? */
 export const areRequisitionFiltersActive = (f: RequisitionFilters): boolean =>
-  !!(f.dateFrom || f.dateTo || f.requestedById);
+  !!(f.status || f.dateFrom || f.dateTo || f.requestedById || f.overdue);
 
 /** Date inputs give YYYY-MM-DD, so comparing them as text compares them as days. */
 export const isRequisitionDateRangeInverted = (f: RequisitionFilters): boolean =>
@@ -47,14 +56,35 @@ export const isRequisitionDateRangeInverted = (f: RequisitionFilters): boolean =
  */
 export const requisitionFiltersQuery = (
   f: RequisitionFilters,
-): { requestedById?: string; from?: string; to?: string } => {
+): { status?: string; requestedById?: string; from?: string; to?: string; overdue?: 'true' } => {
   const inverted = isRequisitionDateRangeInverted(f);
   return {
+    status:        f.status || undefined,
     requestedById: f.requestedById || undefined,
     from:          inverted ? undefined : f.dateFrom || undefined,
     to:            inverted ? undefined : f.dateTo   || undefined,
+    overdue:       f.overdue ? 'true' : undefined,
   };
 };
+
+/**
+ * The status choices, in the order an approver meets them. "Approved (any
+ * stage)" is the comma list the KPI tiles link to — an approved requisition
+ * moves on to assignment and completion, and hiding those would make the
+ * filter disagree with the tile that led here.
+ */
+export const REQUISITION_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '',                                              label: 'Any status' },
+  { value: 'PENDING,SUBMITTED',                             label: 'Pending approval' },
+  { value: 'APPROVED,ASSIGNED,IN_PROGRESS,COMPLETED',      label: 'Approved (any stage)' },
+  { value: 'ASSIGNED,IN_PROGRESS,COMPLETED',                label: 'Assigned & completed' },
+  { value: 'APPROVED',                                      label: 'Approved, not yet assigned' },
+  { value: 'ASSIGNED',                                      label: 'Assigned' },
+  { value: 'IN_PROGRESS',                                   label: 'In progress' },
+  { value: 'COMPLETED',                                     label: 'Completed' },
+  { value: 'REJECTED',                                      label: 'Rejected' },
+  { value: 'CANCELLED',                                     label: 'Cancelled' },
+];
 
 interface Props {
   value:    RequisitionFilters;
@@ -83,14 +113,26 @@ export default function RequisitionFilterPanel({ value, onChange, showRequester 
   return (
     <div style={{ background: '#F2F4F7', borderRadius: '0.5rem', padding: '12px 14px', marginBottom: 16 }}>
       <Row className="g-2">
-        <Col md={showRequester ? 3 : 4} sm={6}>
+        <Col md={2} sm={6}>
+          <Form.Label className="small text-muted mb-1">Status</Form.Label>
+          <Form.Select
+            size="sm" value={value.status}
+            onChange={(e) => set({ status: e.target.value })}
+            aria-label="Filter requisitions by status"
+          >
+            {REQUISITION_STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Form.Select>
+        </Col>
+        <Col md={2} sm={6}>
           <Form.Label className="small text-muted mb-1">Dated from</Form.Label>
           <Form.Control
             type="date" size="sm" value={value.dateFrom} max={value.dateTo || undefined}
             isInvalid={inverted} onChange={(e) => set({ dateFrom: e.target.value })}
           />
         </Col>
-        <Col md={showRequester ? 3 : 4} sm={6}>
+        <Col md={2} sm={6}>
           <Form.Label className="small text-muted mb-1">Dated to</Form.Label>
           <Form.Control
             type="date" size="sm" value={value.dateTo} min={value.dateFrom || undefined}
@@ -98,7 +140,7 @@ export default function RequisitionFilterPanel({ value, onChange, showRequester 
           />
         </Col>
         {showRequester && (
-          <Col md={4} sm={12}>
+          <Col md={3} sm={12}>
             <Form.Label className="small text-muted mb-1">Requested by</Form.Label>
             <SearchableSelect
               options={staffOptions}
@@ -116,9 +158,16 @@ export default function RequisitionFilterPanel({ value, onChange, showRequester 
             />
           </Col>
         )}
-        <Col md={showRequester ? 2 : 4} sm={12} className="d-flex align-items-end">
+        <Col md={showRequester ? 3 : 6} sm={12} className="d-flex align-items-end gap-3">
+          <Form.Check
+            type="checkbox"
+            label="Overdue delivery only"
+            checked={value.overdue}
+            onChange={(e) => set({ overdue: e.target.checked })}
+            className="small text-muted mb-0"
+          />
           <Button
-            size="sm" variant="outline-secondary"
+            size="sm" variant="outline-secondary" className="ms-auto"
             disabled={!areRequisitionFiltersActive(value)}
             onClick={() => onChange(EMPTY_REQUISITION_FILTERS)}
           >

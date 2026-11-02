@@ -1,5 +1,7 @@
 export interface InvoiceEmailData {
   title: string;
+  /** The billing period in words - "Security Services for the month of September". */
+  description: string;
   clientName:    string;
   invoiceNumber: string;
   issueDate:     string;
@@ -58,6 +60,7 @@ export function buildInvoiceEmail(data: InvoiceEmailData): string {
   <div style="background:#1B3A6B;padding:24px 32px">
     <h1 style="color:#fff;margin:0;font-size:1.4rem">${data.company.name}</h1>
     <p style="color:#D6E0F0;margin:4px 0 0">${data.title}</p>
+    <p style="color:#D6E0F0;margin:2px 0 0;opacity:.85">${data.description}</p>
   </div>
 
   <div style="padding:32px">

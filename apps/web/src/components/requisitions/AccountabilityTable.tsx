@@ -22,7 +22,7 @@ const stageIdx = (s: string) => ACCOUNTABILITY_STAGES.indexOf(s as Accountabilit
 /** Which stage this user could act on, given their role. */
 function stageForRole(role: UserRole | undefined): 'admin' | 'hr' | 'director' | null {
   if (!role) return null;
-  if (role === ROLES.DIRECTOR) return 'director';
+  if (role === ROLES.DIRECTOR || role === ROLES.MD) return 'director';
   if (role === ROLES.ASSISTANT_MANAGER) return 'hr';
   if (role === ROLES.ADMINISTRATOR) return 'admin';
   return null;

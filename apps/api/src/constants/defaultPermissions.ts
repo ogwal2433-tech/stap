@@ -22,6 +22,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   // with no way back in.
   DIRECTOR: [...ALL_PERMISSION_KEYS],
 
+  // The Managing Director holds everything a Director holds, now and for any
+  // permission added later: re-seeding is additive, so future keys land here
+  // automatically instead of silently excluding the MD.
+  MD: [...ALL_PERMISSION_KEYS],
+
   ASSISTANT_MANAGER: [
     P.GUARDS_VIEW, P.GUARDS_CREATE, P.GUARDS_EDIT, P.GUARDS_PROMOTE,
     P.GUARDS_TRANSFER, P.GUARDS_DOCUMENTS,
@@ -30,7 +35,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.ROSTER_VIEW, P.ROSTER_BUILD, P.ROSTER_EDIT,
     P.ATTENDANCE_VIEW, P.ATTENDANCE_EDIT,
     P.FINANCE_VIEW, P.INVOICES_VIEW, P.INVOICES_CREATE, P.INVOICES_EDIT,
-    P.INVOICES_PRINT, P.PAYMENTS_VIEW, P.PAYMENTS_RECORD,
+    P.INVOICES_PRINT, P.INVOICES_VOID, P.PAYMENTS_VIEW, P.PAYMENTS_RECORD,
     P.PAYROLL_VIEW, P.PAYROLL_APPROVE,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE, P.REQUISITIONS_APPROVE,
     P.REQUISITIONS_DISPATCH,
@@ -142,6 +147,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     // Read-only: HR reads attendance to answer a leave or discipline question,
     // and reads the staff directory to know who signed something off.
     P.ATTENDANCE_VIEW, P.STAFF_VIEW,
+    P.FINANCE_VIEW, P.INVOICES_VIEW, P.INVOICES_CREATE, P.INVOICES_EDIT,
+    P.INVOICES_PRINT, P.INVOICES_VOID,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT,
     P.SETTINGS_VIEW,

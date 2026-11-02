@@ -14,7 +14,7 @@ type StatusFilter = 'active' | 'inactive' | 'all';
 const STATUS_OPTIONS: StatusFilter[] = ['active', 'inactive', 'all'];
 
 /** Roles allowed to add a staff account. Mirrors STAFF_MANAGER_ROLES on the API. */
-const CAN_ADD_STAFF: string[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const CAN_ADD_STAFF: string[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 
 const TABLE_HEADERS = [
   'Staff Member', 'Role', 'Department', 'Contact', 'Last Login', 'Status', 'Actions',

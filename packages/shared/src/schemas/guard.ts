@@ -52,6 +52,13 @@ export const GUARD_STATUS_CONFIG = {
     paid:        false,
     description: 'Guard employment has been terminated.',
   },
+  DESERTED: {
+    label:       'Deserted',
+    colour:      'dark',
+    deployable:  false,
+    paid:        false,
+    description: 'Guard absconded without authorisation and is classified as a deserter.',
+  },
 } as const;
 
 export type GuardEmploymentStatus = keyof typeof GUARD_STATUS_CONFIG;
@@ -72,7 +79,7 @@ export const DEPLOYABLE_STATUSES = GUARD_STATUS_VALUES.filter(
 export const PAID_STATUSES = GUARD_STATUS_VALUES.filter(s => GUARD_STATUS_CONFIG[s].paid);
 
 /** Statuses that end employment. A guard here cannot be promoted or transferred. */
-export const EXITED_STATUSES: GuardEmploymentStatus[] = ['RESIGNED', 'TERMINATED'];
+export const EXITED_STATUSES: GuardEmploymentStatus[] = ['RESIGNED', 'TERMINATED', 'DESERTED'];
 
 export function guardStatusLabel(status: string): string {
   return GUARD_STATUS_CONFIG[status as GuardEmploymentStatus]?.label ?? status;
@@ -795,6 +802,7 @@ export interface GuardDashboardStats {
   totalActive:         number;
   totalSuspended:      number;
   totalTerminated:     number;
+  totalDeserted:       number;
   totalGuards:         number;
   expiringContracts:   number;
   pendingDisciplinary: number;

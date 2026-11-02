@@ -712,7 +712,14 @@ export default function RosterBuilderTab() {
                                 // paperwork can be chased, but it no longer
                                 // stops the guard being rostered.
                                 const pendingId = guard.pendingNationalId;
-                                const disabled = isAtLimit;
+                                // Posted somewhere else on this date (a
+                                // transfer on file). The row stays visible so
+                                // you can see why he is unavailable — it is
+                                // disabled to keep the roster, the daily sheet
+                                // and the transfer in step.
+                                const postedElsewhere = !!guard.postedSiteId
+                                  && guard.postedSiteId !== site.id;
+                                const disabled = isAtLimit || postedElsewhere;
                                 return (
                                 <div
                                   key={guard.id}
@@ -722,17 +729,19 @@ export default function RosterBuilderTab() {
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addGuard(site.id, guard); }
                                   }}
-                                  title={isAtLimit
-                                    ? `Maximum ${requiredGuards} guard(s) already selected`
-                                    : pendingId
-                                      ? `Add ${guard.firstName} ${guard.lastName} — National ID still outstanding`
-                                      : `Add ${guard.firstName} ${guard.lastName}`}
+                                  title={postedElsewhere
+                                    ? `Posted at ${guard.postedSiteName} — transfer on file, roster him there`
+                                    : isAtLimit
+                                      ? `Maximum ${requiredGuards} guard(s) already selected`
+                                      : pendingId
+                                        ? `Add ${guard.firstName} ${guard.lastName} — National ID still outstanding`
+                                        : `Add ${guard.firstName} ${guard.lastName}`}
                                   className="d-flex align-items-center gap-2"
                                   style={{
                                     padding: '7px 12px', borderBottom: '1px solid #f0f0f0',
                                     cursor: disabled ? 'not-allowed' : 'pointer', userSelect: 'none',
                                     opacity: disabled ? 0.35 : 1,
-                                    pointerEvents: isAtLimit ? 'none' : 'auto',
+                                    pointerEvents: disabled ? 'none' : 'auto',
                                   }}
                                 >
                                   <InitialsAvatar name={guard.fullName} size={26} />
@@ -758,7 +767,19 @@ export default function RosterBuilderTab() {
                                       No ID
                                     </span>
                                   )}
-                                  {guard.alreadyDeployed ? (
+                                  {postedElsewhere ? (
+                                    <span
+                                      title={`Posted at ${guard.postedSiteName} — transfer on file`}
+                                      style={{
+                                        fontSize: '0.64rem', background: '#fff3cd', color: '#856404',
+                                        padding: '1px 5px', borderRadius: 4, flexShrink: 0, fontWeight: 500,
+                                        maxWidth: 130, overflow: 'hidden',
+                                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      Posted: {guard.postedSiteName}
+                                    </span>
+                                  ) : guard.alreadyDeployed ? (
                                     <span style={{
                                       fontSize: '0.64rem', background: '#fff3cd', color: '#856404',
                                       padding: '1px 5px', borderRadius: 4, flexShrink: 0, fontWeight: 500,

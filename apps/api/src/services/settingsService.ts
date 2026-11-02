@@ -23,9 +23,23 @@ import type {
   DeductionTypeResponse,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
+  GunTypeResponse,
+  CreateGunTypeInput,
+  UpdateGunTypeInput,
 } from '@security360/shared';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+function fmtGunType(t: any): GunTypeResponse {
+  return {
+    id:           t.id,
+    code:         t.code,
+    label:        t.label,
+    isActive:     t.isActive,
+    displayOrder: t.displayOrder,
+    createdAt:    t.createdAt.toISOString(),
+  };
+}
 
 function fmtDeductionType(t: any): DeductionTypeResponse {
   return {
@@ -528,6 +542,81 @@ class SettingsService {
       ),
     );
     return this.listDeductionTypes();
+  }
+
+  // -- Gun Type catalogue --------------------------------------------------------
+
+  async listGunTypes(activeOnly = false): Promise<GunTypeResponse[]> {
+    const types = await prisma.gunType.findMany({
+      where:   activeOnly ? { isActive: true } : {},
+      orderBy: [{ displayOrder: 'asc' }, { label: 'asc' }],
+    });
+    return types.map(fmtGunType);
+  }
+
+  async createGunType(data: CreateGunTypeInput, createdBy: string): Promise<GunTypeResponse> {
+    const code = data.code.toUpperCase().replace(/\s+/g, '_');
+    const dup = await prisma.gunType.findUnique({ where: { code } });
+    if (dup) throw new AppError(`A gun type with code "${code}" already exists.`, 409);
+
+    const maxOrder = await prisma.gunType.aggregate({ _max: { displayOrder: true } });
+    const type = await prisma.gunType.create({
+      data: {
+        code,
+        label:        data.label,
+        displayOrder: data.displayOrder ?? (maxOrder._max.displayOrder ?? 0) + 1,
+      },
+    });
+
+    await writeAuditLog({
+        userId:   createdBy,
+        action:   'GUN_TYPE_CREATED',
+        entity:   'gunType',
+        entityId: type.id,
+        newValue: { code, label: type.label },
+      });
+
+    return fmtGunType(type);
+  }
+
+  async updateGunType(id: string, data: UpdateGunTypeInput, updatedBy: string): Promise<GunTypeResponse> {
+    const existing = await prisma.gunType.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError('Gun type not found');
+
+    const updated = await prisma.gunType.update({ where: { id }, data: { ...data } });
+
+    await writeAuditLog({
+        userId:   updatedBy,
+        action:   'GUN_TYPE_UPDATED',
+        entity:   'gunType',
+        entityId: id,
+        oldValue: { label: existing.label },
+        newValue: data,
+      });
+
+    return fmtGunType(updated);
+  }
+
+  async deactivateGunType(id: string, deactivatedBy: string): Promise<GunTypeResponse> {
+    const type = await prisma.gunType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundError('Gun type not found');
+    const updated = await prisma.gunType.update({ where: { id }, data: { isActive: false } });
+
+    await writeAuditLog({
+        userId:   deactivatedBy,
+        action:   'GUN_TYPE_DEACTIVATED',
+        entity:   'gunType',
+        entityId: id,
+      });
+
+    return fmtGunType(updated);
+  }
+
+  async activateGunType(id: string): Promise<GunTypeResponse> {
+    const type = await prisma.gunType.findUnique({ where: { id } });
+    if (!type) throw new NotFoundError('Gun type not found');
+    const updated = await prisma.gunType.update({ where: { id }, data: { isActive: true } });
+    return fmtGunType(updated);
   }
 
   async deactivateUser(id: string, deactivatedBy: string): Promise<void> {

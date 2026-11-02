@@ -48,11 +48,12 @@ const STATUS_BADGE: Record<string, string> = Object.fromEntries(
 const DARK_TEXT_BADGES = ['warning', 'info'];
 
 const STATUS_ACTIONS: { value: GuardEmploymentStatus; action: string; icon: string; danger?: boolean }[] = [
-  { value: 'ACTIVE',     action: 'Activate',      icon: '✅' },
-  { value: 'ON_LEAVE',   action: 'Set on leave',  icon: '🌴' },
-  { value: 'SUSPENDED',  action: 'Suspend',       icon: '⚠️' },
-  { value: 'RESIGNED',   action: 'Mark resigned', icon: '📄', danger: true },
-  { value: 'TERMINATED', action: 'Terminate',     icon: '⛔', danger: true },
+  { value: 'ACTIVE',     action: 'Activate',      icon: 'bi-check-circle-fill' },
+  { value: 'ON_LEAVE',   action: 'Set on leave',  icon: 'bi-calendar-minus-fill' },
+  { value: 'SUSPENDED',  action: 'Suspend',       icon: 'bi-exclamation-triangle-fill' },
+  { value: 'RESIGNED',   action: 'Mark resigned', icon: 'bi-file-earmark-x', danger: true },
+  { value: 'TERMINATED', action: 'Terminate',     icon: 'bi-slash-circle', danger: true },
+  { value: 'DESERTED',   action: 'Mark deserted', icon: 'bi-flag', danger: true },
 ];
 
 const RANK_BADGE: Record<string, string> = {
@@ -80,7 +81,7 @@ interface StatusModal {
   targetStatus: GuardEmploymentStatus;
 }
 
-const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
 
 interface ReinstateModalProps {
   guardId:   string;
@@ -143,7 +144,7 @@ function ReinstateModal({ guardId, guard, onClose, onSuccess }: ReinstateModalPr
 
         {/* Service counting reset notice */}
         <Alert variant="info" className="mb-3">
-          <div className="fw-bold mb-1">ℹ️ Service Counting Will Restart</div>
+          <div className="fw-bold mb-1"><i className="bi bi-info-circle-fill me-1" />Service Counting Will Restart</div>
           <div className="small">
             Upon reinstatement, this guard's service counting will restart from today's date.
             <ul className="mb-0 mt-1">
@@ -313,7 +314,7 @@ function LetterCard({ letter, canReview, onReview }: {
               style={{ fontSize: '0.72rem', padding: '2px 8px' }}
               onClick={() => lettersApi.downloadPdf(letter.id, `${letter.letterType}-${letter.subjectName}.pdf`)}
             >
-              ↓ PDF
+              <i className="bi bi-file-earmark-pdf me-1" />PDF
             </Button>
           )}
         </div>
@@ -337,6 +338,9 @@ export default function GuardDetailPage() {
   const { data: guard, isLoading, isError, refetch } = useGuard(id ?? '');
   const [statusModal, setStatusModal] = useState<StatusModal | null>(null);
   const [showDelete, setShowDelete] = useState(false);
+  const [overrideDelete, setOverrideDelete] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const canOverrideDelete = !!user && (user.role === ROLES.DIRECTOR || user.role === (ROLES as any).MD);
   const { showToast: toast } = useToast();
   const queryClient = useQueryClient();
   const [showDocUpload, setShowDocUpload] = useState(false);
@@ -456,7 +460,7 @@ export default function GuardDetailPage() {
                       className={a.danger ? 'text-danger' : undefined}
                       onClick={() => setStatusModal({ targetStatus: a.value })}
                     >
-                      {a.icon} {a.action}
+                      {a.icon.startsWith('bi-') ? <i className={`${a.icon} me-1`} /> : <>{a.icon} </>}{a.action}
                     </Dropdown.Item>
                   ))}
                 </Dropdown.Menu>
@@ -474,16 +478,20 @@ export default function GuardDetailPage() {
             entityType="guard"
             entityName={`${guard.firstName} ${guard.lastName}`}
             warning="Only a guard added by mistake can be deleted — one with no deployments, attendance, pay or other history. Anyone who has worked is terminated instead."
+            override={canOverrideDelete ? { available: true, checked: overrideDelete, onChecked: setOverrideDelete, reason: deleteReason, onReason: setDeleteReason } : undefined}
             onConfirm={async () => {
-              const r = await guardsApi.remove(id!);
-              toast(`${r.name} deleted. It can be restored from Deleted records.`, 'success');
+              const useOverride = canOverrideDelete && overrideDelete;
+              const r = await guardsApi.remove(id!, useOverride ? { override: true, reason: deleteReason.trim() } : undefined);
+              setOverrideDelete(false);
+              setDeleteReason('');
+              toast(`${r.name} deleted${useOverride ? ' with director override' : ''}. It can be restored from Deleted records.`, 'success');
               queryClient.invalidateQueries({ queryKey: ['guards'] });
               navigate('/guards');
             }}
           />
           {/* Stays on roles: the nearest permission is guards.documents, which the
                        Administrator does not hold, so mapping it would take ID-card printing away. */}
-          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as UserRole[]}>
+          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR] as UserRole[]}>
             <Button
               variant="outline-dark"
               disabled={downloadIdCard.isPending}
@@ -507,7 +515,7 @@ export default function GuardDetailPage() {
               variant="outline-success"
               onClick={() => exportGuardProfile(guard, new Date(), companyBranding.company_name)}
             >
-              📊 Export Details
+              <i className="bi bi-box-arrow-down me-1" />Export Details
             </Button>
           </PermissionGuard>
           {guard.employmentStatus === 'ACTIVE' && (
@@ -644,10 +652,10 @@ export default function GuardDetailPage() {
                 )}
                 {guard.contractEnd && (() => {
                   const days = daysUntilExpiry(guard.contractEnd);
-                  if (days < 0) return <Badge bg="danger" className="mt-1">❌ Expired {Math.abs(days)}d ago</Badge>;
-                  if (days <= 30) return <Badge bg="warning" text="dark" className="mt-1">⚠️ Expires in {days}d</Badge>;
-                  if (days <= 90) return <Badge bg="info" className="mt-1">ℹ️ {days}d remaining</Badge>;
-                  return <Badge bg="success" className="mt-1">✅ Active</Badge>;
+                  if (days < 0) return <Badge bg="danger" className="mt-1"><i className="bi bi-x-circle-fill me-1" />Expired {Math.abs(days)}d ago</Badge>;
+                  if (days <= 30) return <Badge bg="warning" text="dark" className="mt-1"><i className="bi bi-exclamation-triangle-fill me-1" />Expires in {days}d</Badge>;
+                  if (days <= 90) return <Badge bg="info" className="mt-1"><i className="bi bi-info-circle-fill me-1" />{days}d remaining</Badge>;
+                  return <Badge bg="success" className="mt-1"><i className="bi bi-check-circle-fill me-1" />Active</Badge>;
                 })()}
               </div>
             </Col>
@@ -684,7 +692,7 @@ export default function GuardDetailPage() {
       <RoleGuard allowedRoles={FINANCE_ROLES as UserRole[]}>
         <div className="card border-0 shadow-sm mb-3">
           <div className="card-header bg-white fw-bold small d-flex align-items-center justify-content-between" style={{ color: '#1B3A6B' }}>
-            <span>📈 Salary Increment & Service Counting</span>
+            <span><i className="bi bi-graph-up me-1" />Salary Increment & Service Counting</span>
           </div>
           <div className="card-body">
             <Row className="g-3">
@@ -697,7 +705,7 @@ export default function GuardDetailPage() {
                 </div>
                 {guard.effectiveServiceStart && (
                   <Badge bg="warning" text="dark" className="mt-1" style={{ fontSize: '0.7rem' }}>
-                    ↩️ Restarted after reinstatement
+                    <i className="bi bi-arrow-counterclockwise me-1" />Restarted after reinstatement
                   </Badge>
                 )}
               </Col>
@@ -747,7 +755,7 @@ export default function GuardDetailPage() {
       {guard.employmentStatus === 'SUSPENDED' && guard.latestSuspension && (
         <Alert variant="warning" className="mb-3">
           <div className="d-flex align-items-start gap-2">
-            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+            <span style={{ fontSize: '1.2rem' }}><i className="bi bi-exclamation-triangle-fill" /></span>
             <div>
               <strong>Guard is currently suspended</strong>
               <div className="mt-1 small">
@@ -926,7 +934,7 @@ export default function GuardDetailPage() {
                 </PermissionGuard>
                 {/* Director only, deliberately: the bank account number is the one guard field
                        kept from managers. guards.edit would widen it to them and to HR. */}
-                <RoleGuard allowedRoles={[ROLES.DIRECTOR]}>
+                <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD]}>
                   <Col md={4}>
                     <div className="text-muted small">Account Number</div>
                     <div className="fw-medium font-monospace">{guard.accountNumber ?? '—'}</div>
@@ -1058,19 +1066,19 @@ export default function GuardDetailPage() {
                   <div className="text-muted small mb-1">Disability</div>
                   <div className="fw-medium">
                     {(guard as any).hasDisability
-                      ? <>&#9851; Yes {(guard as any).disabilityDetails && <span className="text-muted fw-normal">— {(guard as any).disabilityDetails}</span>}</>
+                      ? <><i className="bi bi-universal-access me-1" />Yes {(guard as any).disabilityDetails && <span className="text-muted fw-normal">— {(guard as any).disabilityDetails}</span>}</>
                       : 'No'}
                   </div>
                 </Col>
                 <Col md={4}>
                   <div className="text-muted small mb-1">Takes Alcohol</div>
-                  <div className="fw-medium">{(guard as any).takesAlcohol ? '🍺 Yes' : 'No'}</div>
+                  <div className="fw-medium">{(guard as any).takesAlcohol ? <><i className="bi bi-cup-straw me-1" />Yes</> : 'No'}</div>
                 </Col>
                 <Col md={4}>
                   <div className="text-muted small mb-1">Allergies</div>
                   <div className="fw-medium">
                     {(guard as any).hasAllergies
-                      ? <>&#9888;&#65039; Yes {(guard as any).allergyDetails && <span className="text-muted fw-normal">— {(guard as any).allergyDetails}</span>}</>
+                      ? <><i className="bi bi-exclamation-triangle-fill me-1" />Yes {(guard as any).allergyDetails && <span className="text-muted fw-normal">— {(guard as any).allergyDetails}</span>}</>
                       : 'No'}
                   </div>
                 </Col>

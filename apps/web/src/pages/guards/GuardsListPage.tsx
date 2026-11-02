@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert, Badge, Button, ButtonGroup, Col, Dropdown, Form,
   Pagination, Row, Spinner, Table,
@@ -29,11 +29,12 @@ const DARK_TEXT_BADGES = ['warning', 'info'];
 
 /** Status transitions offered on the row menu, phrased as the action not the state. */
 const STATUS_ACTIONS: { value: GuardEmploymentStatus; action: string; icon: string; danger?: boolean }[] = [
-  { value: 'ACTIVE',     action: 'Activate',    icon: '✅' },
-  { value: 'ON_LEAVE',   action: 'Set on leave', icon: '🌴' },
-  { value: 'SUSPENDED',  action: 'Suspend',     icon: '⚠️' },
-  { value: 'RESIGNED',   action: 'Mark resigned', icon: '📄', danger: true },
-  { value: 'TERMINATED', action: 'Terminate',   icon: '⛔', danger: true },
+  { value: 'ACTIVE',     action: 'Activate',    icon: 'bi-check-circle-fill' },
+  { value: 'ON_LEAVE',   action: 'Set on leave', icon: 'bi-calendar-minus-fill' },
+  { value: 'SUSPENDED',  action: 'Suspend',     icon: 'bi-exclamation-triangle-fill' },
+  { value: 'RESIGNED',   action: 'Mark resigned', icon: 'bi-file-earmark-x', danger: true },
+  { value: 'TERMINATED', action: 'Terminate',   icon: 'bi-slash-circle', danger: true },
+  { value: 'DESERTED', action: 'Mark deserted', icon: 'bi-flag', danger: true },
 ];
 
 const RANK_BADGE_COLORS = ['secondary', 'info', 'primary', 'warning', 'dark'];
@@ -57,7 +58,13 @@ export default function GuardsListPage() {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [status, setStatus] = useState('');
+  // Dashboard KPI cards link here with ?status= - honour it on arrival so the
+  // click lands on a pre-filtered list. Unknown values fall back to all.
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState(() => {
+    const q = searchParams.get('status');
+    return q && q in GUARD_STATUS_CONFIG ? q : '';
+  });
   const [rank, setRank] = useState('');
   const [contractType, setContractType] = useState('');
   const [probationStatus, setProbationStatus] = useState('');
@@ -205,7 +212,7 @@ export default function GuardsListPage() {
               size="sm"
               onClick={() => navigate('/guards/import')}
             >
-              📥 Import
+              <i className="bi bi-box-arrow-in-down me-1" />Import
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="guards.view">
@@ -218,7 +225,7 @@ export default function GuardsListPage() {
               >
                 {exporting
                   ? <><Spinner as="span" size="sm" animation="border" className="me-1" />Exporting…</>
-                  : <>📥 Export</>}
+                  : <><i className="bi bi-box-arrow-up me-1" />Export</>}
               </Dropdown.Toggle>
               <Dropdown.Menu>
                 <div className="px-3 py-1 small text-muted border-bottom">
@@ -227,10 +234,10 @@ export default function GuardsListPage() {
                     : 'All guards'}
                 </div>
                 <Dropdown.Item onClick={handleExportExcel} disabled={exporting !== null}>
-                  📊 Excel — full workbook, every column
+                  <i className="bi bi-file-earmark-excel me-1" />Excel — full workbook, every column
                 </Dropdown.Item>
                 <Dropdown.Item onClick={handleExportPdf} disabled={exporting !== null}>
-                  🖨️ PDF — printed list, ready to sign
+                  <i className="bi bi-printer me-1" />PDF — printed list, ready to sign
                 </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
@@ -266,10 +273,10 @@ export default function GuardsListPage() {
           </div>
           <Row className="g-2">
             {[
-              { key: 'OWN_ID',         label: 'Own National ID',  n: idStats.ownId,      pct: idStats.ownIdPct,      colour: '#1B3A6B', bg: '#EBF5FB', icon: '\u{1FAAA}' },
-              { key: 'RELATIVE_ID',    label: "Relative's ID",    n: idStats.relativeId, pct: idStats.relativeIdPct, colour: '#0F7B6C', bg: '#E8F8F5', icon: '\u{1F46A}' },
-              { key: 'OTHER_DOCUMENT', label: 'Other document',   n: idStats.otherDoc,   pct: idStats.otherDocPct,   colour: '#E8701A', bg: '#FEF9E7', icon: '\u{1F4C4}' },
-              { key: 'NONE',           label: 'Not provided',     n: idStats.noId,       pct: idStats.noIdPct,       colour: '#6c757d', bg: '#F8F9FA', icon: '\u2B1C' },
+              { key: 'OWN_ID',         label: 'Own National ID',  n: idStats.ownId,      pct: idStats.ownIdPct,      colour: '#1B3A6B', bg: '#EBF5FB', icon: <i className="bi bi-person-vcard" /> },
+              { key: 'RELATIVE_ID',    label: "Relative's ID",    n: idStats.relativeId, pct: idStats.relativeIdPct, colour: '#0F7B6C', bg: '#E8F8F5', icon: <i className="bi bi-people" /> },
+              { key: 'OTHER_DOCUMENT', label: 'Other document',   n: idStats.otherDoc,   pct: idStats.otherDocPct,   colour: '#E8701A', bg: '#FEF9E7', icon: <i className="bi bi-file-earmark-person" /> },
+              { key: 'NONE',           label: 'Not provided',     n: idStats.noId,       pct: idStats.noIdPct,       colour: '#6c757d', bg: '#F8F9FA', icon: <i className="bi bi-slash-circle" /> },
             ].map((s2) => (
               <Col xs={6} md={3} key={s2.key}>
                 <button
@@ -313,7 +320,8 @@ export default function GuardsListPage() {
         <Col md={2}>
           <Form.Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All Statuses</option>
-            {Object.entries(GUARD_STATUS_CONFIG).map(([value, cfg]) => (
+            {/* Deserted guards live only in the Deserters Archive. */}
+            {Object.entries(GUARD_STATUS_CONFIG).filter(([value]) => value !== 'DESERTED').map(([value, cfg]) => (
               <option key={value} value={value}>{cfg.label}</option>
             ))}
           </Form.Select>
@@ -485,7 +493,7 @@ export default function GuardsListPage() {
                             style={{ cursor: 'help', fontSize: '0.85rem' }}
                             title={'On probation until ' + (g.probationEndDate ? new Date(g.probationEndDate).toLocaleDateString('en-GB') : 'N/A')}
                           >
-                            ⏰
+                            <i className="bi bi-clock" />
                           </span>
                         )}
                         {g.isIncompleteNID && (
@@ -563,7 +571,7 @@ export default function GuardsListPage() {
                                   className={a.danger ? 'text-danger' : undefined}
                                   onClick={() => setStatusModal({ guard: g, targetStatus: a.value })}
                                 >
-                                  {a.icon} {a.action}
+                                  {a.icon.startsWith('bi-') ? <i className={`${a.icon} me-1`} /> : <>{a.icon} </>}{a.action}
                                 </Dropdown.Item>
                               ))}
                             </Dropdown.Menu>

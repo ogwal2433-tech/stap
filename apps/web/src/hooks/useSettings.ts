@@ -8,6 +8,8 @@ import type {
   UpdateGuardRankInput,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
+  CreateGunTypeInput,
+  UpdateGunTypeInput,
   CreateShiftTypeInput,
   UpdateShiftTypeInput,
 } from '@security360/shared';
@@ -225,6 +227,51 @@ export function useDeductionTypes(activeOnly = true) {
 
 export function useAllDeductionTypes() {
   return useDeductionTypes(false);
+}
+
+export function useGunTypes(activeOnly = true) {
+  return useQuery({
+    queryKey:  ['gun-types', activeOnly],
+    queryFn:   () => settingsApi.getGunTypes(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAllGunTypes() {
+  return useGunTypes(false);
+}
+
+export function useCreateGunType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateGunTypeInput) => settingsApi.createGunType(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['gun-types'] }),
+  });
+}
+
+export function useUpdateGunType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateGunTypeInput }) =>
+      settingsApi.updateGunType(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['gun-types'] }),
+  });
+}
+
+export function useDeactivateGunType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deactivateGunType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['gun-types'] }),
+  });
+}
+
+export function useActivateGunType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.activateGunType(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['gun-types'] }),
+  });
 }
 
 export function useCreateDeductionType() {

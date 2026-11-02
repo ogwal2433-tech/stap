@@ -2,6 +2,7 @@ import { DEPLOYABLE_STATUSES } from '@security360/shared';
 import prisma from '../db/prisma';
 import { NotFoundError } from '../errors/AppError';
 import { resolveSiteShift, listActiveShiftCodes } from './siteService';
+import { resolvePostedSites } from './guardPosting';
 import type {
   CreateZoneInput,
   UpdateZoneInput,
@@ -299,17 +300,28 @@ class ZoneService {
 
     const deployedIds = new Set(deployedRows.map((d) => d.guardId));
 
-    const guards = allActiveGuards.map((g) => ({
-      id:              g.id,
-      firstName:       g.firstName,
-      lastName:        g.lastName,
-      fullName:        `${g.firstName} ${g.lastName}`,
-      rank:            g.rank ?? null,
-      photoUrl:        g.photoUrl ?? null,
-      phone:           g.phone,
-      alreadyDeployed:   deployedIds.has(g.id),
-      pendingNationalId: g.isIncompleteNID === true,
-    }));
+    // Which site each guard is posted to on this date. Transfers win over
+    // history, so a guard already moved to another site by the Guard Transfer
+    // screen can be held back from this zone's roster instead of being offered
+    // at the site they left.
+    const postedByGuard = await resolvePostedSites(allActiveGuards.map((g) => g.id), [date]);
+
+    const guards = allActiveGuards.map((g) => {
+      const posted = postedByGuard.get(g.id)?.[0] ?? null;
+      return {
+        id:              g.id,
+        firstName:       g.firstName,
+        lastName:        g.lastName,
+        fullName:        `${g.firstName} ${g.lastName}`,
+        rank:            g.rank ?? null,
+        photoUrl:        g.photoUrl ?? null,
+        phone:           g.phone,
+        alreadyDeployed:   deployedIds.has(g.id),
+        pendingNationalId: g.isIncompleteNID === true,
+        postedSiteId:      posted?.siteId ?? null,
+        postedSiteName:    posted?.siteName ?? null,
+      };
+    });
 
     const sites = (zone.sites as typeof zone.sites).map((s) => ({
       id:                  s.id,

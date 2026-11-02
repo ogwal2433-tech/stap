@@ -33,6 +33,7 @@ function fmtPrintDate(d: Date): string {
     year:  'numeric',
     hour:  '2-digit',
     minute:'2-digit',
+    timeZone: 'Africa/Kampala',
   });
 }
 
@@ -138,7 +139,7 @@ class PayrollExportService {
 
     // ── Header block: what period, when printed, by whom ──────────────────────
     bannerRow(COMPANY_NAME.toUpperCase(), NAVY, WHITE, 14);
-    bannerRow('PAYROLL SCHEDULE', AMBER, NAVY, 12);
+    bannerRow(pdfData.payeeLabel === 'Staff' ? 'STAFF PAYROLL' : 'PAYROLL SCHEDULE', AMBER, NAVY, 12);
     ws.addRow([]);
 
     const meta = (label: string, value: string | number) => {

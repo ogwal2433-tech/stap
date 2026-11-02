@@ -386,7 +386,7 @@ export default function DeploymentSheetPage() {
                       >
                         {ATTENDANCE_STATUS_VALUES.map(s => (
                           <option key={s} value={s}>
-                            {ATTENDANCE_STATUS_CONFIG[s].icon} {ATTENDANCE_STATUS_CONFIG[s].label}
+                            {ATTENDANCE_STATUS_CONFIG[s].label}
                           </option>
                         ))}
                       </select>

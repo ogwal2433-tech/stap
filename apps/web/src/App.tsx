@@ -18,6 +18,7 @@ const DashboardPage                = lazyWithReload(() => import('@/pages/Dashbo
 const GuardsListPage               = lazyWithReload(() => import('@/pages/guards/GuardsListPage'), 'GuardsListPage');
 const GuardFormPage                = lazyWithReload(() => import('@/pages/guards/GuardFormPage'), 'GuardFormPage');
 const GuardDetailPage              = lazyWithReload(() => import('@/pages/guards/GuardDetailPage'), 'GuardDetailPage');
+const DesertersArchivePage         = lazyWithReload(() => import('@/pages/guards/DesertersArchivePage'), 'DesertersArchivePage');
 const ClientsListPage              = lazyWithReload(() => import('@/pages/clients/ClientsListPage'), 'ClientsListPage');
 const ClientFormPage               = lazyWithReload(() => import('@/pages/clients/ClientFormPage'), 'ClientFormPage');
 const ClientDetailPage             = lazyWithReload(() => import('@/pages/clients/ClientDetailPage'), 'ClientDetailPage');
@@ -40,6 +41,8 @@ const ComplaintsPage               = lazyWithReload(() => import('@/pages/compla
 const ComplaintsDashboard          = lazyWithReload(() => import('@/pages/complaints/ComplaintsDashboard'), 'ComplaintsDashboard');
 const StaffServiceRequestsPage     = lazyWithReload(() => import('@/pages/serviceRequests/StaffServiceRequestsPage'), 'StaffServiceRequestsPage');
 const ReportsPage                  = lazyWithReload(() => import('@/pages/reports/ReportsPage'), 'ReportsPage');
+const PayrollReportPage           = lazyWithReload(() => import('@/pages/reports/PayrollReportPage'), 'PayrollReportPage');
+const DeploymentReportPage        = lazyWithReload(() => import('@/pages/reports/DeploymentReportPage'), 'DeploymentReportPage');
 const NotificationsPage            = lazyWithReload(() => import('@/pages/notifications/NotificationsPage'), 'NotificationsPage');
 const NotificationSettingsPage     = lazyWithReload(() => import('@/pages/settings/NotificationSettingsPage'), 'NotificationSettingsPage');
 const HRPage                       = lazyWithReload(() => import('@/pages/hr/HRPage'), 'HRPage');
@@ -59,9 +62,9 @@ const DeletedRecordsPage           = lazyWithReload(() => import('@/pages/admin/
 const SecurityLogPage              = lazyWithReload(() => import('@/pages/admin/SecurityLogPage'), 'SecurityLogPage');
 const StaffPage                    = lazyWithReload(() => import('@/pages/staff/StaffPage'), 'StaffPage');
 
-const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
-const INV_ROLES: UserRole[]      = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
-const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const HR_VIEW_ROLES: UserRole[]  = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR];
+const INV_ROLES: UserRole[]      = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
 /**
  * Mirrors the API, which lets any internal role submit a requisition, and the
  * sidebar, which shows the link to all of them. Control Room was missing here
@@ -71,20 +74,20 @@ const FINANCE_ROLES_ARR: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, 
 const REQUISITION_ROLES: UserRole[] = INTERNAL_ROLES.filter(
   (r) => r !== ROLES.CLIENT && r !== ROLES.GUARD,
 );
-const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
-const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const ZONE_VIEW_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR];
+const ERROR_ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 // Who runs the staff directory. Mirrors STAFF_MANAGER_ROLES on the API.
-const STAFF_MANAGER_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
+const STAFF_MANAGER_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR];
 const DEPLOYMENT_ROLES: UserRole[] = [
-  ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR,
+  ROLES.DIRECTOR, ROLES.MD, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR,
 ];
 const COMPLAINT_VIEW_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT);
 // Read access to the deployment sheet. Write controls within the page carry
 // their own RoleGuard, so this stays a viewing list.
 // Firearms are the Trainer's to issue; Operations can see what is on its sites.
-const MARKETING_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
+const MARKETING_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.MARKETING_HEAD, ROLES.SALES];
 const GUN_VIEW_ROLES: UserRole[] = [
-  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
+  ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.TRAINER, ROLES.OPERATIONS_SUPERVISOR,
 ];
 /**
  * The shared list the sidebar already uses, plus Administrator. Keeping a
@@ -130,15 +133,16 @@ function App() {
                   so a role granted guards.create saw "+ Add Guard" and was then
                   refused the page it opened. */}
               <Route path="/guards/new"          element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><GuardFormPage /></PermissionGuard></L>} />
-              <Route path="/guards/dashboard"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><GuardDashboardPage /></RoleGuard></L>} />
+              <Route path="/guards/dashboard"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><GuardDashboardPage /></RoleGuard></L>} />
               <Route path="/guards/import"       element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><BulkImportPage /></PermissionGuard></L>} />
+              <Route path="/guards/deserters"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.HR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><DesertersArchivePage /></RoleGuard></L>} />
               <Route path="/guards/:id"          element={<L><GuardDetailPage /></L>} />
               <Route path="/guards/:id/edit"     element={<L><PermissionGuard permission="guards.edit" fallback={<PermissionDenied permission="guards.edit" />}><GuardFormPage /></PermissionGuard></L>} />
 
               {/* Attendance */}
               <Route path="/attendance"           element={<L><PermissionGuard permission="attendance.view" fallback={<PermissionDenied permission="attendance.view" />}><AttendancePage /></PermissionGuard></L>} />
               <Route path="/attendance/deployment-sheet" element={<L><RoleGuard allowedRoles={[...DEPLOYMENT_ROLES, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><DeploymentSheetPage /></RoleGuard></L>} />
-              <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
+              <Route path="/attendance/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.ADMINISTRATOR]} fallback={<UnauthorisedPage />}><AttendanceDashboardPage /></RoleGuard></L>} />
               <Route path="/checkin"              element={<L><PermissionGuard permission="checkin.perform" fallback={<PermissionDenied permission="checkin.perform" />}><CheckinPage /></PermissionGuard></L>} />
 
               {/* Finance */}
@@ -171,7 +175,7 @@ function App() {
 
               {/* Complaints */}
               <Route path="/complaints"           element={<L><PermissionGuard permission="complaints.view" fallback={<PermissionDenied permission="complaints.view" />}><ComplaintsPage /></PermissionGuard></L>} />
-              <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
+              <Route path="/complaints/dashboard" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><ComplaintsDashboard /></RoleGuard></L>} />
 
               {/* Service requests raised by clients */}
               <Route path="/settings/scheduled-jobs" element={<L><PermissionGuard permission="settings.view" fallback={<PermissionDenied permission="settings.view" />}><ScheduledJobsPage /></PermissionGuard></L>} />
@@ -182,6 +186,8 @@ function App() {
 
               {/* Reports */}
               <Route path="/reports" element={<L><PermissionGuard permission="reports.view" fallback={<PermissionDenied permission="reports.view" />}><ReportsPage /></PermissionGuard></L>} />
+  <Route path="/payroll-report" element={<L><PermissionGuard permission="reports.view" fallback={<PermissionDenied permission="reports.view" />}><PayrollReportPage /></PermissionGuard></L>} />
+  <Route path="/deployment-report" element={<L><PermissionGuard permission="reports.view" fallback={<PermissionDenied permission="reports.view" />}><DeploymentReportPage /></PermissionGuard></L>} />
 
               {/* Notifications */}
               <Route path="/notifications" element={<L><NotificationsPage /></L>} />
@@ -198,7 +204,7 @@ function App() {
 
               {/* Settings */}
               <Route path="/settings" element={<L><PermissionGuard permission="settings.view" fallback={<PermissionDenied permission="settings.view" />}><SettingsPage /></PermissionGuard></L>} />
-              <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
+              <Route path="/settings/notifications" element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD]} fallback={<UnauthorisedPage />}><NotificationSettingsPage /></RoleGuard></L>} />
               <Route path="/settings/roles" element={<L><PermissionGuard permission="roles.manage" fallback={<PermissionDenied permission="roles.manage" />}><RolesPermissionsPage /></PermissionGuard></L>} />
               <Route path="/settings/integrations" element={<L><PermissionGuard permission="settings.edit" fallback={<PermissionDenied permission="settings.edit" />}><IntegrationsPage /></PermissionGuard></L>} />
 

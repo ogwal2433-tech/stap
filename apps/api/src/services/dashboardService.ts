@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { guardService } from './guardService';
 import { OUTSTANDING_STATUSES } from './invoiceService';
+import { reportService } from './reportService';
 import { ROLES, DEPLOYABLE_STATUSES, getJobTitleLabel, formatUgx, roundMoney as round2 } from '@security360/shared';
 import { marketingService } from './marketingService';
 import type { DashboardData } from '@security360/shared';
@@ -35,6 +36,7 @@ const guardName = (g: { firstName: string; lastName: string }) => `${g.firstName
 class DashboardService {
   async getStats(userId: string, role: string, clientId: string | null): Promise<DashboardData> {
     switch (role) {
+      case ROLES.MD:
       case ROLES.DIRECTOR:
       case ROLES.ASSISTANT_MANAGER:
         return this.getDirectorStats();
@@ -75,6 +77,7 @@ class DashboardService {
       totalGuards,
       activeGuards,
       guardsOnLeave,
+      desertedGuards,
       activeClients,
       openComplaints,
       pendingInvoices,
@@ -85,10 +88,12 @@ class DashboardService {
       pendingServiceRequests,
       activeStaff,
       failedJobs,
+      monthSummary,
     ] = await Promise.all([
       prisma.guard.count(),
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
       prisma.guard.count({ where: { employmentStatus: 'ON_LEAVE' } }),
+      prisma.guard.count({ where: { employmentStatus: 'DESERTED' } }),
       prisma.client.count({ where: { contractStatus: 'ACTIVE' } }),
       prisma.clientComplaint.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS', 'UNDER_INVESTIGATION'] } } }),
       prisma.invoice.count({ where: { status: { in: [...OUTSTANDING_STATUSES] } } }),
@@ -121,6 +126,9 @@ class DashboardService {
       // Surfaced on the Director dashboard: a job that stopped working is
       // invisible otherwise — nothing fails loudly, invoices simply stop.
       prisma.scheduledJob.count({ where: { lastRunStatus: 'FAILED' } }),
+      // The same money-in / money-out / net the Income & Expenses report
+      // opens with, so the tiles can never disagree with the report.
+      reportService.getMonthSummary(monthStart.getFullYear(), monthStart.getMonth() + 1),
     ]);
 
     void today;
@@ -131,12 +139,17 @@ class DashboardService {
         totalGuards,
         activeGuards,
         guardsOnLeave,
+        desertedGuards,
         activeClients,
         openComplaints,
         pendingInvoices,
         pendingServiceRequests,
         activeStaff,
         monthlyRevenue: round2(revenueAgg._sum.totalAmount ?? 0),
+        moneyInThisMonth:    round2(monthSummary.moneyIn),
+        moneyOutThisMonth:   round2(monthSummary.moneyOut),
+        paidOutThisMonth:    round2(monthSummary.paidOut),
+        netRevenueThisMonth: round2(monthSummary.netRevenue),
         failedJobs,
       },
       feeds: {
@@ -339,6 +352,7 @@ class DashboardService {
       byRank,
       pendingLeaveFeed,
       idStats,
+      desertedGuards,
     ] = await Promise.all([
       prisma.guard.count({ where: { employmentStatus: 'ACTIVE' } }),
       // Approved leave that covers today, so the figure answers "who is off
@@ -385,6 +399,7 @@ class DashboardService {
       // Reuses the guard service so the dashboard and the guard list cannot
       // disagree about how many guards are documented.
       guardService.getIdStats(),
+      prisma.guard.count({ where: { employmentStatus: 'DESERTED' } }),
     ]);
 
     const fmtDate = (d: Date) =>
@@ -398,6 +413,7 @@ class DashboardService {
         // alongside it so a caller can show either.
         onLeaveToday: guardsOnLeaveToday + staffOnLeaveToday,
         guardsOnLeaveToday,
+        desertedGuards,
         staffOnLeaveToday,
         pendingLeave,
         recentDisciplinary,

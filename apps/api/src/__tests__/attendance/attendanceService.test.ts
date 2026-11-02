@@ -7,13 +7,18 @@ vi.mock('../../db/prisma', () => ({
   default: {
     attendanceRecord: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      upsert: vi.fn(),
       count: vi.fn(),
     },
     deployment: {
       count: vi.fn(),
+    },
+    guard: {
+      findMany: vi.fn(),
     },
   },
 }));
@@ -31,12 +36,15 @@ import { attendanceService } from '../../services/attendanceService';
 const mockPrisma = prisma as unknown as {
   attendanceRecord: {
     findFirst: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    upsert: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
   };
   deployment: { count: ReturnType<typeof vi.fn> };
+  guard: { findMany: ReturnType<typeof vi.fn> };
 };
 
 const baseRecord = {
@@ -54,34 +62,36 @@ beforeEach(() => {
 
 describe('attendanceService.markAttendance()', () => {
   it('creates attendance record when none exists', async () => {
-    mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
-    mockPrisma.attendanceRecord.create.mockResolvedValue({ id: 'a1', ...baseRecord });
+    mockPrisma.guard.findMany.mockResolvedValue([]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'a1', ...baseRecord });
 
     const result = await attendanceService.markAttendance([baseRecord], 'user1');
 
     expect(result.marked).toBe(1);
     expect(result.updated).toBe(0);
-    expect(mockPrisma.attendanceRecord.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledTimes(1);
     expect(QueueService.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'ATTENDANCE_MARKED' }),
     );
   });
 
   it('updates existing record on upsert', async () => {
-    mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ id: 'existing-a1' });
-    mockPrisma.attendanceRecord.update.mockResolvedValue({ id: 'existing-a1', ...baseRecord });
+    mockPrisma.guard.findMany.mockResolvedValue([]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue({ id: 'existing-a1' });
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'existing-a1', ...baseRecord });
 
     const result = await attendanceService.markAttendance([baseRecord], 'user1');
 
     expect(result.marked).toBe(0);
     expect(result.updated).toBe(1);
-    expect(mockPrisma.attendanceRecord.update).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.attendanceRecord.create).not.toHaveBeenCalled();
+    expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledTimes(1);
   });
 
   it('enqueues SMS notification for ABSENT guard', async () => {
-    mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
-    mockPrisma.attendanceRecord.create.mockResolvedValue({ id: 'a1' });
+    mockPrisma.guard.findMany.mockResolvedValue([]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'a1' });
 
     await attendanceService.markAttendance(
       [{ ...baseRecord, status: 'ABSENT' }],
@@ -94,8 +104,9 @@ describe('attendanceService.markAttendance()', () => {
   });
 
   it('enqueues SMS notification for AWOL guard', async () => {
-    mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
-    mockPrisma.attendanceRecord.create.mockResolvedValue({ id: 'a1' });
+    mockPrisma.guard.findMany.mockResolvedValue([]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'a1' });
 
     await attendanceService.markAttendance(
       [{ ...baseRecord, status: 'AWOL' }],
@@ -106,12 +117,50 @@ describe('attendanceService.markAttendance()', () => {
   });
 
   it('does not send SMS for PRESENT guards', async () => {
-    mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
-    mockPrisma.attendanceRecord.create.mockResolvedValue({ id: 'a1' });
+    mockPrisma.guard.findMany.mockResolvedValue([]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'a1' });
 
     await attendanceService.markAttendance([baseRecord], 'user1');
 
     expect(QueueService.sendSms).not.toHaveBeenCalled();
+  });
+
+  it('skips deserted guards without rejecting the rest of the batch', async () => {
+    // g1 is deserted; g2 is fine. The batch must still save g2.
+    mockPrisma.guard.findMany.mockResolvedValue([
+      { id: 'g1', firstName: 'John', lastName: 'Deserter' },
+    ]);
+    mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    mockPrisma.attendanceRecord.upsert.mockResolvedValue({ id: 'a2' });
+
+    const result = await attendanceService.markAttendance(
+      [baseRecord, { ...baseRecord, guardId: 'g2' }],
+      'user1',
+    );
+
+    expect(result.marked).toBe(1);
+    expect(result.skippedDeserted).toBe(1);
+    expect(result.skippedNames).toEqual(['John Deserter']);
+    expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ guardId_siteId_date: expect.objectContaining({ guardId: 'g2' }) }),
+      }),
+    );
+  });
+
+  it('writes nothing when every guard in the batch is deserted', async () => {
+    mockPrisma.guard.findMany.mockResolvedValue([
+      { id: 'g1', firstName: 'John', lastName: 'Deserter' },
+    ]);
+
+    const result = await attendanceService.markAttendance([baseRecord], 'user1');
+
+    expect(result.marked).toBe(0);
+    expect(result.updated).toBe(0);
+    expect(result.skippedDeserted).toBe(1);
+    expect(mockPrisma.attendanceRecord.upsert).not.toHaveBeenCalled();
   });
 });
 

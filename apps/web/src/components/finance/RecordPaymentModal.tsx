@@ -10,11 +10,11 @@ import { getApiErrorMessage } from '../../lib/api';
 
 /**
  * Built per invoice so the cap is the balance actually owed. The API rejects an
- * overpayment too — this only saves the round trip and names the limit while
+ * overpayment too ? this only saves the round trip and names the limit while
  * the number is being typed.
  *
  * An amount is not forced to a whole shilling: an invoice whose lines carry cents
- * (a monthly rate ÷ 30 rarely is whole) can only be settled by paying to the cent,
+ * (a monthly rate ? 30 rarely is whole) can only be settled by paying to the cent,
  * so the same two-decimal rule as the shared RecordPaymentSchema applies here.
  */
 const makeSchema = (outstanding: number) =>
@@ -25,13 +25,19 @@ const makeSchema = (outstanding: number) =>
       .max(outstanding, `Cannot exceed the outstanding balance of ${formatUgx(outstanding)}`)
       // refine last: in zod 3 it returns a wrapper that no longer exposes .max/.int
       .refine(isTwoDpOrWhole, 'Use at most two decimal places'),
-    mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH']),
+    mode:            z.enum(['MOBILE_MONEY', 'BANK', 'CASH', 'CHEQUE']),
     referenceNumber: z.string().optional(),
+    paymentDate:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a valid payment date'),
+    chequeNumber:    z.string().max(50).optional(),
   });
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 
 const ugx = formatUgx;
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 interface Props {
   invoice: InvoiceResponse;
@@ -42,7 +48,7 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
   const { showToast } = useToast();
   const recordPayment = useRecordPayment();
 
-  // The balance owed, from the invoice record — not the invoice total, which is
+  // The balance owed, from the invoice record ? not the invoice total, which is
   // what this panel used to show under an "Outstanding" label.
   const outstanding = invoice.outstandingBalance ?? invoice.totalAmount;
   const alreadyPaid = invoice.paidAmount ?? 0;
@@ -54,20 +60,23 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(makeSchema(outstanding)),
-    defaultValues: { mode: 'MOBILE_MONEY' },
+    defaultValues: { mode: 'MOBILE_MONEY', paymentDate: todayStr() },
   });
 
   // What the invoice will owe once this payment lands, updated as it is typed.
   const entered = Number(useWatch({ control, name: 'amountPaid' })) || 0;
   const remaining = roundMoney(Math.max(0, outstanding - entered));
+  // The cheque number only makes sense once a bank transfer or a cheque is chosen.
+  const selectedMode = useWatch({ control, name: 'mode' });
+  const takesChequeNo = selectedMode === 'BANK' || selectedMode === 'CHEQUE';
 
   const onSubmit = async (values: FormValues) => {
     try {
       await recordPayment.mutateAsync({ invoiceId: invoice.id, ...values });
-      showToast('Payment recorded', 'success');
+      showToast('Payment recorded - awaiting MD approval', 'success');
       onClose();
     } catch (err) {
-      // The API is the authority on the balance — show what it said rather than
+      // The API is the authority on the balance ? show what it said rather than
       // a generic failure, so an overpayment explains itself.
       showToast(getApiErrorMessage(err), 'danger');
     }
@@ -125,8 +134,32 @@ export default function RecordPaymentModal({ invoice, onClose }: Props) {
                 <Form.Select {...register('mode')}>
                   <option value="MOBILE_MONEY">MTN / Airtel Mobile Money</option>
                   <option value="BANK">Bank Transfer</option>
+                  <option value="CHEQUE">Cheque</option>
                   <option value="CASH">Cash</option>
                 </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Payment Date <span className="text-danger">*</span></Form.Label>
+                <Form.Control
+                  type="date"
+                  {...register('paymentDate')}
+                  isInvalid={!!errors.paymentDate}
+                />
+                <Form.Control.Feedback type="invalid">{errors.paymentDate?.message}</Form.Control.Feedback>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>
+                  Cheque Number {!takesChequeNo && <span className="text-muted small">(bank / cheque only)</span>}
+                </Form.Label>
+                <Form.Control
+                  placeholder="Cheque no."
+                  disabled={!takesChequeNo}
+                  {...register('chequeNumber')}
+                />
               </Form.Group>
             </Col>
             <Col md={12}>

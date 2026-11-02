@@ -27,7 +27,7 @@ interface StaffProfileModalProps {
 }
 
 /** Only these two may turn an account off, reset its password, or restore it. */
-const ACCOUNT_CONTROL_ROLES: string[] = [ROLES.DIRECTOR, ROLES.ADMINISTRATOR];
+const ACCOUNT_CONTROL_ROLES: string[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ADMINISTRATOR];
 
 const SECTION_TITLE: React.CSSProperties = {
   fontSize:      '0.72rem',

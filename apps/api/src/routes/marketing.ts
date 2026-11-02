@@ -128,7 +128,7 @@ router.get(
 
     const sheet = XLSX.utils.aoa_to_sheet([
       [report.title],
-      [`Generated ${new Date(report.generatedAt).toLocaleString('en-GB')}`],
+      [`Generated ${new Date(report.generatedAt).toLocaleString('en-GB', { timeZone: 'Africa/Kampala' })}`],
       ...(report.summary.length ? [report.summary.map(s => `${s.label}: ${s.value}`)] : []),
       [],
       report.columns,

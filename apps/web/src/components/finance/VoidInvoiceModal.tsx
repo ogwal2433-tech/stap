@@ -6,16 +6,17 @@ import { getApiErrorMessage } from '../../lib/api';
 /**
  * Voids an invoice — the finance counterpart of delete. The invoice stays on
  * file marked VOID and owes nothing; the reason is kept on it and in the audit
- * log. The server refuses once any payment has been recorded.
+ * log. Settled payments stay on record; only the unpaid remainder is written off.
  */
 export default function VoidInvoiceModal({
-  show, onHide, onConfirm, invoiceNumber, totalAmount,
+  show, onHide, onConfirm, invoiceNumber, totalAmount, paidAmount = 0,
 }: {
   show:          boolean;
   onHide:        () => void;
   onConfirm:     (reason: string) => Promise<unknown>;
   invoiceNumber: string;
   totalAmount:   number;
+  paidAmount?:   number;
 }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy]     = useState(false);
@@ -51,6 +52,12 @@ export default function VoidInvoiceModal({
           AR and revenue. It is not deleted, and voiding cannot be undone.
           Total as issued: <strong>{formatUgx(totalAmount)}</strong>.
         </p>
+        {paidAmount > 0 && (
+          <Alert variant="warning" className="small py-2">
+            {formatUgx(paidAmount)} already received stays on record; only the
+            unpaid remainder is written off. This cannot be undone.
+          </Alert>
+        )}
         {error && <Alert variant="danger" className="small py-2">{error}</Alert>}
         <Form.Group>
           <Form.Label htmlFor="void-reason" className="small fw-bold">

@@ -49,9 +49,11 @@ const label = (k: string, v: unknown) =>
   `<td style="padding:4px 0;font-size:13px;font-weight:bold;">${esc(v)}</td></tr>`;
 const table  = (rows: string) =>
   `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;">${rows}</table>`;
-const button = (href: string, text: string) =>
-  `<p style="margin:18px 0 0;"><a href="${esc(href)}" style="background:${NAVY};color:#ffffff;` +
+const button = (href: string, text: string, color: string = NAVY) =>
+  `<p style="margin:18px 0 0;"><a href="${esc(href)}" style="background:${color};color:#ffffff;` +
   `text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px;display:inline-block;">${esc(text)}</a></p>`;
+const GREEN = '#1E8449';
+const RED   = '#C0392B';
 
 const rows = (d: Record<string, unknown>) =>
   table(Object.entries(d).map(([k, v]) => label(k, v)).join(''));
@@ -117,7 +119,15 @@ export function renderEmail(template: string, subject: string, d: Record<string,
       ].join(''), companyName);
 
     case 'notification':
-      return layout(String(d.title ?? subject), p(esc(d.message)), companyName);
+      return layout(String(d.title ?? subject),
+        p(esc(d.message)) +
+        (d.approveUrl
+          ? button(String(d.approveUrl), String(d.approveLabel ?? 'Approve requisition'), GREEN) : '') +
+        (d.rejectUrl
+          ? button(String(d.rejectUrl), String(d.rejectLabel ?? 'Reject requisition'), RED) : '') +
+        ((d.approveUrl || d.rejectUrl)
+          ? p(String(d.decisionNote ?? 'These buttons work for 7 days and only while the requisition still awaits a decision. You can also decide from the Requisitions page.')) : ''),
+        companyName);
 
     case 'requisition-approval':
       return layout('A requisition needs your approval',

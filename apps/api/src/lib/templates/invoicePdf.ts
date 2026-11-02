@@ -17,6 +17,15 @@ const AMBER = '#F2AA20';
 // September keeps its four letters because that is how this market abbreviates it.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
+/** The billing month in words: the heading a client reads on the invoice. */
+const monthHeading = (periodStart: Date | string): string => {
+  const d = new Date(periodStart);
+  const month = d.toLocaleString('en-GB', { month: 'long' });
+  return d.getFullYear() === new Date().getFullYear()
+    ? `Security Services for the month of ${month}`
+    : `Security Services for the month of ${month} ${d.getFullYear()}`;
+};
+
 const fmtDate = (d: Date | string | null | undefined): string => {
   if (!d) return '—';
   const date = new Date(d);
@@ -28,6 +37,7 @@ const STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
   PARTIALLY_PAID: { bg: '#fff3cd', fg: '#856404' },
   OVERDUE:        { bg: '#fdecea', fg: '#C0392B' },
   PENDING:        { bg: '#e9ecef', fg: '#495057' },
+  ISSUED:         { bg: '#dbe7f6', fg: '#1B3A6B' },
 };
 
 const esc = (v: unknown): string =>
@@ -76,15 +86,22 @@ export function buildInvoiceHtml(
   const paid        = invoice.paidAmount ?? 0;
   const outstanding = invoice.outstandingBalance ?? invoice.totalAmount ?? 0;
 
-  const paymentRows = (invoice.payments ?? []).map((p: any) => `
+  const paymentRows = (invoice.payments ?? []).map((p: any) => {
+    // The payer needs every identifier they may have used: the transaction
+    // reference and, for a cheque, the number printed on it.
+    const ref = [p.referenceNumber, p.chequeNumber ? `Chq ${p.chequeNumber}` : null]
+      .filter(Boolean).join(' · ') || '—';
+    return `
     <tr>
-      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${fmtDate(p.createdAt)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${fmtDate(p.paymentDate ?? p.createdAt)}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(p.mode)}</td>
-      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(p.referenceNumber ?? '—')}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${esc(ref)}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${ugx(p.amountPaid)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
-  // In the order someone completing a transfer reads them. The branch's code is
+  // In the order a payer filling in a transfer form reads them: who the money
+  // is for, the number to quote, then where it goes. The branch's code is
   // kept in Settings but not printed: the name is what a payer needs, and a
   // second identifier for the same branch only invites a slip to be miscopied.
   // One account prints as before (no heading); several are each headed by their
@@ -93,10 +110,10 @@ export function buildInvoiceHtml(
   const accounts = normalised
     .filter((a) => a && [a.bankName, a.bankBranchName, a.bankAccountName, a.bankAccount].some((v) => v && v.trim()));
   const renderAccount = (acc: PaymentAccountView): string => ([
-    ['Bank',         acc.bankName],
-    ['Branch',       acc.bankBranchName],
     ['Account Name', acc.bankAccountName],
     ['Account No',   acc.bankAccount],
+    ['Bank',         acc.bankName],
+    ['Branch',       acc.bankBranchName],
   ] as Array<[string, string | null | undefined]>)
     .filter(([, value]) => value && value.trim())
     .map(([label, value]) => `${label}: <strong>${esc(value)}</strong>`)
@@ -120,6 +137,7 @@ export function buildInvoiceHtml(
       <div>
         <div style="font-size:15pt;font-weight:900;color:${NAVY};letter-spacing:0.5px">${title === 'Invoice' ? 'INVOICE' : esc(title)}</div>
         <div style="font-size:10pt;color:#6c757d;margin-top:2px">${esc(invoice.invoiceNumber)}</div>
+        <div style="font-size:9.5pt;color:#1B3A6B;font-weight:600;margin-top:3px">${esc(invoice.description ?? monthHeading(invoice.periodStart))}</div>
       </div>
       <div style="text-align:right">
         <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:9pt;

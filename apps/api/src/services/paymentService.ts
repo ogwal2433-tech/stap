@@ -8,6 +8,7 @@ import {
   detectNetwork,
 } from '../lib/xcel';
 import { notificationService } from './notificationService';
+import { cashbookService } from './cashbookService';
 import { errorLogger } from './errorLogger';
 
 const WEBHOOK_URL = process.env.XCEL_WEBHOOK_URL ?? '';
@@ -120,6 +121,24 @@ export async function handleWebhook(body: Record<string, unknown>): Promise<void
     // Derive the invoice status from what has actually been paid. Marking it
     // PAID outright would settle the whole invoice off a part payment.
     await recomputeInvoiceBalance(payment.invoiceId);
+
+    // And post the receipt to the cashbook — keyed to this collection, so a
+    // gateway that re-sends the SUCCESS webhook cannot count the money twice.
+    // Dated at the invoice's service month (periodStart), matching the manual
+    // payment path: a September invoice paid in October reflects in September.
+    const invoice = await prisma.invoice.findUnique({
+      where:   { id: payment.invoiceId },
+      select:  { invoiceNumber: true, periodStart: true },
+    });
+    await cashbookService.recordAuto({
+      sourceRef:   `INVOICE_PAYMENT:${payment.id}`,
+      date:        invoice?.periodStart ?? resolvedAt,
+      description: `Payment received - ${invoice?.invoiceNumber ?? payment.invoiceId} (MOBILE MONEY)`,
+      category:    'CLIENT_PAYMENT',
+      amount:      Math.round(payment.amountPaid),
+      type:        'IN',
+      recordedBy:  'system',
+    });
 
     await notificationService.sendToRoles(
       ['DIRECTOR', 'ASSISTANT_MANAGER', 'ACCOUNTS_OFFICER'],

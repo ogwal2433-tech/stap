@@ -4,6 +4,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
+import { cashbookService } from './cashbookService';
 import * as xcel from '../lib/xcel';
 import * as xcelPartner from '../lib/xcelPartner';
 import { errorLogger } from './errorLogger';
@@ -20,6 +21,8 @@ import type {
   CompanyPayrollGuard,
   CompanyPayrollRosterResponse,
   StaffPayrollRosterResponse,
+  PayrollPeriodSummary,
+  PayrollZoneTotal,
 } from '@security360/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -27,9 +30,11 @@ import type {
 const TOTAL_WORKING_DAYS = 26; // Mon-Sat average
 
 // Statuses that still "own" a (period, scope) slot — a run in any of these
-// blocks recalculating over it. REJECTED is deliberately absent, which is what
+// blocks recalculating over it. MD_APPROVED must be here: it is the state a
+// run reaches just before disbursement, so letting a re-run land on top of it
+// would pay the period twice. REJECTED is deliberately absent, which is what
 // keeps a rejected zone/period immediately re-calculable.
-const LIVE_RUN_STATUSES = ['DRAFT', 'APPROVED', 'HR_APPROVED', 'DISBURSING', 'DISBURSED'];
+const LIVE_RUN_STATUSES = ['DRAFT', 'APPROVED', 'HR_APPROVED', 'MD_APPROVED', 'DISBURSING', 'DISBURSED'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -412,6 +417,10 @@ class PayrollService {
     let totalDeductions = 0;
     const payslipData: any[] = [];
 
+    // Calendar days for the month (Feb 28/29, Apr 30...): staff are
+    // salaried, so days are display-only but must read true per month.
+    // Guard runs keep the 26-day pro-rata constant elsewhere.
+    const daysInMonth = new Date(year, month, 0).getDate();
     for (const id of selected) {
       const member = byId.get(id)!;
       const gross = member.salaryRate as number;
@@ -444,8 +453,8 @@ class PayrollService {
         deductionsBreakdown: deductionBreakdown,
         totalDeductions:     totalDed,
         netSalary:           net,
-        daysWorked:          TOTAL_WORKING_DAYS,
-        totalDays:           TOTAL_WORKING_DAYS,
+        daysWorked:          daysInMonth,
+        totalDays:           daysInMonth,
         pendingDeductionIds: pendingDeductions.map((d) => d.id),
       });
     }
@@ -496,6 +505,7 @@ class PayrollService {
     try {
       await notificationService.sendToRoles(['ASSISTANT_MANAGER'], {
         type:       'PAYROLL_CALCULATED',
+        channels:   ['inApp', 'email'],
         title:      `Staff payroll calculated: ${month}/${year}`,
         message:    `A staff payroll run for ${month}/${year} was calculated and needs Harold's approval.`,
         entityType: 'payroll',
@@ -669,6 +679,7 @@ class PayrollService {
     try {
       await notificationService.sendToRoles(['DIRECTOR'], {
         type:       'PAYROLL_CALCULATED',
+        channels:   ['inApp', 'email'],
         title:      `Payroll calculated: ${month}/${year}`,
         message:    `A payroll run for ${zoneName ?? 'the company'} (${month}/${year}) was calculated and needs financial approval.`,
         entityType: 'payroll',
@@ -859,6 +870,27 @@ class PayrollService {
     return { month, year, sites, guardCount: guards.length };
   }
 
+  // Whoever raised the run hears how every decision on it went: the creator
+  // sits in no approver role, so the role broadcasts never reach them.
+  private async notifyRunCreator(
+    run:     { id: string; month: number; year: number; createdBy: string },
+    actorId: string,
+    type:    string,
+    title:   string,
+    message: string,
+  ): Promise<void> {
+    if (!run.createdBy || run.createdBy === actorId) return;
+    try {
+      await notificationService.send({
+        userId:     run.createdBy,
+        channels:   ['inApp', 'email'],
+        type, title, message,
+        entityType: 'payroll',
+        entityId:   run.id,
+      });
+    } catch (err) { console.error('Payroll creator bell failed', err); }
+  }
+
   async approve(payrollRunId: string, approvedBy: string): Promise<PayrollRunResponse> {
     const run = await prisma.payrollRun.findUnique({
       where:   { id: payrollRunId },
@@ -901,15 +933,42 @@ class PayrollService {
       });
     }
 
+    // Money out the moment finance signs the run off: post the payslip-sum to
+    // the cashbook, keyed to the run so HR review (which may adjust amounts)
+    // can refresh it and a re-approval can never post it twice. Dated at the
+    // service month's end — the month the salaries belong to.
+    const committedTotal = payslips.reduce((s, p) => s + (p.hrAdjustedAmount ?? p.netSalary), 0);
+    await cashbookService.recordAuto({
+      sourceRef:   `PAYROLL_RUN:${payrollRunId}`,
+      date:        new Date(run.year, run.month, 0, 23, 59, 59, 999),
+      description: `Payroll ${String(run.month).padStart(2, '0')}/${run.year} `
+        + `${(run as any).runType === 'STAFF' ? 'Staff' : 'Guard'} run`
+        + `${run.zone ? ` - ${run.zone.name}` : ''}`,
+      category:    'PAYROLL',
+      amount:      committedTotal,
+      type:        'OUT',
+      recordedBy:  approvedBy,
+    });
+
     try {
-      await notificationService.sendToRoles(['ASSISTANT_MANAGER'], {
+      // Directors see every approval immediately: Harold approves, every
+      // Director is told at once and their approve/reject controls stay
+      // active regardless of the MD step.
+      await notificationService.sendToRoles([(run as any).runType === 'STAFF' ? 'MD' : 'ASSISTANT_MANAGER', 'DIRECTOR'], {
         type:       'PAYROLL_APPROVED',
+        channels:   ['inApp', 'email'],
         title:      `Payroll approved: ${run.month}/${run.year}`,
-        message:    `A payroll run for ${run.month}/${run.year} was financially approved and now needs HR review.`,
+        message:    (run as any).runType === 'STAFF'
+          ? `A staff payroll run for ${run.month}/${run.year} was approved and now needs MD final approval.`
+          : `A payroll run for ${run.month}/${run.year} was financially approved and now needs HR review.`,
         entityType: 'payroll',
         entityId:   payrollRunId,
       });
     } catch (err) { console.error('Payroll approve handoff bell failed', err); }
+
+    await this.notifyRunCreator(updated, approvedBy, 'PAYROLL_APPROVED',
+      `Payroll approved: ${run.month}/${run.year}`,
+      `Your payroll run for ${run.month}/${run.year} was approved and moves on for the next sign-off.`);
 
     await QueueService.logAudit({
       userId:   approvedBy,
@@ -983,6 +1042,15 @@ class PayrollService {
       );
     }
 
+    // Staff runs reject only by the MD: Harold's end carries no reject
+    // control, Micheal holds both final options (approve or reject).
+    if ((run as any).runType === 'STAFF') {
+      const actor = await prisma.user.findUnique({ where: { id: rejectedBy }, select: { role: true } });
+      if (!actor || (actor.role !== 'MD' && actor.role !== 'DIRECTOR')) {
+        throw new AppError('Only the MD or a Director can reject a staff payroll run.', 403);
+      }
+    }
+
     // Both payroll-run roles (DIRECTOR, ASSISTANT_MANAGER — enforced at the
     // route) can send back a draft or an approved run; approval is a Director
     // action but rejection is the shared "this looks wrong, rewind it" control.
@@ -1010,6 +1078,11 @@ class PayrollService {
       });
     });
 
+    // The run spent nothing (rejection is only possible before disbursement),
+    // so the committed ledger row posted at approval leaves with it — Money
+    // Out must not keep a REJECTED run's salary.
+    await cashbookService.removeAuto(`PAYROLL_RUN:${payrollRunId}`);
+
     await QueueService.logAudit({
       userId:   rejectedBy,
       action:   'PAYROLL_RUN_REJECTED',
@@ -1025,6 +1098,11 @@ class PayrollService {
       },
       newValue: { status: 'REJECTED', reason },
     });
+
+    // Whoever raised the run hears it was sent back, and why.
+    await this.notifyRunCreator(run, rejectedBy, 'PAYROLL_REJECTED',
+      `Payroll rejected: ${run.month}/${run.year}`,
+      `Your payroll run for ${run.month}/${run.year} was rejected${reason ? `: ${reason}` : '.'}`);
 
     // Re-read so fmtRun reports the rewound payslip count (0).
     const rejected = await prisma.payrollRun.findUnique({
@@ -1077,21 +1155,45 @@ class PayrollService {
       );
     }
 
+    // Staff runs skip HR review entirely: Harold's approval sends them
+    // straight to Micheal. Refuse the step so no staff run can ever
+    // carry an HR stamp it should not have.
+    if ((run as any).runType === 'STAFF') {
+      throw new AppError('Staff runs go straight from approval to MD final approval - there is no HR step.', 400);
+    }
     const updated = await prisma.payrollRun.update({
       where: { id: payrollRunId },
       data:  { status: 'HR_APPROVED', hrApprovedBy: reviewedBy, hrApprovedAt: new Date(), hrNotes: notes ?? null },
       include: { _count: { select: { payslips: true } }, zone: true },
     });
 
+    // HR is exactly where per-guard adjustments land, so the committed ledger
+    // row posted at financial approval may now be stale. Refresh its amount
+    // from the payslips as they stand — updateMany is a no-op if the row is
+    // not there (legacy runs posted before this hook existed).
+    const adjustedSlips = await prisma.payslip.findMany({
+      where:  { payrollRunId },
+      select: { hrAdjustedAmount: true, netSalary: true },
+    });
+    await prisma.cashbookEntry.updateMany({
+      where: { sourceRef: `PAYROLL_RUN:${payrollRunId}` },
+      data:  { amount: adjustedSlips.reduce((s, p) => s + (p.hrAdjustedAmount ?? p.netSalary), 0) },
+    });
+
     try {
       await notificationService.sendToRoles(['MD'], {
         type:       'PAYROLL_HR_APPROVED',
+        channels:   ['inApp', 'email'],
         title:      `Payroll needs MD approval: ${run.month}/${run.year}`,
         message:    `A payroll run for ${run.month}/${run.year} passed HR review and now needs final MD approval before disbursement.`,
         entityType: 'payroll',
         entityId:   payrollRunId,
       });
     } catch (err) { console.error('Payroll HR handoff bell failed', err); }
+
+    await this.notifyRunCreator(updated, reviewedBy, 'PAYROLL_HR_APPROVED',
+      `Payroll passed HR review: ${run.month}/${run.year}`,
+      `Your payroll run for ${run.month}/${run.year} passed HR review and awaits MD final approval.`);
 
     await QueueService.logAudit({
       userId:   reviewedBy,
@@ -1111,9 +1213,12 @@ class PayrollService {
       include: { _count: { select: { payslips: true } }, zone: true },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
-    if (run.status !== 'HR_APPROVED') {
+    // Guard runs arrive via HR review; staff runs come straight from
+    // Harold's approval with no HR step in between.
+    const needsHr = (run as any).runType !== 'STAFF';
+    if (needsHr ? run.status !== 'HR_APPROVED' : run.status !== 'APPROVED') {
       throw new AppError(
-        `This run is ${run.status} - only HR-approved runs can receive MD final approval.`,
+        `This run is ${run.status} - MD final approval needs an HR-approved guard run or an approved staff run.`,
         400,
       );
     }
@@ -1132,12 +1237,17 @@ class PayrollService {
     try {
       await notificationService.sendToRoles(['DIRECTOR'], {
         type:       'PAYROLL_MD_APPROVED',
+        channels:   ['inApp', 'email'],
         title:      `Payroll ready to disburse: ${run.month}/${run.year}`,
         message:    `A payroll run for ${run.month}/${run.year} received MD final approval and can now be disbursed.`,
         entityType: 'payroll',
         entityId:   payrollRunId,
       });
     } catch (err) { console.error('Payroll MD handoff bell failed', err); }
+
+    await this.notifyRunCreator(updated, mdApprovedBy, 'PAYROLL_MD_APPROVED',
+      `Payroll ready to disburse: ${run.month}/${run.year}`,
+      `Your payroll run for ${run.month}/${run.year} received MD final approval and is ready to disburse.`);
 
     await QueueService.logAudit({
       userId:   mdApprovedBy,
@@ -1163,6 +1273,11 @@ class PayrollService {
       );
     }
 
+    // Self-payment guard: whoever gave the final MD approval cannot be the
+    // one who moves the money. Directors who never stamped this run pay normally.
+    if (run.mdApprovedBy && run.mdApprovedBy === disbursedBy) {
+      throw new AppError('The MD approver cannot disburse a run they finally approved - ask another Director.', 403);
+    }
     await prisma.payrollRun.update({
       where: { id: payrollRunId },
       data:  { status: 'DISBURSING', disbursedBy, disbursedAt: new Date() },
@@ -1320,7 +1435,14 @@ class PayrollService {
       payload.reference ?? payload.data?.reference ?? payload.clientReference ?? payload.data?.clientReference;
     if (!reference) return;
 
-    const payslip = await prisma.payslip.findFirst({ where: { disbursementRef: reference } });
+    const payslip = await prisma.payslip.findFirst({
+      where:   { disbursementRef: reference },
+      include: {
+        guard:      { select: { firstName: true, lastName: true } },
+        user:       { select: { name: true } },
+        payrollRun: { select: { month: true, year: true } },
+      },
+    });
     if (!payslip || payslip.disbursementStatus !== 'SENT') return;
 
     const rawStatus = (
@@ -1344,6 +1466,36 @@ class PayrollService {
       },
     });
 
+    // Money left the company only on a SUCCESS: post the payout then, keyed to
+    // the payslip so a re-sent webhook (or a manual re-fire) can't count it
+    // twice. The amount mirrors the send — an HR-adjusted payslip pays its
+    // adjusted figure, not the net it was computed with.
+    if (ourStatus === 'SUCCESS') {
+      // The run itself was already posted to the cashbook at approval
+      // (PAYROLL_RUN:<runId>) — the per-slip rows would double-count every
+      // shilling of that run, so only pay slips for runs posted before that
+      // hook existed still write their own row.
+      const runRow = await prisma.cashbookEntry.findUnique({
+        where:  { sourceRef: `PAYROLL_RUN:${payslip.payrollRunId}` },
+        select: { id: true },
+      });
+      if (!runRow) {
+        const payee = payslip.guard
+          ? `${payslip.guard.firstName} ${payslip.guard.lastName}`
+          : payslip.user?.name ?? 'Unknown payee';
+        const period = `${payslip.payrollRun.year}-${String(payslip.payrollRun.month).padStart(2, '0')}`;
+        await cashbookService.recordAuto({
+          sourceRef:   `PAYSLIP:${payslip.id}`,
+          date:        new Date(),
+          description: `Payroll ${period} payout - ${payee}`,
+          category:    'PAYROLL',
+          amount:      payslip.hrAdjustedAmount ?? payslip.netSalary,
+          type:        'OUT',
+          recordedBy:  'system',
+        });
+      }
+    }
+
     const siblings = await prisma.payslip.findMany({ where: { payrollRunId: payslip.payrollRunId } });
     await prisma.payrollRun.update({
       where: { id: payslip.payrollRunId },
@@ -1352,6 +1504,57 @@ class PayrollService {
         failedCount:  siblings.filter((p) => p.disbursementStatus === 'FAILED').length,
       },
     });
+  }
+
+  /**
+   * Period zone-totals for the Payroll tab: one row per live guard run plus
+   * the countrywide total across them. A period is covered either by zone runs
+   * or by a single company-wide run, never both. REJECTED runs are excluded —
+   * they paid nobody. Legacy runs with no zone relation group as company-wide
+   * rather than being dropped.
+   */
+  async getPeriodSummary(month: number, year: number): Promise<PayrollPeriodSummary> {
+    const runs = await prisma.payrollRun.findMany({
+      where:   { month, year, runType: 'GUARD', status: { in: LIVE_RUN_STATUSES } },
+      include: { zone: true },
+    });
+
+    const zones: PayrollZoneTotal[] = runs
+      .map((r) => ({
+        runId:      r.id,
+        zoneId:     r.zoneId ?? null,
+        zoneName:   r.zone?.name ?? null,
+        status:     r.status,
+        guards:     r.totalGuards,
+        gross:      r.totalGross,
+        deductions: r.totalDeductions,
+        net:        r.totalNet,
+      }))
+      .sort((a, b) => {
+        // Company-wide (no zone) rows first, then zone name A→Z.
+        if (a.zoneName === null && b.zoneName !== null) return -1;
+        if (b.zoneName === null && a.zoneName !== null) return 1;
+        return (a.zoneName ?? '').localeCompare(b.zoneName ?? '');
+      });
+
+    const totals = zones.reduce(
+      (acc, z) => ({
+        zones:      acc.zones + 1,
+        guards:     acc.guards + z.guards,
+        gross:      acc.gross + z.gross,
+        deductions: acc.deductions + z.deductions,
+        net:        acc.net + z.net,
+      }),
+      { zones: 0, guards: 0, gross: 0, deductions: 0, net: 0 },
+    );
+
+    return {
+      month,
+      year,
+      scope: totals.zones === 0 ? 'NONE' : zones[0].zoneId === null ? 'COMPANY' : 'ZONE',
+      zones,
+      totals,
+    };
   }
 
   async getRunHistory(query: {

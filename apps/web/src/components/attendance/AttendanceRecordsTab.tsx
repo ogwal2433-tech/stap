@@ -194,7 +194,7 @@ export default function AttendanceRecordsTab() {
               <option value="">All statuses</option>
               {ATTENDANCE_STATUS_VALUES.map(s => (
                 <option key={s} value={s}>
-                  {ATTENDANCE_STATUS_CONFIG[s].icon} {ATTENDANCE_STATUS_CONFIG[s].label}
+                  {ATTENDANCE_STATUS_CONFIG[s].label}
                 </option>
               ))}
             </Form.Select>
@@ -238,7 +238,8 @@ export default function AttendanceRecordsTab() {
                   borderRadius: '0.5rem', padding: '8px 12px',
                 }}>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1B3A6B' }}>
-                    {ATTENDANCE_STATUS_CONFIG[s].icon} {total}
+                    <i className={`bi ${ATTENDANCE_STATUS_CONFIG[s].icon}`} style={{ fontSize: '1rem', marginRight: 4 }} />
+                    {total}
                   </div>
                   <div className="text-muted" style={{ fontSize: '0.74rem' }}>
                     {ATTENDANCE_STATUS_CONFIG[s].label} days
@@ -288,7 +289,12 @@ export default function AttendanceRecordsTab() {
                         text="dark"
                         style={{ background: cfg?.bg ?? '#e9ecef', border: '1px solid rgba(0,0,0,0.06)' }}
                       >
-                        {cfg ? `${cfg.icon} ${cfg.label}` : r.status}
+                        {cfg ? (
+                          <>
+                            <i className={`bi ${cfg.icon}`} style={{ marginRight: 4 }} />
+                            {cfg.label}
+                          </>
+                        ) : r.status}
                       </Badge>
                     </td>
                   </tr>

@@ -1,6 +1,7 @@
 import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { notificationService } from './notificationService';
+import { cashbookService } from './cashbookService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { canEditRequisition } from '@security360/shared';
 import { dateRangeFilter } from '../lib/dateUtils';
@@ -267,6 +268,7 @@ class RequisitionService {
     try {
       await notificationService.sendToRoles(['DIRECTOR', 'MD'], {
         type:       'REQUISITION_HR_APPROVED',
+        channels:   ['inApp', 'email'],
         title:      `Requisition awaiting director approval`,
         message:    `Requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) passed HR review and needs director approval.`,
         entityType: 'requisition',
@@ -299,12 +301,21 @@ class RequisitionService {
       await notificationService.send({
         userId:     updated.requestedById,
         type:       'REQUISITION_DIRECTOR_APPROVED',
+        channels:   ['inApp', 'email'],
         title:      `Requisition approved`,
         message:    `Your requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) was approved and moves to assignment.`,
         entityType: 'requisition',
         entityId:   id,
       });
     } catch (err) { console.error('Requisition approval bell failed', err); }
+
+    const mdActor = await prisma.user.findUnique({ where: { id: by }, select: { role: true } });
+    if (mdActor?.role === 'MD') {
+      await this.notifyWatchers(by, 'REQUISITION_DIRECTOR_APPROVED',
+        `MD approved requisition`,
+        `The MD finally approved requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) - it moves to assignment.`,
+        id);
+    }
 
     return fmtRequisition(updated);
   }
@@ -362,6 +373,20 @@ class RequisitionService {
       newValue: { status: 'PENDING', reason: data.reason ?? null },
     });
 
+    // Approval pulled back: the requester learns it is pending again.
+    // Bell + email; nothing leaves the system except the mailbox copy.
+    try {
+      await notificationService.send({
+        userId:     updated.requestedById,
+        type:       'REQUISITION_APPROVAL_REVOKED',
+        title:      `Requisition approval revoked`,
+        message:    `The approval on your requisition was revoked - it is pending review again.`,
+        entityType: 'requisition',
+        entityId:   id,
+        channels:   ['inApp', 'email'],
+      });
+    } catch (err) { console.error('Requisition revoke bell failed', err); }
+
     return fmtRequisition(updated);
   }
 
@@ -378,6 +403,50 @@ class RequisitionService {
       data:    { assignedToId: data.assignedToId, status: 'ASSIGNED' },
       include: INCLUDE,
     });
+
+    // The moment money is handed out: post it to the cashbook, keyed to the
+    // requisition so re-assigning or the dispatch flow can never count it
+    // twice. Dated at the raised date — that is the month the spend belongs
+    // to, matching how the Income & Expenses report buckets requisitions.
+    // Only the *undispatched* remainder posts here: a payout made while the
+    // requisition was still APPROVED already wrote its own FUND_DISPATCH row,
+    // and the full approved amount must not land on the ledger twice.
+    const alreadyDispatched = updated.totalDispatched ?? 0;
+    const remainingToPost   = updated.amount - alreadyDispatched;
+    if (remainingToPost > 0) {
+      await cashbookService.recordAuto({
+        sourceRef:   `REQ:${id}`,
+        date:        updated.date,
+        description: `Requisition handed out - ${updated.particulars}`,
+        category:    'REQUISITION',
+        amount:      remainingToPost,
+        type:        'OUT',
+        recordedBy:  by,
+      });
+    }
+
+    // Assignee learns there is work waiting; requester sees who holds it.
+    // Bell-only; nothing leaves the system.
+    try {
+      await notificationService.send({
+        userId:     data.assignedToId,
+        type:       'REQUISITION_ASSIGNED',
+        channels:   ['inApp', 'email'],
+        title:      `Requisition assigned to you`,
+        message:    `Requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) was assigned to you for fulfilment.`,
+        entityType: 'requisition',
+        entityId:   id,
+      });
+      await notificationService.send({
+        userId:     updated.requestedById,
+        type:       'REQUISITION_ASSIGNED',
+        channels:   ['inApp', 'email'],
+        title:      `Requisition assigned`,
+        message:    `Your requisition ${updated.particulars} was assigned to ${assignee.name} for fulfilment.`,
+        entityType: 'requisition',
+        entityId:   id,
+      });
+    } catch (err) { console.error('Requisition assignment bell failed', err); }
 
     await QueueService.logAudit({
       userId: by, action: 'REQUISITION_ASSIGNED', entity: 'requisition', entityId: id,
@@ -405,11 +474,96 @@ class RequisitionService {
     return fmtRequisition(updated);
   }
 
+  /**
+   * Close out a requisition whose work (and spending) is done. The step that
+   * was missing: the 41 live rows sat in ASSIGNED forever because nothing in
+   * the app could flip them — approvers can now finish one in one click.
+   */
+  async complete(id: string, by: string): Promise<RequisitionResponse> {
+    const req = await prisma.requisition.findUnique({ where: { id } });
+    if (!req) throw new NotFoundError('Requisition not found');
+    if (!['ASSIGNED', 'IN_PROGRESS'].includes(req.status)) {
+      throw new AppError(
+        `Only assigned or in-progress requisitions can be completed — this one is ` +
+        `${req.status.replace(/_/g, ' ')}.`,
+        400,
+      );
+    }
+
+    const updated = await prisma.requisition.update({
+      where:   { id },
+      data:    { status: 'COMPLETED' },
+      include: INCLUDE,
+    });
+
+    // The requester learns their requisition is closed; best-effort like the
+    // assignment bell — the status change itself never fails on a missed ping.
+    try {
+      await notificationService.send({
+        userId:     updated.requestedById,
+        type:       'REQUISITION_COMPLETED',
+        channels:   ['inApp', 'email'],
+        title:      'Requisition completed',
+        message:    `Requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) has been completed.`,
+        entityType: 'requisition',
+        entityId:   id,
+      });
+    } catch (err) { console.error('Requisition completion bell failed', err); }
+
+    await QueueService.logAudit({
+      userId: by, action: 'REQUISITION_COMPLETED', entity: 'requisition', entityId: id,
+      oldValue: { status: req.status },
+      newValue: { status: 'COMPLETED' },
+    });
+
+    return fmtRequisition(updated);
+  }
+
+  /**
+   * MD decisions reflect to every oversight eye (HR, Directors, MD) except
+   * the actor, who already knows what they just did. Bell + email, best
+   * effort - a failed ping never undoes the decision itself.
+   */
+  private async notifyWatchers(
+    exceptUserId: string,
+    type: string,
+    title: string,
+    message: string,
+    entityId: string,
+  ): Promise<void> {
+    try {
+      const watchers = await prisma.user.findMany({
+        where:  { role: { in: ['HR', 'DIRECTOR', 'MD'] }, id: { not: exceptUserId } },
+        select: { id: true },
+      });
+      await Promise.all(watchers.map((u) =>
+        notificationService.send({
+          userId: u.id, type, title, message,
+          entityType: 'requisition', entityId,
+          channels: ['inApp', 'email'],
+        }).catch((err) => console.error('Requisition watcher bell failed', err)),
+      ));
+    } catch (err) { console.error('Requisition watcher bell failed', err); }
+  }
+
   async approve(id: string, data: ApproveRequisitionInput, actionBy: string): Promise<RequisitionResponse> {
     const requisition = await prisma.requisition.findUnique({ where: { id }, include: INCLUDE });
     if (!requisition) throw new NotFoundError('Requisition not found');
     if (!['PENDING', 'SUBMITTED'].includes(requisition.status)) {
       throw new AppError('Only PENDING requisitions can be actioned', 400);
+    }
+
+    // The MD decides finally and standalone: reject only through this legacy
+    // path (approval itself lives on director-approve), and only once HR has
+    // spoken - the two-stage order holds for everyone.
+    const actor = await prisma.user.findUnique({ where: { id: actionBy }, select: { role: true } });
+    if (actor?.role === 'MD') {
+      if (data.action !== 'REJECT') {
+        throw new AppError('The MD approves through final approval, not here.', 403);
+      }
+      if (!requisition.hrApprovedAt) {
+        throw new AppError('HR must approve before the MD can reject.', 400);
+      }
     }
 
     const now = new Date();
@@ -440,6 +594,39 @@ class RequisitionService {
       newValue: { status: updateData.status },
     });
 
+    // Same bell treatment as the two-stage path: the requester learns the
+    // outcome either way, with the reason attached on a rejection.
+    try {
+      if (data.action === 'APPROVE') {
+        await notificationService.send({
+          userId:     updated.requestedById,
+          type:       'REQUISITION_APPROVED',
+        channels:   ['inApp', 'email'],
+          title:      `Requisition approved`,
+          message:    `Your requisition ${updated.particulars} (UGX ${updated.amount.toLocaleString()}) was approved and moves to assignment.`,
+          entityType: 'requisition',
+          entityId:   id,
+        });
+      } else {
+        await notificationService.send({
+          userId:     updated.requestedById,
+          type:       'REQUISITION_REJECTED',
+        channels:   ['inApp', 'email'],
+          title:      `Requisition rejected`,
+          message:    `Your requisition ${updated.particulars} was rejected${updated.rejectionReason ? `: ${updated.rejectionReason}` : '.'}`,
+          entityType: 'requisition',
+          entityId:   id,
+        });
+      }
+    } catch (err) { console.error('Requisition outcome bell failed', err); }
+
+    if (actor?.role === 'MD' && data.action === 'REJECT') {
+      await this.notifyWatchers(actionBy, 'REQUISITION_REJECTED',
+        `MD rejected requisition`,
+        `The MD rejected requisition ${updated.particulars}${updated.rejectionReason ? `: ${updated.rejectionReason}` : '.'}`,
+        id);
+    }
+
     return fmtRequisition(updated);
   }
 
@@ -449,13 +636,26 @@ class RequisitionService {
    * subtly different one.
    */
   private filterWhere(
-    query: { status?: string; requestedById?: string; from?: string; to?: string },
+    query: { status?: string; requestedById?: string; from?: string; to?: string; overdue?: string },
     viewerRole?: string,
     viewerId?: string,
   ): any {
-    const { status, requestedById, from, to } = query;
+    const { status, requestedById, from, to, overdue } = query;
     const where: any = {};
-    if (status) where.status = status;
+    if (status) {
+      // One status, or a comma list — the KPI tiles link to "approved at any
+      // stage" (APPROVED,ASSIGNED,IN_PROGRESS,COMPLETED), which no single
+      // status can express.
+      const list = status.split(',').map((s) => s.trim()).filter(Boolean);
+      where.status = list.length > 1 ? { in: list } : list[0];
+    }
+    if (overdue === 'true') {
+      // Has a purchase order past its expected delivery, same rule the
+      // dashboard's overdue count uses.
+      where.purchaseOrders = {
+        some: { status: { not: 'CANCELLED' }, expectedDelivery: { lt: new Date() } },
+      };
+    }
     if (from || to) {
       // The requisition's own date (the column shown in the table), not the
       // moment it was submitted. A picker's `to` means the whole of that day,
@@ -464,7 +664,7 @@ class RequisitionService {
       if (range) where.date = range;
     }
 
-    const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'];
+    const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR', 'MD'];
     if (viewerRole && !adminRoles.includes(viewerRole) && viewerId) {
       // Everyone else is scoped to their own submissions, whatever they ask for.
       where.requestedById = viewerId;
@@ -481,6 +681,8 @@ class RequisitionService {
     /** Requisition `date` range, inclusive at both ends. */
     from?: string;
     to?: string;
+    /** 'true' narrows to requisitions with a non-cancelled PO past its expected delivery. */
+    overdue?: string;
     page: number;
     limit: number;
   }, viewerRole?: string, viewerId?: string): Promise<PaginatedResponse<RequisitionResponse>> {
@@ -511,7 +713,7 @@ class RequisitionService {
    * must carry. Scoping matches {@link list}, so the PDF matches the table.
    */
   async listForExport(
-    query: { status?: string; requestedById?: string; from?: string; to?: string },
+    query: { status?: string; requestedById?: string; from?: string; to?: string; overdue?: string },
     viewerRole?: string,
     viewerId?: string,
   ): Promise<RequisitionResponse[]> {
@@ -536,7 +738,7 @@ class RequisitionService {
     const req = await prisma.requisition.findUnique({ where: { id }, include: INCLUDE });
     if (!req) throw new NotFoundError('Requisition not found');
 
-    const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR'];
+    const adminRoles = ['DIRECTOR', 'ASSISTANT_MANAGER', 'ADMINISTRATOR', 'MD'];
     const isPrivileged = viewerRole && adminRoles.includes(viewerRole);
     if (!isPrivileged && req.requestedById !== viewerId) {
       throw new NotFoundError('Requisition not found');
@@ -580,42 +782,56 @@ class RequisitionService {
     return fmtPO(po);
   }
 
-  async getDashboard() {
-    const now   = new Date();
-    const month = now.getMonth();
-    const year  = now.getFullYear();
+  /**
+   * The requisitions KPIs. Optional from/to dates narrow every figure to
+   * requisitions raised in that window — the page's filter panel drives them,
+   * so the tiles reflect whatever period the approver is looking at. Without
+   * dates, all-time.
+   */
+  async getDashboard(dateFrom?: string, dateTo?: string) {
+    const now = new Date();
+    // Raised-date window, matching how the list filters and the Income &
+    // Expenses report bucket requisitions. dateTo is inclusive to midnight.
+    const dateWindow: any = {};
+    if (dateFrom) dateWindow.gte = new Date(dateFrom);
+    if (dateTo)   dateWindow.lte = new Date(`${dateTo}T23:59:59.999`);
+    const dateFilter = dateFrom || dateTo ? { date: dateWindow } : {};
+    // The money handed out for execution: past approval, assigned to a person,
+    // whether still in their hands or already finished. The MD's "where has the
+    // money gone" figure.
+    const OUT_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'];
 
-    const [pendingApprovals, pos, spendByCategory] = await Promise.all([
+    const [pendingApprovals, pos, totalAgg, outAgg] = await Promise.all([
       prisma.requisition.count({ where: { status: { in: ['PENDING', 'SUBMITTED'] } } }),
       prisma.purchaseOrder.findMany({
         where: {
           status:           { not: 'CANCELLED' },
           expectedDelivery: { lt: now },
-          createdAt:        { gte: new Date(year, month, 1) },
+          createdAt:        { gte: new Date(now.getFullYear(), now.getMonth(), 1) },
         },
       }),
-      prisma.requisition.groupBy({
-        by:    ['category'],
-        where: { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
-        _sum:  { estimatedTotal: true },
+      // Total requisitions — every row in the window, whatever its status.
+      // One honest number instead of an "approved-only" subtotal that
+      // disappears rows the moment they move on.
+      prisma.requisition.aggregate({
+        where: dateFilter,
+        _sum:  { amount: true },
+        _count: true,
+      }),
+      prisma.requisition.aggregate({
+        where: { ...dateFilter, status: { in: OUT_STATUSES } },
+        _sum:  { amount: true },
+        _count: true,
       }),
     ]);
 
-    const totalSpendThisMonth = (
-      await prisma.requisition.aggregate({
-        where: { status: 'APPROVED', createdAt: { gte: new Date(year, month, 1) } },
-        _sum:  { amount: true },
-      })
-    )._sum.amount ?? 0;
-
     return {
       pendingApprovals,
-      totalSpendThisMonth,
-      overdueDeliveries: pos.length,
-      spendByCategory:   spendByCategory.map((g) => ({
-        category: g.category,
-        total:    g._sum.estimatedTotal ?? 0,
-      })),
+      totalRequisitions:      totalAgg._sum.amount ?? 0,
+      requisitionsCount:      totalAgg._count,
+      totalAssignedCompleted: outAgg._sum.amount ?? 0,
+      assignedCompletedCount: outAgg._count,
+      overdueDeliveries:      pos.length,
     };
   }
 }

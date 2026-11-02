@@ -882,6 +882,9 @@ class HRService {
       data: {
         guardId:      data.guardId ?? null,
         userId:       data.userId  ?? null,
+        // Who filed it: may be the subject themselves (staff asking for own
+        // leave) or someone acting for them (HR filing a guard's leave).
+        requestedBy,
         type:         data.type,
         startDate,
         endDate,
@@ -919,17 +922,36 @@ class HRService {
       include: LEAVE_INCLUDE,
     });
 
-    // Notify guard if they have a user account
-    const guardUserId = (leave.guard as any).userId;
-    if (guardUserId) {
-      await notificationService.send({
-        userId:  guardUserId,
-        type:    'SYSTEM',
-        title:   `Leave ${data.action === 'APPROVE' ? 'Approved' : 'Rejected'}`,
-        message: data.action === 'APPROVE'
-          ? `Your ${leave.type} leave request has been approved.`
-          : `Your ${leave.type} leave request was rejected. Reason: ${data.rejectionReason}`,
-      });
+    // Both the person the leave is for (guard account or staff login) and the
+    // person who filed it hear the outcome. They coincide when staff request
+    // their own leave; the approver never hears their own action read back.
+    const decisionTitle  = `Leave ${data.action === 'APPROVE' ? 'Approved' : 'Rejected'}`;
+    const subjectUserId  = (leave.guard as any)?.userId ?? leave.userId ?? null;
+    const subjectMessage = data.action === 'APPROVE'
+      ? `Your ${leave.type} leave request has been approved.`
+      : `Your ${leave.type} leave request was rejected. Reason: ${data.rejectionReason}`;
+    const told: string[] = [];
+    const deliver = async (userId: string | null, message: string): Promise<void> => {
+      if (!userId || userId === actionBy || told.includes(userId)) return;
+      told.push(userId);
+      try {
+        await notificationService.send({
+          userId,
+          channels: ['inApp', 'email'],
+          type:      'SYSTEM',
+          title:     decisionTitle,
+          message,
+        });
+      } catch (err) { console.error('Leave outcome bell failed', err); }
+    };
+    await deliver(subjectUserId, subjectMessage);
+    if (leave.requestedBy && leave.requestedBy !== subjectUserId) {
+      const who = leave.guard
+        ? `${leave.guard.firstName} ${leave.guard.lastName}`
+        : leave.user?.name ?? 'the staff member';
+      await deliver(leave.requestedBy, data.action === 'APPROVE'
+        ? `The ${leave.type} leave you requested for ${who} has been approved.`
+        : `The ${leave.type} leave you requested for ${who} was rejected.${data.rejectionReason ? ` Reason: ${data.rejectionReason}` : ''}`);
     }
 
     return fmtLeave(updated);

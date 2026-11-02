@@ -12,6 +12,7 @@ import {
   useDeactivateStaffPosition, useActivateStaffPosition, useDeleteStaffPosition,
   useAllDeductionTypes, useDeactivateDeductionType, useActivateDeductionType,
   useDeleteDeductionType, useReorderDeductionTypes,
+  useAllGunTypes, useDeactivateGunType, useActivateGunType,
   useAllShiftTypes, useDeactivateShiftType, useActivateShiftType, useDeleteShiftType, useReorderShiftTypes,
 } from '../../hooks/useSettings';
 import { ROLES, SALARY_INCREMENT_RULES, type UserRole } from '@security360/shared';
@@ -26,6 +27,7 @@ import StaffPositionModal from '../../components/settings/StaffPositionModal';
 import AddRankModal from '../../components/settings/AddRankModal';
 import EditRankModal from '../../components/settings/EditRankModal';
 import AddDeductionTypeModal from '../../components/settings/AddDeductionTypeModal';
+import AddGunTypeModal from '../../components/settings/AddGunTypeModal';
 import EditDeductionTypeModal from '../../components/settings/EditDeductionTypeModal';
 import AddShiftTypeModal from '../../components/settings/AddShiftTypeModal';
 import EditShiftTypeModal from '../../components/settings/EditShiftTypeModal';
@@ -71,7 +73,7 @@ function validatePassword(password: string): string | null {
 }
 
 const ROLE_OPTIONS: UserRole[] = [
-  ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
+  ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR,
   ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.TRAINER,
   ROLES.ACCOUNTS_OFFICER, ROLES.MARKETING_HEAD, ROLES.SALES, ROLES.GUARD, ROLES.CLIENT,
 ];
@@ -436,6 +438,95 @@ function ResetPasswordModal({ userId, onHide }: { userId: string | null; onHide:
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+
+/**
+ * Firearm catalogue tab. New types added here appear in the register-gun
+ * dropdown immediately - no deploy needed. Codes are permanent; retiring a
+ * type keeps every gun already registered under it readable.
+ */
+function GunTypesPanel({ canEditSettings, onAdd }: { canEditSettings: boolean; onAdd: () => void }) {
+  const { data: allTypes = [], isLoading } = useAllGunTypes();
+  const deactivate = useDeactivateGunType();
+  const activate = useActivateGunType();
+  const { showToast } = useToast();
+
+  return (
+    <>
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h6 className="fw-semibold mb-0">Gun Types</h6>
+        {canEditSettings && (
+          <Button size="sm" onClick={onAdd}>
+            <i className="bi bi-plus-lg me-1" />Add Type
+          </Button>
+        )}
+      </div>
+      <Alert variant="info" className="small py-2">
+        Gun types appear in the register-gun dropdown. Retiring a type hides it
+        from new registrations - guns already registered under it keep working.
+        Codes cannot be changed once created.
+      </Alert>
+      {isLoading ? (
+        <Spinner size="sm" />
+      ) : allTypes.length === 0 ? (
+        <Alert variant="light" className="small">No gun types configured.</Alert>
+      ) : (
+        <div className="border rounded">
+          <ul className="list-unstyled mb-0">
+            {[...allTypes]
+              .sort((a, b) => a.displayOrder - b.displayOrder)
+              .map((t) => (
+                <li key={t.id} className="d-flex align-items-start gap-2 px-3 py-2 border-bottom">
+                  <div className="flex-grow-1 small">
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <span className={`fw-medium ${!t.isActive ? 'text-muted text-decoration-line-through' : ''}`}>
+                        {t.label}
+                      </span>
+                      <Badge bg="light" text="dark" className="font-monospace" style={{ fontSize: '0.6rem' }}>
+                        {t.code}
+                      </Badge>
+                      {!t.isActive && (
+                        <span className="text-danger" style={{ fontSize: '0.7rem' }}>(retired)</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="d-flex gap-1">
+                    {canEditSettings && (<>
+                      {t.isActive ? (
+                        <Button
+                          size="sm" variant="outline-warning"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => deactivate.mutate(t.id, {
+                            onSuccess: () => showToast(`Gun type "${t.label}" retired.`, 'success'),
+                            onError: () => showToast('Could not retire the type.', 'danger'),
+                          })}
+                          title="Retire type"
+                        >
+                          <i className="bi bi-eye-slash" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm" variant="outline-success"
+                          style={{ fontSize: 11, padding: '1px 6px' }}
+                          onClick={() => activate.mutate(t.id, {
+                            onSuccess: () => showToast(`Gun type "${t.label}" restored.`, 'success'),
+                            onError: () => showToast('Could not restore the type.', 'danger'),
+                          })}
+                          title="Restore type"
+                        >
+                          <i className="bi bi-eye" />
+                        </Button>
+                      )}
+                    </>)}
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function SettingsPage() {
   const { showToast } = useToast();
   const { data: allSettings, isLoading: loadingSettings } = useSystemSettings();
@@ -514,6 +605,7 @@ export default function SettingsPage() {
   const [editRank, setEditRank] = useState<GuardRankResponse | null>(null);
   const [deactivateConfirm, setDeactivateConfirm] = useState<GuardRankResponse | null>(null);
   const [showAddDeductionType, setShowAddDeductionType] = useState(false);
+  const [showAddGunType, setShowAddGunType] = useState(false);
   const [editDeductionType, setEditDeductionType] = useState<DeductionTypeResponse | null>(null);
   const [deactivateDeductionConfirm, setDeactivateDeductionConfirm] = useState<DeductionTypeResponse | null>(null);
 
@@ -1157,7 +1249,13 @@ export default function SettingsPage() {
         </Tab>
 
         {/* ── Shift Types ───────────────────────────────────────────────────────── */}
-        <Tab eventKey="shift-types" title={<><i className="bi bi-clock me-1" />Shift Types</>}>
+                <Tab eventKey="gun-types" title={<><i className="bi bi-crosshair me-1" />Gun Types</>}>
+          <GunTypesPanel
+            canEditSettings={canEditSettings}
+            onAdd={() => setShowAddGunType(true)}
+          />
+        </Tab>
+<Tab eventKey="shift-types" title={<><i className="bi bi-clock me-1" />Shift Types</>}>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h6 className="fw-semibold mb-0">Shift Types</h6>
             <Button size="sm" onClick={() => setShowAddShiftType(true)}>
@@ -1408,6 +1506,7 @@ export default function SettingsPage() {
       <AddRankModal show={showAddRank} onHide={() => setShowAddRank(false)} />
       <EditRankModal show={!!editRank} onHide={() => setEditRank(null)} rank={editRank} />
       <AddDeductionTypeModal show={showAddDeductionType} onHide={() => setShowAddDeductionType(false)} />
+      <AddGunTypeModal show={showAddGunType} onHide={() => setShowAddGunType(false)} />
       <EditDeductionTypeModal show={!!editDeductionType} onHide={() => setEditDeductionType(null)} type={editDeductionType} />
 
       {/* Deactivate Rank confirmation */}

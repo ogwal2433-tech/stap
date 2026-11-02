@@ -6,14 +6,18 @@ import { z } from 'zod';
  * Ordered best-to-worst outcome. Only PRESENT and LATE count as days worked in
  * the payroll run — SICK and ON_LEAVE record the reason for a missed day but,
  * like ABSENT, are unpaid.
+ *
+ * `icon` is a Bootstrap Icons class name (rendered as
+ * `<i className={`bi ${icon}`} />`). Native <option> elements cannot show
+ * icons, so dropdowns use the label alone.
  */
 export const ATTENDANCE_STATUS_CONFIG = {
-  PRESENT:  { label: 'Present',  icon: '✅', bg: '#d5f5e3', paid: true  },
-  LATE:     { label: 'Late',     icon: '⏰', bg: '#FEF9E7', paid: true  },
-  SICK:     { label: 'Sick',     icon: '🤒', bg: '#FEF9E7', paid: false },
-  ON_LEAVE: { label: 'On Leave', icon: '🌴', bg: '#D6E0F0', paid: false },
-  ABSENT:   { label: 'Absent',   icon: '❌', bg: '#fdecea', paid: false },
-  AWOL:     { label: 'AWOL',     icon: '🚫', bg: '#fdecea', paid: false },
+  PRESENT:  { label: 'Present',  icon: 'bi-check-circle-fill',      bg: '#d5f5e3', paid: true  },
+  LATE:     { label: 'Late',     icon: 'bi-clock-fill',             bg: '#FEF9E7', paid: true  },
+  SICK:     { label: 'Sick',     icon: 'bi-heart-pulse-fill',       bg: '#FEF9E7', paid: false },
+  ON_LEAVE: { label: 'On Leave', icon: 'bi-calendar-minus-fill',    bg: '#D6E0F0', paid: false },
+  ABSENT:   { label: 'Absent',   icon: 'bi-x-circle-fill',          bg: '#fdecea', paid: false },
+  AWOL:     { label: 'AWOL',     icon: 'bi-exclamation-triangle-fill', bg: '#fdecea', paid: false },
 } as const;
 
 export type AttendanceStatusValue = keyof typeof ATTENDANCE_STATUS_CONFIG;

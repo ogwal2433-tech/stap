@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UpdateGunInput } from '@security360/shared';
 import { gunsApi } from '../lib/guns.api';
 import type {
-  RegisterGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
+  RegisterGunInput, RegisterGunBatchInput, AdjustBulletsInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
 } from '@security360/shared';
 
 export function useGuns(params?: { status?: string; siteId?: string; gunType?: string }) {
@@ -47,6 +47,22 @@ export const useRegisterGun = () => useGunMutation<RegisterGunInput>(gunsApi.reg
 export const useDeployGun   = () => useGunMutation<DeployGunInput>(gunsApi.deploy);
 export const useWithdrawGun = () => useGunMutation<WithdrawGunInput>(gunsApi.withdraw);
 export const useTransferGun = () => useGunMutation<TransferGunInput>(gunsApi.transfer);
+export const useRegisterGunBatch = () => useGunMutation<RegisterGunBatchInput>(gunsApi.registerBatch);
+
+export function useAdjustBullets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: AdjustBulletsInput }) => gunsApi.adjustBullets(id, body),
+    onSuccess:  () => { void qc.invalidateQueries({ queryKey: ['guns'] }); },
+  });
+}
+
+export function useReconcile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => gunsApi.reconcile(),
+  });
+}
 
 export function useUpdateGun() {
   const qc = useQueryClient();

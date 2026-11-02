@@ -5,11 +5,14 @@ import RoleGuard from '../RoleGuard';
 import PermissionGuard from '../PermissionGuard';
 
 /** The three roles allowed to move an invoice's money or content. */
-const EDIT_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const EDIT_ROLES = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR];
+const CLONE_ROLES = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR];
 
 export interface InvoiceActionHandlers {
   onView:          () => void;
+  onIssue:         () => void;
   onEdit:          () => void;
+  onClone:         () => void;
   onPdf:           () => void;
   onHistory:       () => void;
   onSend:          () => void;
@@ -35,18 +38,25 @@ export default function InvoiceActionsMenu({
   invoice,
   pdfBusy,
   sendBusy,
+  issueBusy,
   actions,
 }: {
-  invoice:  InvoiceResponse;
-  pdfBusy:  boolean;
-  sendBusy: boolean;
-  actions:  InvoiceActionHandlers;
+  invoice:   InvoiceResponse;
+  pdfBusy:   boolean;
+  sendBusy:  boolean;
+  issueBusy: boolean;
+  actions:   InvoiceActionHandlers;
 }) {
   const status   = invoice.status;
-  const canPay   = ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(status);
-  const canFees  = status !== 'PAID' && status !== 'VOID';
-  // Only while nothing has been received — the server refuses otherwise.
-  const canVoid  = ['PENDING', 'OVERDUE'].includes(status) && invoice.paidAmount === 0;
+  // Run invoices are locked the moment they land: only the MD's issue (or a
+  // void before issue) may move them, so edit/clone/fees vanish meanwhile.
+  const locked   = !!invoice.runBatchId || !!invoice.issuedAt;
+  const canPay   = ['PENDING', 'ISSUED', 'OVERDUE', 'PARTIALLY_PAID'].includes(status);
+  const canFees  = status !== 'PAID' && status !== 'VOID' && !locked;
+  // Any invoice that is not already VOID and has not been issued: settled
+  // payments stay on record, only the unpaid remainder is written off.
+  const canVoid  = status !== 'VOID' && !invoice.issuedAt;
+  const canIssue = status === 'PENDING' && !!invoice.runBatchId;
   const sentTo   = invoice.emailSentTo ?? '';
   const sentOn   = invoice.emailSentAt
     ? new Date(invoice.emailSentAt).toLocaleDateString('en-GB')
@@ -68,16 +78,34 @@ export default function InvoiceActionsMenu({
             ? <><Spinner size="sm" className="me-1" />Preparing PDF…</>
             : '🖨️ Print / PDF'}
         </Dropdown.Item>
+        {!locked && (
+          <RoleGuard allowedRoles={CLONE_ROLES}>
+            <Dropdown.Item eventKey="clone" onClick={actions.onClone} title="Create a fresh PENDING copy to edit">Clone + edit</Dropdown.Item>
+          </RoleGuard>
+        )}
         <Dropdown.Item eventKey="history" onClick={actions.onHistory}>🧾 Payment history</Dropdown.Item>
+
+        {canIssue && (
+          <PermissionGuard permission="invoices.issue">
+            <Dropdown.Divider />
+            <Dropdown.Item eventKey="issue" onClick={actions.onIssue} disabled={issueBusy}>
+              {issueBusy ? (
+                <><Spinner size="sm" className="me-1" />Issuing...</>
+              ) : (
+                <><i className="bi bi-check2-circle me-1" />Issue invoice (MD)</>
+              )}
+            </Dropdown.Item>
+          </PermissionGuard>
+        )}
 
         {/* Editing block: each entry appears only where it can still succeed.
             A voided invoice has nothing left to edit or send, so the whole
             group disappears rather than showing dead entries. */}
-        {status !== 'VOID' && (
+        {status !== 'VOID' && !locked && (
           <>
             <Dropdown.Divider />
             <RoleGuard allowedRoles={EDIT_ROLES}>
-              {status === 'PENDING' && (
+              {status !== 'VOID' && (
                 <Dropdown.Item eventKey="edit" onClick={actions.onEdit}>✏️ Update invoice</Dropdown.Item>
               )}
               {canFees && (

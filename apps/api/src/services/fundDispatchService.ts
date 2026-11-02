@@ -2,6 +2,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
+import { cashbookService } from './cashbookService';
 import { dispatchChannelLabel } from '@security360/shared';
 import type {
   CreateFundDispatchInput,
@@ -116,6 +117,29 @@ class FundDispatchService {
         data:  { totalDispatched, dispatchStatus },
       }),
     ]);
+
+    // Money left the company the moment the dispatch row was written — but
+    // the ledger may already hold it: requisitions post their full approved
+    // amount to the cashbook when they are assigned (REQ:<id>), so a dispatch
+    // against an assigned requisition is the *same* money and must not post a
+    // second row. Only dispatches on requisitions assigned before that hook
+    // existed (or pre-assignment payouts) write their own row, keyed to the
+    // dispatch so a double-submit can never count it twice.
+    const reqRow = await prisma.cashbookEntry.findUnique({
+      where:  { sourceRef: `REQ:${requisitionId}` },
+      select: { id: true },
+    });
+    if (!reqRow) {
+      await cashbookService.recordAuto({
+        sourceRef:   `FUND_DISPATCH:${dispatch.id}`,
+        date:        dispatch.dispatchDate,
+        description: `Requisition payout - ${requisition.particulars}`,
+        category:    'REQUISITION',
+        amount:      dispatch.amount,
+        type:        'OUT',
+        recordedBy:  dispatchedById,
+      });
+    }
 
     await QueueService.logAudit({
       userId:   dispatchedById,

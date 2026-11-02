@@ -252,7 +252,7 @@ export async function renderShiftReportPdf(r: ShiftReportPdfData): Promise<Buffe
         <div style="margin-top:6px;font-size:8pt;color:#1E8449;">
           Acknowledged by ${esc(r.acknowledgedBy)}${
             r.acknowledgedAt
-              ? ` on ${new Date(r.acknowledgedAt).toLocaleString('en-GB')}`
+              ? ` on ${new Date(r.acknowledgedAt).toLocaleString('en-GB', { timeZone: 'Africa/Kampala' })}`
               : ''}
         </div>` : ''}
     </div>`;

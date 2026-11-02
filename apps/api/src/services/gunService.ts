@@ -1,10 +1,12 @@
 import prisma from '../db/prisma';
-import { generateGunId } from '../lib/systemId';
+import { generateGunId, generateGunIds } from '../lib/systemId';
 import { QueueService } from '../jobs/QueueService';
 import { AppError, NotFoundError } from '../errors/AppError';
 import { GUN_STATUSES, GUN_MOVEMENT_TYPES, ARMOURY_LABEL } from '@security360/shared';
 import type {
   RegisterGunInput,
+  RegisterGunBatchInput,
+  AdjustBulletsInput,
   DeployGunInput,
   WithdrawGunInput,
   TransferGunInput,
@@ -19,7 +21,7 @@ import { gunTypeLabel, ownershipConfig } from '@security360/shared';
 
 const GUN_INCLUDE = {
   registeredByUser: { select: { id: true, name: true } },
-  currentSite:      { select: { id: true, siteName: true } },
+  currentSite:      { select: { id: true, siteName: true, client: { select: { id: true, clientName: true } } } },
 } as const;
 
 const MOVEMENT_INCLUDE = {
@@ -44,6 +46,7 @@ function sanitise(gun: any): GunResponse {
     status:          gun.status,
     currentSiteId:   gun.currentSiteId ?? null,
     currentSiteName: gun.currentSite?.siteName ?? null,
+    clientName:      gun.currentSite?.client?.clientName ?? null,
     totalBullets:    gun.totalBullets,
     currentBullets:  gun.currentBullets,
     notes:           gun.notes ?? null,
@@ -93,6 +96,49 @@ async function originSiteNames(movements: { fromSiteId: string | null }[]): Prom
 }
 
 class GunService {
+  /**
+   * Catalogue check: registration is held to the active gun-type rows, so new
+   * types are added in Settings without a deploy. Retired and unknown codes
+   * are refused with a message that says where to add them.
+   */
+  private async requireGunType(code: string) {
+    const row = await prisma.gunType.findUnique({ where: { code: code.trim() } });
+    if (!row || !row.isActive) {
+      throw new AppError(
+        `Unknown or retired gun type "${code}". Add it in Settings - Gun Types first.`,
+        400,
+      );
+    }
+    return row;
+  }
+
+  /**
+   * Catalogue labels over API responses. Anything the catalogue does not name
+   * keeps the compiled fallback (legacy codes) or its own code.
+   */
+  private async labelGuns<T extends { gunType: string; gunTypeLabel: string }>(rows: T[]): Promise<T[]> {
+    const types = await prisma.gunType.findMany({ select: { code: true, label: true } });
+    const map = new Map(types.map((t) => [t.code, t.label]));
+    for (const r of rows) {
+      const label = map.get(r.gunType);
+      if (label) r.gunTypeLabel = label;
+    }
+    return rows;
+  }
+
+  /**
+   * Type/location counter for the inventory balance. siteKey is the site id,
+   * or '' for the armoury. Always called inside the caller's transaction so
+   * the counter and the gun rows move together; reconcile() proves they did.
+   */
+  private async bumpStock(tx: any, gunType: string, siteKey: string, delta: number): Promise<void> {
+    await tx.gunTypeStock.upsert({
+      where:  { gunType_siteId: { gunType, siteId: siteKey } },
+      update: { count: { increment: delta }, updatedAt: new Date() },
+      create: { gunType, siteId: siteKey, count: Math.max(0, delta) },
+    });
+  }
+
   async registerGun(data: RegisterGunInput, registeredById: string): Promise<GunResponse> {
     const serialNumber = data.serialNumber.trim();
 
@@ -104,28 +150,73 @@ class GunService {
       );
     }
 
+    // Armoury by default; a site id places the gun straight onto that site,
+    // with the arrival recorded as a REGISTRATION movement below.
+    const gunTypeRow = await this.requireGunType(data.gunType);
+    const site = data.siteId ? await this.requireSite(data.siteId, 'Registration site') : null;
+    // Movements and ledger rows record who recorded them; on registration
+    // that is the registrar.
+    const recordedById = registeredById;
+
     // Fee and period come from the ownership, never from the request: the rate
     // is company policy, so a form must not be able to set it.
     const cfg = ownershipConfig(data.ownership);
 
-    const gun = await prisma.gun.create({
-      data: {
-        systemId:       await generateGunId(),
-        serialNumber,
-        gunType:        data.gunType,
-        ownership:      data.ownership,
-        licenceFee:     cfg?.fee ?? null,
-        licencePeriod:  cfg?.period ?? null,
-        manufacturer:   data.manufacturer?.trim() || null,
-        condition:      data.condition ?? 'GOOD',
-        status:         GUN_STATUSES.IN_ARMOURY,
-        // A gun arrives holding what it was issued with, so both start equal.
-        totalBullets:   data.totalBullets ?? 0,
-        currentBullets: data.totalBullets ?? 0,
-        notes:          data.notes?.trim() || null,
-        registeredById,
-      },
-      include: GUN_INCLUDE,
+    const gun = await prisma.$transaction(async (tx) => {
+      const created = await tx.gun.create({
+        data: {
+          systemId:       await generateGunId(),
+          serialNumber,
+          gunType:        gunTypeRow.code,
+          ownership:      data.ownership,
+          licenceFee:     cfg?.fee ?? null,
+          licencePeriod:  cfg?.period ?? null,
+          manufacturer:   data.manufacturer?.trim() || null,
+          condition:      data.condition ?? 'GOOD',
+          status:         site ? GUN_STATUSES.DEPLOYED : GUN_STATUSES.IN_ARMOURY,
+          currentSiteId:  site?.id ?? null,
+          // A gun arrives holding what it was issued with, so both start equal.
+          totalBullets:   data.totalBullets ?? 0,
+          currentBullets: data.totalBullets ?? 0,
+          notes:          data.notes?.trim() || null,
+          registeredById,
+        },
+        include: GUN_INCLUDE,
+      });
+
+      await this.bumpStock(tx, created.gunType, site?.id ?? '', 1);
+
+      let movementId: string | null = null;
+      if (site) {
+        const movement = await tx.gunMovement.create({
+          data: {
+            gunId:        created.id,
+            movementType: GUN_MOVEMENT_TYPES.REGISTRATION,
+            fromSiteId:   null,
+            toSiteId:     site.id,
+            bullets:      created.totalBullets,
+            movementDate: new Date(),
+            reason:       'Registered directly to site',
+            notes:        data.notes?.trim() || null,
+            recordedById,
+          },
+          include: MOVEMENT_INCLUDE,
+        });
+        movementId = movement.id;
+      }
+
+      await tx.ammoTransaction.create({
+        data: {
+          gunId:        created.id,
+          change:       created.totalBullets,
+          balance:      created.totalBullets,
+          reason:       site ? 'REGISTRATION' : 'OPENING_BALANCE',
+          movementId,
+          recordedById,
+        },
+      });
+
+      return created;
     });
 
     await QueueService.logAudit({
@@ -136,10 +227,115 @@ class GunService {
       newValue: {
         systemId: gun.systemId, serialNumber, gunType: gun.gunType,
         ownership: gun.ownership, totalBullets: gun.totalBullets,
+        siteId: site?.id ?? null,
       },
     });
 
-    return sanitise(gun);
+    return { ...sanitise(gun), gunTypeLabel: gunTypeRow.label };
+  }
+
+  /**
+   * Bulk registration: several guns of one type in one request. Every serial
+   * is checked before anything is written, and the whole batch lands in a
+   * single transaction - a duplicate anywhere aborts everything.
+   */
+  async registerGunBatch(data: RegisterGunBatchInput, registeredById: string): Promise<GunResponse[]> {
+    const serials = data.serialNumbers.map((s) => s.trim());
+
+    const clashes = await prisma.gun.findMany({
+      where:  { serialNumber: { in: serials } },
+      select: { serialNumber: true },
+    });
+    if (clashes.length > 0) {
+      throw new AppError(
+        `Serial number${clashes.length === 1 ? '' : 's'} already registered: ${clashes.map((c) => c.serialNumber).join(', ')}. Nothing was registered.`,
+        409,
+      );
+    }
+
+    const gunTypeRow = await this.requireGunType(data.gunType);
+    const site = data.siteId ? await this.requireSite(data.siteId, 'Registration site') : null;
+    // Movements and ledger rows record who recorded them; on registration
+    // that is the registrar.
+    const recordedById = registeredById;
+    const cfg = ownershipConfig(data.ownership);
+
+    // Reserve the whole id block up front: minting inside the loop would
+    // read the same committed max twice and collide (max is invisible until
+    // commit). generateGunIds takes the same lock-free approach as singles.
+    const systemIds = await generateGunIds(serials.length);
+    const guns = await prisma.$transaction(async (tx) => {
+      const made: any[] = [];
+      for (const [i, serialNumber] of serials.entries()) {
+        const gun = await tx.gun.create({
+          data: {
+            systemId:       systemIds[i],
+            serialNumber,
+            gunType:        gunTypeRow.code,
+            ownership:      data.ownership,
+            licenceFee:     cfg?.fee ?? null,
+            licencePeriod:  cfg?.period ?? null,
+            manufacturer:   data.manufacturer?.trim() || null,
+            condition:      data.condition ?? 'GOOD',
+            status:         site ? GUN_STATUSES.DEPLOYED : GUN_STATUSES.IN_ARMOURY,
+            currentSiteId:  site?.id ?? null,
+            totalBullets:   data.totalBullets ?? 0,
+            currentBullets: data.totalBullets ?? 0,
+            notes:          data.notes?.trim() || null,
+            registeredById,
+          },
+          include: GUN_INCLUDE,
+        });
+
+        await this.bumpStock(tx, gun.gunType, site?.id ?? '', 1);
+
+        let movementId: string | null = null;
+        if (site) {
+          const movement = await tx.gunMovement.create({
+            data: {
+              gunId:        gun.id,
+              movementType: GUN_MOVEMENT_TYPES.REGISTRATION,
+              fromSiteId:   null,
+              toSiteId:     site.id,
+              bullets:      gun.totalBullets,
+              movementDate: new Date(),
+              reason:       'Registered directly to site',
+              notes:        data.notes?.trim() || null,
+              recordedById,
+            },
+            include: MOVEMENT_INCLUDE,
+          });
+          movementId = movement.id;
+        }
+
+        await tx.ammoTransaction.create({
+          data: {
+            gunId:        gun.id,
+            change:       gun.totalBullets,
+            balance:      gun.totalBullets,
+            reason:       site ? 'REGISTRATION' : 'OPENING_BALANCE',
+            movementId,
+            recordedById,
+          },
+        });
+
+        made.push(gun);
+      }
+      return made;
+    });
+
+    await QueueService.logAudit({
+      userId:   registeredById,
+      action:   'GUN_BATCH_REGISTERED',
+      entity:   'gun',
+      entityId: guns[0].id,
+      newValue: {
+        count: guns.length, gunType: data.gunType, ownership: data.ownership,
+        serialNumbers: serials, siteId: site?.id ?? null,
+      },
+    });
+
+    return guns.map((g) => ({ ...sanitise(g), gunTypeLabel: gunTypeRow.label }));
   }
 
   /**
@@ -227,7 +423,12 @@ class GunService {
     }
 
     if (gun.movements.length > 0) {
-      await prisma.gun.update({ where: { id }, data: { status: GUN_STATUSES.RETIRED } });
+      // Retirement takes the gun out of the inventory, so its type/location
+      // counter drops in the same transaction.
+      await prisma.$transaction(async (tx) => {
+        await tx.gun.update({ where: { id }, data: { status: GUN_STATUSES.RETIRED } });
+        await this.bumpStock(tx, gun.gunType, gun.currentSiteId ?? '', -1);
+      });
       await QueueService.logAudit({
         userId,
         action:   'GUN_RETIRED',
@@ -241,7 +442,11 @@ class GunService {
       return { deleted: false, retired: true };
     }
 
-    await prisma.gun.delete({ where: { id } });
+    // No movements exist, but the registration counter does: drop it with the row.
+    await prisma.$transaction(async (tx) => {
+      await tx.gun.delete({ where: { id } });
+      await this.bumpStock(tx, gun.gunType, gun.currentSiteId ?? '', -1);
+    });
     await QueueService.logAudit({
       userId,
       action:   'GUN_DELETED',
@@ -269,8 +474,14 @@ class GunService {
   }): Promise<GunMovementResponse> {
     const { gunId, movementType, fromSiteId, toSiteId, bullets, recordedById } = params;
 
-    const [movement] = await prisma.$transaction([
-      prisma.gunMovement.create({
+    const before = await prisma.gun.findUnique({
+      where:  { id: gunId },
+      select: { currentBullets: true, gunType: true },
+    });
+    if (!before) throw new NotFoundError('Gun not found');
+
+    const { movement } = await prisma.$transaction(async (tx) => {
+      const movement = await tx.gunMovement.create({
         data: {
           gunId,
           movementType,
@@ -283,16 +494,40 @@ class GunService {
           recordedById,
         },
         include: MOVEMENT_INCLUDE,
-      }),
-      prisma.gun.update({
+      });
+      await tx.gun.update({
         where: { id: gunId },
         data:  {
           status:         toSiteId ? GUN_STATUSES.DEPLOYED : GUN_STATUSES.IN_ARMOURY,
           currentSiteId:  toSiteId,
           currentBullets: bullets,
         },
-      }),
-    ]);
+      });
+      // Type/location counters move with the gun in the same transaction.
+      const fromKey = fromSiteId ?? '';
+      const toKey   = toSiteId ?? '';
+      if (fromKey !== toKey) {
+        await this.bumpStock(tx, before.gunType, fromKey, -1);
+        await this.bumpStock(tx, before.gunType, toKey, 1);
+      }
+      // Bullet trail: the movement already records the handover count; the
+      // ledger row records the delta so the cached balance stays provable.
+      // Zero-change handovers (same count in and out) add no ledger noise.
+      const change = bullets - before.currentBullets;
+      if (change !== 0) {
+        await tx.ammoTransaction.create({
+          data: {
+            gunId,
+            change,
+            balance: bullets,
+            reason: movementType,
+            movementId: movement.id,
+            recordedById,
+          },
+        });
+      }
+      return { movement };
+    });
 
     await QueueService.logAudit({
       userId:   recordedById,
@@ -425,17 +660,18 @@ class GunService {
     });
   }
 
-  async listGuns(filters: { status?: string; siteId?: string; gunType?: string }): Promise<GunResponse[]> {
+  async listGuns(filters: { status?: string; siteId?: string; gunType?: string; client?: string }): Promise<GunResponse[]> {
     const guns = await prisma.gun.findMany({
       where: {
         ...(filters.status  ? { status: filters.status }         : {}),
         ...(filters.siteId  ? { currentSiteId: filters.siteId }  : {}),
         ...(filters.gunType ? { gunType: filters.gunType }       : {}),
+        ...(filters.client  ? { currentSite: { clientId: filters.client } } : {}),
       },
       include: GUN_INCLUDE,
       orderBy: { serialNumber: 'asc' },
     });
-    return guns.map(sanitise);
+    return this.labelGuns(guns.map(sanitise));
   }
 
   async getGun(id: string): Promise<GunWithHistory> {
@@ -449,8 +685,9 @@ class GunService {
     if (!gun) throw new NotFoundError('Gun not found');
 
     const names = await originSiteNames(gun.movements);
+    const [labelled] = await this.labelGuns([sanitise(gun)]);
     return {
-      ...sanitise(gun),
+      ...labelled,
       movements: gun.movements.map(m => sanitiseMovement(m, names)),
     };
   }
@@ -459,16 +696,21 @@ class GunService {
   async getInventory(): Promise<GunInventoryRow[]> {
     const guns = await prisma.gun.findMany({
       where:   { status: { not: GUN_STATUSES.RETIRED } },
-      include: { currentSite: { select: { id: true, siteName: true } } },
+      include: { currentSite: { select: { id: true, siteName: true, client: { select: { id: true, clientName: true } } } } },
       orderBy: { serialNumber: 'asc' },
     });
 
+    const catalogue = new Map(
+      (await prisma.gunType.findMany({ select: { code: true, label: true } }))
+        .map((t) => [t.code, t.label] as const),
+    );
+    const typeLabel = (code: string) => catalogue.get(code) ?? gunTypeLabel(code);
     const rows = new Map<string, GunInventoryRow>();
     // The armoury is always listed, even when empty — "no guns in the armoury"
     // is a fact worth showing rather than a missing row.
     rows.set('ARMOURY', {
-      siteId: null, siteName: ARMOURY_LABEL,
-      gunCount: 0, serialNumbers: [], gunTypes: [], totalBullets: 0,
+      siteId: null, siteName: ARMOURY_LABEL, clientName: null,
+      gunCount: 0, serialNumbers: [], gunTypes: [], byType: [], totalBullets: 0,
     });
 
     for (const gun of guns) {
@@ -477,19 +719,131 @@ class GunService {
         rows.set(key, {
           siteId:   gun.currentSiteId,
           siteName: gun.currentSite?.siteName ?? 'Unknown site',
-          gunCount: 0, serialNumbers: [], gunTypes: [], totalBullets: 0,
+          clientName: gun.currentSite?.client?.clientName ?? null,
+          gunCount: 0, serialNumbers: [], gunTypes: [], byType: [], totalBullets: 0,
         });
       }
       const row = rows.get(key)!;
       row.gunCount++;
       row.serialNumbers.push(gun.serialNumber);
       if (!row.gunTypes.includes(gun.gunType)) row.gunTypes.push(gun.gunType);
+      const slot = row.byType.find((b) => b.gunType === gun.gunType);
+      if (slot) slot.count++;
+      else row.byType.push({ gunType: gun.gunType, label: typeLabel(gun.gunType), count: 1 });
       row.totalBullets += gun.currentBullets;
     }
 
     const [armoury, ...sites] = [...rows.values()];
     sites.sort((a, b) => a.siteName.localeCompare(b.siteName));
     return [armoury, ...sites];
+  }
+
+  /**
+   * Manual bullet correction: rounds spent, found, or topped up outside a
+   * movement. The cached balance and the ledger move together or not at all.
+   */
+  async adjustBullets(gunId: string, data: AdjustBulletsInput, recordedById: string): Promise<GunResponse> {
+    const gun = await prisma.gun.findUnique({ where: { id: gunId } });
+    if (!gun) throw new NotFoundError('Gun not found');
+    if (gun.status === GUN_STATUSES.RETIRED) {
+      throw new AppError(`Gun ${gun.serialNumber} is retired and cannot be adjusted.`, 400);
+    }
+
+    const balance = gun.currentBullets + data.change;
+    if (balance < 0) {
+      throw new AppError(
+        `Adjustment of ${data.change} would take gun ${gun.serialNumber} to ${balance} rounds - only ${gun.currentBullets} held.`,
+        400,
+      );
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.gun.update({
+        where:   { id: gunId },
+        data:    { currentBullets: balance },
+        include: GUN_INCLUDE,
+      });
+      await tx.ammoTransaction.create({
+        data: {
+          gunId,
+          change:       data.change,
+          balance,
+          reason:       data.reason.trim(),
+          movementId:   null,
+          recordedById,
+        },
+      });
+      return u;
+    });
+
+    await QueueService.logAudit({
+      userId:   recordedById,
+      action:   'GUN_BULLETS_ADJUSTED',
+      entity:   'gun',
+      entityId: gunId,
+      newValue: { serialNumber: gun.serialNumber, change: data.change, balance },
+    });
+
+    return sanitise(updated);
+  }
+
+  /**
+   * Balance check: counters vs live guns, ledger heads vs cached balances.
+   * Read-only by design - it reports drift, and a human fixes the cause.
+   */
+  async reconcile(): Promise<{
+    ok: boolean;
+    checkedAt: string;
+    stockMismatches: Array<{ gunType: string; siteId: string | null; counted: number; actual: number }>;
+    ammoMismatches: Array<{ gunId: string; serialNumber: string; cached: number; ledger: number | null }>;
+  }> {
+    const guns = await prisma.gun.findMany({
+      where:  { status: { not: GUN_STATUSES.RETIRED } },
+      select: { id: true, serialNumber: true, gunType: true, currentSiteId: true, currentBullets: true },
+    });
+
+    const expected = new Map<string, number>();
+    for (const g of guns) {
+      const key = `${g.gunType}||${g.currentSiteId ?? ''}`;
+      expected.set(key, (expected.get(key) ?? 0) + 1);
+    }
+
+    const stocks = await prisma.gunTypeStock.findMany();
+    const seen = new Set<string>();
+    const stockMismatches: Array<{ gunType: string; siteId: string | null; counted: number; actual: number }> = [];
+    for (const s of stocks) {
+      const key = `${s.gunType}||${s.siteId}`;
+      seen.add(key);
+      const want = expected.get(key) ?? 0;
+      if (s.count !== want) {
+        stockMismatches.push({ gunType: s.gunType, siteId: s.siteId || null, counted: s.count, actual: want });
+      }
+    }
+    for (const [key, want] of expected) {
+      if (!seen.has(key)) {
+        const [gunType, siteId] = key.split('||');
+        stockMismatches.push({ gunType, siteId: siteId || null, counted: 0, actual: want });
+      }
+    }
+
+    const ammoMismatches: Array<{ gunId: string; serialNumber: string; cached: number; ledger: number | null }> = [];
+    for (const g of guns) {
+      const last = await prisma.ammoTransaction.findFirst({
+        where:   { gunId: g.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      const ledger = last ? last.balance : null;
+      if (ledger !== g.currentBullets) {
+        ammoMismatches.push({ gunId: g.id, serialNumber: g.serialNumber, cached: g.currentBullets, ledger });
+      }
+    }
+
+    return {
+      ok: stockMismatches.length === 0 && ammoMismatches.length === 0,
+      checkedAt: new Date().toISOString(),
+      stockMismatches,
+      ammoMismatches,
+    };
   }
 
   /** Whole-fleet movement ledger, newest first. */

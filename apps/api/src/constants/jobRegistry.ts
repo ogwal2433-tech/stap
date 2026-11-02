@@ -42,13 +42,13 @@ export const JOB_REGISTRY: JobDefinition[] = [
     key:         'invoice.generate.auto',
     name:        'Automatic Invoice Generation',
     description:
-      'Raises invoices for active contracts that have reached their billing day. '
-      + 'Runs daily and picks up only the contracts due that day, so a contract '
-      + 'billed on the 15th is invoiced on the 15th.',
+      'Switched off: month-end invoices are now raised manually from Finance '
+      + 'by the assistant manager and issued by the MD. Kept for reference and '
+      + 'an explicit Run Now.',
     cronExpr:    '0 6 * * *',
     cronHuman:   'Every day at 6:00 AM',
     category:    'invoices',
-    isActive:    true,
+    isActive:    false,
     run:         async () => (await import('../services/invoiceService')).invoiceService.generateAutoInvoices(),
   },
   {

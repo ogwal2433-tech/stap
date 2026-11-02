@@ -81,10 +81,93 @@ import {
   ReviewAccountabilitySchema,
   CreateFundDispatchSchema,
 } from '@security360/shared';
+import jwt from 'jsonwebtoken';
+import prisma from '../db/prisma';
 import { accountabilityService } from '../services/accountabilityService';
 import { fundDispatchService } from '../services/fundDispatchService';
 
 const router: IRouter = Router();
+// GET /requisitions/email-decision ? one-tap Approve / Reject from an email.
+// Public: the signed token carries who may decide what, and expires in 7 days.
+// Registered before any '/:id' route so 'email-decision' is never read as an id.
+router.get(
+  '/email-decision',
+  asyncHandler(async (req: Request, res: Response) => {
+    const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const page = (title: string, heading: string, body: string, color: string) => {
+      res.status(200).type('html').send(
+        `<!doctype html><html><body style="margin:0;background:#F2F4F7;font-family:Arial,sans-serif;">` +
+        `<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;">` +
+        `<div style="background:${color};color:#fff;padding:16px 24px;font-size:17px;font-weight:bold;">${esc(title)}</div>` +
+        `<div style="padding:24px;"><h2 style="color:#1B3A6B;margin-top:0;">${esc(heading)}</h2>${body}` +
+        `<p style="color:#6c757d;font-size:12px;">${esc(title)} ? Security360</p></div></div></body></html>`);
+    };
+    const fail = (heading: string, message: string) =>
+      page('Security360', heading, `<p>${esc(message)}</p>`, '#343a40');
+
+    const token    = String(req.query.token ?? '');
+    const decision = String(req.query.decision ?? '');
+    if (!token || (decision !== 'approve' && decision !== 'reject')) {
+      fail('This link is not valid.', 'Open the Requisitions page in the portal to decide instead.');
+      return;
+    }
+    let payload: any;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET as string);
+    } catch {
+      fail('This link has expired or is invalid.', 'Links work for 7 days. Open the Requisitions page in the portal to decide instead.');
+      return;
+    }
+    if (payload?.purpose !== 'req-decision' || !payload?.sub || !payload?.req) {
+      fail('This link is not valid.', 'Open the Requisitions page in the portal to decide instead.');
+      return;
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: String(payload.sub) }, select: { id: true, name: true, role: true, status: true },
+    });
+    if (!user || user.status !== 'ACTIVE' || (user.role !== 'MD' && user.role !== 'DIRECTOR')) {
+      fail('You are not authorised to decide this.', 'Only the MD or a Director can approve or reject requisitions.');
+      return;
+    }
+    const rq = await prisma.requisition.findUnique({
+      where: { id: String(payload.req) },
+      select: { id: true, particulars: true, amount: true, status: true, directorApprovedAt: true },
+    });
+    if (!rq) {
+      fail('This requisition no longer exists.', 'It may have been withdrawn.');
+      return;
+    }
+    if (rq.directorApprovedAt || rq.status === 'REJECTED') {
+      const outcome = rq.status === 'REJECTED' ? 'rejected' : 'approved';
+      page('Security360', `Already ${outcome}.`,
+        `<p><strong>${esc(rq.particulars)}</strong> (UGX ${Number(rq.amount).toLocaleString()}) was already ${outcome} — no further action was taken.</p>`,
+        rq.status === 'REJECTED' ? '#C0392B' : '#1E8449');
+      return;
+    }
+    try {
+      if (decision === 'approve') {
+        await requisitionService.directorApprove(rq.id, user.id);
+      } else {
+        await requisitionService.approve(rq.id,
+          { action: 'REJECT', rejectionReason: `Rejected via email link by ${user.name}` }, user.id);
+      }
+    } catch (err: any) {
+      fail('Could not record your decision.', err?.message ?? 'The requisition may no longer await a decision.');
+      return;
+    }
+    if (decision === 'approve') {
+      page('Security360', 'Requisition approved.',
+        `<p><strong>${esc(rq.particulars)}</strong> (UGX ${Number(rq.amount).toLocaleString()}) was approved by ${esc(user.name)} and moves to assignment.</p>`,
+        '#1E8449');
+    } else {
+      page('Security360', 'Requisition rejected.',
+        `<p><strong>${esc(rq.particulars)}</strong> (UGX ${Number(rq.amount).toLocaleString()}) was rejected by ${esc(user.name)}.</p>`,
+        '#C0392B');
+    }
+  }),
+);
+
 router.use(authenticate);
 
 // Roles that may submit requisitions (INTERNAL minus CLIENT and GUARD)
@@ -97,9 +180,13 @@ const REQUISITION_SUBMITTER_ROLES = [
 
 router.get(
   '/dashboard',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
-  asyncHandler(async (_req: Request, res: Response) => {
-    const stats = await requisitionService.getDashboard();
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.MD),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Optional raised-date window: the page's filter panel narrows the KPIs
+    // to whatever period the approver is looking at.
+    const from = typeof req.query.from === 'string' && req.query.from ? req.query.from : undefined;
+    const to   = typeof req.query.to   === 'string' && req.query.to   ? req.query.to   : undefined;
+    const stats = await requisitionService.getDashboard(from, to);
     res.json({ success: true, data: stats });
   }),
 );
@@ -116,6 +203,7 @@ router.get(
         requestedById: query.requestedById,
         from:          query.from,
         to:            query.to,
+        overdue:       query.overdue,
         page:          query.page,
         limit:         query.limit,
       },
@@ -171,7 +259,7 @@ router.patch(
 
 router.patch(
   '/:id/approve',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
+  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.MD),
   validate(ApproveRequisitionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.approve(req.params.id, req.body, req.user!.userId);
@@ -230,6 +318,18 @@ router.patch(
   validate(UpdateProgressSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const requisition = await requisitionService.updateProgress(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: requisition });
+  }),
+);
+
+// Close out a finished requisition (ASSIGNED / IN_PROGRESS → COMPLETED).
+// Same approver gate as /assign — the people who hand the funds out also
+// record that the job is done.
+router.patch(
+  '/:id/complete',
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR),
+  asyncHandler(async (req: Request, res: Response) => {
+    const requisition = await requisitionService.complete(req.params.id, req.user!.userId);
     res.json({ success: true, data: requisition });
   }),
 );

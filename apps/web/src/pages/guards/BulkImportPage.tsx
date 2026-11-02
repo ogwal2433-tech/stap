@@ -163,13 +163,13 @@ export default function BulkImportPage() {
 
           {result.successful > 0 && (
             <Alert variant="success" className="mb-3">
-              ✅ {result.successful} guard{result.successful !== 1 ? 's' : ''} imported successfully.
+              <i className="bi bi-check-circle-fill me-1" />{result.successful} guard{result.successful !== 1 ? 's' : ''} imported successfully.
             </Alert>
           )}
 
           {result.failed > 0 && (
             <Alert variant="danger" className="mb-3">
-              ❌ {result.failed} row{result.failed !== 1 ? 's' : ''} had errors and were not imported.
+              <i className="bi bi-x-circle-fill me-1" />{result.failed} row{result.failed !== 1 ? 's' : ''} had errors and were not imported.
             </Alert>
           )}
 
@@ -239,7 +239,7 @@ export default function BulkImportPage() {
           <Card className="border-0 shadow-sm mb-4">
             <Card.Body className="p-4">
               <div className="d-flex align-items-start gap-3">
-                <span style={{ fontSize: '2.5rem' }}>📥</span>
+                <span style={{ fontSize: '2.5rem' }}><i className="bi bi-cloud-arrow-down" /></span>
                 <div className="flex-grow-1">
                   <h5 className="fw-bold mb-1">Step 1 — Download the Import Template</h5>
                   <p className="text-muted small mb-3">
@@ -264,7 +264,7 @@ export default function BulkImportPage() {
                     {downloadTemplate.isPending ? (
                       <><Spinner size="sm" animation="border" className="me-2" />Downloading…</>
                     ) : templateDone ? (
-                      '✅ Template Downloaded — proceed to Step 2'
+                      <><i className="bi bi-check-circle me-1" />Template Downloaded — proceed to Step 2</>
                     ) : (
                       'Download Template'
                     )}
@@ -278,7 +278,7 @@ export default function BulkImportPage() {
           <Card className={`border-0 shadow-sm ${!templateDone ? 'opacity-75' : ''}`}>
             <Card.Body className="p-4">
               <div className="d-flex align-items-start gap-3">
-                <span style={{ fontSize: '2.5rem' }}>📤</span>
+                <span style={{ fontSize: '2.5rem' }}><i className="bi bi-cloud-arrow-up" /></span>
                 <div className="flex-grow-1">
                   <h5 className="fw-bold mb-1">Step 2 — Upload Filled Template</h5>
                   <p className="text-muted small mb-3">

@@ -13,6 +13,9 @@ import type {
   DeductionTypeResponse,
   CreateDeductionTypeInput,
   UpdateDeductionTypeInput,
+  GunTypeResponse,
+  CreateGunTypeInput,
+  UpdateGunTypeInput,
   ShiftTypeResponse,
   CreateShiftTypeInput,
   UpdateShiftTypeInput,
@@ -250,6 +253,38 @@ export const settingsApi = {
   activateDeductionType(id: string): Promise<DeductionTypeResponse> {
     return api
       .patch<{ success: boolean; data: DeductionTypeResponse }>(`/settings/deduction-types/${id}/activate`)
+      .then((r) => r.data.data);
+  },
+
+  getGunTypes(activeOnly = true): Promise<GunTypeResponse[]> {
+    return api
+      .get<{ success: boolean; data: GunTypeResponse[] }>('/settings/gun-types', {
+        params: { activeOnly: activeOnly ? 'true' : 'false' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  createGunType(data: CreateGunTypeInput): Promise<GunTypeResponse> {
+    return api
+      .post<{ success: boolean; data: GunTypeResponse }>('/settings/gun-types', data)
+      .then((r) => r.data.data);
+  },
+
+  updateGunType(id: string, data: UpdateGunTypeInput): Promise<GunTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: GunTypeResponse }>(`/settings/gun-types/${id}`, data)
+      .then((r) => r.data.data);
+  },
+
+  deactivateGunType(id: string): Promise<GunTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: GunTypeResponse }>(`/settings/gun-types/${id}/deactivate`)
+      .then((r) => r.data.data);
+  },
+
+  activateGunType(id: string): Promise<GunTypeResponse> {
+    return api
+      .patch<{ success: boolean; data: GunTypeResponse }>(`/settings/gun-types/${id}/activate`)
       .then((r) => r.data.data);
   },
 

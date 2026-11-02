@@ -21,6 +21,73 @@ function fmt(entry: any, runningBalance: number): CashbookEntryResponse {
 // ── CashbookService ────────────────────────────────────────────────────────────
 
 class CashbookService {
+  /**
+   * An entry the ledger writes itself at the moment money actually moves.
+   * sourceRef keys the row to that event ("PAYMENT:<id>", "PAYSLIP:<id>", …),
+   * and the column is unique, so a retried webhook, a second approval attempt
+   * or a re-run backfill finds the row already posted and does nothing — no
+   * movement can ever be counted twice. Deliberately best-effort: by the time
+   * we are called the money has already moved on the caller's side, so a
+   * ledger hiccup records itself in the audit trail instead of failing the
+   * business operation and leaving the invoice or payroll run half-updated.
+   */
+  async recordAuto(data: {
+    sourceRef:   string;
+    date:        Date;
+    description: string;
+    category:    string;
+    amount:      number;
+    type:        'IN' | 'OUT';
+    recordedBy:  string;
+  }): Promise<void> {
+    try {
+      await prisma.cashbookEntry.upsert({
+        where:  { sourceRef: data.sourceRef },
+        create: { ...data },
+        update: {},
+      });
+    } catch (err: any) {
+      // P2002: a concurrent writer posted the same movement first — the entry
+      // exists, which is exactly the outcome we wanted.
+      if (err?.code === 'P2002') return;
+      try {
+        await QueueService.logAudit({
+          userId:   data.recordedBy,
+          action:   'CASHBOOK_AUTO_ENTRY_FAILED',
+          entity:   'cashbookEntry',
+          entityId: data.sourceRef,
+          newValue: { sourceRef: data.sourceRef, error: String(err?.message ?? err) },
+        });
+      } catch {
+        // The audit queue is unreachable too; the payment itself still stands.
+      }
+    }
+  }
+
+  /**
+   * The inverse of recordAuto: a commitment that was posted (an approved
+   * payroll run, say) and then rejected before any money moved takes its
+   * ledger row back with it. Best-effort like the post — the business
+   * operation has already committed either way.
+   */
+  async removeAuto(sourceRef: string): Promise<void> {
+    try {
+      await prisma.cashbookEntry.deleteMany({ where: { sourceRef } });
+    } catch (err: any) {
+      try {
+        await QueueService.logAudit({
+          userId:   'system',
+          action:   'CASHBOOK_AUTO_ENTRY_REMOVE_FAILED',
+          entity:   'cashbookEntry',
+          entityId: sourceRef,
+          newValue: { sourceRef, error: String(err?.message ?? err) },
+        });
+      } catch {
+        // The audit queue is unreachable too; the rejection itself still stands.
+      }
+    }
+  }
+
   async addEntry(data: CashbookEntryInput, recordedBy: string): Promise<CashbookEntryResponse> {
     const entry = await prisma.cashbookEntry.create({
       data: {

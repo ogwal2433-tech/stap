@@ -102,7 +102,7 @@ const GUARD_HISTORY = {
   trainingAttendees: 'training record', incidentGuards: 'incident', inventoryTxns: 'kit issue',
 } as const;
 
-async function deleteGuard(id: string, actorId: string) {
+async function deleteGuard(id: string, actorId: string, opts?: { override?: boolean; reason?: string }) {
   const guard = await prisma.guard.findFirst({
     where:  { id, ...ANY },
     select: {
@@ -118,6 +118,44 @@ async function deleteGuard(id: string, actorId: string) {
   const history = (Object.entries(GUARD_HISTORY) as [string, string][])
     .filter(([key]) => counts[key] > 0)
     .map(([key, label]) => plural(counts[key], label));
+  const hadLogin = !!guard.userId;
+
+  // Director override: delete any guard regardless of constraints. The row is
+  // still only soft-deleted (history is kept, restore works as normal), but
+  // the history and login refusals below are skipped. A reason is mandatory
+  // and everything skipped lands in the audit trail.
+  if (opts?.override === true) {
+    const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { role: true } });
+    if (!actor || (actor.role !== 'DIRECTOR' && actor.role !== 'MD')) {
+      throw new AppError('Only a Director can delete a guard with history.', 403);
+    }
+    const reason = (opts?.reason ?? '').trim();
+    if (reason.length < 5) {
+      throw new AppError('Give a reason for deleting a guard with history - at least 5 characters.', 400);
+    }
+    await prisma.$transaction(async (tx) => {
+      // Detach and deactivate the portal login in the same move, so no
+      // orphaned login keeps pointing at a deleted profile. The User row
+      // itself stays for the audit trail.
+      if (guard.userId) {
+        await tx.guard.update({ where: { id }, data: { userId: null } });
+        await tx.user.update({
+          where: { id: guard.userId },
+          data: {
+            status: 'INACTIVE', deactivatedAt: new Date(),
+            deactivatedById: actorId, deactivationReason: `Guard profile deleted by director: ${reason}`,
+          },
+        });
+      }
+      await tx.guard.update({ where: { id }, data: stamp(actorId) });
+    });
+    await audit(actorId, 'GUARD_DELETED', 'guard', id, {
+      name, override: true, reason,
+      historySkipped: history, hadLogin,
+    });
+    return { id, name, override: true };
+  }
+
   if (history.length) {
     refuse(`${name} has ${list(history)}, so they are part of the record. ` +
       'Change their status to Terminated instead — only a guard added by mistake can be deleted.');
@@ -128,6 +166,91 @@ async function deleteGuard(id: string, actorId: string) {
 
   await prisma.guard.update({ where: { id }, data: stamp(actorId) });
   await audit(actorId, 'GUARD_DELETED', 'guard', id, { name });
+  return { id, name };
+}
+
+// ?? Guards: permanent delete from the Deserters Archive ???????????????????????
+
+/**
+ * Permanently deletes a DESERTED guard and every record that points at them,
+ * except payslips (kept for finance, de-linked, name snapshotted on the row)
+ * and the audit trail (which records this purge). Director or MD only, with
+ * the system ID typed as confirmation and a mandatory reason. There is no
+ * undo: documents, history and the guard row itself are gone.
+ */
+async function purgeGuard(id: string, actorId: string, opts: { systemId: string; reason: string }) {
+  const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { role: true } });
+  if (!actor || (actor.role !== 'DIRECTOR' && actor.role !== 'MD')) {
+    throw new AppError('Only a Director or the MD can permanently delete a guard.', 403);
+  }
+  const guard = await prisma.guard.findUnique({
+    where: { id },
+    select: {
+      id: true, firstName: true, lastName: true, systemId: true,
+      employmentStatus: true, userId: true,
+      _count: { select: {
+        deployments: true, deploymentHistory: true, attendance: true,
+        payslips: true, deductions: true, disciplinary: true,
+        transfers: true, promotions: true, leaveRequests: true,
+        trainingAttendees: true, incidentGuards: true, inventoryTxns: true,
+        documents: true, relatives: true, associates: true,
+      } },
+    },
+  });
+  if (!guard) throw new NotFoundError('Guard not found');
+  const name = `${guard.firstName} ${guard.lastName}`;
+  if (guard.employmentStatus !== 'DESERTED') {
+    throw new AppError(
+      `Only deserted guards can be permanently deleted from the archive. ${name} is ${guard.employmentStatus}.`,
+      400,
+    );
+  }
+  const typed = (opts?.systemId ?? '').trim().toUpperCase();
+  if (!typed || typed !== (guard.systemId ?? '').toUpperCase()) {
+    throw new AppError('Type the guard system ID exactly as shown to confirm permanent deletion.', 400);
+  }
+  const reason = (opts?.reason ?? '').trim();
+  if (reason.length < 5) {
+    throw new AppError('Give a reason for permanent deletion - at least 5 characters.', 400);
+  }
+  const counts = guard._count as Record<string, number>;
+
+  await prisma.$transaction(async (tx) => {
+    // Detach and deactivate the portal login first, as soft-delete does.
+    if (guard.userId) {
+      await tx.guard.update({ where: { id }, data: { userId: null } });
+      await tx.user.update({
+        where: { id: guard.userId },
+        data: {
+          status: 'INACTIVE', deactivatedAt: new Date(),
+          deactivatedById: actorId, deactivationReason: `Guard purged by director: ${reason}`,
+        },
+      });
+    }
+    // Payslips stay readable for finance: de-linked, name kept on the row.
+    if (counts.payslips > 0) {
+      await tx.payslip.updateMany({
+        where: { guardId: id },
+        data:  { guardId: null, guardNameSnapshot: name },
+      });
+    }
+    await tx.guardDeduction.deleteMany({ where: { guardId: id } });
+    await tx.incidentGuard.deleteMany({ where: { guardId: id } });
+    await tx.trainingAttendee.deleteMany({ where: { guardId: id } });
+    await tx.leaveRequest.deleteMany({ where: { guardId: id } });
+    await tx.inventoryTransaction.deleteMany({ where: { guardId: id } });
+    await tx.deployment.deleteMany({ where: { guardId: id } });
+    await tx.attendanceRecord.deleteMany({ where: { guardId: id } });
+    await tx.guardTransfer.deleteMany({ where: { guardId: id } });
+    await tx.deploymentHistory.deleteMany({ where: { guardId: id } });
+    await tx.disciplinaryRecord.deleteMany({ where: { guardId: id } });
+    await tx.guardPromotion.deleteMany({ where: { guardId: id } });
+    await tx.guardDocument.deleteMany({ where: { guardId: id } });
+    await tx.guardRelative.deleteMany({ where: { guardId: id } });
+    await tx.guardAssociate.deleteMany({ where: { guardId: id } });
+    await tx.guard.delete({ where: { id } });
+  });
+  await audit(actorId, 'GUARD_PURGED', 'guard', id, { name, systemId: guard.systemId, reason, wiped: counts });
   return { id, name };
 }
 
@@ -313,16 +436,21 @@ async function voidInvoice(id: string, reason: string, actorId: string) {
     where:  { id },
     select: {
       id: true, invoiceNumber: true, status: true, paidAmount: true,
-      _count: { select: { payments: true } },
+      outstandingBalance: true, totalAmount: true, issuedAt: true,
     },
   });
   if (!invoice) throw new NotFoundError('Invoice not found');
   if (invoice.status === 'VOID') throw new AppError(`${invoice.invoiceNumber} is already void.`, 400);
+  if (invoice.issuedAt) {
+    refuse(`${invoice.invoiceNumber} has been issued by the MD and can no longer be voided.`);
+  }
 
-  // Money that moved, or may be moving, must stay on the books.
-  const momo = await prisma.invoicePayment.count({ where: { invoiceId: id, status: { in: ['PENDING', 'SUCCESS'] } } });
-  if (invoice.paidAmount > 0 || invoice._count.payments > 0 || momo > 0) {
-    refuse(`${invoice.invoiceNumber} has payments recorded against it and cannot be voided.`);
+  // A mobile-money payment in flight may still land; settled history stays.
+  // Settled payments (manual or SUCCESS momo) are preserved on the voided
+  // invoice and in the audit log ? only the unpaid remainder is written off.
+  const momoInflight = await prisma.invoicePayment.count({ where: { invoiceId: id, status: 'PENDING' } });
+  if (momoInflight > 0) {
+    refuse(`${invoice.invoiceNumber} has a mobile-money payment in flight. Wait for it to settle first.`);
   }
   const carried = await prisma.invoiceCarryForward.count({ where: { OR: [{ fromInvoiceId: id }, { toInvoiceId: id }] } });
   if (carried) {
@@ -340,13 +468,19 @@ async function voidInvoice(id: string, reason: string, actorId: string) {
       outstandingBalance: 0,
     },
   });
-  await audit(actorId, 'INVOICE_VOIDED', 'invoice', id, { invoiceNumber: invoice.invoiceNumber, reason: reason.trim() });
+  await audit(actorId, 'INVOICE_VOIDED', 'invoice', id, {
+    invoiceNumber: invoice.invoiceNumber,
+    reason: reason.trim(),
+    totalAsIssued: invoice.totalAmount,
+    paidPreserved: invoice.paidAmount,
+    outstandingWrittenOff: invoice.outstandingBalance,
+  });
   return { id, name: invoice.invoiceNumber };
 }
 
 export const softDeleteService = {
   deleteClient,   restoreClient,
-  deleteGuard,    restoreGuard,
+  deleteGuard,    restoreGuard,    purgeGuard,
   deleteStaff,    restoreStaff,
   deleteContract, restoreContract,
   deleteSite,     restoreSite,

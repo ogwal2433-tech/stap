@@ -12,7 +12,7 @@ const NAVY = '#1B3A6B';
 /** Requisition states where the money has been released — mirrors the API. */
 const DISPATCHABLE_STATUSES = ['APPROVED', 'ASSIGNED', 'IN_PROGRESS'];
 
-const FINANCE_ROLES: string[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const FINANCE_ROLES: string[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
 
 /** Left edge colour per channel, so a payment's route reads at a glance. */
 const CHANNEL_COLOUR: Record<string, string> = {

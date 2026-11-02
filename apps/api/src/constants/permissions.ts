@@ -16,6 +16,7 @@ export const PERMISSIONS = {
   GUARDS_CREATE:    'guards.create',
   GUARDS_EDIT:      'guards.edit',
   GUARDS_DELETE:    'guards.delete',
+  GUARDS_PURGE:     'guards.purge',
   GUARDS_PROMOTE:   'guards.promote',
   GUARDS_TRANSFER:  'guards.transfer',
   GUARDS_DOCUMENTS: 'guards.documents',
@@ -58,8 +59,14 @@ export const PERMISSIONS = {
   INVOICES_PRINT:  'invoices.print',
   /** Voids, never deletes: the invoice stays on file marked VOID. */
   INVOICES_VOID:   'invoices.void',
+  /** The month-end run that raises a batch for MD's final issue approval. */
+  INVOICES_RUN:    'invoices.run',
+  /** MD/Director final approval: flips run invoices from PENDING to ISSUED. */
+  INVOICES_ISSUE:  'invoices.issue',
   PAYMENTS_VIEW:   'payments.view',
   PAYMENTS_RECORD: 'payments.record',
+  /** Final approval on manually recorded payments before they count. */
+  PAYMENTS_APPROVE: 'payments.approve',
 
   // ── Payroll ─────────────────────────────────────────────────────────────────
   PAYROLL_VIEW:    'payroll.view',

@@ -11,7 +11,12 @@ import { useGuardDashboard, useRecentGuardActivity } from '../../hooks/useGuards
 
 const NAVY = '#1B3A6B';
 
-const RANKS = ['🥇', '🥈', '🥉', '4', '5'];
+const RANKS: React.ReactNode[] = [
+  <i key="r1" className="bi bi-award-fill" style={{ color: '#F4C430' }} />,
+  <i key="r2" className="bi bi-award-fill" style={{ color: '#A6A6A6' }} />,
+  <i key="r3" className="bi bi-award-fill" style={{ color: '#CD7F32' }} />,
+  '4', '5',
+];
 
 const STATUS_HEX: Record<string, string> = {
   ACTIVE:     '#1E8449',
@@ -19,6 +24,7 @@ const STATUS_HEX: Record<string, string> = {
   SUSPENDED:  '#E8701A',
   RESIGNED:   '#6C757D',
   TERMINATED: '#C0392B',
+  DESERTED:   '#343A40',
 };
 
 const PIE_COLORS = STATUS_HEX;
@@ -41,7 +47,7 @@ function timeAgo(iso: string): string {
 const STATUS_DOT = STATUS_HEX;
 
 interface StatCardProps {
-  icon:     string;
+  icon:     React.ReactNode;
   label:    string;
   value:    number;
   sub:      React.ReactNode;
@@ -103,17 +109,19 @@ export default function GuardDashboardPage() {
 
       {/* ── Row 1: KPI cards ──────────────────────────────────────────────────── */}
       <Row className="g-3 mb-4">
-        <Col xs={6} lg={3}>
+        <Col xs={6} md>
           <StatCard
-            icon="👮" label="Active Guards" value={stats.totalActive}
+            icon={<i className="bi bi-person-fill" style={{ color: NAVY }} />}
+            label="Active Guards" value={stats.totalActive}
             bg="#EBF5FB"
             sub={<>{stats.newThisMonth} joined this month</>}
             onClick={() => navigate('/guards?status=ACTIVE')}
           />
         </Col>
-        <Col xs={6} lg={3}>
+        <Col xs={6} md>
           <StatCard
-            icon="📅" label="Deployed Today" value={stats.deployedToday}
+            icon={<i className="bi bi-calendar-check-fill" style={{ color: '#1E8449' }} />}
+            label="Deployed Today" value={stats.deployedToday}
             bg="#E9F7EF"
             sub={
               <span style={{ color: stats.absentToday > 0 ? '#C0392B' : 'inherit' }}>
@@ -123,20 +131,31 @@ export default function GuardDashboardPage() {
             onClick={() => navigate('/attendance')}
           />
         </Col>
-        <Col xs={6} lg={3}>
+        <Col xs={6} md>
           <StatCard
-            icon="⚠️" label="Suspended" value={stats.totalSuspended}
+            icon={<i className="bi bi-exclamation-triangle-fill" style={{ color: '#E8701A' }} />}
+            label="Suspended" value={stats.totalSuspended}
             bg={stats.totalSuspended > 0 ? '#FEF9E7' : '#F4F6F7'}
             sub="Pending review"
             onClick={() => navigate('/guards?status=SUSPENDED')}
           />
         </Col>
-        <Col xs={6} lg={3}>
+        <Col xs={6} md>
           <StatCard
-            icon="🚫" label="Terminated" value={stats.totalTerminated}
+            icon={<i className="bi bi-slash-circle-fill" style={{ color: '#C0392B' }} />}
+            label="Terminated" value={stats.totalTerminated}
             bg={stats.totalTerminated > 0 ? '#FDEDEC' : '#F4F6F7'}
             sub="Total terminated"
             onClick={() => navigate('/guards?status=TERMINATED')}
+          />
+        </Col>
+        <Col xs={6} md>
+          <StatCard
+            icon={<i className="bi bi-flag" style={{ color: '#343A40' }} />}
+            label="Deserted" value={stats.totalDeserted}
+            bg={stats.totalDeserted > 0 ? '#E2E3E5' : '#F4F6F7'}
+            sub="Needs review"
+            onClick={() => navigate('/guards?status=DESERTED')}
           />
         </Col>
       </Row>
@@ -274,10 +293,10 @@ export default function GuardDashboardPage() {
             <Card.Body className="p-0">
               <ListGroup variant="flush">
                 {[
-                  { icon: '➕', label: 'Add New Guard',       path: '/guards/new'    },
-                  { icon: '📥', label: 'Bulk Import Guards',   path: '/guards/import' },
-                  { icon: '📅', label: "View Today's Roster", path: '/attendance'    },
-                  { icon: '📊', label: 'Mark Attendance',      path: '/attendance'    },
+                  { icon: <i className="bi bi-person-plus" />, label: 'Add New Guard',       path: '/guards/new'    },
+                  { icon: <i className="bi bi-box-arrow-in-down" />, label: 'Bulk Import Guards',   path: '/guards/import' },
+                  { icon: <i className="bi bi-calendar3" />, label: "View Today's Roster", path: '/attendance'    },
+                  { icon: <i className="bi bi-clipboard-check" />, label: 'Mark Attendance',      path: '/attendance'    },
                 ].map(({ icon, label, path }) => (
                   <ListGroup.Item
                     key={label}
@@ -290,7 +309,7 @@ export default function GuardDashboardPage() {
                   </ListGroup.Item>
                 ))}
                 <ListGroup.Item className="d-flex align-items-center justify-content-between px-3 py-2 text-muted">
-                  <span>📄 Generate Report</span>
+                  <span><i className="bi bi-file-earmark-text me-1" />Generate Report</span>
                   <Badge bg="secondary" style={{ fontSize: '0.65rem' }}>Coming Soon</Badge>
                 </ListGroup.Item>
               </ListGroup>

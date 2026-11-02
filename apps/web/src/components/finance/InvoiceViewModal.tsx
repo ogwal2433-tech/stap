@@ -13,7 +13,7 @@ const NAVY = '#1B3A6B';
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB');
 
 const STATUS_BG: Record<string, string> = {
-  PENDING: 'warning', OVERDUE: 'danger', PARTIALLY_PAID: 'info',
+  ISSUED: 'primary', PENDING: 'warning', OVERDUE: 'danger', PARTIALLY_PAID: 'info',
   PAID: 'success', VOID: 'dark',
 };
 

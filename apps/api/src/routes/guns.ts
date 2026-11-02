@@ -59,6 +59,8 @@ import { gunService } from '../services/gunService';
 import {
   ROLES,
   RegisterGunSchema,
+  RegisterGunBatchSchema,
+  AdjustBulletsSchema,
   UpdateGunSchema,
   DeployGunSchema,
   WithdrawGunSchema,
@@ -110,6 +112,7 @@ router.get(
       status:  req.query.status  as string | undefined,
       siteId:  req.query.siteId  as string | undefined,
       gunType: req.query.gunType as string | undefined,
+      client:  req.query.client  as string | undefined,
     });
     res.json({ success: true, data });
   }),
@@ -149,6 +152,16 @@ router.post(
 );
 
 router.post(
+  '/batch',
+  requirePermission(PERMISSIONS.GUNS_REGISTER),
+  validate(RegisterGunBatchSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await gunService.registerGunBatch(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.post(
   '/',
   requirePermission(PERMISSIONS.GUNS_REGISTER),
   validate(RegisterGunSchema),
@@ -170,6 +183,28 @@ router.patch(
 );
 
 // DELETE /guns/:id — removes it, or retires it when it has a movement history
+// POST /guns/:id/adjust-bullets - manual bullet correction (spend, find, top-up)
+router.post(
+  '/:id/adjust-bullets',
+  requireRole(...GUN_WRITE_ROLES),
+  validate(AdjustBulletsSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await gunService.adjustBullets(req.params.id, req.body, req.user!.userId);
+    res.json({ success: true, data: data });
+  }),
+);
+
+// GET /guns/reconcile - balance check: counters vs live guns, ledger heads vs
+// cached balances. Read-only by design; reports drift for a human to fix.
+router.get(
+  '/reconcile',
+  requireRole(...GUN_VIEW_ROLES),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const data = await gunService.reconcile();
+    res.json({ success: true, data: data });
+  }),
+);
+
 router.delete(
   '/:id',
   requirePermission(PERMISSIONS.GUNS_REGISTER),

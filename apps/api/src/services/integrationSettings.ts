@@ -183,6 +183,14 @@ export async function smtpConfig(): Promise<{
   };
 }
 
+/** Base address staff open in a browser; email buttons are built on it. */
+export async function publicUrl(): Promise<string> {
+  const all = await resolveAll();
+  const get = (k: string) => all.get(k)?.value ?? '';
+  const raw = get('app.publicUrl') || process.env.S360_FRONTEND_URL || '';
+  return raw.replace(/\/$/, '');
+}
+
 export async function xcelConfig(): Promise<{
   baseUrl: string; apiKey: string; merchantId: string;
   webhookUrl: string; partnerId: string; partnerApiKey: string; partnerBaseUrl: string;

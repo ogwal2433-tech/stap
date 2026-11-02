@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Badge, Breadcrumb, Button, Card, Col, Modal, Row, Spinner,
+  Alert, Badge, Breadcrumb, Button, Card, Col, Form, Modal, Row, Spinner,
   Tab, Table, Tabs,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
   useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
   useHrApprovePayroll, useMdApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
-  useZonePayrollRoster, useCompanyPayrollRoster,
+  useZonePayrollRoster, useCompanyPayrollRoster, usePayrollSummary,
   useStaffPayrollRoster, useStaffPayrollRuns, useRunStaffPayroll,
   useStaffDeductions, useCreateStaffDeduction, useCancelStaffDeduction,
   usePayrollShares, useSharePayroll,
@@ -23,6 +23,7 @@ import { useToast } from '../../context/ToastContext';
 import { useReportTitle } from '../../hooks/useReportTitles';
 import { useAuth } from '../../context/AuthContext';
 import RoleGuard from '../../components/RoleGuard';
+import PermissionGuard from '../../components/PermissionGuard';
 import InvoiceFormModal from '../../components/finance/InvoiceFormModal';
 import RecordPaymentModal from '../../components/finance/RecordPaymentModal';
 import FeeIncrementModal from '../../components/finance/FeeIncrementModal';
@@ -37,20 +38,37 @@ import { useInvoicePayments } from '../../hooks/usePayments';
 // Invoice amounts may carry cents now (a monthly contract rate ÷ 30 rarely lands
 // on a whole shilling); payroll figures are whole and print unchanged.
 import { ROLES, HR_ROLES, formatUgx as fmtUGX } from '@security360/shared';
-import type { InvoiceResponse, PayslipResponse, PayrollRunResponse, RunPayrollInput } from '@security360/shared';
-import { invoicesApi, payrollApi, payrollSharesApi } from '../../lib/finance.api';
+import type { InvoiceResponse, PaymentResponse, PayslipResponse, PayrollRunResponse, RunPayrollInput } from '@security360/shared';
+import { invoicesApi, paymentApprovalsApi, payrollApi, payrollSharesApi } from '../../lib/finance.api';
 import { FILE_PREFIX } from '../../lib/branding';
 
 const NAVY = '#1B3A6B';
 
+/** Billing month as YYYY-MM: the filter, the run and the summary share it. */
+const monthStr = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+/** The last twelve billing months, newest first, for the month pickers. */
+const MONTH_OPTIONS: { value: string; label: string }[] = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - i);
+  return {
+    value: monthStr(d),
+    label: d.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+  };
+});
+
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    PENDING:   'warning',
-    PAID:      'success',
-    OVERDUE:   'danger',
-    CANCELLED: 'secondary',
+    PENDING:        'warning',
+    ISSUED:         'primary',
+    PARTIALLY_PAID: 'info',
+    PAID:           'success',
+    OVERDUE:        'danger',
+    CANCELLED:      'secondary',
     // Voided, not deleted: stays on file and owes nothing.
-    VOID:      'dark',
+    VOID:           'dark',
   };
   return (
     <Badge bg={map[status] ?? 'secondary'} text={status === 'PENDING' ? 'dark' : undefined}>
@@ -128,7 +146,7 @@ function InvoicePaymentHistoryModal({ invoice, onClose }: { invoice: InvoiceResp
 
 // ── Invoices Tab ──────────────────────────────────────────────────────────────
 
-function InvoicesTab() {
+function InvoicesTab({ onGoAging }: { onGoAging: () => void }) {
   const [showCreate, setShowCreate]       = useState(false);
   const [payInvoice,    setPayInvoice]    = useState<InvoiceResponse | null>(null);
   const [incrementInvoice, setIncrementInvoice] = useState<InvoiceResponse | null>(null);
@@ -148,8 +166,16 @@ function InvoicesTab() {
   const [payMoMo,       setPayMoMo]       = useState<InvoiceResponse | null>(null);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceResponse | null>(null);
   const [viewInvoice,   setViewInvoice]   = useState<InvoiceResponse | null>(null);
+  const [monthFilter, setMonthFilter] = useState<string>(monthStr(new Date()));
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  // Column sort over the list: the Client header toggles name A→Z / newest.
+  const [sortBy, setSortBy] = useState<'newest' | 'clientName'>('newest');
+  const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [runningRun, setRunningRun] = useState(false);
+  const [issuingBatch, setIssuingBatch] = useState(false);
   const [editInvoice,   setEditInvoice]   = useState<InvoiceResponse | null>(null);
   const [sendingId,     setSendingId]     = useState<string | null>(null);
+  const [cloningId,     setCloningId]     = useState<string | null>(null);
 
   // ── Filters over the list ───────────────────────────────────────────────────
   // Both bounds are the day the invoice was raised, which the table prints in its
@@ -161,10 +187,11 @@ function InvoicesTab() {
   const filtersActive         = areInvoiceFiltersActive(filters);
 
   const listQuery: Parameters<typeof invoicesApi.list>[0] = {
-    // The table has no pager, so the filtered set comes back in one call. The
-    // tiles above are computed from these rows, which is another reason the old
-    // default of 20 was too few: a busy month made them quietly wrong.
+    // The table has no pager, so the filtered set comes back in one call.
     limit: 500,
+    month:     monthFilter || undefined,
+    status:    statusFilter || undefined,
+    sortBy,
     ...raisedRangeQuery(filters),
   };
 
@@ -185,28 +212,80 @@ function InvoicesTab() {
     }
   };
 
+  const handleClone = async (inv: InvoiceResponse) => {
+    if (cloningId) return;
+    setCloningId(inv.id);
+    try {
+      const copy = await invoicesApi.clone(inv.id);
+      showToast('Cloned '+inv.invoiceNumber+' as '+copy.invoiceNumber+' - adjust dates then save.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      setEditInvoice(copy);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Could not clone invoice.', 'danger');
+    } finally {
+      setCloningId(null);
+    }
+  };
+
   const invoices = data?.data ?? [];
 
-  const totalInvoiced = invoices.filter((i) => {
-    const d = new Date(i.createdAt);
-    const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  // The tiles are read from the server now: billing periods, not the raised
+  // date of one capped page, so the month on screen is the month totalled.
+  const { data: summary } = useQuery({
+    queryKey: ['invoice-summary', monthFilter],
+    queryFn:  () => invoicesApi.getSummary(monthFilter || undefined),
   });
 
-  const sumInvoiced = totalInvoiced.reduce((s, i) => s + i.totalAmount, 0);
-  // Both figures read the per-invoice balances rather than the invoice total.
-  // Summing totalAmount meant a part payment moved neither tile: the invoice
-  // still counted in full towards Outstanding, and contributed nothing to Paid
-  // because its status was PARTIALLY_PAID rather than PAID.
-  const sumPaid     = totalInvoiced.filter((i) => i.status !== 'CANCELLED')
-    .reduce((s, i) => s + (i.paidAmount ?? 0), 0);
-  const outstanding = totalInvoiced.filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED')
-    .reduce((s, i) => s + (i.outstandingBalance ?? i.totalAmount), 0);
-  const overdueCount = totalInvoiced.filter((i) => i.status === 'OVERDUE').length;
+  const handleIssue = async (inv: InvoiceResponse) => {
+    setIssuingId(inv.id);
+    try {
+      await invoicesApi.issue(inv.id);
+      showToast(`${inv.invoiceNumber} issued.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-summary'] });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not issue the invoice.'), 'danger');
+    } finally {
+      setIssuingId(null);
+    }
+  };
+
+  const handleRun = async () => {
+    const month = monthFilter || monthStr(new Date());
+    setRunningRun(true);
+    try {
+      const r = await invoicesApi.runMonthly(month);
+      showToast(`Run ${month}: ${r.created} raised, ${r.skipped} already on file.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-summary'] });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not run the month-end invoices.'), 'danger');
+    } finally {
+      setRunningRun(false);
+    }
+  };
+
+  const handleIssueBatch = async () => {
+    const month = monthFilter || monthStr(new Date());
+    setIssuingBatch(true);
+    try {
+      const r = await invoicesApi.issueBatch({ month });
+      showToast(
+        r.issued > 0 ? `${r.issued} invoice${r.issued === 1 ? '' : 's'} issued.` : 'Nothing left to issue.',
+        'success',
+      );
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-summary'] });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not issue the run.'), 'danger');
+    } finally {
+      setIssuingBatch(false);
+    }
+  };
 
   return (
     <>
-      <div className="d-flex align-items-center justify-content-between mb-3">
+      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <span className="fw-semibold">
           Invoices
           {data && (
@@ -219,25 +298,82 @@ function InvoicesTab() {
             </span>
           )}
         </span>
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
-          <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
-            + Generate Invoice
-          </Button>
-        </RoleGuard>
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Select
+            size="sm" style={{ width: 190 }} aria-label="Billing month"
+            value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
+          >
+            <option value="">All months</option>
+            {MONTH_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </Form.Select>
+          <PermissionGuard permission="invoices.run">
+            <Button
+              size="sm" variant="outline-primary" disabled={runningRun}
+              onClick={handleRun}
+              title="Raise one invoice per active contract for the month, held for MD issue"
+            >
+              {runningRun ? 'Running...' : 'Run month-end invoices'}
+            </Button>
+          </PermissionGuard>
+          <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
+            <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowCreate(true)}>
+              + Generate Invoice
+            </Button>
+          </RoleGuard>
+        </div>
       </div>
 
-      {/* Summary bar */}
+      {(summary?.awaitingIssue ?? 0) > 0 && monthFilter && (
+        <Alert variant="info" className="d-flex align-items-center justify-content-between py-2 small mb-3 flex-wrap gap-2">
+          <span>
+            <i className="bi bi-envelope-paper me-2" />
+            {summary!.awaitingIssue} invoice{summary!.awaitingIssue === 1 ? '' : 's'} for
+            {MONTH_OPTIONS.find((m) => m.value === monthFilter)?.label ?? monthFilter} await your issue.
+          </span>
+          <PermissionGuard permission="invoices.issue">
+            <Button size="sm" style={{ background: '#1E8449', borderColor: '#1E8449' }} disabled={issuingBatch} onClick={handleIssueBatch}>
+              {issuingBatch ? 'Issuing...' : 'Issue all'}
+            </Button>
+          </PermissionGuard>
+        </Alert>
+      )}
+
+      {statusFilter && (
+        <div className="mb-2">
+          <Badge bg="secondary">Status: {statusFilter.replace('_', ' ')}</Badge>{' '}
+          <Button size="sm" variant="link" className="text-decoration-none p-0 ms-1" onClick={() => setStatusFilter('')}>
+            clear
+          </Button>
+        </div>
+      )}
+
+      {/* Summary bar - server-computed for the picked month, and each tile
+          narrows the page to the figures it shows. */}
       <Row className="g-2 mb-3">
-        {[
-          { label: 'Invoiced This Month', value: sumInvoiced, color: '#EBF5FB' },
-          { label: 'Paid This Month',     value: sumPaid,     color: '#E9F7EF' },
-          { label: 'Outstanding',         value: outstanding, color: outstanding > 0 ? '#FEF9E7' : '#F4F6F7' },
-          { label: 'Overdue',             value: overdueCount, color: overdueCount > 0 ? '#FDEDEC' : '#F4F6F7', isCount: true },
-        ].map(({ label, value, color, isCount }) => (
+        {([
+          { label: 'Invoiced This Month', value: summary?.invoiced ?? 0, color: '#EBF5FB',
+            onClick: () => { setStatusFilter(''); setMonthFilter(monthFilter || monthStr(new Date())); } },
+          { label: 'Paid This Month', value: summary?.paid ?? 0, color: '#E9F7EF',
+            onClick: () => setStatusFilter('PAID') },
+          { label: 'Outstanding', value: summary?.outstanding ?? 0,
+            color: (summary?.outstanding ?? 0) > 0 ? '#FEF9E7' : '#F4F6F7',
+            onClick: onGoAging },
+          { label: 'Overdue', value: summary?.overdueCount ?? 0,
+            color: (summary?.overdueCount ?? 0) > 0 ? '#FDEDEC' : '#F4F6F7', isCount: true,
+            onClick: () => setStatusFilter('OVERDUE') },
+        ] as Array<{ label: string; value: number; color: string; isCount?: boolean; onClick: () => void }>)
+          .map(({ label, value, color, isCount, onClick }) => (
           <Col xs={6} lg={3} key={label}>
-            <Card className="border-0 shadow-sm h-100" style={{ background: color }}>
+            <Card
+              className="border-0 shadow-sm h-100"
+              style={{ background: color, cursor: 'pointer' }}
+              onClick={onClick}
+              title={`Show ${label.toLowerCase()} on this page`}
+            >
               <Card.Body className="p-2">
-                <div className="small text-muted">{label}</div>
+                <div className="small text-muted d-flex justify-content-between">
+                  {label}<i className="bi bi-arrow-right-short" />
+                </div>
                 <div className="fw-bold" style={{ color: NAVY, fontSize: '1.1rem' }}>
                   {isCount ? value : fmtUGX(value)}
                 </div>
@@ -258,11 +394,19 @@ function InvoicesTab() {
           <thead className="table-light">
             <tr>
               <th>Invoice #</th>
-              <th>Client</th>
+              <th
+                role="button"
+                onClick={() => setSortBy(sortBy === 'clientName' ? 'newest' : 'clientName')}
+                title={sortBy === 'clientName' ? 'Sorted A→Z — click for newest first' : 'Click to sort by client name'}
+                style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+              >
+                Client {sortBy === 'clientName' ? '▲' : '↕'}
+              </th>
               <th>Raised</th>
               <th>Period</th>
               <th>Amount</th>
               <th>Due Date</th>
+              <th>Raised by</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -270,7 +414,7 @@ function InvoicesTab() {
           <tbody>
             {invoices.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center text-muted py-4">
+                <td colSpan={9} className="text-center text-muted py-4">
                   {filtersActive ? 'No invoice matches these filters' : 'No invoices yet'}
                 </td>
               </tr>
@@ -303,14 +447,18 @@ function InvoicesTab() {
                     </div>
                   )}
                 </td>
+                <td className="text-muted small text-nowrap">{inv.createdByName ?? '-'}</td>
                 <td>
                   <InvoiceActionsMenu
                     invoice={inv}
                     pdfBusy={pdfId === inv.id}
                     sendBusy={sendingId === inv.id}
+                    issueBusy={issuingId === inv.id}
                     actions={{
                       onView:          () => setViewInvoice(inv),
+                      onIssue:         () => handleIssue(inv),
                       onEdit:          () => setEditInvoice(inv),
+                      onClone:         () => handleClone(inv),
                       onPdf:           () => handleOpenPdf(inv),
                       onHistory:       () => setHistoryInvoice(inv),
                       onSend:          () => handleSendEmail(inv),
@@ -333,6 +481,7 @@ function InvoicesTab() {
         onHide={() => setVoidTarget(null)}
         invoiceNumber={voidTarget?.invoiceNumber ?? ''}
         totalAmount={voidTarget?.totalAmount ?? 0}
+        paidAmount={voidTarget?.paidAmount ?? 0}
         onConfirm={async (reason) => {
           const r = await invoicesApi.voidInvoice(voidTarget!.id, reason);
           showToast(`${r.name} voided.`, 'success');
@@ -495,7 +644,150 @@ function payrollStatusColor(status: string): { bg: string; dark?: boolean } {
 // Same gate as the DELETE endpoint: dropping a draft is a write action on the
 // same footing as calculating one, but stopping short of the money trail an
 // approved run leaves is why only these two roles may do it.
-const RUN_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const RUN_DELETE_ROLES = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
+
+// Zone-totals panel: total pay for each zone for the selected period plus the
+// countrywide total across them. Clicking a zone row expands every guard paid
+// in it, their amounts footing to the row figure. Reads its own summary query
+// so it stays in step with month/year without threading props through the run
+// card. Rejected runs never appear — the server only counts live runs.
+function ZoneTotalsCard({ month, year }: { month: number; year: number }) {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const { data, isLoading } = usePayrollSummary(month, year);
+  const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const { data: openDetail, isLoading: openLoading } = usePayrollDetail(openRunId ?? '');
+
+  const zones  = data?.zones ?? [];
+  const totals = data?.totals;
+  const payslips = (openDetail?.payslips ?? [])
+    .slice()
+    .sort((a, b) => b.netSalary - a.netSalary);
+  const openRow = zones.find((z) => z.runId === openRunId);
+
+  return (
+    <Card className="mb-3 border-0 shadow-sm">
+      <Card.Body className="py-3">
+        <div className="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-2">
+          <div className="small fw-bold text-uppercase" style={{ fontSize: '0.72rem', color: NAVY }}>
+            Guard payroll — zone totals
+          </div>
+          <div className="small text-muted">{MONTHS[month - 1]} {year}</div>
+        </div>
+        {isLoading ? (
+          <div className="text-center py-3"><Spinner animation="border" size="sm" /></div>
+        ) : zones.length === 0 ? (
+          <div className="small text-muted">
+            No live guard payroll run for {MONTHS[month - 1]} {year} yet — calculated zone totals appear here.
+          </div>
+        ) : (
+          <Table size="sm" className="mb-0 align-middle">
+            <thead>
+              <tr className="small text-uppercase" style={{ fontSize: '0.68rem', color: NAVY }}>
+                <th>Zone</th>
+                <th>Status</th>
+                <th className="text-end">Guards</th>
+                <th className="text-end">Gross</th>
+                <th className="text-end">Deductions</th>
+                <th className="text-end">Net pay</th>
+              </tr>
+            </thead>
+            <tbody>
+              {zones.map((z) => {
+                const c = payrollStatusColor(z.status);
+                const open = z.runId === openRunId;
+                return (
+                  <tr
+                    key={z.runId}
+                    style={{ cursor: 'pointer', background: open ? '#EEF3FA' : undefined }}
+                    onClick={() => setOpenRunId(open ? null : z.runId)}
+                    title="Click to see every guard paid in this zone"
+                  >
+                    <td className="small fw-semibold">{z.zoneName ?? 'Company-wide (all zones)'}</td>
+                    <td><Badge bg={c.bg} text={c.dark ? 'dark' : undefined}>{z.status.replace('_', ' ')}</Badge></td>
+                    <td className="small text-end">{z.guards}</td>
+                    <td className="small text-end">{fmtUGX(z.gross)}</td>
+                    <td className="small text-end">{fmtUGX(z.deductions)}</td>
+                    <td className="small text-end fw-semibold">{fmtUGX(z.net)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: '#F4F7FB' }}>
+                <td className="small fw-bold" colSpan={2}>Total — all zones (countrywide)</td>
+                <td className="small fw-bold text-end">{totals?.guards ?? 0}</td>
+                <td className="small fw-bold text-end">{fmtUGX(totals?.gross ?? 0)}</td>
+                <td className="small fw-bold text-end">{fmtUGX(totals?.deductions ?? 0)}</td>
+                <td className="small fw-bold text-end" style={{ color: NAVY }}>{fmtUGX(totals?.net ?? 0)}</td>
+              </tr>
+            </tfoot>
+          </Table>
+        )}
+        <div className="small text-muted mt-2">
+          Click a zone to see every guard paid in it. Rejected runs are excluded — they paid nobody.
+        </div>
+      </Card.Body>
+
+      {openRunId && (
+        <Card.Body className="border-top py-3">
+          <div className="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-2">
+            <div className="small fw-semibold" style={{ color: NAVY }}>
+              {openRow?.zoneName ?? 'Company-wide (all zones)'} — paid guards
+            </div>
+            <Button size="sm" variant="link" className="p-0 small" onClick={() => setOpenRunId(null)}>
+              Close
+            </Button>
+          </div>
+          {openLoading ? (
+            <div className="text-center py-3"><Spinner animation="border" size="sm" /></div>
+          ) : payslips.length === 0 ? (
+            <div className="small text-muted">No payslips on this run.</div>
+          ) : (
+            <>
+              <Table size="sm" className="mb-0 align-middle">
+                <thead>
+                  <tr className="small text-uppercase" style={{ fontSize: '0.68rem', color: NAVY }}>
+                    <th>Guard</th>
+                    <th className="text-end">Days</th>
+                    <th className="text-end">Gross</th>
+                    <th className="text-end">Deductions</th>
+                    <th className="text-end">Net pay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payslips.map((p) => (
+                    <tr key={p.id}>
+                      <td className="small">{p.guardName}</td>
+                      <td className="small text-end text-muted">{p.daysWorked}/{p.totalDays}</td>
+                      <td className="small text-end">{fmtUGX(p.grossSalary)}</td>
+                      <td className="small text-end">{fmtUGX(p.totalDeductions)}</td>
+                      <td className="small text-end fw-semibold">{fmtUGX(p.netSalary)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#F4F7FB' }}>
+                    <td className="small fw-bold" colSpan={2}>
+                      {payslips.length} paid guard{payslips.length === 1 ? '' : 's'}
+                    </td>
+                    <td className="small fw-bold text-end">{fmtUGX(payslips.reduce((s, p) => s + p.grossSalary, 0))}</td>
+                    <td className="small fw-bold text-end">{fmtUGX(payslips.reduce((s, p) => s + p.totalDeductions, 0))}</td>
+                    <td className="small fw-bold text-end" style={{ color: NAVY }}>
+                      {fmtUGX(payslips.reduce((s, p) => s + p.netSalary, 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </Table>
+              <div className="small text-muted mt-2">
+                Sorted by net pay, highest first. These amounts foot to the zone figure above.
+              </div>
+            </>
+          )}
+        </Card.Body>
+      )}
+    </Card>
+  );
+}
 
 function PayrollTab() {
   const now   = new Date();
@@ -509,7 +801,7 @@ function PayrollTab() {
   const [hrNotes, setHrNotes] = useState('');
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
-  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
+  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf' | 'full'>('');
   // Two-step inline confirmation, shared by the run card and the history row.
   const [confirmDeleteRunId, setConfirmDeleteRunId] = useState<string | null>(null);
   // Rejection always needs a reason, so it goes through a modal — run card or
@@ -663,6 +955,18 @@ function PayrollTab() {
     }
   };
 
+  // The whole month - every zone, company-wide and staff - in one workbook.
+  const handleFullExport = async () => {
+    setExporting('full');
+    try {
+      await payrollApi.downloadFullPayroll(month, year);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, 'Failed to download the full payroll'), 'danger');
+    } finally {
+      setExporting('');
+    }
+  };
+
   return (
     <>
       <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
@@ -678,6 +982,12 @@ function PayrollTab() {
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
+        <Button size="sm" variant="outline-primary" disabled={!!exporting} onClick={handleFullExport}
+          title="Every run this month - all zones, company-wide and staff - in one file">
+          {exporting === 'full'
+            ? <><Spinner animation="border" size="sm" className="me-1" />Exporting...</>
+            : <><i className="bi bi-file-earmark-spreadsheet me-1" />Full payroll</>}
+        </Button>
         {scope === 'ZONE' && (
           <Form.Select size="sm" style={{ width: 260 }} value={selectedZoneId} onChange={(e) => setZoneId(e.target.value)}>
             {zones.length === 0 && <option value="">— No active zones —</option>}
@@ -688,7 +998,7 @@ function PayrollTab() {
             ))}
           </Form.Select>
         )}
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER]}>
           {canOpenRun && (!thisRun || thisRun.status === 'REJECTED') && (
             <Button
               size="sm"
@@ -701,6 +1011,8 @@ function PayrollTab() {
           )}
         </RoleGuard>
       </div>
+
+      <ZoneTotalsCard month={month} year={year} />
 
       {confirming && canOpenRun && (
         <Card className={`mb-3 border-${thisRun?.status === 'REJECTED' ? 'danger' : 'warning'}`}>
@@ -907,7 +1219,7 @@ function PayrollTab() {
                       ✅ HR Approve
                     </Button>
                   )}
-                                    {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.MD && (
+                                    {thisRun.status === 'HR_APPROVED' && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
                     <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(thisRun.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
                       <i className="bi bi-award me-1" />MD Approve
                     </Button>
@@ -1319,7 +1631,7 @@ function StaffPayrollTab() {
   const [hrNotes, setHrNotes] = useState('');
   const [viewPayslip, setViewPayslip] = useState<PayslipResponse | null>(null);
   const [flagTarget, setFlagTarget] = useState<PayslipResponse | null>(null);
-  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf'>('');
+  const [exporting, setExporting] = useState<'' | 'excel' | 'pdf' | 'full'>('');
   const [confirmDeleteRunId, setConfirmDeleteRunId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PayrollRunResponse | null>(null);
   const [unpicked, setUnpicked] = useState<Set<string>>(new Set());
@@ -1415,6 +1727,18 @@ function StaffPayrollTab() {
     }
   };
 
+  // The whole month - every run, including the guard zones, in one workbook.
+  const handleFullExport = async () => {
+    setExporting('full');
+    try {
+      await payrollApi.downloadFullPayroll(month, year);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, 'Failed to download the full payroll'), 'danger');
+    } finally {
+      setExporting('');
+    }
+  };
+
   const handleAddDeduction = async () => {
     const amount = parseInt(dedAmount.replace(/[^0-9]/g, ''), 10);
     if (!deducteeId) { showToast('Pick the staff member first.', 'danger'); return; }
@@ -1452,7 +1776,13 @@ function StaffPayrollTab() {
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER]}>
+        <Button size="sm" variant="outline-primary" disabled={!!exporting} onClick={handleFullExport}
+          title="Every run this month - all zones, company-wide and staff - in one file">
+          {exporting === 'full'
+            ? <><Spinner animation="border" size="sm" className="me-1" />Exporting...</>
+            : <><i className="bi bi-file-earmark-spreadsheet me-1" />Full payroll</>}
+        </Button>
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER]}>
           {(!thisRun || thisRun.status === 'REJECTED') && (
             <Button
               size="sm"
@@ -1558,7 +1888,7 @@ function StaffPayrollTab() {
                   <Button size="sm" variant="outline-primary" onClick={() => setShareTarget(thisRun)}>
                     <i className="bi bi-share me-1" />Share
                   </Button>
-                  {thisRun.status === 'DRAFT' && user?.role === ROLES.DIRECTOR && (
+                  {thisRun.status === 'DRAFT' && (user?.role === ROLES.DIRECTOR || user?.role === ROLES.ASSISTANT_MANAGER) && (
                     <Button size="sm" variant="success"
                       onClick={() => approvePayroll.mutateAsync(thisRun.id).then(() => showToast('Staff payroll approved', 'success')).catch(() => showToast('Failed', 'danger'))}>
                       <i className="bi bi-check-lg me-1" />Approve
@@ -1578,17 +1908,20 @@ function StaffPayrollTab() {
                       </Button>
                     )
                   )}
-                  {(thisRun.status === 'DRAFT' || thisRun.status === 'APPROVED') && canDeleteRun && (
+                  {thisRun.status === 'APPROVED' && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
+                    <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(thisRun.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                      <i className="bi bi-award me-1" />MD Approve
+                    </Button>
+                  )}
+                  {(thisRun.status === 'DRAFT' || thisRun.status === 'APPROVED') && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
                     <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(thisRun)}>
                       <i className="bi bi-arrow-counterclockwise me-1" />Reject
                     </Button>
                   )}
-                  {thisRun.status === 'APPROVED' && isHR && (
-                    <Button size="sm" variant="success" onClick={() => setHrApproving(true)}>
-                      <i className="bi bi-check-lg me-1" />HR Approve
-                    </Button>
+                  {thisRun.status === 'APPROVED' && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
+                    <div className="small text-muted">Awaiting final approval (approve or reject above).</div>
                   )}
-                                    {thisRun.status === 'HR_APPROVED' && user?.role === ROLES.MD && (
+                                    {thisRun.status === 'HR_APPROVED' && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
                     <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(thisRun.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
                       <i className="bi bi-award me-1" />MD Approve
                     </Button>
@@ -1604,8 +1937,8 @@ function StaffPayrollTab() {
 
               {thisRun.status === 'APPROVED' && isHR && (
                 <Alert variant="info" className="mt-3 mb-0 small">
-                  <div className="fw-bold mb-1"><i className="bi bi-info-circle me-1" />HR Review Required</div>
-                  Review each salary below. Flag any that need adjustment before approving. Once HR-approved, the run needs MD final approval before Finance can disburse.
+                  <div className="fw-bold mb-1"><i className="bi bi-info-circle me-1" />Approved - awaiting final approval</div>
+                  Harold has approved this run. Micheal gives the final approval (or sends it back) - there is no HR step on staff payroll.
                   {flaggedCount > 0 && <div className="mt-1">{flaggedCount} staff payslip(s) currently flagged.</div>}
                 </Alert>
               )}
@@ -1837,6 +2170,16 @@ function StaffPayrollTab() {
                           </Button>
                         )
                       )}
+                      {r.status === 'APPROVED' && (user?.role === ROLES.MD || user?.role === ROLES.DIRECTOR) && (
+                        <span className="d-inline-flex gap-1 ms-1">
+                          <Button size="sm" variant="dark" onClick={() => mdApprovePayroll.mutateAsync(r.id).then(() => showToast('MD final approval recorded', 'success')).catch((err: any) => showToast(err?.response?.data?.error ?? 'Failed', 'danger'))}>
+                            <i className="bi bi-award me-1" />MD Approve
+                          </Button>
+                          <Button size="sm" variant="outline-danger" onClick={() => setRejectTarget(r)}>
+                            <i className="bi bi-arrow-counterclockwise me-1" />Reject
+                          </Button>
+                        </span>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -2063,8 +2406,11 @@ function CashbookTab() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year,  setYear]  = useState(now.getFullYear());
   const [showAdd, setShowAdd] = useState(false);
+  // Clicking a tile filters the table to that side of the ledger — the tile
+  // doubles as the drill-down.
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
 
-  const { data, isLoading } = useCashbook({ month, year, limit: 200 });
+  const { data, isLoading } = useCashbook({ month, year, limit: 200, type: typeFilter === 'ALL' ? undefined : typeFilter });
   const { data: summary }   = useCashbookSummary(month, year);
   const entries = data?.data ?? [];
 
@@ -2079,7 +2425,7 @@ function CashbookTab() {
         <Form.Select size="sm" style={{ width: 90 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </Form.Select>
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER]}>
           <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowAdd(true)}>
             + Add Entry
           </Button>
@@ -2087,23 +2433,36 @@ function CashbookTab() {
       </div>
 
       {summary && (
-        <Row className="g-2 mb-3">
+        <Row className="g-2 mb-1">
           {[
-            { label: 'Total In',  value: summary.totalIn,  color: '#E9F7EF' },
-            { label: 'Total Out', value: summary.totalOut, color: '#FDEDEC' },
-            { label: 'Net Cash',  value: summary.netCash,  color: '#EBF5FB' },
-          ].map(({ label, value, color }) => (
-            <Col xs={4} key={label}>
-              <Card className="border-0 shadow-sm" style={{ background: color }}>
-                <Card.Body className="p-2">
-                  <div className="small text-muted">{label}</div>
-                  <div className="fw-bold small" style={{ color: NAVY }}>{fmtUGX(value)}</div>
-                </Card.Body>
-              </Card>
-            </Col>
-          ))}
+            { label: 'Total In',  value: summary.totalIn,  color: '#E9F7EF', type: 'IN'  as const },
+            { label: 'Total Out', value: summary.totalOut, color: '#FDEDEC', type: 'OUT' as const },
+            { label: 'Net Cash',  value: summary.netCash,  color: '#EBF5FB', type: 'ALL' as const },
+          ].map(({ label, value, color, type }) => {
+            const active = typeFilter === type;
+            return (
+              <Col xs={4} key={label}>
+                <Card
+                  className="border-0 shadow-sm h-100"
+                  style={{ background: color, cursor: 'pointer', outline: active ? `2px solid ${NAVY}` : '2px solid transparent' }}
+                  title="Click to filter the entries below"
+                  onClick={() => setTypeFilter(prev => (prev === type ? 'ALL' : type))}
+                >
+                  <Card.Body className="p-2">
+                    <div className="small text-muted">{label}</div>
+                    <div className="fw-bold small" style={{ color: NAVY }}>{fmtUGX(value)}</div>
+                  </Card.Body>
+                </Card>
+              </Col>
+            );
+          })}
         </Row>
       )}
+      <div className="text-muted mb-3" style={{ fontSize: '0.7rem' }}>
+        {typeFilter === 'ALL'
+          ? 'Tip: click a tile above to filter the entries below.'
+          : <>Showing: {typeFilter === 'IN' ? 'money in' : 'money out'} — <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setTypeFilter('ALL')}>show all</span></>}
+      </div>
 
       {isLoading ? (
         <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
@@ -2146,16 +2505,29 @@ function ARAgingTab() {
   // this window, and how much of it is still owed" — not "what fell due in it".
   const [filters, setFilters] = useState(EMPTY_INVOICE_FILTERS);
   const filtersActive         = areInvoiceFiltersActive(filters);
+  const [activeBucket, setActiveBucket] = useState<string | null>(null);
   const { data, isLoading }   = useARAgingReport(raisedRangeQuery(filters));
 
   const buckets = data ? [
-    { label: 'Current (0-30 days)', value: data.buckets.current,   color: 'success' },
-    { label: '31-60 Days',          value: data.buckets.days31_60, color: 'warning' },
-    { label: '61-90 Days',          value: data.buckets.days61_90, color: 'warning' },
-    { label: '90+ Days',            value: data.buckets.over90,    color: 'danger' },
+    { key: 'current', label: 'Current (0-30 days)', value: data.buckets.current,   color: 'success' },
+    { key: '31_60',   label: '31-60 Days',          value: data.buckets.days31_60, color: 'warning' },
+    { key: '61_90',   label: '61-90 Days',          value: data.buckets.days61_90, color: 'warning' },
+    { key: 'over90',  label: '90+ Days',            value: data.buckets.over90,    color: 'danger' },
   ] : [];
 
-  const unpaid = (data?.invoices ?? []).filter((i) => ['PENDING', 'OVERDUE'].includes(i.status));
+  const agingBucketOf = (dueDate: string) => {
+    const days = Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000);
+    if (days <= 30) return 'current';
+    if (days <= 60) return '31_60';
+    if (days <= 90) return '61_90';
+    return 'over90';
+  };
+
+  const unpaid = (data?.invoices ?? []).filter((i) => {
+    if (!['PENDING', 'ISSUED', 'OVERDUE', 'PARTIALLY_PAID'].includes(i.status)) return false;
+    if (!activeBucket) return true;
+    return agingBucketOf(i.dueDate) === activeBucket;
+  });
 
   return (
     <>
@@ -2180,19 +2552,34 @@ function ARAgingTab() {
       ) : (
         <>
           <Row className="g-2 mb-4">
-            {buckets.map(({ label, value, color }) => (
-              <Col xs={6} lg={3} key={label}>
-                <Card className="border-0 shadow-sm text-center">
-                  <Card.Body className="py-2 px-1">
-                    <div className="small text-muted mb-1" style={{ fontSize: '0.7rem' }}>{label}</div>
-                    <Badge bg={color} text={color === 'warning' ? 'dark' : undefined} style={{ fontSize: '0.9rem', padding: '6px 10px' }}>
-                      {fmtUGX(value)}
-                    </Badge>
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
+            {buckets.map(({ key, label, value, color }) => {
+              const active = activeBucket === key;
+              return (
+                <Col xs={6} lg={3} key={key}>
+                  <Card
+                    className="border-0 shadow-sm text-center"
+                    style={{ cursor: 'pointer', border: active ? '2px solid #1B3A6B' : undefined, boxShadow: active ? '0 2px 10px #1B3A6B22' : undefined }}
+                    onClick={() => setActiveBucket((prev) => (prev === key ? null : key))}
+                    title="Click to filter the invoices below by this bucket"
+                  >
+                    <Card.Body className="py-2 px-1">
+                      <div className="small text-muted mb-1" style={{ fontSize: '0.7rem' }}>{label}</div>
+                      <Badge bg={color} text={color === 'warning' ? 'dark' : undefined} style={{ fontSize: '0.9rem', padding: '6px 10px' }}>
+                        {fmtUGX(value)}
+                      </Badge>
+                      {active && <div className="small mt-1" style={{ color: '#1B3A6B', fontSize: '0.65rem' }}>filtered</div>}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              );
+            })}
           </Row>
+          {activeBucket && (
+            <div className="d-flex align-items-center gap-2 mb-3 small">
+              <span className="text-muted">Showing {unpaid.length} invoice{unpaid.length === 1 ? '' : 's'} in {buckets.find(b => b.key === activeBucket)?.label}.</span>
+              <Button size="sm" variant="outline-secondary" onClick={() => setActiveBucket(null)}>Clear filter</Button>
+            </div>
+          )}
 
           <Table striped responsive className="small">
             <thead className="table-light">
@@ -2202,7 +2589,7 @@ function ARAgingTab() {
               {unpaid.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center text-muted py-3">
-                    {filtersActive ? 'No outstanding invoice matches these filters' : 'No outstanding invoices'}
+                    {activeBucket ? 'No outstanding invoice in this aging bucket' : filtersActive ? 'No outstanding invoice matches these filters' : 'No outstanding invoices'}
                   </td>
                 </tr>
               ) : unpaid.map((inv) => (
@@ -2227,11 +2614,207 @@ function ARAgingTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-import { Form } from 'react-bootstrap';
+// ?? Payments Tab ???????????????????????????????????????????????????????????????
+
+const PAYMENT_STATUS_TABS = [
+  { key: 'PENDING_APPROVAL', label: 'Awaiting approval' },
+  { key: 'APPROVED',         label: 'Approved' },
+  { key: 'REJECTED',         label: 'Rejected' },
+  { key: '',                 label: 'All' },
+] as const;
+
+function PaymentsTab() {
+  const [statusFilter, setStatusFilter] = useState<string>('PENDING_APPROVAL');
+  const [monthFilter, setMonthFilter]   = useState<string>(monthStr(new Date()));
+  const [rejectTarget, setRejectTarget] = useState<PaymentResponse | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [busyId, setBusyId]             = useState<string | null>(null);
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['finance-payments', statusFilter, monthFilter],
+    queryFn:  () => paymentApprovalsApi.list({
+      status: statusFilter || undefined,
+      month:  monthFilter || undefined,
+      limit:  100,
+    }),
+  });
+  const rows = data?.data ?? [];
+
+  const handleApprove = async (id: string) => {
+    setBusyId(id);
+    try {
+      await paymentApprovalsApi.approve(id);
+      showToast('Payment approved - the invoice balance has moved.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['finance-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['ar-aging'] });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not approve the payment.'), 'danger');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectTarget) return;
+    setBusyId(rejectTarget.id);
+    try {
+      await paymentApprovalsApi.reject(rejectTarget.id, rejectReason.trim());
+      showToast('Payment rejected.', 'success');
+      setRejectTarget(null);
+      setRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['finance-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-summary'] });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Could not reject the payment.'), 'danger');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const badgeFor = (s: string) =>
+    s === 'APPROVED' ? 'success' : s === 'REJECTED' ? 'danger' : 'warning';
+
+  return (
+    <>
+      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <span className="fw-semibold small text-muted">
+          Manually recorded payments and their approval state
+        </span>
+        <Form.Select size="sm" style={{ width: 190 }} aria-label="Payment month"
+          value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
+          <option value="">All months</option>
+          {MONTH_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </Form.Select>
+      </div>
+
+      <div className="d-flex gap-2 mb-3 flex-wrap">
+        {PAYMENT_STATUS_TABS.map((t) => (
+          <Button
+            key={t.key || 'all'}
+            size="sm"
+            variant={statusFilter === t.key ? 'primary' : 'outline-secondary'}
+            onClick={() => setStatusFilter(t.key)}
+          >
+            {t.label}
+          </Button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
+      ) : (
+        <Table striped responsive className="small">
+          <thead className="table-light">
+            <tr>
+              <th>Invoice #</th>
+              <th>Client</th>
+              <th>Amount</th>
+              <th>Mode</th>
+              <th>Payment Date</th>
+              <th>Cheque #</th>
+              <th>Reference</th>
+              <th>Entered by</th>
+              <th>Submitted</th>
+              <th>Status</th>
+              <th className="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={11} className="text-center text-muted py-4">No payments match this view</td>
+              </tr>
+            ) : rows.map((p) => (
+              <tr key={p.id}>
+                <td className="fw-medium">{p.invoiceNumber || '-'}</td>
+                <td>{p.clientName || '-'}</td>
+                <td className="fw-semibold">{fmtUGX(p.amountPaid)}</td>
+                <td>{p.mode.replace('_', ' ')}</td>
+                <td className="text-nowrap">
+                  {p.paymentDate
+                    ? new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : '-'}
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                  {p.chequeNumber || '-'}
+                </td>
+                <td className="text-muted" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                  {p.referenceNumber || '-'}
+                </td>
+                <td>{p.recordedByName ?? p.recordedBy}</td>
+                <td className="text-nowrap">
+                  {new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </td>
+                <td>
+                  <Badge bg={badgeFor(p.status)}>{p.status.replace('_', ' ')}</Badge>
+                  {p.status === 'REJECTED' && p.rejectedReason && (
+                    <div className="text-muted" style={{ fontSize: '0.68rem', maxWidth: 200 }} title={p.rejectedReason}>
+                      {p.rejectedReason}
+                    </div>
+                  )}
+                </td>
+                <td className="text-end text-nowrap">
+                  {p.status === 'PENDING_APPROVAL' && (
+                    <PermissionGuard permission="payments.approve">
+                      <Button
+                        size="sm" variant="outline-success" className="me-1"
+                        disabled={busyId === p.id}
+                        onClick={() => handleApprove(p.id)}
+                      >
+                        <i className="bi bi-check-lg" /> Approve
+                      </Button>
+                      <Button
+                        size="sm" variant="outline-danger"
+                        disabled={busyId === p.id}
+                        onClick={() => { setRejectTarget(p); setRejectReason(''); }}
+                      >
+                        <i className="bi bi-x-lg" /> Reject
+                      </Button>
+                    </PermissionGuard>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+
+      <Modal show={!!rejectTarget} onHide={() => setRejectTarget(null)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="small fw-bold">Reject payment</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="small text-muted mb-2">
+            {rejectTarget ? `${fmtUGX(rejectTarget.amountPaid)} on ${rejectTarget.invoiceNumber || 'this invoice'}` : ''}
+          </p>
+          <Form.Control
+            as="textarea" rows={2} placeholder="Reason (kept on the payment)"
+            value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button size="sm" variant="secondary" onClick={() => setRejectTarget(null)}>Cancel</Button>
+          <Button
+            size="sm" variant="danger"
+            disabled={rejectReason.trim().length < 3 || busyId === rejectTarget?.id}
+            onClick={handleReject}
+          >
+            Reject payment
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </>
+  );
+}
 
 export default function FinancePage() {
   const navigate = useNavigate();
   const agingTitle = useReportTitle('receivables_aging_report');
+  const [tab, setTab] = useState('invoices');
 
   return (
     <div className="py-4 px-3">
@@ -2244,9 +2827,12 @@ export default function FinancePage() {
 
       <Card className="border-0 shadow-sm">
         <Card.Body>
-          <Tabs defaultActiveKey="invoices" className="mb-3">
+          <Tabs activeKey={tab} onSelect={(k) => setTab(k ?? 'invoices')} className="mb-3">
             <Tab eventKey="invoices" title="Invoices">
-              <InvoicesTab />
+              <InvoicesTab onGoAging={() => setTab('aging')} />
+            </Tab>
+            <Tab eventKey="payments" title={<><i className="bi bi-credit-card me-1" />Payments</>}>
+              <PaymentsTab />
             </Tab>
             <Tab eventKey="payroll" title="Payroll">
               <PayrollTab />

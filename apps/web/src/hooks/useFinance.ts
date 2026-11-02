@@ -60,6 +60,10 @@ export function useRecordPayment() {
       // until something else happened to refetch them.
       qc.invalidateQueries({ queryKey: ['ar-aging'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
+      // The finance tiles and the payments approval tab read from their own
+      // queries now; a recorded payment moves both.
+      qc.invalidateQueries({ queryKey: ['invoice-summary'] });
+      qc.invalidateQueries({ queryKey: ['finance-payments'] });
     },
   });
 }
@@ -150,6 +154,18 @@ export function useCompanyPayrollRoster(month: number, year: number, enabled = t
     queryKey: ['payroll', 'company-roster', month, year],
     queryFn:  () => payrollApi.companyRoster(month, year),
     enabled,
+  });
+}
+
+/**
+ * Zone totals + countrywide total for the period picked on the Payroll tab.
+ * Keyed under ['payroll', ...] so every run mutation (calculate, approve,
+ * reject, delete) refreshes it automatically.
+ */
+export function usePayrollSummary(month: number, year: number) {
+  return useQuery({
+    queryKey: ['payroll', 'summary', month, year],
+    queryFn:  () => payrollApi.summary(month, year),
   });
 }
 

@@ -62,9 +62,9 @@ const SEVERITY_STYLE: Record<string, { bg?: string; text?: string; style?: React
   CRITICAL: { bg: 'danger' },
 };
 
-const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
-const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR];
-const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
+const SITE_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR];
+const CONTRACT_WRITE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
 
 /** Said before the user confirms, so a refusal is not the first they hear of the rule. */
 const DELETE_WARNINGS: Record<'client' | 'site' | 'contract', string> = {

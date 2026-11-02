@@ -177,6 +177,7 @@
  *         description: Entry added
  */
 import { Router, type IRouter, type Request, type Response } from 'express';
+import jwt from 'jsonwebtoken';
 import prisma from '../db/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/rbac';
@@ -191,6 +192,7 @@ import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
 import { payrollService } from '../services/payrollService';
 import { payrollExportService } from '../services/payrollExportService';
+import { reportService } from '../services/reportService';
 import { payrollShareService } from '../services/payrollShareService';
 import { cashbookService } from '../services/cashbookService';
 import {
@@ -216,10 +218,111 @@ import {
   FlagPayslipSchema,
   HrApprovePayrollSchema,
   RejectPayrollSchema,
+  RunInvoicesSchema,
+  IssueBatchSchema,
+  InvoiceSummaryQuerySchema,
+  PaymentListQuerySchema,
+  RejectPaymentSchema,
+  type PaymentListQuery,
 } from '@security360/shared';
 
 const router: IRouter = Router();
+
+// GET /finance/email-decision - one-tap Issue/Reject for an invoice run and
+// Approve/Reject for a payment, straight from the MD's email. Public: the
+// signed token carries who may decide what and expires in 7 days. Registered
+// before any '/:id' route so 'email-decision' is never read as an id.
+router.get(
+  '/email-decision',
+  asyncHandler(async (req: Request, res: Response) => {
+    const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const page = (title: string, heading: string, body: string, color: string) => {
+      res.status(200).type('html').send(
+        `<!doctype html><html><body style="margin:0;background:#F2F4F7;font-family:Arial,sans-serif;">` +
+        `<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;">` +
+        `<div style="background:${color};color:#fff;padding:16px 24px;font-size:17px;font-weight:bold;">${esc(title)}</div>` +
+        `<div style="padding:24px;"><h2 style="color:#1B3A6B;margin-top:0;">${esc(heading)}</h2>${body}` +
+        `<p style="color:#6c757d;font-size:12px;">${esc(title)} - Security360</p></div></div></body></html>`);
+    };
+    const fail = (heading: string, message: string) =>
+      page('Security360', heading, `<p>${esc(message)}</p>`, '#343a40');
+
+    const token    = String(req.query.token ?? '');
+    const decision = String(req.query.decision ?? '');
+    if (!token || (decision !== 'approve' && decision !== 'reject')) {
+      fail('This link is not valid.', 'Open the Finance page in the portal to decide instead.');
+      return;
+    }
+    let payload: any;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET as string);
+    } catch {
+      fail('This link has expired or is invalid.', 'Links work for 7 days. Open the Finance page in the portal to decide instead.');
+      return;
+    }
+    if (payload?.purpose !== 'ar-decision' || !payload?.sub || !payload?.ref || !payload?.kind) {
+      fail('This link is not valid.', 'Open the Finance page in the portal to decide instead.');
+      return;
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: String(payload.sub) }, select: { id: true, name: true, role: true, status: true },
+    });
+    if (!user || user.status !== 'ACTIVE' || (user.role !== 'MD' && user.role !== 'DIRECTOR')) {
+      fail('You are not authorised to decide this.', 'Only the MD or a Director can issue invoices or approve payments.');
+      return;
+    }
+    try {
+      if (payload.kind === 'invoice-run') {
+        const runBatchId = String(payload.ref);
+        if (decision === 'approve') {
+          const r = await invoiceService.issueBatch({ runBatchId }, user.id);
+          page('Security360', 'Invoices issued.',
+            r.issued > 0
+              ? `<p>${r.issued} invoice${r.issued === 1 ? '' : 's'} of <strong>${esc(runBatchId)}</strong> issued by ${esc(user.name)}.</p>`
+              : `<p>Every invoice in <strong>${esc(runBatchId)}</strong> was already decided - nothing changed.</p>`,
+            '#1E8449');
+        } else {
+          const r = await invoiceService.rejectRunBatch(
+            runBatchId, `Run ${runBatchId} rejected via email by ${user.name}`, user.id);
+          page('Security360', 'Invoice run rejected.',
+            r.voided > 0
+              ? `<p>${r.voided} invoice${r.voided === 1 ? '' : 's'} of <strong>${esc(runBatchId)}</strong> voided (${r.failed} left as is). Correct the run and raise it again.</p>`
+              : `<p>Every invoice in <strong>${esc(runBatchId)}</strong> was already decided - nothing changed.</p>`,
+            '#C0392B');
+        }
+      } else if (payload.kind === 'payment') {
+        const payment = await prisma.payment.findUnique({
+          where: { id: String(payload.ref) },
+          select: { id: true, status: true, amountPaid: true },
+        });
+        if (!payment) { fail('This payment no longer exists.', 'It may already have been decided.'); return; }
+        if (payment.status !== 'PENDING_APPROVAL') {
+          page('Security360', payment.status === 'APPROVED' ? 'Already approved.' : 'Already rejected.',
+            `<p>UGX ${Number(payment.amountPaid).toLocaleString()} was already ${payment.status === 'APPROVED' ? 'approved' : 'rejected'} - no further action was taken.</p>`,
+            payment.status === 'APPROVED' ? '#1E8449' : '#C0392B');
+          return;
+        }
+        if (decision === 'approve') {
+          await invoiceService.approvePayment(payment.id, user.id);
+          page('Security360', 'Payment approved.',
+            `<p>UGX ${Number(payment.amountPaid).toLocaleString()} approved by ${esc(user.name)}.</p>`, '#1E8449');
+        } else {
+          await invoiceService.rejectPayment(payment.id, user.id, `Rejected via email by ${user.name}`);
+          page('Security360', 'Payment rejected.',
+            `<p>UGX ${Number(payment.amountPaid).toLocaleString()} rejected by ${esc(user.name)}.</p>`, '#C0392B');
+        }
+      } else {
+        fail('This link is not valid.', 'Open the Finance page in the portal to decide instead.');
+      }
+    } catch (err: any) {
+      fail('Could not record your decision.', err?.message ?? 'It may no longer await a decision.');
+    }
+  }),
+);
+
 router.use(authenticate);
+
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
 
@@ -230,20 +333,101 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const query = req.query as unknown as InvoiceListQuery;
     const result = await invoiceService.list({
-      clientId: query.clientId,
-      status:   query.status,
-      from:     query.from,
-      to:       query.to,
-      page:     query.page,
-      limit:    query.limit,
+      clientId:  query.clientId,
+      status:    query.status,
+      from:      query.from,
+      to:        query.to,
+      month:     query.month,
+      createdBy: query.createdBy,
+      sortBy:    query.sortBy,
+      page:      query.page,
+      limit:     query.limit,
     });
     res.json({ success: true, ...result });
   }),
 );
 
+// POST /finance/invoices/run - the month-end run: one invoice per active
+// contract, tagged with a shared runBatchId, left PENDING for MD issue.
+router.post(
+  '/invoices/run',
+  requirePermission(PERMISSIONS.INVOICES_RUN),
+  validate(RunInvoicesSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await invoiceService.runMonthlyInvoices(req.body.month, req.user!.userId);
+    res.status(201).json({ success: true, data: result });
+  }),
+);
+
+// POST /finance/invoices/issue-batch - MD's final approval over a whole run.
+router.post(
+  '/invoices/issue-batch',
+  requirePermission(PERMISSIONS.INVOICES_ISSUE),
+  validate(IssueBatchSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await invoiceService.issueBatch(req.body, req.user!.userId);
+    res.json({ success: true, data: result });
+  }),
+);
+
+// POST /finance/invoices/:id/issue - MD's final approval over one invoice.
+router.post(
+  '/invoices/:id/issue',
+  requirePermission(PERMISSIONS.INVOICES_ISSUE),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.issueInvoice(req.params.id, req.user!.userId);
+    res.json({ success: true, data: invoice });
+  }),
+);
+
+// GET /finance/invoices/summary?month= - the tiles, computed over billing
+// periods server side so the month cannot lie to the MD.
+router.get(
+  '/invoices/summary',
+  requireRole(...FINANCE_ROLES),
+  validateQuery(InvoiceSummaryQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+    const data = await invoiceService.getSummary(month);
+    res.json({ success: true, data });
+  }),
+);
+
+// GET /finance/payments - manual payments awaiting (and holding) approval.
+router.get(
+  '/payments',
+  requireRole(...FINANCE_ROLES),
+  validateQuery(PaymentListQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = req.query as unknown as PaymentListQuery;
+    const result = await invoiceService.listPayments(query);
+    res.json({ success: true, ...result });
+  }),
+);
+
+router.post(
+  '/payments/:id/approve',
+  requirePermission(PERMISSIONS.PAYMENTS_APPROVE),
+  asyncHandler(async (req: Request, res: Response) => {
+    const payment = await invoiceService.approvePayment(req.params.id, req.user!.userId);
+    res.json({ success: true, data: payment });
+  }),
+);
+
+router.post(
+  '/payments/:id/reject',
+  requirePermission(PERMISSIONS.PAYMENTS_APPROVE),
+  validate(RejectPaymentSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const payment = await invoiceService.rejectPayment(
+      req.params.id, req.user!.userId, req.body.reason);
+    res.json({ success: true, data: payment });
+  }),
+);
+
 router.post(
   '/invoices',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   validate(CreateInvoiceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.create(req.body, req.user!.userId);
@@ -264,7 +448,7 @@ router.get(
 
 router.get(
   '/invoices/preview',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   asyncHandler(async (req: Request, res: Response) => {
     const { contractId, billingDays } = req.query;
     const preview = await invoiceService.getInvoicePreview(
@@ -277,7 +461,7 @@ router.get(
 
 router.post(
   '/invoices/generate',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   validate(GenerateInvoiceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.generateInvoice(req.body, req.user!.userId);
@@ -300,11 +484,21 @@ router.get(
 // Add Fees or void-and-reissue instead.
 router.patch(
   '/invoices/:id',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   validate(UpdateInvoiceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.update(req.params.id, req.body, req.user!.userId);
     res.json({ success: true, data: invoice });
+  }),
+);
+
+// POST /invoices/:id/clone - fresh PENDING copy for edit (HR included)
+router.post(
+  '/invoices/:id/clone',
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.clone(req.params.id, req.user!.userId);
+    res.status(201).json({ success: true, data: invoice });
   }),
 );
 
@@ -334,7 +528,7 @@ router.post(
 
 router.post(
   '/invoices/:id/send-email',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   asyncHandler(async (req: Request, res: Response) => {
     await invoiceService.sendInvoiceEmail(req.params.id);
     res.json({ success: true, message: 'Invoice email sent' });
@@ -343,7 +537,7 @@ router.post(
 
 router.post(
   '/invoices/:id/pay',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
   validate(RecordPaymentSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const payment = await invoiceService.recordManualPayment(
@@ -357,7 +551,7 @@ router.post(
 // ── POST /invoices/:id/increment — extra charge on an unsettled invoice ───────
 router.post(
   '/invoices/:id/increment',
-  requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER),
+  requireRole(ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.HR),
   validate(AddFeeIncrementSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await invoiceService.addFeeIncrement(req.params.id, req.body, req.user!.userId);
@@ -490,6 +684,22 @@ router.get(
   }),
 );
 
+// Zone-by-zone totals + the countrywide total for a period — the summary
+// panel on the Payroll tab. Same read gate as the rosters, registered before
+// every '/payroll/:id' route so the literal path is never shadowed.
+router.get(
+  '/payroll/summary',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  validateQuery(PayrollRosterQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const summary = await payrollService.getPeriodSummary(
+      Number(req.query.month),
+      Number(req.query.year),
+    );
+    res.json({ success: true, data: summary });
+  }),
+);
+
 router.post(
   '/payroll/calculate',
   requireRole(ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER),
@@ -570,7 +780,7 @@ router.post(
 // grants it, and the service refuses an MD who already stamped this run.
 router.post(
   '/payroll/:id/md-approve',
-  requireRole(ROLES.MD),
+  requireRole(ROLES.MD, ROLES.DIRECTOR),
   asyncHandler(async (req: Request, res: Response) => {
     const run = await payrollService.mdApprove(req.params.id, req.user!.userId);
     res.json({ success: true, data: run });
@@ -669,6 +879,27 @@ router.get(
 // ── GET /payroll/:id/export/{excel|pdf} — printable payroll schedule ──────────
 // Both carry the header block (month, year, group, print date, generated by)
 // so a printed or emailed copy is traceable to its run and exporter.
+// -- GET /payroll/full/export/excel?month=&year= -- the whole period -------------
+// Every run in the month - each zone, company-wide and staff - in one
+// workbook. Registered before '/payroll/:id/export/excel' so the literal
+// 'full' segment is never read as a run id.
+router.get(
+  '/payroll/full/export/excel',
+  requireRole(...FINANCE_ROLES, ...HR_ROLES),
+  asyncHandler(async (req: Request, res: Response) => {
+    const month = Number(req.query.month);
+    const year  = Number(req.query.year);
+    if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+      res.status(400).json({ success: false, message: 'month (1-12) and year are required' });
+      return;
+    }
+    const buffer = await reportService.generateMonthlyPayrollExcel(month, year);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="full-payroll-${year}-${month}.xlsx"`);
+    res.send(buffer);
+  }),
+);
+
 router.get(
   '/payroll/:id/export/excel',
   requireRole(...FINANCE_ROLES, ...HR_ROLES),

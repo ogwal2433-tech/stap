@@ -27,6 +27,7 @@ import type {
   CompanyPayrollRosterResponse,
   StaffPayrollRosterResponse,
   PayrollShareResponse,
+  PayrollPeriodSummary,
 } from '@security360/shared';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
@@ -37,6 +38,12 @@ export const invoicesApi = {
     status?: string;
     from?: string;
     to?: string;
+    /** Billing-period month (YYYY-MM). */
+    month?: string;
+    /** Initiator (user id): invoices raised by one person. */
+    createdBy?: string;
+    /** Ordering: newest-raised (default) or by client trading name A→Z. */
+    sortBy?: 'newest' | 'clientName';
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<InvoiceResponse>> {
@@ -90,6 +97,10 @@ export const invoicesApi = {
     return api
       .patch<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}`, data)
       .then((r) => r.data.data);
+  },
+
+  clone(invoiceId: string): Promise<InvoiceResponse> {
+    return api.post<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}/clone`).then((r) => r.data.data);
   },
 
   recordPayment(invoiceId: string, data: Omit<RecordPaymentInput, 'invoiceId'>): Promise<PaymentResponse> {
@@ -148,6 +159,65 @@ export const invoicesApi = {
       .post<{ success: boolean; data: InvoiceResponse }>('/finance/invoices/generate', data)
       .then((r) => r.data.data);
   },
+
+  /** The month-end run: one invoice per active contract, held for MD issue. */
+  runMonthly(month: string): Promise<{ created: number; skipped: number; runBatchId: string }> {
+    return api
+      .post<{ success: boolean; data: { created: number; skipped: number; runBatchId: string } }>(
+        '/finance/invoices/run', { month },
+      )
+      .then((r) => r.data.data);
+  },
+
+  /** MD's final approval over one run invoice. */
+  issue(invoiceId: string): Promise<InvoiceResponse> {
+    return api
+      .post<{ success: boolean; data: InvoiceResponse }>(`/finance/invoices/${invoiceId}/issue`)
+      .then((r) => r.data.data);
+  },
+
+  /** MD's final approval over a whole run (by month or runBatchId). */
+  issueBatch(by: { month?: string; runBatchId?: string }): Promise<{ issued: number; runBatchId: string }> {
+    return api
+      .post<{ success: boolean; data: { issued: number; runBatchId: string } }>(
+        '/finance/invoices/issue-batch', by,
+      )
+      .then((r) => r.data.data);
+  },
+
+  /** Server-computed tiles over billing periods: the month cannot lie. */
+  getSummary(month?: string): Promise<{
+    invoiced: number; paid: number; outstanding: number;
+    overdueCount: number; awaitingIssue: number;
+  }> {
+    return api
+      .get<{ success: boolean; data: {
+        invoiced: number; paid: number; outstanding: number;
+        overdueCount: number; awaitingIssue: number;
+      } }>('/finance/invoices/summary', { params: month ? { month } : undefined })
+      .then((r) => r.data.data);
+  },
+};
+
+/** Manually recorded payments and their MD approval state. */
+export const paymentApprovalsApi = {
+  list(params?: { status?: string; month?: string; page?: number; limit?: number }): Promise<PaginatedResponse<PaymentResponse>> {
+    return api
+      .get<{ success: boolean } & PaginatedResponse<PaymentResponse>>('/finance/payments', { params })
+      .then((r) => ({ data: r.data.data, pagination: r.data.pagination }));
+  },
+
+  approve(id: string): Promise<PaymentResponse> {
+    return api
+      .post<{ success: boolean; data: PaymentResponse }>(`/finance/payments/${id}/approve`)
+      .then((r) => r.data.data);
+  },
+
+  reject(id: string, reason: string): Promise<PaymentResponse> {
+    return api
+      .post<{ success: boolean; data: PaymentResponse }>(`/finance/payments/${id}/reject`, { reason })
+      .then((r) => r.data.data);
+  },
 };
 
 // ── Deductions ────────────────────────────────────────────────────────────────
@@ -198,6 +268,13 @@ export const payrollApi = {
   companyRoster(month: number, year: number): Promise<CompanyPayrollRosterResponse> {
     return api
       .get<{ success: boolean; data: CompanyPayrollRosterResponse }>('/finance/payroll/company-roster', { params: { month, year } })
+      .then((r) => r.data.data);
+  },
+
+  /** Per-zone totals + countrywide total for a period (Payroll tab panel). */
+  summary(month: number, year: number): Promise<PayrollPeriodSummary> {
+    return api
+      .get<{ success: boolean; data: PayrollPeriodSummary }>('/finance/payroll/summary', { params: { month, year } })
       .then((r) => r.data.data);
   },
 
@@ -277,6 +354,15 @@ export const payrollApi = {
   async downloadRunPdf(runId: string, filename: string): Promise<void> {
     const r = await api.get(`/finance/payroll/${runId}/export/pdf`, { responseType: 'blob' });
     downloadBlob(r.data as Blob, filename);
+  },
+
+  /** The whole month - every zone, company-wide and staff - in one workbook. */
+  async downloadFullPayroll(month: number, year: number): Promise<void> {
+    const r = await api.get('/finance/payroll/full/export/excel', {
+      params: { month, year },
+      responseType: 'blob',
+    });
+    downloadBlob(r.data as Blob, `full-payroll-${year}-${month}.xlsx`);
   },
 };
 

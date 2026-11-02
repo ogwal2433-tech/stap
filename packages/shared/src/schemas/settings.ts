@@ -50,6 +50,38 @@ export type ReorderDeductionTypesInput = z.infer<typeof ReorderDeductionTypesSch
  * A position is a label. The system role beside it is what grants access, so
  * adding or renaming one changes what a profile reads, never what it may reach.
  */
+/**
+ * Firearm catalogue entries. Codes are immutable once created (existing guns
+ * point at them); retiring a type keeps those guns readable. New registrations
+ * are held to the active rows by the server, so the register form can grow
+ * without a deploy.
+ */
+export const CreateGunTypeSchema = z.object({
+  code: z.string().min(1).max(40)
+    .regex(/^[A-Z0-9_]+$/, 'Code must be uppercase letters, numbers, and underscores only')
+    .describe('Unique internal code e.g. GLOCK_19'),
+  label:        z.string().min(2).max(60),
+  displayOrder: z.coerce.number().int().min(0).default(0),
+});
+
+export const UpdateGunTypeSchema = z.object({
+  label:        z.string().min(2).max(60).optional(),
+  displayOrder: z.coerce.number().int().min(0).optional(),
+  isActive:     z.boolean().optional(),
+});
+
+export interface GunTypeResponse {
+  id:           string;
+  code:         string;
+  label:        string;
+  isActive:     boolean;
+  displayOrder: number;
+  createdAt:    string;
+}
+
+export type CreateGunTypeInput = z.infer<typeof CreateGunTypeSchema>;
+export type UpdateGunTypeInput = z.infer<typeof UpdateGunTypeSchema>;
+
 export const CreateStaffPositionSchema = z.object({
   title:        z.string().min(1).max(100),
   department:   z.string().min(1).max(60),

@@ -19,6 +19,7 @@ import type { MarkAttendanceInput, DeploymentResponse } from '@security360/share
 import RosterBuilderTab from '../../components/attendance/RosterBuilderTab';
 import AttendanceRecordsTab from '../../components/attendance/AttendanceRecordsTab';
 import { exportAttendanceSheet } from '../../lib/exportToExcel';
+import { getApiErrorMessage } from '../../lib/api';
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'AWOL' | '';
 
@@ -29,10 +30,10 @@ interface AttendanceEdit {
 
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
   { value: '',        label: '— Not Marked —' },
-  { value: 'PRESENT', label: '✅ Present'      },
-  { value: 'ABSENT',  label: '❌ Absent'       },
-  { value: 'LATE',    label: '🕐 Late'         },
-  { value: 'AWOL',    label: '🚨 AWOL'         },
+  { value: 'PRESENT', label: 'Present' },
+  { value: 'ABSENT',  label: 'Absent'  },
+  { value: 'LATE',    label: 'Late'    },
+  { value: 'AWOL',    label: 'AWOL'    },
 ];
 
 const STATUS_BADGE: Record<string, string> = {
@@ -62,14 +63,30 @@ const STATUS_SELECT_BG: Record<string, string> = {
   LATE:    '#fef9e7',
 };
 
-const ROSTER_WRITE:     UserRole[] = [ROLES.DIRECTOR, ROLES.OPERATIONS_SUPERVISOR];
+const ROSTER_WRITE:     UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.OPERATIONS_SUPERVISOR];
 const ATTENDANCE_WRITE: UserRole[] = [
-  ROLES.DIRECTOR, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR,
+  ROLES.DIRECTOR, ROLES.MD, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR,
 ];
-const ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const ADMIN_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// A deployment matches when every whitespace-separated token of the query
+// appears somewhere in its guard/site/client details — typing "john kamp"
+// narrows to John at a Kampala site, and each extra token narrows further.
+function deploymentMatches(dep: DeploymentResponse, query: string): boolean {
+  const haystack = [
+    dep.guard.fullName,
+    dep.guard.phone ?? '',
+    dep.guard.rank ?? '',
+    dep.site.siteName,
+    dep.site.client.clientName,
+    dep.site.location,
+    dep.supervisor.name,
+  ].join(' ').toLowerCase();
+  return query.split(/\s+/).filter(Boolean).every((token) => haystack.includes(token));
 }
 
 export default function AttendancePage() {
@@ -99,6 +116,14 @@ export default function AttendancePage() {
   const [absencePromptIds, setAbsencePromptIds] = useState<Set<string>>(new Set());
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Record<string, AttendanceEdit>>({});
+  // Row keys ticked in the checkbox column. Feeds the bulk status bar so a
+  // supervisor can mark any subset of guards in one click and save once.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // Deployment id currently being removed, so its delete button can disable
+  // and a double-click cannot fire a second request.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Live search over the sheet below — narrows rows as you type.
+  const [search, setSearch] = useState('');
 
   // Zone list for filter dropdown
   const { data: allZonesData } = useZones({ isActive: true, limit: 100 });
@@ -166,6 +191,15 @@ export default function AttendancePage() {
   const totalAbsent    = allDeployments.filter((d) => ['ABSENT', 'AWOL'].includes(d.attendance?.status ?? '')).length;
   const totalUnmarked  = allDeployments.filter((d) => !d.attendance).length;
 
+  // Live search: active as soon as there is any non-space input. The summary
+  // counts above always describe the whole day — only the rows below narrow.
+  const searchQuery  = search.trim().toLowerCase();
+  const searchActive = searchQuery.length > 0;
+  const searchMatches = useMemo(
+    () => (searchActive ? allDeployments.filter((d) => deploymentMatches(d, searchQuery)).length : 0),
+    [searchActive, searchQuery, allDeployments],
+  );
+
   // Number of edits with a status set
   const pendingCount = Object.values(edits).filter((e) => e.status).length;
 
@@ -198,6 +232,33 @@ export default function AttendancePage() {
     setEdits((prev) => ({ ...prev, ...updates }));
   }
 
+  function toggleSelected(key: string, on: boolean) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key); else next.delete(key);
+      return next;
+    });
+  }
+
+  function toggleSiteSelected(deployments: { guard: { id: string }; id: string }[], siteId: string, on: boolean) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const d of deployments) {
+        const key = `${d.guard.id}:${siteId}:${d.id}`;
+        if (on) next.add(key); else next.delete(key);
+      }
+      return next;
+    });
+  }
+
+  function applyStatusToSelected(status: Exclude<AttendanceStatus, ''>) {
+    const updates: Record<string, AttendanceEdit> = {};
+    for (const key of selectedKeys) {
+      updates[key] = { ...getEdit(key), status };
+    }
+    setEdits((prev) => ({ ...prev, ...updates }));
+  }
+
   async function handleSaveAttendance() {
     const records: MarkAttendanceInput['records'] = [];
     for (const [key, edit] of Object.entries(edits)) {
@@ -219,24 +280,53 @@ export default function AttendancePage() {
 
     try {
       const result = await markAttendanceMutation.mutateAsync(records);
-      showToast(`Attendance saved for ${result.marked + result.updated} guard(s)`, 'success');
+      const savedCount = result.marked + result.updated;
+      const skipped = result.skippedDeserted ?? 0;
+      if (skipped > 0) {
+        const names = result.skippedNames?.join(', ');
+        showToast(
+          `Saved ${savedCount} guard(s). Skipped ${skipped} archived guard(s)${names ? `: ${names}` : ''}.`,
+          'warning',
+        );
+      } else {
+        showToast(`Attendance saved for ${savedCount} guard(s)`, 'success');
+      }
       setEdits({});
+      setSelectedKeys(new Set());
       queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
       refetch();
-    } catch {
-      showToast('Failed to save attendance', 'danger');
+    } catch (err: unknown) {
+      // Surface the server's message (e.g. overpayment-style validations) so a
+      // failed batch explains itself instead of a bare "Failed to save".
+      showToast(getApiErrorMessage(err, 'Failed to save attendance'), 'danger');
     }
   }
 
   async function handleDeleteDeployment(id: string) {
     if (!confirm('Remove this guard from the roster? This cannot be undone.')) return;
+    setDeletingId(id);
     try {
       await deleteDeploymentMutation.mutateAsync(id);
       showToast('Deployment removed', 'success');
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        for (const key of next) if (key.endsWith(`:${id}`)) next.delete(key);
+        return next;
+      });
       refetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to remove deployment';
-      showToast(msg, 'danger');
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404) {
+        // Already removed elsewhere (or by the deserter purge) — treat as done
+        // and refresh rather than surfacing a scary error.
+        showToast('Deployment was already removed — refreshing the sheet.', 'warning');
+        queryClient.invalidateQueries({ queryKey: ['daily-sheet'] });
+        refetch();
+      } else {
+        showToast(getApiErrorMessage(err, 'Failed to remove deployment'), 'danger');
+      }
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -265,6 +355,17 @@ export default function AttendancePage() {
     return (
       <>
       <tr style={{ background: rowBg, fontSize: '0.85rem' }}>
+        <td className="align-middle d-print-none" style={{ width: 32 }}>
+          {canMarkAttendance && (
+            <Form.Check
+              type="checkbox"
+              checked={selectedKeys.has(key)}
+              onChange={(e) => toggleSelected(key, e.target.checked)}
+              aria-label={`Select ${dep.guard.fullName}`}
+              style={{ margin: 0 }}
+            />
+          )}
+        </td>
         <td className="text-muted align-middle" style={{ width: 36 }}>{index}</td>
         <td className="align-middle">
           <div className="d-flex align-items-center gap-2">
@@ -278,12 +379,12 @@ export default function AttendancePage() {
               )}
               {dep.attendance?.replacedByGuardId && (
                 <div style={{ fontSize: '0.72rem', color: '#0F7B6C', marginTop: 1 }}>
-                  🔄 Replacement assigned
+                  <i className="bi bi-arrow-left-right me-1" />Replacement assigned
                 </div>
               )}
               {dep.isReplacement && (
                 <div style={{ fontSize: '0.72rem', color: '#1E8449', marginTop: 1 }}>
-                  🔄 Replacement{dep.replacementReason ? ` — ${dep.replacementReason.toLowerCase()}` : ''}
+                  <i className="bi bi-arrow-left-right me-1" />Replacement{dep.replacementReason ? ` — ${dep.replacementReason.toLowerCase()}` : ''}
                 </div>
               )}
             </div>
@@ -330,9 +431,12 @@ export default function AttendancePage() {
               <Button
                 size="sm" variant="outline-danger"
                 title="Remove from roster"
+                disabled={deletingId === dep.id}
                 onClick={() => handleDeleteDeployment(dep.id)}
               >
-                <i className="bi bi-x-lg" />
+                {deletingId === dep.id
+                  ? <Spinner size="sm" animation="border" />
+                  : <i className="bi bi-x-lg" />}
               </Button>
             )}
           </RoleGuard>
@@ -340,14 +444,14 @@ export default function AttendancePage() {
       </tr>
       {showReplacementPrompt && (
         <tr style={{ background: '#fffbe6' }}>
-          <td colSpan={7} style={{ padding: '6px 14px' }}>
+          <td colSpan={9} style={{ padding: '6px 14px' }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               gap: 8, padding: '6px 10px', background: '#fff3cd',
               borderRadius: '0.375rem', border: '1px solid #ffc107',
             }}>
               <div style={{ fontSize: '0.8rem', color: '#664d03', fontWeight: 500 }}>
-                ⚠️ Guard marked absent — assign a replacement?
+                <i className="bi bi-exclamation-triangle-fill me-1" />Guard marked absent — assign a replacement?
               </div>
               <div className="d-flex gap-2">
                 <Button
@@ -368,7 +472,7 @@ export default function AttendancePage() {
                     });
                   }}
                 >
-                  🔄 Find Replacement
+                  <i className="bi bi-arrow-left-right me-1" />Find Replacement
                 </Button>
                 <Button
                   size="sm" variant="outline-secondary"
@@ -399,7 +503,7 @@ export default function AttendancePage() {
               <Form.Control
                 type="date"
                 value={selectedDate}
-                onChange={(e) => { setSelectedDate(e.target.value); setEdits({}); }}
+                onChange={(e) => { setSelectedDate(e.target.value); setEdits({}); setSelectedKeys(new Set()); }}
               />
             </Col>
             <Col xs={6} md={3}>
@@ -434,6 +538,17 @@ export default function AttendancePage() {
                 ))}
               </Form.Select>
             </Col>
+            <Col xs={12} md={3} className="d-print-none">
+              <Form.Label className="small fw-semibold" htmlFor="attendance-search">Search</Form.Label>
+              <Form.Control
+                id="attendance-search"
+                type="search"
+                size="sm"
+                placeholder="Guard, site, client, phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </Col>
             <Col className="d-flex gap-2 justify-content-end">
               <Button
                 variant="outline-success"
@@ -446,9 +561,9 @@ export default function AttendancePage() {
               <Button variant="outline-secondary" size="sm" onClick={() => window.print()}>
                 <i className="bi bi-printer me-1" />Print
               </Button>
-              <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
+              <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR] as UserRole[]}>
                 <Button variant="outline-primary" size="sm" onClick={() => setShowCopyModal(true)}>
-                  📋 Copy Roster
+                  <i className="bi bi-clipboard-check me-1" />Copy Roster
                 </Button>
               </RoleGuard>
             </Col>
@@ -480,6 +595,12 @@ export default function AttendancePage() {
         </Alert>
       )}
 
+      {!isLoading && searchActive && sheet && sheet.zones.length > 0 && searchMatches === 0 && (
+        <Alert variant="light" className="d-print-none">
+          No deployments match "{search.trim()}". Clear the search to see the full sheet.
+        </Alert>
+      )}
+
       {sheet && sheet.zones.length > 0 && (
         <div className="attendance-sheet">
           {/* Summary bar */}
@@ -493,24 +614,91 @@ export default function AttendancePage() {
             }}
           >
             <div style={{ fontWeight: 600 }}>
-              📅{' '}
+              <i className="bi bi-calendar3 me-1" />
               {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', {
                 weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
               })}
             </div>
             <div className="d-flex gap-3 flex-wrap">
-              <span style={{ fontSize: '0.85rem' }}>👮 {totalDeployed} deployed</span>
-              <span style={{ fontSize: '0.85rem', color: '#A9DFBF' }}>✅ {totalPresent} present</span>
+              <span style={{ fontSize: '0.85rem' }}><i className="bi bi-person-badge me-1" />{totalDeployed} deployed</span>
+              <span style={{ fontSize: '0.85rem', color: '#A9DFBF' }}><i className="bi bi-check-circle me-1" />{totalPresent} present</span>
               <span style={{ fontSize: '0.85rem', color: totalAbsent  > 0 ? '#F1948A' : '#A9DFBF' }}>
-                ❌ {totalAbsent} absent
+                <i className="bi bi-x-circle me-1" />{totalAbsent} absent
               </span>
               <span style={{ fontSize: '0.85rem', color: totalUnmarked > 0 ? '#FAD7A0' : '#A9DFBF' }}>
-                ⏳ {totalUnmarked} unmarked
+                <i className="bi bi-hourglass-split me-1" />{totalUnmarked} unmarked
               </span>
             </div>
           </div>
 
-          {sheet.zones.map((zone, zoneIdx) => (
+          {/* Bulk status bar — visible once any rows are ticked */}
+          {canMarkAttendance && selectedKeys.size > 0 && (
+            <div
+              className="d-print-none"
+              style={{
+                background: '#0F7B6C', color: 'white',
+                padding: '8px 16px', borderRadius: 0,
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+              }}
+            >
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {selectedKeys.size} guard{selectedKeys.size !== 1 ? 's' : ''} selected
+              </span>
+              <div className="d-flex gap-2 flex-wrap">
+                <Button
+                  size="sm" variant="light"
+                  style={{ fontSize: '0.75rem', padding: '2px 10px' }}
+                  onClick={() => applyStatusToSelected('PRESENT')}
+                >
+                  <i className="bi bi-check-circle me-1" />Present
+                </Button>
+                <Button
+                  size="sm" variant="light"
+                  style={{ fontSize: '0.75rem', padding: '2px 10px' }}
+                  onClick={() => applyStatusToSelected('LATE')}
+                >
+                  <i className="bi bi-clock me-1" />Late
+                </Button>
+                <Button
+                  size="sm" variant="light"
+                  style={{ fontSize: '0.75rem', padding: '2px 10px' }}
+                  onClick={() => applyStatusToSelected('ABSENT')}
+                >
+                  <i className="bi bi-x-circle me-1" />Absent
+                </Button>
+                <Button
+                  size="sm" variant="light"
+                  style={{ fontSize: '0.75rem', padding: '2px 10px' }}
+                  onClick={() => applyStatusToSelected('AWOL')}
+                >
+                  <i className="bi bi-exclamation-triangle me-1" />AWOL
+                </Button>
+                <Button
+                  size="sm" variant="outline-light"
+                  style={{ fontSize: '0.75rem', padding: '2px 10px' }}
+                  onClick={() => setSelectedKeys(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {sheet.zones.map((zone, zoneIdx) => {
+            // Live search narrows each site's rows; sites and zones left with
+            // no match drop out entirely. Site header counts stay at full-site
+            // truth so the filter never rewrites the staffing picture.
+            const siteRows = zone.sites
+              .map((siteGroup) => ({
+                siteGroup,
+                visibleDeps: searchActive
+                  ? siteGroup.deployments.filter((d) => deploymentMatches(d, searchQuery))
+                  : siteGroup.deployments,
+              }))
+              .filter((r) => r.visibleDeps.length > 0);
+            if (siteRows.length === 0) return null;
+            return (
             <div key={zone.zoneId ?? 'no-zone'} className="mb-3">
               {/* Zone header — only when multiple zones or zone data present */}
               {hasZoneData && (
@@ -523,11 +711,11 @@ export default function AttendancePage() {
                     marginTop: zoneIdx > 0 ? 12 : 0,
                   }}
                 >
-                  🗺️ {zone.zoneName ?? 'No Zone'}
+                  <i className="bi bi-geo-alt me-1" />{zone.zoneName ?? 'No Zone'}
                 </div>
               )}
 
-              {zone.sites.map((siteGroup) => {
+              {siteRows.map(({ siteGroup, visibleDeps }) => {
                 const required = siteGroup.site.guardsRequired;
                 const deployed = siteGroup.deployments.length;
                 const underStaffed = required > 0 && deployed < required;
@@ -552,13 +740,13 @@ export default function AttendancePage() {
                           {siteGroup.site.client.clientName}
                         </span>
                         <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#6c757d' }}>
-                          📍 {siteGroup.site.location}
+                          <i className="bi bi-geo-alt me-1" />{siteGroup.site.location}
                         </span>
                         {(() => {
                           const copied = siteGroup.deployments.find((d: any) => d.copiedFromDate);
                           return copied ? (
                             <span style={{ marginLeft: 8, fontSize: '0.72rem', color: '#6c757d', fontStyle: 'italic' }}>
-                              📋 Copied from {new Date((copied as any).copiedFromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              <i className="bi bi-clipboard-check me-1" />Copied from {new Date((copied as any).copiedFromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
                           ) : null;
                         })()}
@@ -569,22 +757,22 @@ export default function AttendancePage() {
                           color: underStaffed ? '#dc3545' : '#1e8449',
                           fontWeight: 500,
                         }}>
-                          👮 {deployed}
+                          <i className="bi bi-person-badge me-1" />{deployed}
                           {required > 0 && ` / ${required} required`}
                         </span>
                         {siteGroup.presentCount > 0 && (
                           <Badge bg="success" style={{ fontSize: '0.7rem' }}>
-                            ✅ {siteGroup.presentCount} present
+                            <i className="bi bi-check-circle me-1" />{siteGroup.presentCount} present
                           </Badge>
                         )}
                         {siteGroup.absentCount > 0 && (
                           <Badge bg="danger" style={{ fontSize: '0.7rem' }}>
-                            ❌ {siteGroup.absentCount} absent
+                            <i className="bi bi-x-circle me-1" />{siteGroup.absentCount} absent
                           </Badge>
                         )}
                         {siteGroup.unmarkedCount > 0 && (
                           <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
-                            ⏳ {siteGroup.unmarkedCount} unmarked
+                            <i className="bi bi-hourglass-split me-1" />{siteGroup.unmarkedCount} unmarked
                           </Badge>
                         )}
                         <RoleGuard allowedRoles={ATTENDANCE_WRITE}>
@@ -614,7 +802,7 @@ export default function AttendancePage() {
                           display: 'flex', alignItems: 'flex-start', gap: '6px',
                           width: '100%',
                         }}>
-                          <span style={{ flexShrink: 0 }}>📋</span>
+                          <span style={{ flexShrink: 0 }}><i className="bi bi-clipboard" /></span>
                           <div>
                             <span style={{ fontWeight: 600, color: '#1B3A6B', marginRight: '4px' }}>
                               Site Instructions:
@@ -650,6 +838,25 @@ export default function AttendancePage() {
                     <Table responsive hover size="sm" className="mb-0 align-middle small" style={{ borderTop: 'none' }}>
                       <thead className="table-light d-print-table-header-group">
                         <tr style={{ fontSize: '0.78rem', color: '#6c757d', fontWeight: 600 }}>
+                          <th className="d-print-none" style={{ width: 32 }}>
+                            {canMarkAttendance && visibleDeps.length > 0 && (() => {
+                              const siteKeys = visibleDeps.map(
+                                (d) => `${d.guard.id}:${siteGroup.site.id}:${d.id}`,
+                              );
+                              const allOn = siteKeys.every((k) => selectedKeys.has(k));
+                              const someOn = !allOn && siteKeys.some((k) => selectedKeys.has(k));
+                              return (
+                                <Form.Check
+                                  type="checkbox"
+                                  checked={allOn}
+                                  ref={(el) => { if (el) el.indeterminate = someOn; }}
+                                  onChange={(e) => toggleSiteSelected(visibleDeps, siteGroup.site.id, e.target.checked)}
+                                  aria-label={`Select all at ${siteGroup.site.siteName}`}
+                                  style={{ margin: 0 }}
+                                />
+                              );
+                            })()}
+                          </th>
                           <th style={{ width: 36 }}>#</th>
                           <th>Guard</th>
                           <th style={{ width: 72 }}>Shift</th>
@@ -661,7 +868,7 @@ export default function AttendancePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {siteGroup.deployments.map((dep, idx) => (
+                        {visibleDeps.map((dep, idx) => (
                           <GuardRow
                             key={dep.id}
                             dep={dep}
@@ -675,7 +882,8 @@ export default function AttendancePage() {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -699,7 +907,7 @@ export default function AttendancePage() {
               {markAttendanceMutation.isPending ? (
                 <><Spinner size="sm" animation="border" className="me-2" />Saving…</>
               ) : (
-                <>💾 Save Attendance ({pendingCount} change{pendingCount !== 1 ? 's' : ''})</>
+                <><i className="bi bi-save me-1" />Save Attendance ({pendingCount} change{pendingCount !== 1 ? 's' : ''})</>
               )}
             </Button>
           </div>
@@ -717,7 +925,7 @@ export default function AttendancePage() {
           size="sm"
           onClick={() => navigate('/attendance/dashboard')}
         >
-          📊 View Attendance Dashboard
+          <i className="bi bi-bar-chart-line me-1" />View Attendance Dashboard
         </Button>
       </div>
 
@@ -760,7 +968,7 @@ export default function AttendancePage() {
         onSuccess={(result) => {
           setReplacementTarget(null);
           refetch();
-          showToast(`✅ ${result.replacementDeployment.guardName} assigned as replacement.`, 'success');
+          showToast(`${result.replacementDeployment.guardName} assigned as replacement.`, 'success');
         }}
       />
 

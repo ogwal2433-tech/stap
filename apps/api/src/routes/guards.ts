@@ -20,7 +20,7 @@
  *         schema: { type: string }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [ACTIVE, SUSPENDED, TERMINATED] }
+ *         schema: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, DESERTED, RESIGNED, TERMINATED] }
  *     responses:
  *       200:
  *         description: Paginated list of guards
@@ -124,7 +124,7 @@
  *             type: object
  *             required: [status, reason]
  *             properties:
- *               status: { type: string, enum: [ACTIVE, SUSPENDED, TERMINATED] }
+ *               status: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, DESERTED, RESIGNED, TERMINATED] }
  *               reason: { type: string }
  *     responses:
  *       200:
@@ -175,7 +175,7 @@
  *       so the download holds exactly the guards the table was showing.
  *     parameters:
  *       - { in: query, name: search,            schema: { type: string } }
- *       - { in: query, name: status,             schema: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, RESIGNED, TERMINATED] } }
+ *       - { in: query, name: status,             schema: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, DESERTED, RESIGNED, TERMINATED] } }
  *       - { in: query, name: rank,               schema: { type: string } }
  *       - { in: query, name: contractType,       schema: { type: string, enum: [TEMPORARY, PERMANENT] } }
  *       - { in: query, name: probationStatus,    schema: { type: string, enum: [ON_PROBATION, CONFIRMED] } }
@@ -418,12 +418,30 @@ router.delete(
   '/:id',
   requirePermission(PERMISSIONS.GUARDS_DELETE),
   asyncHandler(async (req, res) => {
-    const data = await softDeleteService.deleteGuard(req.params.id, req.user!.userId);
+    const data = await softDeleteService.deleteGuard(req.params.id, req.user!.userId, {
+      override: (req.body as any)?.override === true,
+      reason:   typeof (req.body as any)?.reason === 'string' ? (req.body as any).reason : undefined,
+    });
     res.status(200).json({ success: true, data });
   }),
 );
 
 // ── POST /:id/restore ─────────────────────────────────────────────────────────
+// DELETE /:id/permanent - purge a deserter from the archive. Irreversible:
+// guard row, documents and history are deleted (payslips stay, de-linked).
+// Director or MD only, typed system-ID confirmation, reason logged.
+router.delete(
+  '/:id/permanent',
+  requirePermission(PERMISSIONS.GUARDS_PURGE),
+  asyncHandler(async (req, res) => {
+    const data = await softDeleteService.purgeGuard(req.params.id, req.user!.userId, {
+      systemId: typeof (req.body as any)?.systemId === 'string' ? (req.body as any).systemId : '',
+      reason:   typeof (req.body as any)?.reason === 'string' ? (req.body as any).reason : '',
+    });
+    res.status(200).json({ success: true, data });
+  }),
+);
+
 router.post(
   '/:id/restore',
   requirePermission(PERMISSIONS.GUARDS_DELETE),

@@ -2,6 +2,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { notificationService } from './notificationService';
+import { resolvePostedSites } from './guardPosting';
 import { DEPLOYABLE_STATUSES, guardStatusLabel, type GuardEmploymentStatus } from '@security360/shared';
 import { ROLES } from '@security360/shared';
 import type {
@@ -164,6 +165,38 @@ class DeploymentService {
       }
     }
 
+    // A guard may only be rostered at the site they are posted to on that
+    // date. Transfers decide the posting; letting a roster reach back to a
+    // site the guard has been transferred away from would put the daily
+    // sheet, the client's deployment history and the transfer on file out
+    // of step with each other.
+    const dateList = [...new Map(toCreate.map((t) => [t.date.getTime(), t.date])).values()];
+    const postedByGuard = await resolvePostedSites(
+      toCreate.map((t) => t.guardId),
+      dateList,
+    );
+    const allowed: { guardId: string; date: Date }[] = [];
+    for (const entry of toCreate) {
+      const di = dateList.findIndex((d) => d.getTime() === entry.date.getTime());
+      const posted = postedByGuard.get(entry.guardId)?.[di] ?? null;
+      if (posted && posted.siteId !== data.siteId) {
+        const g = guardMap.get(entry.guardId)!;
+        const guardName = [g.firstName, g.otherNames, g.lastName].filter(Boolean).join(' ');
+        conflicts.push({
+          guardId:   entry.guardId,
+          guardName,
+          date:           entry.date.toISOString(),
+          existingSite:   posted.siteName,
+          existingClient: '',
+          message:        `${guardName} is posted to ${posted.siteName} for this date — roster him there, or record a transfer before rostering him here.`,
+        });
+      } else {
+        allowed.push(entry);
+      }
+    }
+    toCreate.length = 0;
+    toCreate.push(...allowed);
+
     let created = 0;
     if (toCreate.length > 0) {
       await prisma.deployment.createMany({
@@ -182,16 +215,38 @@ class DeploymentService {
         skipDuplicates: false,
       });
 
-      await prisma.deploymentHistory.createMany({
-        data: toCreate.map(({ guardId, date }) => ({
-          guardId,
-          siteId:       data.siteId,
-          shiftType:    data.shiftType,
-          startDate:    date,
-          supervisorId: data.supervisorId,
-        })),
-        skipDuplicates: true,
-      });
+      // One history row per newly-posted guard (their earliest rostered date),
+      // not one per rostered day. The per-day rows left every posting
+      // duplicated with an open end date, so "latest open row" — the transfer
+      // screen's from-site lookup — could resolve off a stale site. A guard
+      // already posted on a date (here, or via a transfer) needs no new row.
+      const earliestByGuard = new Map<string, Date>();
+      for (const entry of toCreate) {
+        const prev = earliestByGuard.get(entry.guardId);
+        if (!prev || entry.date.getTime() < prev.getTime()) {
+          earliestByGuard.set(entry.guardId, entry.date);
+        }
+      }
+      const historyRows: {
+        guardId: string; siteId: string; shiftType: string;
+        startDate: Date; supervisorId: string;
+      }[] = [];
+      for (const [guardId, earliest] of earliestByGuard) {
+        const di = dateList.findIndex((d) => d.getTime() === earliest.getTime());
+        const posted = postedByGuard.get(guardId)?.[di] ?? null;
+        if (!posted) {
+          historyRows.push({
+            guardId,
+            siteId:       data.siteId,
+            shiftType:    data.shiftType,
+            startDate:    earliest,
+            supervisorId: data.supervisorId,
+          });
+        }
+      }
+      if (historyRows.length > 0) {
+        await prisma.deploymentHistory.createMany({ data: historyRows, skipDuplicates: true });
+      }
 
       created = toCreate.length;
     }
@@ -393,6 +448,11 @@ class DeploymentService {
 
     const where: import('@prisma/client').Prisma.DeploymentWhereInput = {
       date: { gte: start, lte: end },
+      // Deserted guards are archived and out of service: their rows never
+      // appear on the sheet, matching getAttendanceByDate. Without this the
+      // sheet keeps showing today's rows of a freshly-marked deserter and
+      // "mark all present" 400s on their quarantine.
+      guard: { employmentStatus: { not: 'DESERTED' } },
     };
     if (siteId) where.siteId = siteId;
     if (zoneId) where.site = { zoneId };

@@ -136,6 +136,14 @@ export interface ZoneRosterGuard {
    * these guards used to be left out of the list altogether.
    */
   pendingNationalId: boolean;
+  /**
+   * The site this guard is posted to on the roster date — the latest transfer
+   * on file on or before the date wins, else the current deployment-history
+   * posting. Null when no posting covers the date, meaning free to roster
+   * anywhere. Optional so older fixtures keep typechecking.
+   */
+  postedSiteId?:   string | null;
+  postedSiteName?: string | null;
 }
 
 export interface ZoneRosterData {

@@ -10,13 +10,12 @@ import { ROLES } from '@security360/shared';
 import { reportsApi } from '../lib/reports.api';
 import { dashboardApi } from '../lib/dashboard.api';
 import { useAuth } from '../context/AuthContext';
-import NotificationBell from '../components/layout/NotificationBell';
 import RoleDashboard from './dashboard/RoleDashboard';
 
 const NAVY = '#1B3A6B';
 
 /** Roles that get the company-wide charts in addition to their stat cards. */
-const CHART_ROLES: string[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const CHART_ROLES: string[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
 
 function useClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -75,7 +74,6 @@ export default function DashboardPage() {
       </div>
       <div className="d-flex align-items-center gap-3">
         <div className="fw-semibold small" style={{ color: NAVY }}>{timeStr}</div>
-        <NotificationBell />
         <Badge bg="primary">{user.role.replace(/_/g, ' ')}</Badge>
         <Button size="sm" variant="outline-secondary" onClick={logout}>Logout</Button>
       </div>

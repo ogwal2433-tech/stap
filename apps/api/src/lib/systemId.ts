@@ -135,11 +135,11 @@ async function nextId(table: IdTable, settingKey: string, body = ''): Promise<st
  * `count` consecutive IDs in one round trip, for a bulk import where issuing
  * them one row at a time is not practical.
  */
-async function nextIds(table: IdTable, settingKey: string, count: number): Promise<string[]> {
+async function nextIds(table: IdTable, settingKey: string, count: number, body = ''): Promise<string[]> {
   const [prefix, width] = await Promise.all([prefixFor(settingKey), padding()]);
-  const from = (await maxIssued(table, prefix)) + 1;
+  const from = (await maxIssued(table, prefix, body)) + 1;
   return Array.from({ length: count }, (_, i) =>
-    `${prefix}${(from + i).toString().padStart(width, '0')}`,
+    `${prefix}${body}${(from + i).toString().padStart(width, '0')}`,
   );
 }
 
@@ -154,6 +154,10 @@ export const generateGuardIds = (count: number): Promise<string[]> =>
 
 /** GUN-001. The dash is part of the shape and is kept when the prefix changes. */
 export const generateGunId = (): Promise<string> => nextId('Gun', SETTING_KEYS.gun, '-');
+
+/** GUN-041..043 in one reservation, so a batch never mints the same id twice. */
+export const generateGunIds = (count: number): Promise<string[]> =>
+  nextIds('Gun', SETTING_KEYS.gun, count, '-');
 
 /**
  * SHR-2026-001, numbered afresh each calendar year — which is why the year sits

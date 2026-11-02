@@ -33,7 +33,7 @@ import type {
 } from '@security360/shared';
 
 // Roles allowed to see the accountNumber field
-const ACCOUNT_VISIBLE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const ACCOUNT_VISIBLE_ROLES: UserRole[] = [ROLES.MD, ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
 
 class GuardService {
   // ── List ───────────────────────────────────────────────────────────────────
@@ -54,6 +54,11 @@ class GuardService {
 
     if (status) {
       where.employmentStatus = status;
+    } else {
+      // Deserted guards are quarantined: they surface only through an explicit
+      // status=DESERTED filter (the Deserters Archive), never in general
+      // lists, searches or exports.
+      where.employmentStatus = { not: 'DESERTED' };
     }
 
     if (rank) {
@@ -623,17 +628,43 @@ class GuardService {
       },
     });
 
-    if (status === 'SUSPENDED' || status === 'TERMINATED') {
+    if (status === 'SUSPENDED' || status === 'TERMINATED' || status === 'DESERTED') {
       await prisma.disciplinaryRecord.create({
         data: {
           guardId: id,
           incidentDate: new Date(),
-          type: status === 'SUSPENDED' ? 'SUSPENSION' : 'TERMINATION',
+          type: status === 'SUSPENDED' ? 'SUSPENSION' : status === 'DESERTED' ? 'DESERTION' : 'TERMINATION',
           officerId: updatedBy,
           reason,
           outcome: `Employment status changed to ${status} via management action`,
         },
       });
+    }
+
+    // Desertion takes effect at once: the portal login dies so a deserter keeps
+    // no system access, and roster rows from today onward go so they appear
+    // nowhere - including today's deployment sheet. Past deployments,
+    // attendance, pay and documents stay untouched - the record of what
+    // happened stands exactly as it was.
+    let loginDeactivated = false;
+    let futureDeploymentsDropped = 0;
+    if (status === 'DESERTED') {
+      if (guard.userId) {
+        await prisma.user.update({
+          where: { id: guard.userId },
+          data: {
+            status: 'INACTIVE', deactivatedAt: new Date(),
+            deactivatedById: updatedBy, deactivationReason: 'Guard marked deserted - portal access revoked automatically.',
+          },
+        });
+        loginDeactivated = true;
+      }
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const dropped = await prisma.deployment.deleteMany({
+        where: { guardId: id, date: { gte: startOfToday } },
+      });
+      futureDeploymentsDropped = dropped.count;
     }
 
     await QueueService.logAudit({
@@ -642,7 +673,7 @@ class GuardService {
       entity: 'guard',
       entityId: id,
       oldValue: { status: previousStatus },
-      newValue: { status, reason },
+      newValue: { status, reason, loginDeactivated, futureDeploymentsDropped },
     });
 
     return this.sanitiseGuard(updated, ROLES.DIRECTOR, false);
@@ -1075,10 +1106,10 @@ class GuardService {
     if (!guard) throw new NotFoundError('Guard not found');
     // Reinstatement covers both lifting a suspension and rehiring someone who
     // left. A guard on leave returns by being set back to Active, not reinstated.
-    if (!['SUSPENDED', 'RESIGNED', 'TERMINATED'].includes(guard.employmentStatus)) {
+    if (!['SUSPENDED', 'RESIGNED', 'TERMINATED', 'DESERTED'].includes(guard.employmentStatus)) {
       throw new AppError(
         `${guard.firstName} ${guard.lastName} is currently ${guardStatusLabel(guard.employmentStatus)}. ` +
-          'Only suspended, resigned or terminated guards can be reinstated.',
+          'Only suspended, resigned, terminated or deserted guards can be reinstated.',
         400,
       );
     }
@@ -1643,6 +1674,7 @@ class GuardService {
       totalActive:         byStatus['ACTIVE']     ?? 0,
       totalSuspended:      byStatus['SUSPENDED']  ?? 0,
       totalTerminated:     byStatus['TERMINATED'] ?? 0,
+      totalDeserted:       byStatus['DESERTED']   ?? 0,
       totalGuards:         statusCounts.reduce((sum, s) => sum + s._count.id, 0),
       expiringContracts,
       pendingDisciplinary,

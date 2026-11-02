@@ -132,12 +132,17 @@ export const guardsApi = {
   },
 
   /** Only a guard with no history; anyone who has worked is terminated instead. */
-  remove(id: string): Promise<{ id: string; name: string }> {
-    return api.delete(`/guards/${id}`).then((r) => r.data.data);
+  remove(id: string, body?: { override?: boolean; reason?: string }): Promise<{ id: string; name: string }> {
+    return api.delete(`/guards/${id}`, { data: body }).then((r) => r.data.data);
   },
 
   restore(id: string): Promise<{ id: string; name: string }> {
     return api.post(`/guards/${id}/restore`).then((r) => r.data.data);
+  },
+
+  /** Permanently deletes a deserted guard from the archive. Irreversible. */
+  purge(id: string, systemId: string, reason: string): Promise<{ id: string; name: string }> {
+    return api.delete(`/guards/${id}/permanent`, { data: { systemId, reason } }).then((r) => r.data.data);
   },
 
   /**

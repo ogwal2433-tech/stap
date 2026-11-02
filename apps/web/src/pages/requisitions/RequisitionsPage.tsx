@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge, Breadcrumb, Button, Card, Alert, Form,
   Col, Row, Spinner, Tab, Table, Tabs, Modal,
 } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useRequisitions, useSuppliers, useApproveRequisition,
   useHRApproveRequisition, useDirectorApproveRequisition,
   useRevokeRequisitionApproval,
   useAssignRequisition, useUpdateRequisitionProgress,
+  useCompleteRequisition,
   useCreatePurchaseOrder, useAccountability,
+  useRequisitionDashboard,
 } from '../../hooks/useRequisitions';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +32,7 @@ import RequisitionFilterPanel, {
 import { useStaffUsers } from '../../hooks/useUsers';
 import { ROLES, canEditRequisition } from '@security360/shared';
 import type { RequisitionResponse } from '@security360/shared';
+import StatCard from '../dashboard/StatCard';
 
 const NAVY = '#1B3A6B';
 
@@ -370,6 +373,49 @@ function ProgressModal({ requisition, onClose }: { requisition: RequisitionRespo
   );
 }
 
+// ── Complete Modal ────────────────────────────────────────────────────────────
+
+/**
+ * Close out a requisition whose work is done (ASSIGNED / IN_PROGRESS →
+ * COMPLETED). This is the step that was missing — live rows sat in ASSIGNED
+ * with no way to finish them from the UI.
+ */
+function CompleteModal({ requisition, onClose }: { requisition: RequisitionResponse; onClose: () => void }) {
+  const complete = useCompleteRequisition();
+  const { showToast } = useToast();
+
+  async function handleComplete() {
+    try {
+      await complete.mutateAsync(requisition.id);
+      showToast('Requisition completed', 'success');
+      onClose();
+    } catch {
+      showToast('Could not complete the requisition', 'danger');
+    }
+  }
+
+  return (
+    <Modal show onHide={onClose}>
+      <Modal.Header closeButton><Modal.Title>Complete Requisition</Modal.Title></Modal.Header>
+      <Modal.Body>
+        <Alert variant="info" className="small">
+          Mark this requisition as <strong>COMPLETED</strong>. The work is done and the money
+          has been spent — it will count as money out on the dashboard and reports.
+          <div className="mt-1">
+            <strong>{requisition.particulars}</strong> — UGX {requisition.amount.toLocaleString()}
+          </div>
+        </Alert>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={complete.isPending}>Cancel</Button>
+        <Button variant="success" onClick={handleComplete} disabled={complete.isPending}>
+          {complete.isPending ? 'Completing…' : '✓ Complete'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 // ── Revoke Approval Modal ─────────────────────────────────────────────────────
 
 /**
@@ -435,7 +481,7 @@ function MyRequisitionsTab() {
   // The list endpoint only shows other people's requisitions to admin roles; a
   // requester filter for everyone else could only ever match themselves, so the
   // picker is dropped where it would be dead weight.
-  const showRequester = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]
+  const showRequester = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]
     .includes(user?.role as any);
   const { data, isLoading }         = useRequisitions(requisitionFiltersQuery(filters));
   const reqs = data?.data ?? [];
@@ -456,7 +502,7 @@ function MyRequisitionsTab() {
   const mayEdit = (r: RequisitionResponse) =>
     canEditRequisition(r.status, r.hrApproved.at) &&
     (r.requestedBy.id === user?.id ||
-      [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any));
+      [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER].includes(user?.role as any));
 
   return (
     <>
@@ -588,14 +634,17 @@ function MyRequisitionsTab() {
 
 // ── Manage Tab (Director / Admin) ─────────────────────────────────────────────
 
-function ManageTab() {
+function ManageTab(
+  { filters, onFiltersChange }: { filters: RequisitionFilters; onFiltersChange: (f: RequisitionFilters) => void },
+) {
   const [rejectReq, setRejectReq]     = useState<RequisitionResponse | null>(null);
   const [assignReq, setAssignReq]     = useState<RequisitionResponse | null>(null);
   const [progressReq, setProgressReq] = useState<RequisitionResponse | null>(null);
+  const [completeReq, setCompleteReq] = useState<RequisitionResponse | null>(null);
   const [poReq, setPoReq]             = useState<RequisitionResponse | null>(null);
   const [detailReq, setDetailReq]     = useState<RequisitionResponse | null>(null);
   const [revokeReq, setRevokeReq]     = useState<RequisitionResponse | null>(null);
-  const [filters, setFilters]         = useState<RequisitionFilters>(EMPTY_REQUISITION_FILTERS);
+  const setFilters                    = onFiltersChange;
   const [printing, setPrinting]       = useState(false);
 
   const { data, isLoading } = useRequisitions(requisitionFiltersQuery(filters));
@@ -604,11 +653,11 @@ function ManageTab() {
   const dirApprove          = useDirectorApproveRequisition();
   const reqs = data?.data ?? [];
 
-  const isDirector = user?.role === ROLES.DIRECTOR;
-  const isAdmin    = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+  const isDirector = user?.role === ROLES.DIRECTOR || user?.role === ROLES.MD;
+  const isAdmin    = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
   // Reversing an approval is held to the roles that can grant it (see PATCH
   // /:id/revoke-approval), so the button never shows where the call would 403.
-  const isApprover = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER].includes(user?.role as any);
+  const isApprover = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER].includes(user?.role as any);
   // The narrow window the server enforces: approved, and nothing paid out yet.
   const mayRevoke  = (r: RequisitionResponse) =>
     isApprover && r.status === 'APPROVED' && r.totalDispatched === 0;
@@ -714,7 +763,7 @@ function ManageTab() {
                       <Button size="sm" variant="success"
                         disabled={dirApprove.isPending}
                         onClick={() => dirApprove.mutate(r.id)}>
-                        Dir ✓
+                        <i className="bi bi-award me-1" />MD Approve
                       </Button>
                     )}
                     {isAdmin && r.status === 'APPROVED' && !r.assignedTo && (
@@ -725,6 +774,11 @@ function ManageTab() {
                     {isAdmin && ['ASSIGNED', 'IN_PROGRESS', 'APPROVED'].includes(r.status) && (
                       <Button size="sm" variant="outline-secondary" onClick={() => setProgressReq(r)}>
                         Progress
+                      </Button>
+                    )}
+                    {isAdmin && ['ASSIGNED', 'IN_PROGRESS'].includes(r.status) && (
+                      <Button size="sm" variant="outline-success" onClick={() => setCompleteReq(r)}>
+                        ✓ Complete
                       </Button>
                     )}
                     {isAdmin && r.status === 'APPROVED' && r.purchaseOrders.length === 0 && (
@@ -755,6 +809,7 @@ function ManageTab() {
       )}
       {assignReq && <AssignModal requisition={assignReq} onClose={() => setAssignReq(null)} />}
       {progressReq && <ProgressModal requisition={progressReq} onClose={() => setProgressReq(null)} />}
+      {completeReq && <CompleteModal requisition={completeReq} onClose={() => setCompleteReq(null)} />}
       {poReq && <PurchaseOrderModal requisition={poReq} onClose={() => setPoReq(null)} />}
       {revokeReq && <RevokeApprovalModal requisition={revokeReq} onClose={() => setRevokeReq(null)} />}
       {detailReq && <RequisitionDetailModal req={detailReq} onClose={() => setDetailReq(null)} />}
@@ -772,7 +827,7 @@ function SuppliersTab() {
     <>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <span className="fw-semibold">Suppliers</span>
-        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}>
+        <RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR]}>
           <Button size="sm" style={{ background: NAVY, borderColor: NAVY }} onClick={() => setShowAdd(true)}>
             + Add Supplier
           </Button>
@@ -811,12 +866,125 @@ function SuppliersTab() {
   );
 }
 
+// ── Approved totals ───────────────────────────────────────────────────────────
+// The figures the MD asked for: what requisitions have cost the business once
+// approved, and what is still waiting. Rendered for the same roles the
+// /requisitions/dashboard endpoint allows, so the tiles never 403.
+//
+// Each tile links into the Manage tab with its filter already applied, so the
+// number on the tile and the rows under it always agree: the same status list
+// and the same month boundary the endpoint counts with.
+
+/** The status list behind "assigned & completed" — KPI and drill-down share it. */
+const OUT_STATUSES = 'ASSIGNED,IN_PROGRESS,COMPLETED';
+
+/**
+ * Two honest numbers, no more: every requisition in the current window, and
+ * how much of it has been handed out. Both follow the filter panel's date
+ * range, so switching period switches the tiles with it.
+ */
+function RequisitionTotals({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  const { data, isLoading } = useRequisitionDashboard(dateFrom, dateTo);
+  if (isLoading || !data) return null;
+
+  const ugx = (n: number) => `UGX ${n.toLocaleString()}`;
+  const rangeQs = dateFrom || dateTo
+    ? `&from=${dateFrom || ''}&to=${dateTo || ''}`
+    : '';
+
+  return (
+    <>
+      <Row className="g-3 mb-3">
+        <Col xs={6} md={6}>
+          <StatCard
+            label="Total Requisitions"
+            value={ugx(data.totalRequisitions)}
+            icon={<i className="bi bi-files" />}
+            colour="navy"
+            subtext={`${data.requisitionsCount} requisition(s) — click to view`}
+            linkTo={`/requisitions?tab=manage${rangeQs}`}
+          />
+        </Col>
+        <Col xs={6} md={6}>
+          <StatCard
+            label="Assigned & Completed"
+            value={ugx(data.totalAssignedCompleted)}
+            icon={<i className="bi bi-cash-coin" />}
+            colour="amber"
+            subtext={`${data.assignedCompletedCount} handed out — click to view`}
+            linkTo={`/requisitions?tab=manage&status=${OUT_STATUSES}${rangeQs}`}
+          />
+        </Col>
+      </Row>
+      {/* The queues: what still needs a signature, what is late. */}
+      <Row className="g-3 mb-4">
+        <Col xs={6} md={4}>
+          <StatCard
+            label="Pending Approvals"
+            value={data.pendingApprovals}
+            icon={<i className="bi bi-hourglass-split" />}
+            colour={data.pendingApprovals > 0 ? 'amber' : 'green'}
+            subtext={data.pendingApprovals > 0 ? 'Click to review' : undefined}
+            linkTo="/requisitions?tab=manage&status=PENDING,SUBMITTED"
+          />
+        </Col>
+        <Col xs={6} md={4}>
+          <StatCard
+            label="Overdue Deliveries"
+            value={data.overdueDeliveries}
+            icon={<i className="bi bi-truck" />}
+            colour={data.overdueDeliveries > 0 ? 'red' : 'green'}
+            subtext={data.overdueDeliveries > 0 ? 'Click to view late POs' : undefined}
+            linkTo="/requisitions?tab=manage&overdue=true"
+          />
+        </Col>
+      </Row>
+    </>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
+
+/** The drill-down filters a KPI tile puts in the URL, read back on mount. */
+function filtersFromSearchParams(sp: URLSearchParams): RequisitionFilters {
+  return {
+    ...EMPTY_REQUISITION_FILTERS,
+    status:   sp.get('status') ?? '',
+    dateFrom: sp.get('from')   ?? '',
+    dateTo:   sp.get('to')     ?? '',
+    overdue:  sp.get('overdue') === 'true',
+  };
+}
 
 export default function RequisitionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canManage = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canManage = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR].includes(user?.role as any);
+
+  // The tab lives in the URL so a KPI tile can deep-link straight into Manage
+  // with its filter applied. Anything but 'manage'/'suppliers' falls back to
+  // 'mine', and a non-approver landing on ?tab=manage is dropped to 'mine'
+  // rather than shown an empty tab they cannot use.
+  const urlTab = searchParams.get('tab');
+  const activeTab = urlTab === 'manage' && canManage ? 'manage'
+    : urlTab === 'suppliers' ? 'suppliers'
+    : 'mine';
+
+  // Filters live at page level: the KPI tiles above and the Manage tab below
+  // read the same state, so the date range in the panel drives the tiles too.
+  const [filters, setFilters] = useState<RequisitionFilters>(() => filtersFromSearchParams(searchParams));
+  // A KPI drill-down lands in the URL — re-seed the panel (and the tiles'
+  // window) from it.
+  const spKey = searchParams.toString();
+  useEffect(() => { setFilters(filtersFromSearchParams(searchParams)); }, [spKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectTab = (key: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (key && key !== 'mine') next.set('tab', key);
+    else next.delete('tab');
+    setSearchParams(next, { replace: true });
+  };
 
   return (
     <div className="py-4 px-3">
@@ -827,15 +995,17 @@ export default function RequisitionsPage() {
 
       <h4 className="fw-bold mb-4" style={{ color: NAVY }}>Requisitions</h4>
 
+      {canManage && <RequisitionTotals dateFrom={filters.dateFrom} dateTo={filters.dateTo} />}
+
       <Card className="border-0 shadow-sm">
         <Card.Body>
-          <Tabs defaultActiveKey="mine" className="mb-3">
+          <Tabs activeKey={activeTab} onSelect={selectTab} className="mb-3">
             <Tab eventKey="mine" title="My Requisitions">
               <MyRequisitionsTab />
             </Tab>
             {canManage && (
-              <Tab eventKey="manage" title="Manage">
-                <ManageTab />
+              <Tab eventKey="manage" title={<span style={{ color: "#0d6efd", fontWeight: 600 }}>Manage</span>}>
+                <ManageTab filters={filters} onFiltersChange={setFilters} />
               </Tab>
             )}
             <Tab eventKey="suppliers" title="Suppliers">

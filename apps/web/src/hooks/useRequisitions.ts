@@ -89,6 +89,17 @@ export function useUpdateRequisitionProgress() {
   });
 }
 
+export function useCompleteRequisition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => requisitionsApi.complete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['requisitions'] });
+      qc.invalidateQueries({ queryKey: ['requisitions', 'dashboard'] });
+    },
+  });
+}
+
 export function useCreatePurchaseOrder() {
   const qc = useQueryClient();
   return useMutation({
@@ -153,11 +164,13 @@ export function useReviewAccountability(requisitionId: string, stage: 'admin' | 
   });
 }
 
-export function useRequisitionDashboard() {
+export function useRequisitionDashboard(from?: string, to?: string) {
   return useQuery({
-    queryKey: ['requisitions', 'dashboard'],
-    queryFn:  () => requisitionsApi.getDashboard(),
-    staleTime: 5 * 60 * 1000,
+    // Keyed on the date window: changing the filter panel refetches the tiles
+    // for the new period instead of showing stale all-time figures.
+    queryKey: ['requisitions', 'dashboard', from ?? '', to ?? ''],
+    queryFn:  () => requisitionsApi.getDashboard({ from: from || undefined, to: to || undefined }),
+    staleTime: 30 * 1000,
   });
 }
 

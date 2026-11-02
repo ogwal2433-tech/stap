@@ -21,11 +21,11 @@ const toIso = (day: string) => new Date(day).toISOString();
  * "16666" while typing, so the next digits land as "1666667". Parse with Number()
  * where used, as InvoiceFormModal does.
  */
-type Line = { description: string; guardsCount: number; ratePerGuard: string; days: number };
+type Line = { description: string; guardsCount: number; ratePerGuard: string };
 
 const rateOf = (l: Line) => Number(l.ratePerGuard) || 0;
 
-const lineAmount = (l: Line) => roundMoney(l.guardsCount * rateOf(l) * l.days);
+const lineAmount = (l: Line) => roundMoney(l.guardsCount * rateOf(l));
 
 /** An emptied number field parses to NaN; keep it at 0 so totals stay readable. */
 const toNum = (v: string) => {
@@ -65,14 +65,13 @@ export default function InvoiceEditModal({
       description:  li.description,
       guardsCount:  li.quantity,
       ratePerGuard: String(li.ratePerDay),
-      days:         li.days,
     })));
   }, [full?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateLine = (idx: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   const addLine = () =>
-    setLines((prev) => [...prev, { description: '', guardsCount: 1, ratePerGuard: '', days: 30 }]);
+    setLines((prev) => [...prev, { description: '', guardsCount: 1, ratePerGuard: '' }]);
   const removeLine = (idx: number) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
   const ratesWithinTwoDecimals = lines.every((l) => isTwoDpOrWhole(rateOf(l)));
@@ -80,8 +79,7 @@ export default function InvoiceEditModal({
     && ratesWithinTwoDecimals
     && lines.every((l) => l.description.trim().length > 0
       && Number.isInteger(l.guardsCount) && l.guardsCount >= 1
-      && Number.isFinite(rateOf(l)) && rateOf(l) >= 0
-      && Number.isInteger(l.days) && l.days >= 1);
+      && Number.isFinite(rateOf(l)) && rateOf(l) >= 0);
   const datesValid = !!periodStart && !!periodEnd && !!dueDate && periodStart <= periodEnd;
   const canSave = !isLoading && linesValid && datesValid && !updateMutation.isPending;
 
@@ -104,7 +102,7 @@ export default function InvoiceEditModal({
             guardType:    l.description.trim(),
             guardsCount:  l.guardsCount,
             ratePerGuard: rateOf(l),
-            days:         l.days,
+            days:         30,
           })),
         },
       });
@@ -164,8 +162,7 @@ export default function InvoiceEditModal({
                 <tr>
                   <th>Description</th>
                   <th style={{ width: 80 }} className="text-center">Qty</th>
-                  <th style={{ width: 140 }} className="text-end">Rate / day</th>
-                  <th style={{ width: 70 }} className="text-center">Days</th>
+                  <th style={{ width: 170 }} className="text-end">Rate / guard / month</th>
                   <th style={{ width: 130 }} className="text-end">Line total</th>
                   <th style={{ width: 36 }} />
                 </tr>
@@ -197,13 +194,6 @@ export default function InvoiceEditModal({
                         onChange={(e) => updateLine(idx, { ratePerGuard: e.target.value })}
                       />
                     </td>
-                    <td>
-                      <Form.Control
-                        size="sm" type="number" min={1} className="text-center"
-                        value={l.days}
-                        onChange={(e) => updateLine(idx, { days: toNum(e.target.value) })}
-                      />
-                    </td>
                     <td className="text-end small fw-semibold align-middle">{fmtUGX(lineAmount(l))}</td>
                     <td className="text-center align-middle">
                       <Button
@@ -216,13 +206,13 @@ export default function InvoiceEditModal({
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f8f9fa' }}>
-                  <td colSpan={4} className="text-end fw-semibold small">Subtotal</td>
+                  <td colSpan={3} className="text-end fw-semibold small">Subtotal</td>
                   <td className="text-end fw-semibold small">{fmtUGX(subtotal)}</td>
                   <td />
                 </tr>
                 {(full?.taxAmount ?? invoice.taxAmount) > 0 && (
                   <tr style={{ background: '#f8f9fa' }}>
-                    <td colSpan={4} className="text-end fw-semibold small">Tax</td>
+                    <td colSpan={3} className="text-end fw-semibold small">Tax</td>
                     <td className="text-end fw-semibold small">{fmtUGX(full?.taxAmount ?? invoice.taxAmount)}</td>
                     <td />
                   </tr>

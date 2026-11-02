@@ -27,6 +27,7 @@ export const requisitionsApi = {
     requestedById?: string;
     from?: string;
     to?: string;
+    overdue?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<RequisitionResponse>> {
@@ -83,6 +84,12 @@ export const requisitionsApi = {
       .then((r) => r.data.data);
   },
 
+  complete(id: string): Promise<RequisitionResponse> {
+    return api
+      .patch<{ success: boolean; data: RequisitionResponse }>(`/requisitions/${id}/complete`, {})
+      .then((r) => r.data.data);
+  },
+
   createPurchaseOrder(requisitionId: string, data: Omit<CreatePurchaseOrderInput, 'requisitionId'>): Promise<PurchaseOrderResponse> {
     return api
       .post<{ success: boolean; data: PurchaseOrderResponse }>(
@@ -129,14 +136,16 @@ export const requisitionsApi = {
       .then((r) => r.data.data);
   },
 
-  getDashboard(): Promise<{
+  getDashboard(params?: { from?: string; to?: string }): Promise<{
     pendingApprovals: number;
-    totalSpendThisMonth: number;
+    totalRequisitions: number;
+    requisitionsCount: number;
+    totalAssignedCompleted: number;
+    assignedCompletedCount: number;
     overdueDeliveries: number;
-    spendByCategory: { category: string; total: number }[];
   }> {
     return api
-      .get<{ success: boolean; data: any }>('/requisitions/dashboard')
+      .get<{ success: boolean; data: any }>('/requisitions/dashboard', { params })
       .then((r) => r.data.data);
   },
 

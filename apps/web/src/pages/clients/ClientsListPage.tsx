@@ -20,7 +20,7 @@ const CONTRACT_BADGE: Record<string, string> = {
   EXPIRED: 'danger',
 };
 
-const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.ASSISTANT_MANAGER];
+const CLIENT_ARCHIVE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER];
 
 /**
  * The primary contact, with a count of the others.

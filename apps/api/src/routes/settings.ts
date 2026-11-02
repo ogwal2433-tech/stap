@@ -181,6 +181,8 @@ import {
   CreateDeductionTypeSchema,
   UpdateDeductionTypeSchema,
   ReorderDeductionTypesSchema,
+  CreateGunTypeSchema,
+  UpdateGunTypeSchema,
   CreateShiftTypeSchema,
   UpdateShiftTypeSchema,
   ReorderShiftTypesSchema,
@@ -622,6 +624,58 @@ router.delete(
 // ── Shift Types ────────────────────────────────────────────────────────────────
 
 // GET /shift-types — all authenticated roles (needed for roster builder)
+// Gun Type catalogue - the register-gun dropdown reads the active rows,
+// so new types land without a deploy. Writes are Director-only; codes are
+// immutable once created and retired types stay readable on old guns.
+router.get(
+  '/gun-types',
+  asyncHandler(async (req, res) => {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const data = await settingsService.listGunTypes(activeOnly);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/gun-types',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = CreateGunTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await settingsService.createGunType(parsed.data, req.user!.userId);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/gun-types/:id',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const parsed = UpdateGunTypeSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400);
+    const data = await settingsService.updateGunType(req.params.id, parsed.data, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/gun-types/:id/deactivate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await settingsService.deactivateGunType(req.params.id, req.user!.userId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/gun-types/:id/activate',
+  requireRole(ROLES.DIRECTOR),
+  asyncHandler(async (req, res) => {
+    const data = await settingsService.activateGunType(req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
 router.get(
   '/shift-types',
   asyncHandler(async (req, res) => {

@@ -18,12 +18,33 @@ class AttendanceService {
   async markAttendance(
     records: MarkAttendanceInput['records'],
     markedBy: string,
-  ): Promise<{ marked: number; updated: number }> {
+  ): Promise<{ marked: number; updated: number; skippedDeserted: number; skippedNames: string[] }> {
     let marked = 0;
     let updated = 0;
     const absentGuards: { guardId: string; siteId: string; date: string }[] = [];
 
-    for (const record of records) {
+    // Deserted guards are quarantined: no attendance may be recorded for them.
+    // Rather than rejecting the whole batch (which blocks "mark all present" the
+    // moment one stale deserter row is still on the sheet), their records are
+    // filtered out and reported back so the rest of the batch still saves.
+    const guardIds = [...new Set(records.map((r) => r.guardId))];
+    let skippedDeserted = 0;
+    let skippedNames: string[] = [];
+    let recordsToWrite = records;
+    if (guardIds.length) {
+      const deserted = await prisma.guard.findMany({
+        where: { id: { in: guardIds }, employmentStatus: 'DESERTED' },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      if (deserted.length) {
+        const desertedIds = new Set(deserted.map((g) => g.id));
+        skippedNames = deserted.map((g) => `${g.firstName} ${g.lastName}`.trim());
+        skippedDeserted = records.filter((r) => desertedIds.has(r.guardId)).length;
+        recordsToWrite = records.filter((r) => !desertedIds.has(r.guardId));
+      }
+    }
+
+    for (const record of recordsToWrite) {
       const date = new Date(record.date);
       date.setUTCHours(0, 0, 0, 0);
 
@@ -70,10 +91,10 @@ class AttendanceService {
       action: 'ATTENDANCE_MARKED',
       entity: 'attendanceRecord',
       entityId: 'bulk',
-      newValue: { recordCount: records.length, markedBy },
+      newValue: { recordCount: recordsToWrite.length, skippedDeserted, markedBy },
     });
 
-    return { marked, updated };
+    return { marked, updated, skippedDeserted, skippedNames };
   }
 
   // ── Get attendance by date ─────────────────────────────────────────────────
@@ -110,6 +131,8 @@ class AttendanceService {
     if (siteId)  where.siteId  = siteId;
     if (guardId) where.guardId = guardId;
     if (status)  where.status  = status;
+    // Deserted guards never appear in attendance records, past or present.
+    where.guard = { employmentStatus: { not: 'DESERTED' } };
 
     const [records, total] = await Promise.all([
       prisma.attendanceRecord.findMany({
@@ -159,6 +182,7 @@ class AttendanceService {
 
     const where: import('@prisma/client').Prisma.AttendanceRecordWhereInput = {
       date: { gte: fromDate, lte: toDate },
+      guard: { employmentStatus: { not: 'DESERTED' } },
     };
     if (guardId) where.guardId = guardId;
     if (siteId) where.siteId = siteId;
@@ -305,6 +329,14 @@ class AttendanceService {
   }> {
     const fromDate = new Date(from.slice(0, 10) + 'T00:00:00.000Z');
     const toDate = new Date(to.slice(0, 10) + 'T23:59:59.999Z');
+
+    // Deserted guards never appear in attendance records.
+    const target = await prisma.guard.findUnique({
+      where: { id: guardId }, select: { employmentStatus: true },
+    });
+    if (target?.employmentStatus === 'DESERTED') {
+      return { totalDays: 0, present: 0, absent: 0, late: 0, awol: 0, attendanceRate: 0 };
+    }
 
     const [totalDays, records] = await Promise.all([
       prisma.deployment.count({

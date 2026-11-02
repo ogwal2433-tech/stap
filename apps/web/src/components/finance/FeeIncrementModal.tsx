@@ -26,13 +26,13 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
    * "1666667". Counts and days are whole numbers and keep parsing to a number.
    */
   const [rate, setRate]               = useState('');
-  const [days, setDays]               = useState<number | ''>(30);
+  const [days]                        = useState<number | ''>(30);
   const [reason, setReason]           = useState('');
   const [error, setError]             = useState('');
 
   const increment = useAddFeeIncrement();
 
-  const lineTotal = roundMoney((Number(guardCount) || 0) * (Number(rate) || 0) * (Number(days) || 0));
+  const lineTotal = roundMoney((Number(guardCount) || 0) * (Number(rate) || 0));
   const newTotal  = roundMoney(invoice.totalAmount + lineTotal);
   const newDue    = roundMoney(invoice.outstandingBalance + lineTotal);
 
@@ -41,7 +41,7 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
     if (!guardCount || Number(guardCount) < 1) { setError('Enter how many extra guards.'); return; }
     if (rate === '' || Number(rate) < 0) { setError('Enter the rate per guard.'); return; }
     if (!isTwoDpOrWhole(Number(rate))) { setError('The rate per guard can carry at most two decimal places — e.g. 16666.67.'); return; }
-    if (!days || Number(days) < 1) { setError('Enter the number of days.'); return; }
+    void days;
     setError('');
 
     increment.mutate(
@@ -51,7 +51,7 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
         guardType:    guardType.trim() || null,
         guardCount:   Number(guardCount),
         ratePerGuard: Number(rate),
-        days:         Number(days),
+        days:         30,
         reason:       reason.trim() || null,
       },
       {
@@ -107,18 +107,14 @@ export default function FeeIncrementModal({ invoice, onClose, onSuccess }: Props
 
         <Row className="g-2 mb-3">
           <Col sm={6}>
-            <Form.Label className="fw-bold small">Rate per guard (UGX) <span className="text-danger">*</span></Form.Label>
+            <Form.Label className="fw-bold small">Rate per guard / month (UGX) <span className="text-danger">*</span></Form.Label>
             <Form.Control
-              type="number" min={0} step="0.01" value={rate} placeholder="e.g. 600000 or 16666.67"
+              type="number" min={0} step="0.01" value={rate} placeholder="e.g. 500000"
               onChange={e => { setRate(e.target.value); setError(''); }}
             />
           </Col>
-          <Col sm={6}>
-            <Form.Label className="fw-bold small">Days <span className="text-danger">*</span></Form.Label>
-            <Form.Control
-              type="number" min={1} value={days}
-              onChange={e => { setDays(e.target.value === '' ? '' : Number(e.target.value)); setError(''); }}
-            />
+          <Col sm={6} className="d-flex align-items-end">
+            <div className="text-muted small pb-2">Full-month rate: total = guards x rate (30-day cycle).</div>
           </Col>
         </Row>
 

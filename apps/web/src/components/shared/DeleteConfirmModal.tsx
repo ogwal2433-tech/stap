@@ -13,10 +13,18 @@ const RED = '#C0392B';
  * toast that has already gone.
  */
 export default function DeleteConfirmModal({
-  show, onHide, onConfirm, entityName, entityType, warning,
+  show, onHide, onConfirm, entityName, entityType, warning, override,
 }: {
   show:       boolean;
   onHide:     () => void;
+  /** Director override section. Shown only when provided (guard deletes by Directors). */
+  override?: {
+    available: boolean;
+    checked:   boolean;
+    onChecked: (v: boolean) => void;
+    reason:    string;
+    onReason:  (v: string) => void;
+  };
   /** Resolves once deleted; a rejection is shown in the dialog. */
   onConfirm:  () => Promise<unknown>;
   entityName: string;
@@ -30,10 +38,10 @@ export default function DeleteConfirmModal({
 
   // A dialog reopened for another record must not carry the last one's state.
   useEffect(() => {
-    if (show) { setTyped(''); setError(null); setBusy(false); }
+    if (show) { setTyped(''); setError(null); setBusy(false); override?.onChecked(false); override?.onReason(''); }
   }, [show]);
 
-  const confirmed = typed.trim() === 'DELETE';
+  const confirmed = typed.trim() === 'DELETE' && (!override?.checked || override.reason.trim().length >= 5);
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -75,6 +83,32 @@ export default function DeleteConfirmModal({
         )}
 
         {error && <Alert variant="danger" className="small py-2">{error}</Alert>}
+
+        {override?.available && (
+          <div style={{ border: '1px solid #E8701A', borderRadius: '0.5rem', padding: '12px 14px', marginBottom: 14 }}>
+            <Form.Check
+              type="checkbox"
+              id="delete-override"
+              label="Delete with history (Director override)"
+              checked={override.checked}
+              onChange={(e) => override.onChecked(e.target.checked)}
+              style={{ fontSize: '0.82rem', fontWeight: 700 }}
+            />
+            <div className="text-muted" style={{ fontSize: '0.75rem', margin: '4px 0 8px' }}>
+              Skips the no-history rule. The portal login is revoked, a reason is mandatory, and everything is audited.
+            </div>
+            {override.checked && (
+              <Form.Control
+                as="textarea"
+                rows={2}
+                maxLength={500}
+                value={override.reason}
+                onChange={(e) => override.onReason(e.target.value)}
+                placeholder="Why must this record go despite its history? (min 5 characters)"
+              />
+            )}
+          </div>
+        )}
 
         <div style={{ background: '#FDEDEC', borderRadius: '0.5rem', padding: '14px 16px' }}>
           <Form.Label htmlFor="delete-confirm" style={{ fontSize: '0.78rem', color: RED, fontWeight: 600 }}>

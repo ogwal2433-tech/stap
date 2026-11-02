@@ -11,7 +11,7 @@
  */
 export interface SettingDefinition {
   key:          string;
-  group:        'smtp' | 'xcel' | 'company';
+  group:        'smtp' | 'xcel' | 'company' | 'app';
   label:        string;
   description:  string;
   inputType:    'text' | 'password' | 'number' | 'toggle' | 'email' | 'url';
@@ -158,9 +158,20 @@ export const SETTINGS_CONFIG: SettingDefinition[] = [
     inputType: 'text', isEncrypted: false, isRequired: false,
     placeholder: '@yourcompany', envFallback: 'COMPANY_TWITTER',
   },
+  {
+    key: 'app.publicUrl', group: 'app', label: 'Public app URL',
+    description: 'The address staff open in a browser. Used for Approve/Reject buttons inside emails. No trailing slash.',
+    inputType: 'url', isEncrypted: false, isRequired: false,
+    placeholder: 'https://security.example.com', envFallback: 'S360_FRONTEND_URL',
+  },
 ];
 
 export const SETTINGS_GROUPS = {
+  app: {
+    label:       'App & links',
+    description: 'How staff reach the system from outside, used for buttons inside emails.',
+    icon:        '?',
+  },
   company: {
     label:       'Company details',
     description: 'The registered name and contact details printed on invoices, letters and ID cards.',

@@ -40,11 +40,6 @@ interface EditableLineItem {
   fromContract: boolean;
 }
 
-function computeDays(start: string, end: string): number {
-  const diff = new Date(end).getTime() - new Date(start).getTime();
-  return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1);
-}
-
 export default function InvoiceFormModal({ onClose }: Props) {
   const { showToast } = useToast();
   const generateMutation = useGenerateInvoice();
@@ -108,7 +103,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
           guardType:    li.guardType,
           count:        li.count,
           ratePerGuard: String(li.ratePerGuard),
-          billingDays:  li.billingDays,
+          billingDays:  30,
           fromContract: true,
         })));
       })
@@ -120,9 +115,9 @@ export default function InvoiceFormModal({ onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractId]);
 
-  const applyBillingDaysToAllLines = (days: number) => {
-    setBillingDays(days);
-    setLineItems((prev) => prev.map((li) => ({ ...li, billingDays: days })));
+  const applyBillingDaysToAllLines = (_days: number) => {
+    setBillingDays(30);
+    setLineItems((prev) => prev.map((li) => ({ ...li, billingDays: 30 })));
   };
 
   const updateLine = (idx: number, field: keyof EditableLineItem, value: number | string) => {
@@ -134,7 +129,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
   // get a row at all; in contract mode it is how a charge outside the contract's
   // rate lines gets billed on the same invoice instead of a second one.
   const addLine = () => {
-    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: '', billingDays, fromContract: false }]);
+    setLineItems((prev) => [...prev, { guardType: '', count: 1, ratePerGuard: '', billingDays: 30, fromContract: false }]);
   };
 
   const removeLine = (idx: number) => {
@@ -142,7 +137,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
   };
 
   const lineTotal = (li: EditableLineItem) =>
-    roundMoney(li.count * (Number(li.ratePerGuard) || 0) * li.billingDays);
+    roundMoney(li.count * (Number(li.ratePerGuard) || 0));
   const computedTotal = roundMoney(lineItems.reduce((sum, li) => sum + lineTotal(li), 0));
   const totalGuards   = lineItems.reduce((sum, li) => sum + li.count, 0);
 
@@ -188,7 +183,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
         guardType:    li.guardType.trim(),
         count:        li.count,
         ratePerGuard: Number(li.ratePerGuard) || 0,
-        billingDays:  li.billingDays,
+        billingDays:  30,
       }));
       await generateMutation.mutateAsync(
         contractId
@@ -308,18 +303,17 @@ export default function InvoiceFormModal({ onClose }: Props) {
           {/* ── Billing Period + Days ── */}
           {(contractId || manualMode) && (
             <>
-              <Col md={5}>
+              <Col md={6}>
                 <Form.Label className="fw-semibold small">Billing Period Start <span className="text-danger">*</span></Form.Label>
                 <Form.Control
                   type="date"
                   value={billingStart}
                   onChange={(e) => {
                     setBillingStart(e.target.value);
-                    if (billingEnd) applyBillingDaysToAllLines(computeDays(e.target.value, billingEnd));
                   }}
                 />
               </Col>
-              <Col md={5}>
+              <Col md={6}>
                 <Form.Label className="fw-semibold small">Billing Period End <span className="text-danger">*</span></Form.Label>
                 <Form.Control
                   type="date"
@@ -327,18 +321,11 @@ export default function InvoiceFormModal({ onClose }: Props) {
                   min={billingStart}
                   onChange={(e) => {
                     setBillingEnd(e.target.value);
-                    if (billingStart) applyBillingDaysToAllLines(computeDays(billingStart, e.target.value));
                   }}
                 />
               </Col>
-              <Col md={2}>
-                <Form.Label className="fw-semibold small">Days</Form.Label>
-                <Form.Control
-                  type="number"
-                  min={1}
-                  value={billingDays}
-                  onChange={(e) => applyBillingDaysToAllLines(parseInt(e.target.value, 10) || 30)}
-                />
+              <Col md={12}>
+                <div className="text-muted small">Rate is the full-month amount for one guard: total = quantity x rate (30-day cycle).</div>
               </Col>
             </>
           )}
@@ -391,8 +378,7 @@ export default function InvoiceFormModal({ onClose }: Props) {
                       <tr>
                         <th>Description / Guard Type</th>
                         <th style={{ width: 70 }}>Count</th>
-                        <th style={{ width: 130 }}>Rate / Guard (UGX)</th>
-                        <th style={{ width: 70 }}>Days</th>
+                        <th style={{ width: 150 }}>Rate / guard / month (UGX)</th>
                         <th style={{ width: 130 }}>Line Total</th>
                         <th style={{ width: 40 }} />
                       </tr>
@@ -426,17 +412,9 @@ export default function InvoiceFormModal({ onClose }: Props) {
                           </td>
                           <td>
                             <Form.Control
-                              size="sm" type="number" min={0} step="0.01" placeholder="e.g. 16666.67"
+                              size="sm" type="number" min={0} step="0.01" placeholder="e.g. 500000"
                               value={li.ratePerGuard}
                               onChange={(e) => updateLine(idx, 'ratePerGuard', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <Form.Control
-                              size="sm" type="number" min={1}
-                              value={li.billingDays}
-                              onChange={(e) => updateLine(idx, 'billingDays', parseInt(e.target.value, 10) || 30)}
-                              style={{ textAlign: 'center' }}
                             />
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'middle', color: NAVY, fontSize: '0.85rem' }}>

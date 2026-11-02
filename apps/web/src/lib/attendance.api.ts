@@ -49,9 +49,14 @@ export const attendanceApi = {
     return api.delete(`/attendance/deployments/${id}`).then(() => undefined);
   },
 
-  markAttendance(records: MarkAttendanceInput['records']): Promise<{ marked: number; updated: number }> {
+  markAttendance(records: MarkAttendanceInput['records']): Promise<{
+    marked: number; updated: number; skippedDeserted?: number; skippedNames?: string[];
+  }> {
     return api
-      .post<{ success: boolean; data: { marked: number; updated: number } }>(
+      .post<{
+        success: boolean;
+        data: { marked: number; updated: number; skippedDeserted?: number; skippedNames?: string[] };
+      }>(
         '/attendance/attendance/mark',
         { records },
       )

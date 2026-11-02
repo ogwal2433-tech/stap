@@ -16,7 +16,12 @@ export function requireRole(...allowedRoles: UserRole[]): RequestHandler {
       return next(new UnauthorisedError());
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    // The MD outranks every role: wherever a Director may go, the MD may go too.
+    // (Service-level same-actor rules still apply - this only opens the gate.)
+    const role = req.user.role as string;
+    const admitted = allowedRoles.includes(req.user.role)
+      || (role === 'MD' && (allowedRoles as string[]).includes('DIRECTOR'));
+    if (!admitted) {
       logSecurityEvent(req, 'ROLE_DENIED', { required: allowedRoles.join(' | ') });
       return next(logged(new ForbiddenError()));
     }
@@ -77,11 +82,11 @@ export function requireOwnership(
     try {
       const ownerUserId = await getResourceUserId(req);
 
-      if (req.user.userId === ownerUserId || req.user.role === 'DIRECTOR') {
+      if (req.user.userId === ownerUserId || req.user.role === 'DIRECTOR' || req.user.role === 'MD') {
         return next();
       }
 
-      logSecurityEvent(req, 'ACCESS_DENIED', { required: 'owner or DIRECTOR' });
+      logSecurityEvent(req, 'ACCESS_DENIED', { required: 'owner, DIRECTOR or MD' });
       next(logged(new ForbiddenError()));
     } catch (err) {
       next(err);

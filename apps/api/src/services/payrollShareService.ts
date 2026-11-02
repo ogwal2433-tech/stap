@@ -123,11 +123,11 @@ class PayrollShareService {
         await notificationService.send({
           userId: u.id,
           type: 'PAYROLL_SHARED',
+          channels: ['inApp', 'email'],
           title: `${runLabel} schedule shared: ${periodLabel}`,
           message: `${generatedByName} shared the ${periodLabel} ${runLabel.toLowerCase()} schedule (${format})${data.note ? `: ${data.note}` : ''}.`,
           entityType: 'payrollShare',
           entityId: share.id,
-          channels: ['inApp'],
         });
       }
 

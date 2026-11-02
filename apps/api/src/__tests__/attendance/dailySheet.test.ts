@@ -79,6 +79,20 @@ describe('deploymentService.getDailySheet()', () => {
     expect(result.zones[0].sites[0].site.siteName).toBe('Alpha Tower');
   });
 
+  it('excludes deserters from the sheet query', async () => {
+    mockPrisma.deployment.findMany.mockResolvedValue([]);
+
+    await deploymentService.getDailySheet(DATE);
+
+    expect(mockPrisma.deployment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          guard: { employmentStatus: { not: 'DESERTED' } },
+        }),
+      }),
+    );
+  });
+
   it('returns empty zones array when no deployments', async () => {
     mockPrisma.deployment.findMany.mockResolvedValue([]);
 

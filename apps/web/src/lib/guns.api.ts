@@ -1,7 +1,8 @@
 import api from './api';
 import type {
   GunResponse, GunWithHistory, GunMovementResponse, GunInventoryRow,
-  RegisterGunInput, UpdateGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
+  RegisterGunInput, RegisterGunBatchInput, AdjustBulletsInput,
+  UpdateGunInput, DeployGunInput, WithdrawGunInput, TransferGunInput,
 } from '@security360/shared';
 
 export const gunsApi = {
@@ -45,6 +46,24 @@ export const gunsApi = {
   register(data: RegisterGunInput): Promise<GunResponse> {
     return api
       .post<{ success: boolean; data: GunResponse }>('/guns', data)
+      .then((r) => r.data.data);
+  },
+
+  registerBatch(data: RegisterGunBatchInput): Promise<GunResponse[]> {
+    return api
+      .post<{ success: boolean; data: GunResponse[] }>('/guns/batch', data)
+      .then((r) => r.data.data);
+  },
+
+  adjustBullets(id: string, data: AdjustBulletsInput): Promise<GunResponse> {
+    return api
+      .post<{ success: boolean; data: GunResponse }>(`/guns/${id}/adjust-bullets`, data)
+      .then((r) => r.data.data);
+  },
+
+  reconcile(): Promise<{ ok: boolean; checkedAt: string; stockMismatches: unknown[]; ammoMismatches: unknown[] }> {
+    return api
+      .get<{ success: boolean; data: { ok: boolean; checkedAt: string; stockMismatches: unknown[]; ammoMismatches: unknown[] } }>('/guns/reconcile')
       .then((r) => r.data.data);
   },
 

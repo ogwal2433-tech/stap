@@ -1,10 +1,11 @@
+import type { ReactNode } from 'react';
 import { Badge } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import type { DashboardFeedItem } from '@security360/shared';
 
 interface FeedCardProps {
   title:     string;
-  icon:      string;
+  icon:      string | ReactNode;
   items:     DashboardFeedItem[];
   emptyText: string;
   linkTo:    string;

@@ -161,10 +161,13 @@ const RANGE_MESSAGE = 'The from date must be on or before the to date';
  * service always scopes everyone else to their own submissions.
  */
 const requisitionFilterBase = z.object({
+  /** One status, or a comma list — the KPI tiles link to "approved at any stage". */
   status:        z.string().optional(),
   requestedById: z.string().min(1).optional(),
   from:          requisitionDateFilter.optional(),
   to:            requisitionDateFilter.optional(),
+  /** 'true' narrows to requisitions with a non-cancelled PO past its expected delivery. */
+  overdue:       z.enum(['true', 'false']).optional(),
 });
 
 /** Query for GET /requisitions, shared by the My Requisitions and Manage tabs. */

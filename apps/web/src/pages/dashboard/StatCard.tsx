@@ -11,10 +11,12 @@ const COLOURS: Record<StatColour, { bg: string; accent: string; text: string }> 
   grey:  { bg: '#F2F4F7', accent: '#6c757d', text: '#6c757d' },
 };
 
+import type { ReactNode } from 'react';
+
 interface StatCardProps {
   label:    string;
   value:    string | number;
-  icon:     string;
+  icon:     string | ReactNode;
   colour:   StatColour;
   linkTo?:  string;
   subtext?: string;

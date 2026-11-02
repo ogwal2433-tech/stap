@@ -27,6 +27,7 @@ function fmtPrintDate(d: Date): string {
     year:   'numeric',
     hour:   '2-digit',
     minute: '2-digit',
+    timeZone: 'Africa/Kampala',
   });
 }
 
@@ -41,7 +42,13 @@ function fmtDay(iso: string): string {
  */
 function describeSelection(query: RequisitionExportQuery): string {
   const parts: string[] = [];
-  if (query.status) parts.push(query.status.replace(/_/g, ' '));
+  if (query.status) {
+    // A comma list reads as one phrase — "approved at any stage" rather than
+    // four statuses strung together.
+    const list = query.status.split(',').map((s) => s.trim().replace(/_/g, ' '));
+    parts.push(list.length > 1 ? `${list[0]} at any stage` : list[0]);
+  }
+  if (query.overdue === 'true') parts.push('with an overdue delivery');
   if (query.requestedById) parts.push('raised by a specific requester');
   if (query.from && query.to)   parts.push(`dated ${fmtDay(query.from)} – ${fmtDay(query.to)}`);
   else if (query.from)          parts.push(`dated from ${fmtDay(query.from)}`);
