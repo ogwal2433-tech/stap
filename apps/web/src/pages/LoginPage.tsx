@@ -132,10 +132,11 @@ export default function LoginPage() {
       </div>
 
       {/* Login panel */}
-      <div className="d-flex align-items-center justify-content-center flex-grow-1 px-3">
+      <div className="d-flex align-items-center justify-content-center flex-grow-1 px-3" style={{ background: "linear-gradient(135deg, #F2F4F7 0%, #E8EDF5 100%)" }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
-          <Card className="shadow-sm border-0">
-            <Card.Header className="text-center py-4 bg-white border-0">
+          <Card className="shadow border-0" style={{ borderRadius: 16, overflow: "hidden", animation: "fadeIn 0.6s ease-out" }}>
+            <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+            <Card.Header className="text-center py-4 bg-white border-0" style={{ borderBottom: "3px solid #1B3A6B" }}>
               <h4 className="mb-1 fw-bold" style={{ color: NAVY }}>
                 {APP_NAME}
               </h4>
