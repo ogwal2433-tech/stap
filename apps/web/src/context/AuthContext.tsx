@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (reason === 'inactivity') {
           showToast('You were signed out after a period of inactivity.', 'info');
         }
-        navigate('/login');
+        navigate('/');
       }
     },
     [clearSession, showToast, navigate],
@@ -231,7 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setSessionLostHandler(() => {
       clearSession();
-      navigate('/login');
+      navigate('/');
     });
     return () => setSessionLostHandler(null);
   }, [clearSession, navigate]);
