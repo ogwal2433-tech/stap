@@ -412,8 +412,10 @@ function NavGroupPanel({
 const SIDEBAR_CSS = `
   .nav-link {
     color: #344054;
-    font-weight: 450;
-    letter-spacing: -0.005em;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
     outline: none;
     transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
   }
@@ -429,6 +431,7 @@ const SIDEBAR_CSS = `
     background: #EEF3FA;
     color: #1B3A6B;
     font-weight: 600;
+    font-size: 0.85rem;
     box-shadow: inset 3px 0 0 0 #1B3A6B;
   }
   .nav-link.active:hover {
@@ -445,7 +448,7 @@ const SIDEBAR_CSS = `
   }
   .nav-soon-chip {
     margin-left: auto;
-    font-size: 0.58rem;
+    font-size: 0.6rem;
     font-weight: 600;
     letter-spacing: 0.02em;
     background: #EAECF0;
@@ -479,9 +482,10 @@ const SIDEBAR_CSS = `
     color: #667085;
     cursor: pointer;
     text-align: left;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     padding: 8px 12px 5px;
     box-sizing: border-box;
