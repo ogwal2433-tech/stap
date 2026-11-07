@@ -135,7 +135,7 @@ function App() {
               <Route path="/guards/new"          element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><GuardFormPage /></PermissionGuard></L>} />
               <Route path="/guards/dashboard"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><GuardDashboardPage /></RoleGuard></L>} />
               <Route path="/guards/import"       element={<L><PermissionGuard permission="guards.create" fallback={<PermissionDenied permission="guards.create" />}><BulkImportPage /></PermissionGuard></L>} />
-              <Route path="/guards/deserters"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.HR, ROLES.OPERATIONS_SUPERVISOR]} fallback={<UnauthorisedPage />}><DesertersArchivePage /></RoleGuard></L>} />
+              <Route path="/guards/deserters"    element={<L><RoleGuard allowedRoles={[ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.HR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR]} fallback={<UnauthorisedPage />}><DesertersArchivePage /></RoleGuard></L>} />
               <Route path="/guards/:id"          element={<L><GuardDetailPage /></L>} />
               <Route path="/guards/:id/edit"     element={<L><PermissionGuard permission="guards.edit" fallback={<PermissionDenied permission="guards.edit" />}><GuardFormPage /></PermissionGuard></L>} />
 

@@ -71,6 +71,30 @@ const DisciplineRow = z.object({
   actionTakenBy: z.string().default(''),
 });
 
+const DaySupervisorTask = z.object({
+  time:       z.string().default(''),
+  site:       z.string().default(''),
+  task:       z.string().default(''),
+  outcome:    z.string().default(''),
+  followUp:   z.string().default(''),
+});
+
+const DaySupervisorReport = z.object({
+  bikeRegistration: z.string().default(''),
+  bikeCondition:    z.string().default(''),
+  sectionA:         z.array(DaySupervisorTask).default([]),
+  sectionB:         z.array(DaySupervisorTask).default([]),
+});
+
+const MajorIssueRow = z.object({
+  id:                 z.string(),
+  issue:              z.string().default(''),
+  riskImpact:         z.string().default(''),
+  actionRequired:     z.string().default(''),
+  responsibleManager: z.string().default(''),
+  deadline:           z.string().default(''),
+});
+
 /**
  * Sections 8 and 9 differ from the tables above: their rows carry an id.
  * The form edits a row in place and the periods nest inside a motorcycle, so
@@ -120,6 +144,9 @@ const MotorcycleReportSchema = z.object({
 });
 
 export type PendingMatter     = z.infer<typeof PendingMatterSchema>;
+export type DaySupervisorTask  = z.infer<typeof DaySupervisorTask>;
+export type DaySupervisorReport = z.infer<typeof DaySupervisorReport>;
+export type MajorIssueRow      = z.infer<typeof MajorIssueRow>;
 export type UnreachablePeriod = z.infer<typeof UnreachablePeriodSchema>;
 export type LongParkedPeriod  = z.infer<typeof LongParkedPeriodSchema>;
 export type MotorcycleReport  = z.infer<typeof MotorcycleReportSchema>;
@@ -157,20 +184,30 @@ export const ShiftReportBodySchema = z.object({
   clientComms:       z.array(ClientCommRow).default([]),
   gunsDeployed:      z.array(GunRow).default([]),
   disciplineIssues:  z.array(DisciplineRow).default([]),
-  pendingMatters:    z.array(PendingMatterSchema).default([]),
-  motorcycleReport:  z.array(MotorcycleReportSchema).default([]),
+  pendingMatters:       z.array(PendingMatterSchema).default([]),
+  motorcycleReport:     z.array(MotorcycleReportSchema).default([]),
+  daySupervisorReport:  DaySupervisorReport.optional().nullable(),
+  majorIssues:          z.array(MajorIssueRow).default([]),
 
-  totalIncidents:    z.coerce.number().int().min(0).default(0),
-  totalClientCalls:  z.coerce.number().int().min(0).default(0),
-  totalAbsentees:    z.coerce.number().int().min(0).default(0),
-  totalReplacements: z.coerce.number().int().min(0).default(0),
-  majorIssue:        z.string().optional().nullable(),
+  totalIncidents:     z.coerce.number().int().min(0).default(0),
+  totalClientCalls:   z.coerce.number().int().min(0).default(0),
+  totalAbsentees:     z.coerce.number().int().min(0).default(0),
+  totalReplacements:  z.coerce.number().int().min(0).default(0),
+  totalSitesExpected: z.coerce.number().int().min(0).default(0),
+  totalSitesCovered:  z.coerce.number().int().min(0).default(0),
+  totalSickGuards:    z.coerce.number().int().min(0).default(0),
+  totalDisciplinary:  z.coerce.number().int().min(0).default(0),
+  totalOpenActions:   z.coerce.number().int().min(0).default(0),
+  totalOverdueActions:z.coerce.number().int().min(0).default(0),
+  majorIssue:         z.string().optional().nullable(),
 
   outgoingControllerName: z.string().optional().nullable(),
   outgoingTime:           z.string().optional().nullable(),
   incomingControllerName: z.string().optional().nullable(),
   incomingTime:           z.string().optional().nullable(),
   incomingControllerId:   z.string().optional().nullable(),
+  forwardedToId:          z.string().optional().nullable(),
+  forwardedAt:            z.string().optional().nullable(),
 
   /** Omitted means SUBMITTED — the form's default action. */
   status: z.enum(['DRAFT', 'SUBMITTED']).optional(),
@@ -203,11 +240,21 @@ export interface ShiftReportResponse extends ShiftReportRowSummary {
   clientComms:       { time: string; clientSite: string; issueRaised: string; staffResponsible: string }[];
   gunsDeployed:      { zone: string; numGuns: string; numBullets: string; status: string }[];
   disciplineIssues:  { site: string; guardName: string; issue: string; actionTakenBy: string }[];
-  pendingMatters:    PendingMatter[];
-  motorcycleReport:  MotorcycleReport[];
-  totalClientCalls:  number;
-  totalReplacements: number;
-  majorIssue:             string | null;
+  pendingMatters:       PendingMatter[];
+  motorcycleReport:     MotorcycleReport[];
+  daySupervisorReport: DaySupervisorReport | null;
+  majorIssues:          MajorIssueRow[];
+  totalClientCalls:    number;
+  totalReplacements:   number;
+  totalSitesExpected:  number;
+  totalSitesCovered:   number;
+  totalSickGuards:     number;
+  totalDisciplinary:   number;
+  totalOpenActions:    number;
+  totalOverdueActions: number;
+  majorIssue:          string | null;
+  forwardedToId:       string | null;
+  forwardedAt:         string | null;
   outgoingControllerName: string | null;
   outgoingTime:           string | null;
   incomingControllerName: string | null;

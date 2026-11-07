@@ -40,14 +40,25 @@ function fmt(r: WithNames) {
     gunsDeployed:      (r.gunsDeployed     ?? []) as never,
     disciplineIssues:  (r.disciplineIssues ?? []) as never,
     // Null on every report written before sections 8 and 9 existed.
-    pendingMatters:    (r.pendingMatters   ?? []) as never,
-    motorcycleReport:  (r.motorcycleReport ?? []) as never,
+    pendingMatters:       (r.pendingMatters   ?? []) as never,
+    motorcycleReport:     (r.motorcycleReport ?? []) as never,
+    daySupervisorReport:  (r.daySupervisorReport ?? null) as never,
+    majorIssues:          (r.majorIssues ?? []) as never,
 
-    totalIncidents:    r.totalIncidents,
-    totalClientCalls:  r.totalClientCalls,
-    totalAbsentees:    r.totalAbsentees,
-    totalReplacements: r.totalReplacements,
-    majorIssue:        r.majorIssue,
+    totalIncidents:     r.totalIncidents,
+    totalClientCalls:   r.totalClientCalls,
+    totalAbsentees:     r.totalAbsentees,
+    totalReplacements:  r.totalReplacements,
+    totalSitesExpected: r.totalSitesExpected,
+    totalSitesCovered:  r.totalSitesCovered,
+    totalSickGuards:    r.totalSickGuards,
+    totalDisciplinary:  r.totalDisciplinary,
+    totalOpenActions:   r.totalOpenActions,
+    totalOverdueActions:r.totalOverdueActions,
+    majorIssue:         r.majorIssue,
+
+    forwardedToId:      r.forwardedToId,
+    forwardedAt:        r.forwardedAt?.toISOString() ?? null,
 
     outgoingControllerName: r.outgoingControllerName,
     outgoingTime:           r.outgoingTime,
@@ -76,14 +87,25 @@ function sectionData(d: ShiftReportInput) {
     clientComms:       (d.clientComms      ?? []) as unknown as Json,
     gunsDeployed:      (d.gunsDeployed     ?? []) as unknown as Json,
     disciplineIssues:  (d.disciplineIssues ?? []) as unknown as Json,
-    pendingMatters:    (d.pendingMatters   ?? []) as unknown as Json,
-    motorcycleReport:  (d.motorcycleReport ?? []) as unknown as Json,
+    pendingMatters:       (d.pendingMatters   ?? []) as unknown as Json,
+    motorcycleReport:     (d.motorcycleReport ?? []) as unknown as Json,
+    daySupervisorReport:  (d.daySupervisorReport ?? null) as unknown as Json,
+    majorIssues:          (d.majorIssues ?? []) as unknown as Json,
 
-    totalIncidents:    d.totalIncidents    ?? 0,
-    totalClientCalls:  d.totalClientCalls  ?? 0,
-    totalAbsentees:    d.totalAbsentees    ?? 0,
-    totalReplacements: d.totalReplacements ?? 0,
-    majorIssue:        d.majorIssue ?? null,
+    totalIncidents:     d.totalIncidents    ?? 0,
+    totalClientCalls:   d.totalClientCalls  ?? 0,
+    totalAbsentees:     d.totalAbsentees    ?? 0,
+    totalReplacements:  d.totalReplacements ?? 0,
+    totalSitesExpected: d.totalSitesExpected ?? 0,
+    totalSitesCovered:  d.totalSitesCovered  ?? 0,
+    totalSickGuards:    d.totalSickGuards    ?? 0,
+    totalDisciplinary:  d.totalDisciplinary  ?? 0,
+    totalOpenActions:   d.totalOpenActions   ?? 0,
+    totalOverdueActions:d.totalOverdueActions ?? 0,
+    majorIssue:         d.majorIssue ?? null,
+
+    forwardedToId:      d.forwardedToId ?? null,
+    forwardedAt:       d.forwardedAt ? new Date(d.forwardedAt) : null,
 
     outgoingControllerName: d.outgoingControllerName ?? null,
     outgoingTime:           d.outgoingTime ?? null,
@@ -170,6 +192,21 @@ export const shiftReportService = {
       newValue: { systemId, status },
     });
 
+    return fmt(report as WithNames);
+  },
+
+  async forward(id: string, forwardedToId: string | null, actorId: string) {
+    const existing = await prisma.shiftHandoverReport.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError('Shift report not found');
+    const report = await prisma.shiftHandoverReport.update({
+      where: { id },
+      data: { forwardedToId, forwardedAt: new Date() },
+      include: INCLUDE,
+    });
+    await writeAuditLog({
+      userId: actorId, action: 'SHIFT_REPORT_FORWARDED', entity: 'shiftHandoverReport',
+      entityId: id, newValue: { forwardedToId },
+    });
     return fmt(report as WithNames);
   },
 

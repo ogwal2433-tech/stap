@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCompanyBranding } from '../../hooks/useCompanyBranding';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Alert, Badge, Button, Col, Form, Row, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { DEPLOYMENT_ROW_LABELS, GUN_EXTRA_ROWS } from '@security360/shared';
 import type { MotorcycleReport, PendingMatter, ShiftReportInput } from '@security360/shared';
@@ -28,12 +28,17 @@ interface FormState {
   deploymentRows: Row[]; deploymentRemarks: string;
   incidents: Row[]; supervisionRows: Row[]; clientComms: Row[];
   gunsDeployed: Row[]; disciplineIssues: Row[];
+  daySupervisorReport: { bikeRegistration: string; bikeCondition: string; sectionA: Row[]; sectionB: Row[] };
   pendingMatters: PendingMatter[]; motorcycleReport: MotorcycleReport[];
+  majorIssues: { id: string; issue: string; riskImpact: string; actionRequired: string; responsibleManager: string; deadline: string }[];
   totalIncidents: number; totalClientCalls: number;
   totalAbsentees: number; totalReplacements: number;
+  totalSitesExpected: number; totalSitesCovered: number; totalSickGuards: number;
+  totalDisciplinary: number; totalOpenActions: number; totalOverdueActions: number;
   majorIssue: string;
   outgoingControllerName: string; outgoingTime: string;
   incomingControllerName: string; incomingTime: string;
+  forwardedToId: string | null;
 }
 
 function blankForm(): FormState {
@@ -51,11 +56,18 @@ function blankForm(): FormState {
     disciplineIssues: [{ ...emptyDiscipline }],
     // Sections 8 and 9 start empty: unlike the printed tables above, a row here
     // means the controller had something to hand over.
-    pendingMatters: [], motorcycleReport: [],
-    totalIncidents: 0, totalClientCalls: 0, totalAbsentees: 0, totalReplacements: 0,
-    majorIssue: '',
+    daySupervisorReport: { bikeRegistration: '', bikeCondition: '', sectionA: [], sectionB: [] },
+  // Sections 8 and 9 start empty: unlike the printed tables above, a row here
+  // means the controller had something to hand over.
+  pendingMatters: [], motorcycleReport: [],
+  majorIssues: [],
+  totalIncidents: 0, totalClientCalls: 0, totalAbsentees: 0, totalReplacements: 0,
+  totalSitesExpected: 0, totalSitesCovered: 0, totalSickGuards: 0,
+  totalDisciplinary: 0, totalOpenActions: 0, totalOverdueActions: 0,
+  majorIssue: '',
     outgoingControllerName: '', outgoingTime: '',
     incomingControllerName: '', incomingTime: '',
+    forwardedToId: null,
   };
 }
 
@@ -74,6 +86,8 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
   const canAcknowledge = useHasPermission('shift_report.acknowledge');
 
   const [form, setForm] = useState<FormState>(blankForm);
+  const [showForward, setShowForward] = useState(false);
+  const [forwardTo, setForwardTo] = useState('');
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) =>
     setForm(p => ({ ...p, [key]: val }));
 
@@ -110,15 +124,24 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         disciplineIssues:  existing.disciplineIssues as Row[],
         pendingMatters:    existing.pendingMatters   ?? [],
         motorcycleReport:  existing.motorcycleReport ?? [],
+        daySupervisorReport: existing.daySupervisorReport ?? { bikeRegistration: '', bikeCondition: '', sectionA: [], sectionB: [] },
+        majorIssues:       existing.majorIssues ?? [],
         totalIncidents:    existing.totalIncidents,
         totalClientCalls:  existing.totalClientCalls,
         totalAbsentees:    existing.totalAbsentees,
         totalReplacements: existing.totalReplacements,
+        totalSitesExpected: existing.totalSitesExpected ?? 0,
+        totalSitesCovered:  existing.totalSitesCovered ?? 0,
+        totalSickGuards:    existing.totalSickGuards ?? 0,
+        totalDisciplinary:  existing.totalDisciplinary ?? 0,
+        totalOpenActions:   existing.totalOpenActions ?? 0,
+        totalOverdueActions:existing.totalOverdueActions ?? 0,
         majorIssue:             existing.majorIssue ?? '',
         outgoingControllerName: existing.outgoingControllerName ?? '',
         outgoingTime:           existing.outgoingTime ?? '',
         incomingControllerName: existing.incomingControllerName ?? '',
         incomingTime:           existing.incomingTime ?? '',
+        forwardedToId:          existing.forwardedToId ?? null,
       });
       return;
     }
@@ -273,7 +296,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         onChange={rows => set('incidents', rows)}
       />
 
-      <SectionHeader number={3} title="SUPERVISION REPORTS RECEIVED" />
+      <SectionHeader number={3} title="SUPERVISION COVERAGE" />
       <FixedTable
         headers={[
           { key: 'zone',          label: 'Zone Day/Night' },
@@ -291,7 +314,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         readOnly={locked}
       />
 
-      <SectionHeader number={4} title="CLIENT COMMUNICATIONS" />
+      <SectionHeader number={4} title="CLIENT COMMUNICATIONS / COMPLAINTS" />
       <DynamicTable
         columns={[
           { key: 'time',             label: 'Time', width: '90px' },
@@ -303,7 +326,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         onChange={rows => set('clientComms', rows)}
       />
 
-      <SectionHeader number={5} title="GUNS DEPLOYED" />
+      <SectionHeader number={5} title="FIREARMS DEPLOYMENT & ACCOUNTABILITY" />
       <FixedTable
         headers={[
           { key: 'zone',       label: 'Zone' },
@@ -322,7 +345,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         highlightRow="TOTAL"
       />
 
-      <SectionHeader number={6} title="GUARD DISCIPLINE ISSUES" />
+      <SectionHeader number={6} title="GUARD DISCIPLINE / COMPLIANCE ISSUES" />
       <DynamicTable
         columns={[
           { key: 'site',          label: 'Site' },
@@ -334,7 +357,53 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         onChange={rows => set('disciplineIssues', rows)}
       />
 
-      <SectionHeader number={7} title="SHIFT SUMMARY" />
+      <SectionHeader number={6} title="SUPERVISOR & MOTORCYCLE EXCEPTION REPORT" />
+      <div className="mb-3">
+        <Row className="g-3 mb-2">
+          <Col md={6}>
+            <Form.Label className="small fw-bold mb-1">Bike / Motorcycle Used</Form.Label>
+            <Form.Control size="sm" value={form.daySupervisorReport.bikeRegistration} disabled={locked}
+              placeholder="Registration / ID"
+              onChange={e => set('daySupervisorReport', { ...form.daySupervisorReport, bikeRegistration: e.target.value })} />
+          </Col>
+          <Col md={6}>
+            <Form.Label className="small fw-bold mb-1">Condition on Handover</Form.Label>
+            <Form.Control size="sm" value={form.daySupervisorReport.bikeCondition} disabled={locked}
+              placeholder="e.g. Good, minor scratch"
+              onChange={e => set('daySupervisorReport', { ...form.daySupervisorReport, bikeCondition: e.target.value })} />
+          </Col>
+        </Row>
+        <div className="fw-bold small mb-1" style={{ color: NAVY }}>Section A ? Tasks Handled</div>
+        <DynamicTable
+          columns={[
+            { key: 'time',     label: 'Time', width: '70px' },
+            { key: 'site',     label: 'Site / Location' },
+            { key: 'task',     label: 'Task / Activity Performed' },
+            { key: 'outcome',  label: 'Outcome / Findings' },
+            { key: 'followUp', label: 'Follow-up Required' },
+          ]}
+          rows={form.daySupervisorReport.sectionA}
+          emptyRow={{ time: '', site: '', task: '', outcome: '', followUp: '' }}
+          readOnly={locked}
+          onChange={rows => set('daySupervisorReport', { ...form.daySupervisorReport, sectionA: rows })}
+        />
+        <div className="fw-bold small mb-1 mt-2" style={{ color: NAVY }}>Section B ? Tasks Handled</div>
+        <DynamicTable
+          columns={[
+            { key: 'time',     label: 'Time', width: '70px' },
+            { key: 'site',     label: 'Site / Location' },
+            { key: 'task',     label: 'Task / Activity Performed' },
+            { key: 'outcome',  label: 'Outcome / Findings' },
+            { key: 'followUp', label: 'Follow-up Required' },
+          ]}
+          rows={form.daySupervisorReport.sectionB}
+          emptyRow={{ time: '', site: '', task: '', outcome: '', followUp: '' }}
+          readOnly={locked}
+          onChange={rows => set('daySupervisorReport', { ...form.daySupervisorReport, sectionB: rows })}
+        />
+      </div>
+
+      <SectionHeader number={9} title="SHIFT SUMMARY" />
       <Row className="g-3 mb-3">
         {([
           ['totalIncidents',    'Total Incidents',    suggested.totalIncidents],
@@ -365,12 +434,27 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
           );
         })}
       </Row>
-      <Form.Group className="mb-4">
-        <Form.Label className="fw-bold small mb-1">Major Issue of the Shift</Form.Label>
-        <Form.Control as="textarea" rows={3} value={form.majorIssue} disabled={locked}
+      <SectionHeader number={10} title="MAJOR ISSUES REQUIRING MANAGEMENT ATTENTION" />
+      <DynamicTable
+        columns={[
+          { key: 'issue',              label: 'Issue' },
+          { key: 'riskImpact',         label: 'Risk / Impact' },
+          { key: 'actionRequired',    label: 'Action Required' },
+          { key: 'responsibleManager',label: 'Responsible Manager' },
+          { key: 'deadline',          label: 'Deadline', width: '110px' },
+        ]}
+        rows={form.majorIssues}
+        emptyRow={{ id: crypto.randomUUID(), issue: '', riskImpact: '', actionRequired: '', responsibleManager: '', deadline: '' }}
+        readOnly={locked}
+        onChange={rows => set('majorIssues', rows.map(r => ({ id: r.id || crypto.randomUUID(), issue: r.issue ?? '', riskImpact: r.riskImpact ?? '', actionRequired: r.actionRequired ?? '', responsibleManager: r.responsibleManager ?? '', deadline: r.deadline ?? '' })))}
+      />
+      <Form.Group className="mb-4 mt-2">
+        <Form.Label className="fw-bold small mb-1">Major Issue of the Shift (summary)</Form.Label>
+        <Form.Control as="textarea" rows={2} value={form.majorIssue} disabled={locked}
           onChange={e => set('majorIssue', e.target.value)} />
       </Form.Group>
 
+      <SectionHeader number={8} title="CONTROL ROOM ACTION / PENDING REGISTER" />
       <PendingMattersSection
         items={form.pendingMatters} readOnly={locked}
         onChange={items => set('pendingMatters', items)}
@@ -381,6 +465,7 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         onChange={items => set('motorcycleReport', items)}
       />
 
+      <SectionHeader number={11} title="CONTROLLER'S DECLARATION" />
       <div style={{
         background: '#F2F4F7', borderRadius: '0.5rem', padding: '16px 20px',
         marginBottom: 20, border: `2px solid ${NAVY}`,
@@ -423,6 +508,14 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
             </Button>
           </>
         )}
+        {existing && existing.status !== 'DRAFT' && (
+          <Button
+            variant="outline-warning"
+            onClick={() => setShowForward(true)}
+          >
+            <i className="bi bi-send me-1" />Forward for Review
+          </Button>
+        )}
         {existing && (
           <Button
             variant="outline-primary"
@@ -443,6 +536,32 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
           Back to reports
         </Button>
       </div>
+      <Modal show={showForward} onHide={() => setShowForward(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: '1rem' }}>Forward Shift Report for Review</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="small text-muted">Forward this report to an administrator for review.</p>
+          <Form.Group>
+            <Form.Label className="small">Forward to (admin user ID or leave blank for all admins)</Form.Label>
+            <Form.Control size="sm" value={forwardTo} onChange={(e) => setForwardTo(e.target.value)}
+              placeholder="User ID (optional)" />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button size="sm" variant="outline-secondary" onClick={() => setShowForward(false)}>Cancel</Button>
+          <Button size="sm" variant="primary" onClick={async () => {
+            if (!existing) return;
+            try {
+              await shiftReportsApi.forward(existing.id, forwardTo || null);
+              showToast('Report forwarded for review.', 'success');
+              setShowForward(false);
+            } catch (err: any) {
+              showToast(err?.response?.data?.error ?? 'Failed to forward.', 'danger');
+            }
+          }}>Forward</Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

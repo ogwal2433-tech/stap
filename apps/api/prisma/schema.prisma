@@ -209,6 +209,7 @@ model User {
   contractAmendments       ContractAmendment[]         @relation("ContractAmender")
   shiftReportsAsIncoming   ShiftHandoverReport[]       @relation("IncomingController")
   acknowledgedShiftReports ShiftHandoverReport[]       @relation("ShiftReportAcknowledger")
+  forwardedShiftReports    ShiftHandoverReport[]       @relation("ShiftReportForwardedTo")
 
   // ── Client portal linkage ─────────────────────────────────────────────────────
   // NULL for internal staff. Set for CLIENT-role portal users — all users sharing
@@ -2285,13 +2286,23 @@ model ShiftHandoverReport {
   pendingMatters    Json?
   /// Section 9 — [{ id, zone, motorcycleId, riderName, unreachablePeriods[], longParkedPeriods[] }]
   motorcycleReport  Json?
+  /// Section 6A
+  daySupervisorReport Json?
+  /// Section 10
+  majorIssues Json?
 
   // ── Section 7: summary ──────────────────────────────────────────────────────
-  totalIncidents    Int     @default(0)
-  totalClientCalls  Int     @default(0)
-  totalAbsentees    Int     @default(0)
-  totalReplacements Int     @default(0)
-  majorIssue        String? @db.Text
+  totalIncidents     Int     @default(0)
+  totalClientCalls   Int     @default(0)
+  totalAbsentees     Int     @default(0)
+  totalReplacements  Int     @default(0)
+  totalSitesExpected Int     @default(0)
+  totalSitesCovered  Int     @default(0)
+  totalSickGuards    Int     @default(0)
+  totalDisciplinary  Int     @default(0)
+  totalOpenActions   Int     @default(0)
+  totalOverdueActions Int    @default(0)
+  majorIssue         String? @db.Text
 
   // ── Handover sign-off ───────────────────────────────────────────────────────
   // Names are free text: the incoming controller may not hold an account, and
@@ -2302,6 +2313,10 @@ model ShiftHandoverReport {
   incomingTime           String?
   incomingControllerId   String?
   incomingController     User?   @relation("IncomingController", fields: [incomingControllerId], references: [id], onDelete: SetNull)
+
+  forwardedToId  String?
+  forwardedTo    User?     @relation("ShiftReportForwardedTo", fields: [forwardedToId], references: [id], onDelete: SetNull)
+  forwardedAt    DateTime?
 
   /// DRAFT | SUBMITTED | ACKNOWLEDGED
   status             String    @default("DRAFT")

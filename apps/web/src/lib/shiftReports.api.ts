@@ -47,6 +47,10 @@ export const shiftReportsApi = {
     return api.patch(`/shift-reports/${id}/acknowledge`).then(r => r.data.data);
   },
 
+  forward(id: string, forwardedToId: string | null): Promise<ShiftReportResponse> {
+    return api.patch(`/shift-reports/${id}/forward`, { forwardedToId }).then(r => r.data.data);
+  },
+
   /** The browser cannot follow the URL directly — the PDF route needs the token. */
   async downloadPdf(id: string, filename: string): Promise<void> {
     const res  = await api.get(`/shift-reports/${id}/pdf`, { responseType: 'blob' });

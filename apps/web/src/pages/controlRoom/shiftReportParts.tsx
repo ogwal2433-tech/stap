@@ -105,7 +105,7 @@ export function DynamicTable({
                         cursor: 'pointer', fontSize: '1rem', lineHeight: 1,
                       }}
                     >
-                      ✕
+                      <i className="bi bi-x-lg" />
                     </button>
                   </td>
                 )}
@@ -263,7 +263,7 @@ function RemoveButton({ label, onClick, size = '1rem' }: {
         cursor: 'pointer', fontSize: size, lineHeight: 1, padding: '0 4px',
       }}
     >
-      ✕
+      <i className="bi bi-x-lg" />
     </button>
   );
 }
