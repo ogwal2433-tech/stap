@@ -51,6 +51,7 @@ interface NavItem {
   /** Shown when the user holds any one of these — for a page gathering several modules. */
   anyPermission?: string[];
   roles?: UserRole[];
+  excludeRoles?: UserRole[];
 }
 
 interface NavGroup {
@@ -77,7 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Guard Operations',
     items: [
       { icon: 'bi-shield-fill',         label: 'Guards',     to: '/guards',     roles: INTERNAL_ROLES as UserRole[] , permission: 'guards.view'},
-      { icon: 'bi-flag-fill',          label: 'Deserters',  to: '/guards/deserters', roles: [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.HR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[], permission: 'guards.view'},
+      { icon: 'bi-flag-fill',          label: 'Deserters',  to: '/guards/deserters', roles: [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.HR, ROLES.OPERATIONS_SUPERVISOR] as UserRole[], permission: 'guards.view', excludeRoles: [ROLES.CONTROL_ROOM] as UserRole[]},
       { icon: 'bi-calendar-check-fill', label: 'Attendance', to: '/attendance', roles: DEPLOYMENT_VIEW_ROLES as UserRole[] , permission: 'attendance.view'},
       { icon: 'bi-crosshair',           label: 'Gun Management', to: '/guns', roles: GUN_VIEW_ROLES as UserRole[] , permission: 'guns.view'},
       { icon: 'bi-phone-fill',          label: 'Check-in',   to: '/checkin',    permission: 'checkin.perform' },
@@ -89,9 +90,9 @@ const NAV_GROUPS: NavGroup[] = [
     icon:  'bi-building-fill',
     label: 'Clients & Sites',
     items: [
-      { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL as UserRole[] , permission: 'clients.view'},
-      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'roster.view' },
-      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] , permission: 'marketing.view'},
+      { icon: 'bi-building-fill',      label: 'Clients',    to: '/clients',    roles: NON_GUARD_INTERNAL.filter(r => r !== ROLES.CONTROL_ROOM) as UserRole[] , permission: 'clients.view'},
+      { icon: 'bi-map-fill',           label: 'Zones',      to: '/zones',      roles: [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ADMINISTRATOR, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR] as UserRole[], permission: 'roster.view', excludeRoles: [ROLES.CONTROL_ROOM] as UserRole[] },
+      { icon: 'bi-graph-up-arrow',      label: 'Marketing',  to: '/marketing',  roles: MARKETING_ROLES as UserRole[] , permission: 'marketing.view', excludeRoles: [ROLES.CONTROL_ROOM] as UserRole[]},
       { icon: 'bi-chat-left-text-fill', label: 'Complaints', to: '/complaints', roles: INTERNAL_ROLES.filter(r => r !== ROLES.GUARD && r !== ROLES.CLIENT) as UserRole[] , permission: 'complaints.view'},
       { icon: 'bi-tools',               label: 'Service Requests', to: '/service-requests', permission: 'service_requests.view'},
     ],
@@ -112,9 +113,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'HR & Reporting',
     items: [
       { icon: 'bi-people-fill',   label: 'HR',      to: '/hr',      roles: [...HR_ROLES, ROLES.TRAINER] as UserRole[], permission: 'hr.view' },
-      { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view'},
-{ icon: 'bi-file-earmark-spreadsheet', label: 'Payroll Report', to: '/payroll-report', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view'},
-{ icon: 'bi-clipboard2-pulse', label: 'Deployment Report', to: '/deployment-report', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view'},
+      { icon: 'bi-bar-chart-fill', label: 'Reports', to: '/reports', permission: 'reports.view'},
+{ icon: 'bi-file-earmark-spreadsheet', label: 'Payroll Report', to: '/payroll-report', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view', excludeRoles: [ROLES.CONTROL_ROOM] as UserRole[]},
+{ icon: 'bi-clipboard2-pulse', label: 'Deployment Report', to: '/deployment-report', roles: REPORT_ROLES as UserRole[] , permission: 'reports.view', excludeRoles: [ROLES.CONTROL_ROOM] as UserRole[]},
     ],
   },
   {
@@ -179,10 +180,14 @@ const ROLE_BADGE: Record<string, string> = {
  * what stops the sidebar offering a page the router then refuses.
  */
 function NavGate({ item, children }: { item: NavItem; children: React.ReactNode }) {
-  const { permissions, isLoading } = useAuth();
+  const { permissions, isLoading, user } = useAuth();
+  if (item.excludeRoles?.includes(user?.role as UserRole)) return null;
   if (item.anyPermission) {
     if (isLoading) return null;
     return item.anyPermission.some((p) => permissions.includes(p)) ? <>{children}</> : null;
+  }
+  if (item.excludeRoles?.includes(userRole)) {
+    return null;
   }
   if (item.permission) {
     return <PermissionGuard permission={item.permission}>{children}</PermissionGuard>;
