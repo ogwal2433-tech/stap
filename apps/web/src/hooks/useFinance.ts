@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { invoicesApi, deductionsApi, payrollApi, staffPayrollApi, staffDeductionsApi, payrollSharesApi, cashbookApi } from '../lib/finance.api';
+import { invoicesApi, deductionsApi, allowancesApi, payrollApi, staffPayrollApi, staffDeductionsApi, payrollSharesApi, cashbookApi } from '../lib/finance.api';
 import type {
   CreateInvoiceInput,
   GenerateInvoiceInput,
@@ -8,6 +8,7 @@ import type {
   AddFeeIncrementInput,
   CreateDeductionInput,
   CreateStaffDeductionInput,
+  CreateAllowanceInput,
   RunPayrollInput,
   RunStaffPayrollInput,
   SharePayrollInput,
@@ -128,6 +129,37 @@ export function useCancelDeduction() {
   return useMutation({
     mutationFn: (id: string) => deductionsApi.cancel(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['deductions'] }),
+  });
+}
+
+export function useAllowances(params?: { guardId?: string; status?: string }) {
+  return useQuery({
+    queryKey: ['allowances', params],
+    queryFn:  () => allowancesApi.list(params),
+  });
+}
+
+export function useAllowancesByGuard(guardId: string) {
+  return useQuery({
+    queryKey: ['allowances', 'guard', guardId],
+    queryFn:  () => allowancesApi.listByGuard(guardId),
+    enabled:  !!guardId,
+  });
+}
+
+export function useCreateAllowance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateAllowanceInput) => allowancesApi.create(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['allowances'] }),
+  });
+}
+
+export function useCancelAllowance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => allowancesApi.cancel(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['allowances'] }),
   });
 }
 

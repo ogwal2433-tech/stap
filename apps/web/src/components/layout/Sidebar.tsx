@@ -186,9 +186,6 @@ function NavGate({ item, children }: { item: NavItem; children: React.ReactNode 
     if (isLoading) return null;
     return item.anyPermission.some((p) => permissions.includes(p)) ? <>{children}</> : null;
   }
-  if (item.excludeRoles?.includes(userRole)) {
-    return null;
-  }
   if (item.permission) {
     return <PermissionGuard permission={item.permission}>{children}</PermissionGuard>;
   }

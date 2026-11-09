@@ -6,6 +6,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { DEPLOYMENT_ROW_LABELS, GUN_EXTRA_ROWS } from '@security360/shared';
 import type { MotorcycleReport, PendingMatter, ShiftReportInput } from '@security360/shared';
 import { shiftReportsApi } from '../../lib/shiftReports.api';
+import { usersApi } from '../../lib/users.api';
 import { useAuth, useHasPermission } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useReportTitle } from '../../hooks/useReportTitles';
@@ -88,6 +89,11 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
   const [form, setForm] = useState<FormState>(blankForm);
   const [showForward, setShowForward] = useState(false);
   const [forwardTo, setForwardTo] = useState('');
+  const { data: adminUsers } = useQuery({
+    queryKey: ['admin-users-forward'],
+    queryFn: () => usersApi.list({ roles: 'DIRECTOR,MD,ASSISTANT_MANAGER,ADMINISTRATOR', status: 'ACTIVE' }),
+    enabled: showForward,
+  });
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) =>
     setForm(p => ({ ...p, [key]: val }));
 
@@ -543,9 +549,13 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         <Modal.Body>
           <p className="small text-muted">Forward this report to an administrator for review.</p>
           <Form.Group>
-            <Form.Label className="small">Forward to (admin user ID or leave blank for all admins)</Form.Label>
-            <Form.Control size="sm" value={forwardTo} onChange={(e) => setForwardTo(e.target.value)}
-              placeholder="User ID (optional)" />
+            <Form.Label className="small">Forward to</Form.Label>
+            <Form.Select size="sm" value={forwardTo} onChange={(e) => setForwardTo(e.target.value)}>
+              <option value="">All admins</option>
+              {(adminUsers?.data ?? []).map((u: any) => (
+                <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+              ))}
+            </Form.Select>
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>

@@ -4,6 +4,7 @@ import prisma from '../db/prisma';
 import { QueueService } from '../jobs/QueueService';
 import { NotFoundError, AppError } from '../errors/AppError';
 import { deductionService } from './deductionService';
+import { allowanceService } from './allowanceService';
 import { cashbookService } from './cashbookService';
 import * as xcel from '../lib/xcel';
 import * as xcelPartner from '../lib/xcelPartner';
@@ -609,20 +610,40 @@ class PayrollService {
       }));
 
       const totalDed = pendingDeductions.reduce((s, d) => s + d.amount, 0);
-      const net      = Math.max(0, gross - totalDed);
 
-      totalGross      += gross;
+      // Pending allowances effective this period
+      const pendingAllowances = await prisma.guardAllowance.findMany({
+        where: {
+          guardId:       guard.id,
+          status:        'PENDING',
+          effectiveDate: { lte: periodEnd },
+        },
+      });
+      const allowanceBreakdown = pendingAllowances.map((a) => ({
+        allowanceId:   a.id,
+        type:          a.type,
+        amount:        a.amount,
+        description:   a.description,
+        effectiveDate: a.effectiveDate.toISOString(),
+      }));
+      const totalAllow = pendingAllowances.reduce((s, a) => s + a.amount, 0);
+
+      const net      = Math.max(0, gross + totalAllow - totalDed);
+
+      totalGross      += gross + totalAllow;
       totalDeductions += totalDed;
 
       payslipData.push({
         guard,
-        grossSalary:         gross,
+        grossSalary:         gross + totalAllow,
         deductionsBreakdown: deductionBreakdown,
+        allowanceBreakdown:  allowanceBreakdown,
         totalDeductions:     totalDed,
         netSalary:           net,
         daysWorked,
         totalDays,
         pendingDeductionIds: pendingDeductions.map((d) => d.id),
+        pendingAllowanceIds: pendingAllowances.map((a) => a.id),
       });
     }
 
@@ -706,6 +727,9 @@ class PayrollService {
 
       if (p.pendingDeductionIds.length > 0) {
         await deductionService.applyToPayroll(p.pendingDeductionIds, runId);
+      }
+      if (p.pendingAllowanceIds?.length > 0) {
+        await allowanceService.applyToPayroll(p.pendingAllowanceIds, runId);
       }
 
       payslips.push(payslip);

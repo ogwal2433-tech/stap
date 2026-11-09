@@ -190,6 +190,7 @@ import { PERMISSIONS } from '../constants/permissions';
 import { VoidInvoiceSchema } from '@security360/shared';
 import { runInvoiceEmailJob } from '../jobs/invoiceCron';
 import { deductionService } from '../services/deductionService';
+import { allowanceService } from '../services/allowanceService';
 import { payrollService } from '../services/payrollService';
 import { payrollExportService } from '../services/payrollExportService';
 import { reportService } from '../services/reportService';
@@ -210,6 +211,7 @@ import {
   AddFeeIncrementSchema,
   CreateDeductionSchema,
   CreateStaffDeductionSchema,
+  CreateAllowanceSchema,
   RunPayrollSchema,
   RunStaffPayrollSchema,
   SharePayrollSchema,
@@ -1020,6 +1022,48 @@ router.get(
     const year  = Number(req.query.year  ?? new Date().getFullYear());
     const summary = await cashbookService.getMonthSummary(month, year);
     res.json({ success: true, data: summary });
+  }),
+);
+
+// ?? Guard Allowances (benefits/incharge allowance, tenure benefits) ?????????
+
+router.get(
+  '/allowances',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await allowanceService.list({
+      guardId: req.query.guardId as string | undefined,
+      status:  req.query.status as string | undefined,
+    });
+    res.json({ success: true, data: result });
+  }),
+);
+
+router.post(
+  '/allowances',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER),
+  validate(CreateAllowanceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const allowance = await allowanceService.create(req.body, req.user!.userId);
+    res.status(201).json({ success: true, data: allowance });
+  }),
+);
+
+router.get(
+  '/allowances/guard/:guardId',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await allowanceService.listByGuard(req.params.guardId);
+    res.json({ success: true, data: result });
+  }),
+);
+
+router.patch(
+  '/allowances/:id/cancel',
+  requireRole(...HR_ROLES, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR, ROLES.FIELD_SUPERVISOR, ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER),
+  asyncHandler(async (req: Request, res: Response) => {
+    const allowance = await allowanceService.cancel(req.params.id, req.user!.userId);
+    res.json({ success: true, data: allowance });
   }),
 );
 

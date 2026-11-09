@@ -8,7 +8,7 @@ import {
 import { useGuard, useGuardDeploymentHistory, useReinstateGuard, useTransferHistory, useDownloadIdCard, usePromotionHistory } from '../../hooks/useGuards';
 import { useDisciplinaryRecords, useGuardLetters } from '../../hooks/useDisciplinary';
 import { useLettersBySubject } from '../../hooks/useLetters';
-import { useDeductions, useCancelDeduction } from '../../hooks/useFinance';
+import { useDeductions, useCancelDeduction, useAllowancesByGuard, useCancelAllowance } from '../../hooks/useFinance';
 import { useGuardInventory } from '../../hooks/useInventory';
 import { guardsApi } from '../../lib/guards.api';
 import { lettersApi } from '../../lib/letters.api';
@@ -31,6 +31,7 @@ import PromoteGuardModal from '../../components/guards/PromoteGuardModal';
 import GuardSystemAccess from '../../components/guards/GuardSystemAccess';
 import ReturnItemModal from '../../components/inventory/ReturnItemModal';
 import DeductionFormModal from '../../components/finance/DeductionFormModal';
+import AllowanceFormModal from '../../components/finance/AllowanceFormModal';
 import { useToast } from '../../context/ToastContext';
 import {
   ROLES, GUARD_CONTRACT_TYPES, GUARD_RANKS, GUARD_WRITE_ROLES, HR_ROLES, FINANCE_ROLES, type UserRole,
@@ -81,7 +82,8 @@ interface StatusModal {
   targetStatus: GuardEmploymentStatus;
 }
 
-const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER];
+const DEDUCTION_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR];
+const ALLOWANCE_ROLES: UserRole[] = [ROLES.DIRECTOR, ROLES.MD, ROLES.ASSISTANT_MANAGER, ROLES.ACCOUNTS_OFFICER, ROLES.OPERATIONS_SUPERVISOR];
 
 interface ReinstateModalProps {
   guardId:   string;
@@ -330,6 +332,7 @@ export default function GuardDetailPage() {
   const { showToast } = useToast();
   const { user } = useAuth();
   const canViewDeductions = !!user && DEDUCTION_ROLES.includes(user.role as UserRole);
+const canViewAllowances = !!user && ALLOWANCE_ROLES.includes(user.role as UserRole);
   // Issued items are an inventory view, not a payroll one: whoever is granted
   // inventory.view sees them, with no role list of its own to drift.
   const canViewIssuedItems = useHasPermission('inventory.view');
@@ -365,6 +368,7 @@ export default function GuardDetailPage() {
   const [showHRLetterModal, setShowHRLetterModal] = useState(false);
   const [reviewLetter, setReviewLetter] = useState<GeneratedLetterResponse | null>(null);
   const [showDeductionModal, setShowDeductionModal] = useState(false);
+  const [showAllowanceModal, setShowAllowanceModal] = useState(false);
   const [showReinstateModal, setShowReinstateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showPromoteModal, setShowPromoteModal] = useState(false);
@@ -376,6 +380,8 @@ export default function GuardDetailPage() {
 
   const { data: deductions = [], refetch: refetchDeductions } = useDeductions({ guardId: id });
   const cancelDeduction = useCancelDeduction();
+  const { data: allowances = [], refetch: refetchAllowances } = useAllowancesByGuard(id!);
+  const cancelAllowance = useCancelAllowance();
 
   if (isLoading) {
     return (
@@ -1436,6 +1442,51 @@ export default function GuardDetailPage() {
         </Tab>
 
         {/* ── Issued Items Tab ──────────────────────────────────────────────── */}
+        {canViewAllowances && <Tab eventKey="allowances" title="Allowances">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <span className="fw-semibold small">Guard Allowances / Benefits</span>
+              <Button size="sm" variant="outline-success" onClick={() => setShowAllowanceModal(true)}>
+                + Add Allowance
+              </Button>
+            </div>
+            {allowances.length === 0 ? (
+              <Alert variant="light" className="small py-2">No allowances recorded.</Alert>
+            ) : (
+              <Table size="sm" hover responsive className="align-middle small">
+                <thead className="table-light">
+                  <tr>
+                    <th>Type</th>
+                    <th className="text-end">Amount (UGX)</th>
+                    <th>Description</th>
+                    <th>Effective Date</th>
+                    <th>Status</th>
+                    <th>Applied In</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allowances.map((a: any) => (
+                    <tr key={a.id}>
+                      <td>{a.type}</td>
+                      <td className="text-end">{a.amount.toLocaleString()}</td>
+                      <td className="small">{a.description}</td>
+                      <td className="small">{new Date(a.effectiveDate).toLocaleDateString('en-GB')}</td>
+                      <td><Badge bg={a.status === 'APPLIED' ? 'success' : a.status === 'CANCELLED' ? 'secondary' : 'warning'}>{a.status}</Badge></td>
+                      <td className="small">{a.appliedInPayroll ? `${a.appliedInPayroll.month}/${a.appliedInPayroll.year}` : '?'}</td>
+                      <td>
+                        {a.status === 'PENDING' && (
+                          <Button size="sm" variant="outline-danger" onClick={() => cancelAllowance.mutateAsync(a.id).then(() => refetchAllowances())}>
+                            Cancel
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Tab>}
+
         {canViewIssuedItems && <Tab eventKey="issued-items" title="Issued Items">
           <IssuedItemsTab guardId={id!} guardName={guard.fullName} guardStatus={guard.employmentStatus} />
         </Tab>}
@@ -1586,6 +1637,13 @@ export default function GuardDetailPage() {
           guardId={id!}
           guardName={guard.fullName}
           onClose={() => { setShowDeductionModal(false); refetchDeductions(); }}
+        />
+      )}
+      {showAllowanceModal && (
+        <AllowanceFormModal
+          guardId={id!}
+          guardName={guard.fullName}
+          onClose={() => { setShowAllowanceModal(false); refetchAllowances(); }}
         />
       )}
       {showReinstateModal && (

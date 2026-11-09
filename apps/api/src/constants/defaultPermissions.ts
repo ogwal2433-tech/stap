@@ -164,6 +164,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     P.COMPLAINTS_OUTBOUND,
     P.SERVICE_REQUESTS_VIEW, P.SERVICE_REQUESTS_RESPOND,
     P.REQUISITIONS_VIEW, P.REQUISITIONS_CREATE,
+    P.INVENTORY_VIEW, P.INVENTORY_EDIT,
     P.REPORTS_VIEW,
     // Writes the end-of-shift handover and reads back what the previous shift
     // left. Acknowledging is a manager's, so it is not here.

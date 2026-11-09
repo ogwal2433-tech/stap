@@ -280,6 +280,31 @@ export const RunStaffPayrollSchema = z.object({
 });
 
 export type CreateDeductionInput    = z.infer<typeof CreateDeductionSchema>;
+
+export const CreateAllowanceSchema = z.object({
+  guardId:       z.string().min(1),
+  type:          z.string().min(1),
+  amount:        z.number().int().positive(),
+  description:   z.string().min(5),
+  effectiveDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Invalid date' }),
+});
+
+export type CreateAllowanceInput = z.infer<typeof CreateAllowanceSchema>;
+
+export interface AllowanceResponse {
+  id:               string;
+  guardId:          string;
+  guardName:        string;
+  type:             string;
+  amount:           number;
+  description:      string;
+  effectiveDate:    string;
+  status:           string;
+  payrollRunId:     string | null;
+  appliedInPayroll: { month: number; year: number } | null;
+  createdBy:        string;
+  createdAt:        string;
+}
 export type RunPayrollInput         = z.infer<typeof RunPayrollSchema>;
 export const SharePayrollSchema = z.object({
   formats: z.array(z.enum(['EXCEL', 'PDF'])).min(1, 'Pick at least one format'),
@@ -398,6 +423,21 @@ export interface PaymentResponse {
 }
 
 export interface DeductionResponse {
+  id:               string;
+  guardId:          string;
+  guardName:        string;
+  type:             string;
+  amount:           number;
+  description:      string;
+  effectiveDate:    string;
+  status:           string;
+  payrollRunId:     string | null;
+  appliedInPayroll: { month: number; year: number } | null;
+  createdBy:        string;
+  createdAt:        string;
+}
+
+export interface AllowanceResponse {
   id:               string;
   guardId:          string;
   guardName:        string;
