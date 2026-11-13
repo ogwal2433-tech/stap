@@ -20,8 +20,6 @@ import type {
   CreateStaffDeductionInput,
   CreateAllowanceInput,
   AllowanceResponse,
-  CreateAllowanceInput,
-  AllowanceResponse,
   RunPayrollInput,
   RunStaffPayrollInput,
   SharePayrollInput,
@@ -271,34 +269,6 @@ export const allowancesApi = {
       .then((r) => r.data.data);
   },
 };
-
-export const allowancesApi = {
-  list(params?: { guardId?: string; status?: string }): Promise<AllowanceResponse[]> {
-    return api
-      .get<{ success: boolean; data: AllowanceResponse[] }>('/finance/allowances', { params })
-      .then((r) => r.data.data);
-  },
-
-  listByGuard(guardId: string): Promise<AllowanceResponse[]> {
-    return api
-      .get<{ success: boolean; data: AllowanceResponse[] }>(`/finance/allowances/guard/${guardId}`)
-      .then((r) => r.data.data);
-  },
-
-  create(data: CreateAllowanceInput): Promise<AllowanceResponse> {
-    return api
-      .post<{ success: boolean; data: AllowanceResponse }>('/finance/allowances', data)
-      .then((r) => r.data.data);
-  },
-
-  cancel(id: string): Promise<AllowanceResponse> {
-    return api
-      .patch<{ success: boolean; data: AllowanceResponse }>(`/finance/allowances/${id}/cancel`)
-      .then((r) => r.data.data);
-  },
-};
-
-// ── Payroll ───────────────────────────────────────────────────────────────────
 
 export const payrollApi = {
   list(params?: { page?: number; limit?: number; runType?: string }): Promise<PaginatedResponse<PayrollRunResponse>> {

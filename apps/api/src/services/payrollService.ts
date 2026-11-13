@@ -628,22 +628,27 @@ class PayrollService {
       }));
       const totalAllow = pendingAllowances.reduce((s, a) => s + a.amount, 0);
 
-      const net      = Math.max(0, gross + totalAllow - totalDed);
+      // Carryover: if deductions exceed earned salary, the remainder is carried
+      // to the next month as a new pending deduction.
+      const recoveredDed = Math.min(totalDed, gross + totalAllow);
+      const remainder    = totalDed - recoveredDed;
+      const net          = Math.max(0, gross + totalAllow - recoveredDed);
 
       totalGross      += gross + totalAllow;
-      totalDeductions += totalDed;
+      totalDeductions += recoveredDed;
 
       payslipData.push({
         guard,
         grossSalary:         gross + totalAllow,
         deductionsBreakdown: deductionBreakdown,
         allowanceBreakdown:  allowanceBreakdown,
-        totalDeductions:     totalDed,
+        totalDeductions:     recoveredDed,
         netSalary:           net,
         daysWorked,
         totalDays,
         pendingDeductionIds: pendingDeductions.map((d) => d.id),
         pendingAllowanceIds: pendingAllowances.map((a) => a.id),
+        carryoverAmount:     remainder,
       });
     }
 
@@ -730,6 +735,23 @@ class PayrollService {
       }
       if (p.pendingAllowanceIds?.length > 0) {
         await allowanceService.applyToPayroll(p.pendingAllowanceIds, runId);
+      }
+      // Carry over any unpaid deduction balance to the next month
+      if ((p as any).carryoverAmount > 0) {
+        const amt = (p as any).carryoverAmount;
+        const nextMonth = month === 12 ? 1 : month + 1;
+        const nextYear  = month === 12 ? year + 1 : year;
+        await prisma.guardDeduction.create({
+          data: {
+            guardId:       p.guard.id,
+            type:          'CARRYOVER',
+            amount:        amt,
+            description:   `Carryover of unpaid deductions from ${month}/${year}`,
+            effectiveDate: new Date(nextYear, nextMonth - 1, 1),
+            status:        'PENDING',
+            createdBy:     calculatedBy,
+          },
+        });
       }
 
       payslips.push(payslip);

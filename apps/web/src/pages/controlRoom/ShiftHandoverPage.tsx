@@ -89,9 +89,17 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
   const [form, setForm] = useState<FormState>(blankForm);
   const [showForward, setShowForward] = useState(false);
   const [forwardTo, setForwardTo] = useState('');
+
+  // Auto-populate the outgoing controller from the signed-in user so the report
+  // always records exactly who was in the control room making it.
+  useEffect(() => {
+    if (user?.name && !form.outgoingControllerName && !id) {
+      set('outgoingControllerName', user.name);
+    }
+  }, [user?.name, id]);
   const { data: adminUsers } = useQuery({
     queryKey: ['admin-users-forward'],
-    queryFn: () => usersApi.list({ roles: 'DIRECTOR,MD,ASSISTANT_MANAGER,ADMINISTRATOR', status: 'ACTIVE' }),
+    queryFn: () => usersApi.list({ roles: 'DIRECTOR,MD,ASSISTANT_MANAGER,ADMINISTRATOR,CONTROL_ROOM', status: 'ACTIVE' }),
     enabled: showForward,
   });
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) =>
@@ -217,17 +225,18 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY }}>
           {reportTitle.title}
         </div>
-        {existing && (
-          <div className="mt-2 d-flex gap-2 justify-content-center align-items-center">
-            {existing.systemId && <code style={{ fontSize: '0.8rem' }}>{existing.systemId}</code>}
+        <div className="mt-2 d-flex gap-2 justify-content-center align-items-center flex-wrap">
+          {user?.name && <Badge bg="primary" style={{ fontSize: '0.75rem' }}>Controller on duty: {user.name}</Badge>}
+          {existing && existing.systemId && <code style={{ fontSize: '0.8rem' }}>{existing.systemId}</code>}
+          {existing && (
             <Badge bg={
               existing.status === 'ACKNOWLEDGED' ? 'success'
                 : existing.status === 'SUBMITTED' ? 'warning' : 'secondary'
             }>
               {existing.status}
             </Badge>
+          )}
           </div>
-        )}
       </div>
 
       {locked && existing?.status !== 'DRAFT' && existing && (
@@ -502,6 +511,14 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
       </div>
 
       <div className="d-flex flex-wrap gap-2 mb-4">
+        {existing && (
+          <Button
+            variant="outline-warning"
+            onClick={() => setShowForward(true)}
+          >
+            <i className="bi bi-send me-1" />Forward for Review
+          </Button>
+        )}
         {!locked && (
           <>
             <Button variant="outline-secondary" disabled={save.isPending}
@@ -513,14 +530,6 @@ export default function ShiftHandoverPage({ readOnly = false }: { readOnly?: boo
               {save.isPending ? 'Submitting…' : 'Submit Report'}
             </Button>
           </>
-        )}
-        {existing && existing.status !== 'DRAFT' && (
-          <Button
-            variant="outline-warning"
-            onClick={() => setShowForward(true)}
-          >
-            <i className="bi bi-send me-1" />Forward for Review
-          </Button>
         )}
         {existing && (
           <Button
