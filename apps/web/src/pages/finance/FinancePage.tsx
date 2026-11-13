@@ -2817,16 +2817,29 @@ function PaymentsTab() {
 
 function DeductionsTab() {
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const { data: deductions = [], refetch } = useDeductions({ status: statusFilter || undefined });
+  const [view, setView] = useState<'guard' | 'staff'>('guard');
+  const { data: guardDeductions = [], refetch: refetchGuard } = useDeductions({ status: statusFilter || undefined });
+  const { data: staffDeductions = [], refetch: refetchStaff } = useStaffDeductions({ status: statusFilter || undefined });
   const cancelDeduction = useCancelDeduction();
+  const cancelStaffDeduction = useCancelStaffDeduction();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const handleCancel = async (id: string) => {
+  const handleCancelGuard = async (id: string) => {
     try {
       await cancelDeduction.mutateAsync(id);
       showToast('Deduction cancelled.', 'success');
-      refetch();
+      refetchGuard();
+    } catch {
+      showToast('Failed to cancel deduction.', 'danger');
+    }
+  };
+
+  const handleCancelStaff = async (id: string) => {
+    try {
+      await cancelStaffDeduction.mutateAsync(id);
+      showToast('Staff deduction cancelled.', 'success');
+      refetchStaff();
     } catch {
       showToast('Failed to cancel deduction.', 'danger');
     }
@@ -2835,51 +2848,92 @@ function DeductionsTab() {
   return (
     <>
       <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-        <span className="fw-semibold">Guard Deductions</span>
-        <div className="d-flex gap-2 align-items-center">
+        <span className="fw-semibold">Deductions History</span>
+        <div className="d-flex gap-2 align-items-center flex-wrap">
+          <div className="btn-group btn-group-sm" role="group">
+            <Button size="sm" variant={view === 'guard' ? 'primary' : 'outline-primary'} onClick={() => setView('guard')}>Guards</Button>
+            <Button size="sm" variant={view === 'staff' ? 'primary' : 'outline-primary'} onClick={() => setView('staff')}>Staff</Button>
+          </div>
           <Form.Select size="sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 140 }}>
             <option value="">All statuses</option>
             <option value="PENDING">Pending</option>
             <option value="APPLIED">Applied</option>
             <option value="CANCELLED">Cancelled</option>
           </Form.Select>
-          <Button size="sm" variant="outline-primary" onClick={() => navigate('/guards')}>
-            <i className="bi bi-plus-lg me-1" />Add via Guard
-          </Button>
+          {view === 'guard' && (
+            <Button size="sm" variant="outline-primary" onClick={() => navigate('/guards')}>
+              <i className="bi bi-plus-lg me-1" />Add via Guard
+            </Button>
+          )}
         </div>
       </div>
 
-      {deductions.length === 0 ? (
-        <Alert variant="light" className="small py-2">No deductions recorded{statusFilter ? ` with status ${statusFilter}` : ''}.</Alert>
-      ) : (
-        <Table size="sm" hover responsive className="align-middle small">
-          <thead className="table-light">
-            <tr>
-              <th>Guard</th><th>Type</th><th className="text-end">Amount (UGX)</th>
-              <th>Description</th><th>Effective Date</th><th>Status</th><th>Applied In</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {deductions.map((d: any) => (
-              <tr key={d.id}>
-                <td>{d.guardName}</td>
-                <td>{d.type}</td>
-                <td className="text-end">{d.amount.toLocaleString()}</td>
-                <td className="small">{d.description}</td>
-                <td className="small">{new Date(d.effectiveDate).toLocaleDateString('en-GB')}</td>
-                <td><Badge bg={d.status === 'APPLIED' ? 'success' : d.status === 'CANCELLED' ? 'secondary' : 'warning'}>{d.status}</Badge></td>
-                <td className="small">{d.appliedInPayroll ? `${d.appliedInPayroll.month}/${d.appliedInPayroll.year}` : '?'}</td>
-                <td>
-                  {d.status === 'PENDING' && (
-                    <Button size="sm" variant="outline-danger" onClick={() => handleCancel(d.id)}>
-                      Cancel
-                    </Button>
-                  )}
-                </td>
+      {view === 'guard' ? (
+        guardDeductions.length === 0 ? (
+          <Alert variant="light" className="small py-2">No guard deductions recorded{statusFilter ? ` with status ${statusFilter}` : ''}.</Alert>
+        ) : (
+          <Table size="sm" hover responsive className="align-middle small">
+            <thead className="table-light">
+              <tr>
+                <th>Guard</th><th>Type</th><th className="text-end">Amount (UGX)</th>
+                <th>Description</th><th>Effective Date</th><th>Status</th><th>Applied In</th><th></th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {guardDeductions.map((d: any) => (
+                <tr key={d.id}>
+                  <td>{d.guardName}</td>
+                  <td>{d.type}</td>
+                  <td className="text-end">{d.amount.toLocaleString()}</td>
+                  <td className="small">{d.description}</td>
+                  <td className="small">{new Date(d.effectiveDate).toLocaleDateString('en-GB')}</td>
+                  <td><Badge bg={d.status === 'APPLIED' ? 'success' : d.status === 'CANCELLED' ? 'secondary' : 'warning'}>{d.status}</Badge></td>
+                  <td className="small">{d.appliedInPayroll ? `${d.appliedInPayroll.month}/${d.appliedInPayroll.year}` : '?'}</td>
+                  <td>
+                    {d.status === 'PENDING' && (
+                      <Button size="sm" variant="outline-danger" onClick={() => handleCancelGuard(d.id)}>
+                        Cancel
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )
+      ) : (
+        (staffDeductions ?? []).length === 0 ? (
+          <Alert variant="light" className="small py-2">No staff deductions recorded{statusFilter ? ` with status ${statusFilter}` : ''}.</Alert>
+        ) : (
+          <Table size="sm" hover responsive className="align-middle small">
+            <thead className="table-light">
+              <tr>
+                <th>Staff</th><th>Type</th><th className="text-end">Amount (UGX)</th>
+                <th>Description</th><th>Effective Date</th><th>Status</th><th>Applied In</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(staffDeductions ?? []).map((d: any) => (
+                <tr key={d.id}>
+                  <td>{d.staffName}</td>
+                  <td>{d.type}</td>
+                  <td className="text-end">{d.amount.toLocaleString()}</td>
+                  <td className="small">{d.description}</td>
+                  <td className="small">{new Date(d.effectiveDate).toLocaleDateString('en-GB')}</td>
+                  <td><Badge bg={d.status === 'APPLIED' ? 'success' : d.status === 'CANCELLED' ? 'secondary' : 'warning'}>{d.status}</Badge></td>
+                  <td className="small">{d.appliedInPayroll ? `${d.appliedInPayroll.month}/${d.appliedInPayroll.year}` : '?'}</td>
+                  <td>
+                    {d.status === 'PENDING' && (
+                      <Button size="sm" variant="outline-danger" onClick={() => handleCancelStaff(d.id)}>
+                        Cancel
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )
       )}
     </>
   );
