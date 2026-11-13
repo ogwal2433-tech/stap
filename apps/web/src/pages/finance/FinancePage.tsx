@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useInvoices, useARAgingReport, usePayrollRuns,
+  useDeductions, useCancelDeduction,
   useRunPayroll, useApprovePayroll, useDisbursePayroll, useDeletePayrollRun,
   useHrApprovePayroll, useMdApprovePayroll, useRejectPayroll, useFlagPayslip, useUnflagPayslip,
   useCashbook, useCashbookSummary, usePayrollDetail,
@@ -2811,6 +2812,79 @@ function PaymentsTab() {
   );
 }
 
+
+// ?? Deductions Tab ??????????????????????????????????????????????????????????????
+
+function DeductionsTab() {
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const { data: deductions = [], refetch } = useDeductions({ status: statusFilter || undefined });
+  const cancelDeduction = useCancelDeduction();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  const handleCancel = async (id: string) => {
+    try {
+      await cancelDeduction.mutateAsync(id);
+      showToast('Deduction cancelled.', 'success');
+      refetch();
+    } catch {
+      showToast('Failed to cancel deduction.', 'danger');
+    }
+  };
+
+  return (
+    <>
+      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <span className="fw-semibold">Guard Deductions</span>
+        <div className="d-flex gap-2 align-items-center">
+          <Form.Select size="sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 140 }}>
+            <option value="">All statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPLIED">Applied</option>
+            <option value="CANCELLED">Cancelled</option>
+          </Form.Select>
+          <Button size="sm" variant="outline-primary" onClick={() => navigate('/guards')}>
+            <i className="bi bi-plus-lg me-1" />Add via Guard
+          </Button>
+        </div>
+      </div>
+
+      {deductions.length === 0 ? (
+        <Alert variant="light" className="small py-2">No deductions recorded{statusFilter ? ` with status ${statusFilter}` : ''}.</Alert>
+      ) : (
+        <Table size="sm" hover responsive className="align-middle small">
+          <thead className="table-light">
+            <tr>
+              <th>Guard</th><th>Type</th><th className="text-end">Amount (UGX)</th>
+              <th>Description</th><th>Effective Date</th><th>Status</th><th>Applied In</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {deductions.map((d: any) => (
+              <tr key={d.id}>
+                <td>{d.guardName}</td>
+                <td>{d.type}</td>
+                <td className="text-end">{d.amount.toLocaleString()}</td>
+                <td className="small">{d.description}</td>
+                <td className="small">{new Date(d.effectiveDate).toLocaleDateString('en-GB')}</td>
+                <td><Badge bg={d.status === 'APPLIED' ? 'success' : d.status === 'CANCELLED' ? 'secondary' : 'warning'}>{d.status}</Badge></td>
+                <td className="small">{d.appliedInPayroll ? `${d.appliedInPayroll.month}/${d.appliedInPayroll.year}` : '?'}</td>
+                <td>
+                  {d.status === 'PENDING' && (
+                    <Button size="sm" variant="outline-danger" onClick={() => handleCancel(d.id)}>
+                      Cancel
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </>
+  );
+}
+
 export default function FinancePage() {
   const navigate = useNavigate();
   const agingTitle = useReportTitle('receivables_aging_report');
@@ -2839,6 +2913,9 @@ export default function FinancePage() {
             </Tab>
             <Tab eventKey="staff-payroll" title={<><i className="bi bi-people me-1" />Staff Payroll</>}>
               <StaffPayrollTab />
+            </Tab>
+            <Tab eventKey="deductions" title={<><i className="bi bi-dash-circle me-1" />Deductions</>}>
+              <DeductionsTab />
             </Tab>
             <Tab eventKey="cashbook" title="Cashbook">
               <CashbookTab />
