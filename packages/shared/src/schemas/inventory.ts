@@ -44,13 +44,14 @@ export type UpdateInventoryItemInput = z.infer<typeof UpdateInventoryItemSchema>
 
 export const IssueItemSchema = z.object({
   itemId:             z.string().min(1),
-  guardId:            z.string().min(1),
+  guardId:            z.string().min(1).optional(),
+  userId:             z.string().min(1).optional(),
   quantity:           z.number().int().min(1),
   conditionNote:      z.string()
     .min(3, "Condition note is required — describe the item's condition before issuing (e.g. 'New', 'Good condition', 'Minor wear').")
     .max(500, 'Condition note cannot exceed 500 characters.'),
   issueFromCondition: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED']).optional(),
-});
+}).refine(d => d.guardId || d.userId, { message: 'Select a guard or staff member', path: ['guardId'] });
 export type IssueItemInput = z.infer<typeof IssueItemSchema>;
 
 export const IssueLineItemSchema = z.object({
@@ -65,9 +66,10 @@ export const IssueLineItemSchema = z.object({
 export type IssueLineItemInput = z.infer<typeof IssueLineItemSchema>;
 
 export const BatchIssueSchema = z.object({
-  guardId: z.string().min(1, 'Please select a guard'),
+  guardId: z.string().min(1).optional(),
+  userId:  z.string().min(1).optional(),
   items:   z.array(IssueLineItemSchema).min(1, 'Add at least one item to issue'),
-});
+}).refine(d => d.guardId || d.userId, { message: 'Select a guard or staff member', path: ['guardId'] });
 export type BatchIssueInput = z.infer<typeof BatchIssueSchema>;
 
 export interface BatchIssueResult {
@@ -87,7 +89,8 @@ export interface BatchIssueResult {
 
 export const ReturnItemSchema = z.object({
   itemId:            z.string().min(1),
-  guardId:           z.string().min(1),
+  guardId:           z.string().min(1).optional(),
+  userId:            z.string().min(1).optional(),
   quantity:          z.number().int().min(1),
   action:            z.enum(['RETURNED', 'LOST', 'DAMAGED']),
   conditionNote:     z.string().optional(),
@@ -183,6 +186,7 @@ export interface InventoryTransactionResponse {
   id:            string;
   item:          { id: string; itemName: string; itemCode: string };
   guard:         { id: string; fullName: string } | null;
+  staff:         { id: string; name: string } | null;
   action:        string;
   quantity:      number;
   conditionNote: string;

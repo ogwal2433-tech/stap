@@ -188,6 +188,7 @@ model User {
   approvedLeaves          LeaveRequest[]          @relation("LeaveApprover")
   staffLeaveRequests      LeaveRequest[]          @relation("StaffLeaveRequest")
   recordedInventory       InventoryTransaction[]  @relation("InventoryRecorder")
+  heldInventory           InventoryTransaction[]  @relation("InventoryHolder")
   authorisedTransfers     GuardTransfer[]         @relation("TransferAuthoriser")
   supervisedZones         Zone[]                  @relation("ZoneSupervisor")
   alternateZones          Zone[]                  @relation("ZoneAlternate")
@@ -2023,6 +2024,8 @@ model InventoryTransaction {
   item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
   guardId        String?
   guard          Guard?        @relation(fields: [guardId], references: [id])
+  userId         String?
+  user           User?         @relation("InventoryHolder", fields: [userId], references: [id])
   action         String
   quantity       Int
   conditionNote  String        @default("")

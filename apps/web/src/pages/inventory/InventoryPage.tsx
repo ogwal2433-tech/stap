@@ -11,6 +11,8 @@ import {
   useReturnItem, useAdjustStock, useAdjustCondition, useBatchIssueItems,
 } from '../../hooks/useInventory';
 import { useGuardList, useGuard } from '../../hooks/useGuards';
+import { useStaffList } from '../../hooks/useStaff';
+import { staffApi } from '../../lib/staff.api';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import EditIssuedItemModal from '../../components/inventory/EditIssuedItemModal';
@@ -510,6 +512,7 @@ export function IssueItemModal({
   // Guards are searched on the server as the user types. This used to load one
   // unfiltered page — the first 200 by date added — so every guard after those
   // could not be issued to from here at all.
+  const [recipientType, setRecipientType] = useState<'guard' | 'staff'>('guard');
   const [guardSearch, setGuardSearch] = useState('');
   const guardTerm = useDebouncedValue(guardSearch.trim(), SEARCH_DEBOUNCE_MS);
   const { data: guardsData, isLoading: guardsLoading } = useGuardList({
@@ -518,11 +521,20 @@ export function IssueItemModal({
     sortBy:    'firstName',
     sortOrder: 'asc',
   });
+  const [staffSearch, setStaffSearch] = useState('');
+  const staffTerm = useDebouncedValue(staffSearch.trim(), SEARCH_DEBOUNCE_MS);
+  const { data: staffData, isLoading: staffLoading } = useStaffList({
+    search: staffTerm || undefined,
+    limit:  GUARD_RESULTS,
+    isActive: true,
+  });
+  const staffList = staffData?.data ?? [];
   const inventoryItems = itemsData?.data ?? [];
   const guards         = guardsData?.data ?? [];
   const moreGuards     = guardsData?.pagination?.hasNext ?? false;
 
   const [selectedGuardId, setSelectedGuardId] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
   const [lineItems, setLineItems]             = useState<LineItem[]>([]);
 
   // Held separately from selectedGuardId: once the search moves on, the chosen
@@ -558,12 +570,14 @@ export function IssueItemModal({
     setSelectedGuardId('');
     setSelectedGuard(null);
     setGuardSearch('');
+    setSelectedStaffId('');
+    setStaffSearch('');
     setLineItems([]);
     onHide();
   };
 
   const isValid =
-    !!selectedGuardId &&
+    (recipientType === 'guard' ? !!selectedGuardId : !!selectedStaffId) &&
     lineItems.length > 0 &&
     lineItems.every(l =>
       l.itemId !== '' &&
@@ -585,7 +599,7 @@ export function IssueItemModal({
     if (!isValid) return;
     try {
       const result = await mutation.mutateAsync({
-        guardId: selectedGuardId,
+        ...(recipientType === 'guard' ? { guardId: selectedGuardId } : { userId: selectedStaffId }),
         items:   lineItems.map(l => ({
           itemId:        l.itemId,
           quantity:      l.quantity,

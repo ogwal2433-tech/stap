@@ -62,6 +62,7 @@ function fmtTxn(t: any): InventoryTransactionResponse {
     id:            t.id,
     item:          { id: t.item.id, itemName: t.item.itemName, itemCode: t.item.itemCode },
     guard:         t.guard ? { id: t.guard.id, fullName: `${t.guard.firstName} ${t.guard.lastName}` } : null,
+    staff:         t.user ? { id: t.user.id, name: t.user.name } : null,
     action:        t.action,
     quantity:      t.quantity,
     conditionNote: t.conditionNote ?? null,
@@ -75,6 +76,7 @@ function fmtTxn(t: any): InventoryTransactionResponse {
 const TXN_INCLUDE = {
   item:          { select: { id: true, itemName: true, itemCode: true } },
   guard:         { select: { id: true, firstName: true, lastName: true } },
+  user:          { select: { id: true, name: true } },
   recordedByUser: { select: { id: true, name: true } },
 };
 
@@ -204,7 +206,8 @@ class InventoryService {
       const t = await tx.inventoryTransaction.create({
         data: {
           itemId:       data.itemId,
-          guardId:      data.guardId,
+          guardId:      data.guardId || null,
+          userId:       data.userId || null,
           action:       'ISSUED',
           quantity:     data.quantity,
           conditionNote,
@@ -227,7 +230,7 @@ class InventoryService {
       action:   'ITEM_ISSUED',
       entity:   'InventoryTransaction',
       entityId: txn.id,
-      newValue: { itemId: data.itemId, guardId: data.guardId, quantity: data.quantity },
+      newValue: { itemId: data.itemId, guardId: data.guardId, userId: data.userId, quantity: data.quantity },
     });
 
     return fmtTxn(txn);
