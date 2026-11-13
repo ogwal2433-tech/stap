@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import type { AxiosError } from 'axios';
 
 const NAVY = '#1B3A6B';
-const STAP_IMAGES = ['/stap/P84A6216.webp', '/stap/P84A6541.webp', '/stap/P84A6604.webp'];
+const STAP_IMAGES = ['/stap/P84A6216.webp', '/stap/P84A6541.webp', '/stap/P84A6604.webp', '/stap/Amumpaire.jpeg'];
 
 export default function LoginPage() {
   const navigate = useNavigate();
