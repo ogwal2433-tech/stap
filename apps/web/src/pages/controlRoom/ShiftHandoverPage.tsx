@@ -18,7 +18,7 @@ import {
 type Row = Record<string, string>;
 
 /** Used only where the company has configured no zones of its own. */
-const FALLBACK_ZONES = ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5'];
+const FALLBACK_ZONES = ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
 const emptyIncident   = { time: '', site: '', incident: '', staffResponding: '', status: '' };
 const emptyClientComm = { time: '', clientSite: '', issueRaised: '', staffResponsible: '' };

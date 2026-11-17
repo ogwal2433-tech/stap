@@ -109,7 +109,7 @@ function motorcycleBlock(mc: MotorcycleReport): string {
 
   const unreachable = periods('Unreachable periods', '#C0392B', '#FDF2F2',
     (mc.unreachablePeriods ?? []).map((u) => ({ from: u.from, to: u.to, tail: u.reason })));
-  const parked = periods('Long parked periods', '#856404', '#FEF9E7',
+  const parked = periods('Long parked periods', '#856404', '#F2F4F7',
     (mc.longParkedPeriods ?? []).map((p) => ({ from: p.from, to: p.to, tail: p.location })));
 
   return `

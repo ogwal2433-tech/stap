@@ -560,7 +560,7 @@ export function MotorcycleSection({ items, onChange, readOnly }: {
                   </PeriodList>
 
                   <PeriodList
-                    title="Long Parked Periods" colour="#856404" bg="#FEF9E7" border="#F9E79F"
+                    title="Long Parked Periods" colour="#856404" bg="#F2F4F7" border="#D9D9D9"
                     rows={mc.longParkedPeriods.length} readOnly={readOnly}
                     onAdd={() => setParked([...mc.longParkedPeriods, { id: uid(), from: '', to: '', location: '', duration: '' }])}
                   >
@@ -568,7 +568,7 @@ export function MotorcycleSection({ items, onChange, readOnly }: {
                       <PeriodRow
                         key={lp.id} index={j} from={lp.from} to={lp.to} tail={lp.location}
                         tailLabel="Parking Location" tailPlaceholder="e.g. Main gate, Zone 2 depot"
-                        colour="#856404" bg="#FEF9E7" border="#F9E79F" readOnly={readOnly}
+                        colour="#856404" bg="#F2F4F7" border="#D9D9D9" readOnly={readOnly}
                         suffix=" parked"
                         onChange={patch => setParked(mc.longParkedPeriods.map(x => {
                           if (x.id !== lp.id) return x;
