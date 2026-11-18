@@ -410,7 +410,7 @@ class InventoryService {
         // A waived charge (0) records the loss without creating a deduction.
         await tx.guardDeduction.create({
           data: {
-            guardId:       data.guardId,
+            guardId:       data.guardId!,
             type:          'DAMAGE_LOSS',
             amount:        chargedAmount,
             description:   `${data.action}: ${item.itemName} x${data.quantity}${data.conditionNote ? ` — ${data.conditionNote}` : ''}`,
